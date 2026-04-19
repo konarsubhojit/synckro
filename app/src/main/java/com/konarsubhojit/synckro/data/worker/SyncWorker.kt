@@ -34,26 +34,23 @@ class SyncWorker @AssistedInject constructor(
     /**
      * Runs a single synchronization pass for the SyncPair whose id is provided in the worker input and applies WorkManager retry/cancellation policies based on the outcome.
      *
-     * If the input `pair_id` is missing or invalid, or if the corresponding DB entity no longer exists, the worker cancels the pair's unique periodic work and treats the run as successful. The function constructs a domain `SyncPair` (splitting newline-delimited include/exclude globs into non-blank lines) and delegates the sync to `SyncEngine.runOnce`.
+     * If the input `pair_id` is missing or invalid, the worker treats the run as a permanent failure because there is no stable unique-work name to cancel. If the corresponding DB entity no longer exists, the worker cancels the pair's unique periodic work and treats the run as successful. The function constructs a domain `SyncPair` (splitting newline-delimited include/exclude globs into non-blank lines) and delegates the sync to `SyncEngine.runOnce`.
      *
      * Mapping of engine results to WorkManager results:
      * - `SyncEngine.Result.Success` → `Result.success()`
-     * - `SyncEngine.Result.PartialFailure` → logs warning and returns `Result.retry()`
+     * - `SyncEngine.Result.PartialFailure` → logs warning and returns `Result.success()`
      * - `SyncEngine.Result.Retriable` → logs info and returns `Result.retry()`
      * - `SyncEngine.Result.Terminal` → logs warning, cancels the pair's unique periodic work, and returns `Result.failure()`
      *
      * Any thrown exception is logged and results in `Result.retry()`.
      *
-     * @return `Result.success()` for successful runs or when the pair is missing/invalid; `Result.retry()` for partial, retriable, or exceptional failures; `Result.failure()` for terminal failures after cancelling the periodic work.
+     * @return `Result.success()` for successful runs, partial failures, or when the pair no longer exists; `Result.retry()` for retriable or exceptional failures; `Result.failure()` for invalid input or terminal failures after cancelling the periodic work.
      */
     override suspend fun doWork(): Result {
         val pairId = inputData.getLong(KEY_PAIR_ID, -1L)
         if (pairId < 0) {
-            // Misconfigured enqueue — nothing we can do on retry, so cancel
-            // this unique chain rather than marking it permanently failed.
-            Timber.w("SyncWorker enqueued without %s; cancelling.", KEY_PAIR_ID)
-            WorkManager.getInstance(applicationContext).cancelUniqueWork(uniqueName(pairId))
-            return Result.success()
+            Timber.w("SyncWorker enqueued without a valid %s; failing permanently.", KEY_PAIR_ID)
+            return Result.failure()
         }
         val entity = syncPairDao.getById(pairId)
         if (entity == null) {

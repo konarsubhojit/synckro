@@ -5,8 +5,9 @@ a folder on **OneDrive** or **Google Drive**.
 
 > Status: **early scaffolding**. The project structure, core abstractions, and a
 > runnable Compose shell are in place. Cloud provider implementations
-> (OneDrive / Google Drive) are currently stubs that throw
-> `NotImplementedError`, and the real sync engine is intentionally minimal —
+> (OneDrive / Google Drive) currently return `false` from
+> `ensureAuthenticated()` and throw `NotYetImplementedException` for provider
+> operations, and the real sync engine is intentionally minimal —
 > its file-diff logic is pure Kotlin and unit-tested, and everything plugs into
 > a `FakeCloudProvider` so that the pipeline can be developed end-to-end without
 > any network access.

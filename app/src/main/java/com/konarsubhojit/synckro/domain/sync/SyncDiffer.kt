@@ -110,11 +110,17 @@ object SyncDiffer {
             // Deletions
             if (localDeleted && remoteDeleted) continue // converged
             if (localDeleted && !remoteChanged) {
-                if (direction != SyncDirection.REMOTE_TO_LOCAL) ops += SyncOp.DeleteRemote(path)
+                ops += when (direction) {
+                    SyncDirection.REMOTE_TO_LOCAL -> SyncOp.DownloadNew(path)
+                    else -> SyncOp.DeleteRemote(path)
+                }
                 continue
             }
             if (remoteDeleted && !localChanged) {
-                if (direction != SyncDirection.LOCAL_TO_REMOTE) ops += SyncOp.DeleteLocal(path)
+                ops += when (direction) {
+                    SyncDirection.LOCAL_TO_REMOTE -> SyncOp.UploadNew(path)
+                    else -> SyncOp.DeleteLocal(path)
+                }
                 continue
             }
 

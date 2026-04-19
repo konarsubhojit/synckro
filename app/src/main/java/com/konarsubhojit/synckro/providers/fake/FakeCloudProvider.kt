@@ -27,29 +27,29 @@ class FakeCloudProvider : CloudProvider {
     private val mutex = Mutex()
 
     /**
- * Indicates whether the provider is authenticated.
- *
- * @return `true` if the provider is authenticated; always `true` for this fake provider.
- */
-override suspend fun ensureAuthenticated(): Boolean = true
+     * Indicates whether the provider is authenticated.
+     *
+     * @return `true` if the provider is authenticated; always `true` for this fake provider.
+     */
+    override suspend fun ensureAuthenticated(): Boolean = true
 
     /**
-         * Lists stored remote files whose `parentId` matches the provided folder ID.
-         *
-         * @param folderId The parent folder ID to filter by; pass `null` to list items with no parent.
-         * @return A list of `RemoteFile` metadata entries whose `parentId` equals `folderId`.
-         */
-        override suspend fun list(folderId: String?): List<RemoteFile> =
+     * Lists stored remote files whose `parentId` matches the provided folder ID.
+     *
+     * @param folderId The parent folder ID to filter by; pass `null` to list items with no parent.
+     * @return A list of `RemoteFile` metadata entries whose `parentId` equals `folderId`.
+     */
+    override suspend fun list(folderId: String?): List<RemoteFile> =
         store.values.map { it.meta }.filter { it.parentId == folderId }
 
     /**
-         * Retrieve the metadata for a remote file or folder by its id.
-         *
-         * @param id The file or folder id to look up.
-         * @return The corresponding RemoteFile metadata.
-         * @throws IllegalStateException if no record exists for the given id.
-         */
-        override suspend fun getMetadata(id: String): RemoteFile =
+     * Retrieve the metadata for a remote file or folder by its id.
+     *
+     * @param id The file or folder id to look up.
+     * @return The corresponding RemoteFile metadata.
+     * @throws IllegalStateException if no record exists for the given id.
+     */
+    override suspend fun getMetadata(id: String): RemoteFile =
         store[id]?.meta ?: error("Not found: $id")
 
     /**
