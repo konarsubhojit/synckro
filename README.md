@@ -69,22 +69,6 @@ Requires JDK 17 and the Android SDK (command-line tools or Android Studio).
 Copy `local.properties.example` to `local.properties` and set `sdk.dir` to your
 Android SDK location.
 
-### One-time setup: generate the Gradle wrapper
-
-The Gradle wrapper scripts (`gradlew`, `gradlew.bat`) and JAR are **not**
-committed — this repo only ships `gradle/wrapper/gradle-wrapper.properties`.
-Run the following once with a locally installed Gradle (matching the
-distribution declared in `gradle/wrapper/gradle-wrapper.properties`) to
-generate the wrapper artifacts:
-
-```bash
-gradle wrapper
-```
-
-After that the commands below work on any checkout that has the generated
-wrapper in place. If you prefer not to commit the wrapper, you can substitute
-`gradle` for `./gradlew` in every command.
-
 ### Common tasks
 
 ```bash
@@ -92,6 +76,13 @@ wrapper in place. If you prefer not to commit the wrapper, you can substitute
 ./gradlew testDebugUnitTest    # run unit tests
 ./gradlew lintDebug            # Android lint
 ```
+
+## CI / CD
+
+GitHub Actions builds the debug APK on every push to `main` / `master`, on
+pull requests, and on manual dispatch. Each run uploads the generated APK from
+`app/build/outputs/apk/debug/` as an Actions artifact named
+`synckro-debug-apk-<run_number>`.
 
 ## Roadmap
 
