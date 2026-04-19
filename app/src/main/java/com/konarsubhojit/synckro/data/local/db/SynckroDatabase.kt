@@ -13,12 +13,48 @@ import com.konarsubhojit.synckro.domain.model.SyncDirection
 import androidx.room.TypeConverter
 
 class EnumConverters {
-    @TypeConverter fun dirFromString(s: String): SyncDirection = SyncDirection.valueOf(s)
-    @TypeConverter fun dirToString(d: SyncDirection): String = d.name
-    @TypeConverter fun policyFromString(s: String): ConflictPolicy = ConflictPolicy.valueOf(s)
-    @TypeConverter fun policyToString(p: ConflictPolicy): String = p.name
-    @TypeConverter fun providerFromString(s: String): CloudProviderType = CloudProviderType.valueOf(s)
-    @TypeConverter fun providerToString(p: CloudProviderType): String = p.name
+    /**
+ * Converts a stored enum name into the corresponding SyncDirection.
+ *
+ * @param s The enum name as stored in the database.
+ * @return The `SyncDirection` represented by `s`.
+ */
+@TypeConverter fun dirFromString(s: String): SyncDirection = SyncDirection.valueOf(s)
+    /**
+ * Convert a SyncDirection to its persisted string representation.
+ *
+ * @return The enum constant's name as stored in the database.
+ */
+@TypeConverter fun dirToString(d: SyncDirection): String = d.name
+    /**
+ * Converts a persisted string into a ConflictPolicy enum.
+ *
+ * @param s The persisted enum name.
+ * @return The ConflictPolicy corresponding to the provided enum name.
+ */
+@TypeConverter fun policyFromString(s: String): ConflictPolicy = ConflictPolicy.valueOf(s)
+    /**
+ * Converts a ConflictPolicy enum value to its persisted string representation.
+ *
+ * @param p The conflict resolution policy to convert.
+ * @return The enum's name used for storage.
+ */
+@TypeConverter fun policyToString(p: ConflictPolicy): String = p.name
+    /**
+ * Converts a persisted enum name into its corresponding CloudProviderType.
+ *
+ * @param s The enum name as stored in the database.
+ * @return The matching CloudProviderType.
+ * @throws IllegalArgumentException If `s` does not match any CloudProviderType constant.
+ */
+@TypeConverter fun providerFromString(s: String): CloudProviderType = CloudProviderType.valueOf(s)
+    /**
+ * Converts a CloudProviderType to its persisted string representation.
+ *
+ * @param p The cloud provider enum to convert.
+ * @return The enum's name as stored in the database.
+ */
+@TypeConverter fun providerToString(p: CloudProviderType): String = p.name
 }
 
 @Database(
@@ -28,8 +64,18 @@ class EnumConverters {
 )
 @TypeConverters(EnumConverters::class)
 abstract class SynckroDatabase : RoomDatabase() {
-    abstract fun syncPairDao(): SyncPairDao
-    abstract fun fileIndexDao(): FileIndexDao
+    /**
+ * Returns the DAO used to access and modify sync pair entities.
+ *
+ * @return The [SyncPairDao] for performing operations on sync pair data.
+ */
+abstract fun syncPairDao(): SyncPairDao
+    /**
+ * Provides the DAO for performing CRUD operations on file index records.
+ *
+ * @return The {@link FileIndexDao} used to access and modify file index data.
+ */
+abstract fun fileIndexDao(): FileIndexDao
 
     companion object {
         const val NAME = "synckro.db"

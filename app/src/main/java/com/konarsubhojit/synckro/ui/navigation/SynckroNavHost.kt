@@ -12,6 +12,13 @@ object Routes {
     const val HOME = "home"
 }
 
+/**
+ * Hosts the main navigation graph for the Synckro app, providing onboarding and home destinations.
+ *
+ * The start destination is the onboarding screen. When the onboarding screen's `onContinue`
+ * action is invoked, navigation transitions to the home screen and removes the onboarding
+ * destination from the back stack so users cannot navigate back to it.
+ */
 @Composable
 fun SynckroNavHost() {
     val nav = rememberNavController()

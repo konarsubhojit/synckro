@@ -13,6 +13,18 @@ import android.os.Build
 private val LightColors = lightColorScheme()
 private val DarkColors = darkColorScheme()
 
+/**
+ * Applies the app's Material 3 color scheme to the provided composable content, choosing between
+ * light, dark, or Android 12+ dynamic system palettes based on the provided flags and device support.
+ *
+ * When `dynamicColor` is true and the device runs Android 12 or newer, a dynamic light or dark
+ * color scheme is obtained from the system; otherwise the statically defined `LightColors` or
+ * `DarkColors` are used. The selected scheme is passed to `MaterialTheme`.
+ *
+ * @param darkTheme If `true`, prefer a dark color scheme; defaults to the system dark/light setting.
+ * @param dynamicColor If `true`, allow using Android 12+ dynamic system colors when supported.
+ * @param content Composable content that will be wrapped with the selected `MaterialTheme`.
+ */
 @Composable
 fun SynckroTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),

@@ -15,6 +15,13 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.konarsubhojit.synckro.R
 
+/**
+ * Displays the onboarding screen containing a title, explanatory body text, and a continue button.
+ *
+ * The content is centered both vertically and horizontally and uses string resources for the texts.
+ *
+ * @param onContinue Callback invoked when the user taps the continue button.
+ */
 @Composable
 fun OnboardingScreen(onContinue: () -> Unit) {
     Column(

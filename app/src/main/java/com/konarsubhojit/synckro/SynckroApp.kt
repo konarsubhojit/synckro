@@ -16,6 +16,12 @@ class SynckroApp : Application(), Configuration.Provider {
 
     @Inject lateinit var workerFactory: HiltWorkerFactory
 
+    /**
+     * Performs application startup initialization.
+     *
+     * Sets up application-wide behavior on process start (for example, enables Timber debug
+     * logging when the build is a debug build).
+     */
     override fun onCreate() {
         super.onCreate()
         if (BuildConfig.DEBUG) {

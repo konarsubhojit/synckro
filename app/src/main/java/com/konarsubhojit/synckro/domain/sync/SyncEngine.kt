@@ -36,6 +36,18 @@ class SyncEngine {
         }
     }
 
+    /**
+     * Run a single synchronization pass for the given SyncPair.
+     *
+     * Performs a full sync workflow: enumerate local files, fetch remote changes, compute
+     * required operations, apply uploads/downloads/deletes with retries, and persist updated
+     * index entries and delta token.
+     *
+     * Currently not implemented; every invocation returns `Result.Terminal("SyncEngine not yet implemented")`.
+     *
+     * @param pair The SyncPair describing the local and remote endpoints and synchronization metadata.
+     * @return A [Result] describing the sync outcome (`Success`, `PartialFailure`, `Retriable`, or `Terminal`).
+     */
     suspend fun runOnce(pair: SyncPair): Result {
         // TODO:
         //  1. Enumerate local files via SAF DocumentFile tree into List<FileSnapshot>.

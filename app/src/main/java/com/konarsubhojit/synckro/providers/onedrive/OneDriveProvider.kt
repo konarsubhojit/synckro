@@ -29,14 +29,60 @@ import java.io.InputStream
 class OneDriveProvider : CloudProvider {
     override val displayName: String = "OneDrive"
 
-    private fun unsupported(op: String): Nothing =
+    /**
+         * Signals that the given OneDriveProvider operation is not implemented by throwing a NotYetImplementedException.
+         *
+         * @param op The name of the unsupported operation (used in the exception message).
+         * @throws NotYetImplementedException always thrown with message "OneDriveProvider.<op> is not implemented yet".
+         */
+        private fun unsupported(op: String): Nothing =
         throw NotYetImplementedException("OneDriveProvider.$op is not implemented yet")
 
-    override suspend fun ensureAuthenticated(): Boolean = unsupported("ensureAuthenticated")
-    override suspend fun list(folderId: String?): List<RemoteFile> = unsupported("list")
-    override suspend fun getMetadata(id: String): RemoteFile = unsupported("getMetadata")
-    override suspend fun download(id: String): InputStream = unsupported("download")
+    /**
+ * Ensures the provider is authenticated.
+ *
+ * @return `true` if the provider is authenticated, `false` otherwise.
+ * @throws NotYetImplementedException always; OneDrive support is not implemented yet.
+ */
+override suspend fun ensureAuthenticated(): Boolean = unsupported("ensureAuthenticated")
+    /**
+ * Lists files and folders contained in the specified remote folder.
+ *
+ * @param folderId The ID of the folder to list, or `null` to list the root drive.
+ * @return A list of `RemoteFile` objects representing the folder's entries.
+ * @throws NotYetImplementedException Always thrown by this provider because the operation is not implemented.
+ */
+override suspend fun list(folderId: String?): List<RemoteFile> = unsupported("list")
+    /**
+ * Retrieves metadata for a remote file identified by the given id.
+ *
+ * @param id The identifier of the remote file.
+ * @return The file's metadata as a [RemoteFile].
+ * @throws NotYetImplementedException This implementation is not implemented and always throws a `NotYetImplementedException`.
+ */
+override suspend fun getMetadata(id: String): RemoteFile = unsupported("getMetadata")
+    /**
+ * Download the contents of a remote file identified by the given id.
+ *
+ * @param id The remote file identifier.
+ * @return An InputStream for reading the file's content.
+ * @throws NotYetImplementedException Always thrown for OneDriveProvider stubs since this operation is not implemented.
+ */
+override suspend fun download(id: String): InputStream = unsupported("download")
 
+    /**
+     * Uploads a new file to the specified parent folder in OneDrive.
+     *
+     * Currently unimplemented — always throws NotYetImplementedException.
+     *
+     * @param parentId ID of the parent folder where the file should be created.
+     * @param name Desired name of the new file.
+     * @param content Stream containing the file content.
+     * @param size Size of the content in bytes.
+     * @param mimeType Optional MIME type of the file.
+     * @return The created RemoteFile metadata.
+     * @throws NotYetImplementedException Always thrown since the operation is not implemented.
+     */
     override suspend fun uploadNew(
         parentId: String,
         name: String,
@@ -45,6 +91,16 @@ class OneDriveProvider : CloudProvider {
         mimeType: String?,
     ): RemoteFile = unsupported("uploadNew")
 
+    /**
+     * Updates the content of a remote file identified by [id].
+     *
+     * @param id The remote file identifier.
+     * @param content Stream containing the new file content.
+     * @param size The size of the new content in bytes.
+     * @param mimeType Optional MIME type to assign to the file; pass `null` to leave it unchanged.
+     * @return The updated `RemoteFile` metadata after replacing the file content.
+     * @throws NotYetImplementedException Always thrown because OneDrive operations are not implemented.
+     */
     override suspend fun updateContent(
         id: String,
         content: InputStream,
@@ -52,12 +108,33 @@ class OneDriveProvider : CloudProvider {
         mimeType: String?,
     ): RemoteFile = unsupported("updateContent")
 
-    override suspend fun createFolder(parentId: String, name: String): RemoteFile =
+    /**
+         * Create a new folder with the given name inside the specified parent folder.
+         *
+         * @param parentId The id of the parent remote folder where the new folder will be created.
+         * @param name The name of the folder to create.
+         * @return A [RemoteFile] representing the newly created folder.
+         * @throws NotYetImplementedException Always thrown because OneDrive operations are not implemented.
+         */
+        override suspend fun createFolder(parentId: String, name: String): RemoteFile =
         unsupported("createFolder")
 
-    override suspend fun delete(id: String): Unit = unsupported("delete")
+    /**
+ * Delete the remote item with the given identifier from the OneDrive account.
+ *
+ * @param id The remote item's identifier.
+ * @throws NotYetImplementedException Always thrown because OneDrive operations are not implemented.
+ */
+override suspend fun delete(id: String): Unit = unsupported("delete")
 
-    override suspend fun changesSince(token: String?): ChangesPage = unsupported("changesSince")
+    /**
+ * Fetches a page of changes that occurred since the supplied change token.
+ *
+ * @param token The change token to start from; pass `null` to enumerate from the beginning.
+ * @return A [ChangesPage] containing the changes and the next continuation token.
+ * @throws NotYetImplementedException Always thrown because OneDrive support is not implemented.
+ */
+override suspend fun changesSince(token: String?): ChangesPage = unsupported("changesSince")
 }
 
 /**

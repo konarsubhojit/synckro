@@ -46,6 +46,17 @@ sealed interface SyncOp {
  */
 object SyncDiffer {
 
+    /**
+     * Compute the ordered list of reconciliation operations needed to bring local and remote file sets
+     * into agreement with each other and the provided baseline index, respecting the sync direction and
+     * conflict resolution policy.
+     *
+     * @param local Collection of FileSnapshot for the local side.
+     * @param remote Collection of FileSnapshot for the remote side.
+     * @param lastIndex Collection of FileIndexEntry representing the last-known baseline index.
+     * @param direction Controls which directions of change are permitted (e.g., disallowing remote->local).
+     * @param conflictPolicy Strategy used to resolve concurrent modifications when both sides changed.
+     * @return A list of SyncOp describing the operations to perform, in the order they were determined. */
     fun diff(
         local: Collection<FileSnapshot>,
         remote: Collection<FileSnapshot>,
@@ -141,17 +152,40 @@ object SyncDiffer {
         return ops
     }
 
+    /**
+     * Determines whether the local snapshot differs from the last-known local columns in the index.
+     *
+     * Compares `hash` values when both `snap.hash` and `idx.localHash` are non-null; otherwise compares `size` and `lastModifiedMs`.
+     *
+     * @param snap The current local file snapshot.
+     * @param idx The last-known index entry for the same path.
+     * @return `true` if the local snapshot differs from the index's local metadata, `false` otherwise.
+     */
     private fun changed(snap: FileSnapshot, idx: FileIndexEntry): Boolean {
         if (snap.hash != null && idx.localHash != null) return snap.hash != idx.localHash
         return snap.size != idx.localSize || snap.lastModifiedMs != idx.localLastModifiedMs
     }
 
-    /** True when two same-path snapshots represent the same content. */
+    /**
+     * Determines whether two snapshots for the same path represent identical content.
+     *
+     * When both snapshots include a hash, equality is based on the hash; otherwise it is
+     * based on matching size and lastModifiedMs.
+     *
+     * @return `true` if the snapshots represent the same content, `false` otherwise.
+     */
     private fun snapshotsEquivalent(a: FileSnapshot, b: FileSnapshot): Boolean {
         if (a.hash != null && b.hash != null) return a.hash == b.hash
         return a.size == b.size && a.lastModifiedMs == b.lastModifiedMs
     }
 
+    /**
+     * Determines whether the remote snapshot differs from the remote columns in the index.
+     *
+     * @param snap The remote-side FileSnapshot to compare.
+     * @param idx The FileIndexEntry whose remote metadata columns are used for comparison.
+     * @return `true` if the index lacks remote size or mtime, or if `snap.size` or `snap.lastModifiedMs` differ from the index's remote values; `false` otherwise.
+     */
     private fun changedRemote(snap: FileSnapshot, idx: FileIndexEntry): Boolean {
         // For the remote side we compare against the remote columns of the index.
         val idxSize = idx.remoteSize ?: return true
@@ -159,6 +193,16 @@ object SyncDiffer {
         return snap.size != idxSize || snap.lastModifiedMs != idxMtime
     }
 
+    /**
+     * Resolve a two-sided content conflict into a concrete reconciliation operation using the given policy and sync direction.
+     *
+     * @param path The file's relative path within the sync roots.
+     * @param local The local side's file snapshot.
+     * @param remote The remote side's file snapshot.
+     * @param policy The conflict resolution policy to apply.
+     * @param direction The configured sync direction which may forbid certain operations.
+     * @return A `SyncOp` describing the chosen action, or `null` if the resolved action would be disallowed by `direction`.
+     */
     private fun resolveConflict(
         path: String,
         local: FileSnapshot,

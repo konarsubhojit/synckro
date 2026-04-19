@@ -30,6 +30,21 @@ class SyncWorker @AssistedInject constructor(
     private val engine: SyncEngine,
 ) : CoroutineWorker(appContext, params) {
 
+    /**
+     * Runs a single synchronization pass for the SyncPair whose id is provided in the worker input and applies WorkManager retry/cancellation policies based on the outcome.
+     *
+     * If the input `pair_id` is missing or invalid, or if the corresponding DB entity no longer exists, the worker cancels the pair's unique periodic work and treats the run as successful. The function constructs a domain `SyncPair` (splitting newline-delimited include/exclude globs into non-blank lines) and delegates the sync to `SyncEngine.runOnce`.
+     *
+     * Mapping of engine results to WorkManager results:
+     * - `SyncEngine.Result.Success` → `Result.success()`
+     * - `SyncEngine.Result.PartialFailure` → logs warning and returns `Result.retry()`
+     * - `SyncEngine.Result.Retriable` → logs info and returns `Result.retry()`
+     * - `SyncEngine.Result.Terminal` → logs warning, cancels the pair's unique periodic work, and returns `Result.failure()`
+     *
+     * Any thrown exception is logged and results in `Result.retry()`.
+     *
+     * @return `Result.success()` for successful runs or when the pair is missing/invalid; `Result.retry()` for partial, retriable, or exceptional failures; `Result.failure()` for terminal failures after cancelling the periodic work.
+     */
     override suspend fun doWork(): Result {
         val pairId = inputData.getLong(KEY_PAIR_ID, -1L)
         if (pairId < 0) {
@@ -90,13 +105,28 @@ class SyncWorker @AssistedInject constructor(
 
     companion object {
         const val KEY_PAIR_ID = "pair_id"
-        fun uniqueName(pairId: Long): String = "synckro-sync-$pairId"
+        /**
+ * Produces a deterministic unique WorkManager name for a SyncPair.
+ *
+ * @param pairId The SyncPair's id.
+ * @return The unique work name for the given pair id (format: "synckro-sync-<pairId>").
+ */
+fun uniqueName(pairId: Long): String = "synckro-sync-$pairId"
     }
 }
 
 /** Schedules [SyncWorker] as periodic work per-pair with the pair's constraints. */
 class SyncScheduler(private val workManager: WorkManager) {
 
+    /**
+     * Schedules or updates a periodic sync job for the given SyncPair with WorkManager.
+     *
+     * The requested interval is in minutes; values below 15 minutes are clamped to 15 and a warning is logged.
+     * The scheduled work is enqueued as unique periodic work identified by the pair's unique name and will replace any existing schedule.
+     *
+     * @param pair The SyncPair to schedule periodic synchronization for; its properties (network, charging, storage, and include/exclude rules) are used to build the work's constraints and input.
+     * @param intervalMinutes Desired interval between runs in minutes (defaults to 60). Values less than 15 will be clamped to the WorkManager minimum.
+     */
     fun schedulePeriodic(pair: SyncPair, intervalMinutes: Long = 60) {
         // WorkManager rejects periodic intervals below 15 minutes. Clamp to
         // that floor rather than crashing in release builds.
@@ -126,6 +156,11 @@ class SyncScheduler(private val workManager: WorkManager) {
         )
     }
 
+    /**
+     * Cancels any scheduled periodic sync work for the SyncPair with the given id.
+     *
+     * @param pairId The id of the SyncPair whose periodic WorkManager job will be canceled.
+     */
     fun cancel(pairId: Long) {
         workManager.cancelUniqueWork(SyncWorker.uniqueName(pairId))
     }

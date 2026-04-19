@@ -19,6 +19,14 @@ import javax.inject.Singleton
 @InstallIn(SingletonComponent::class)
 object AppModule {
 
+    /**
+     * Provides the application's Room-backed SynckroDatabase instance.
+     *
+     * In debug builds the database builder is configured to fallback to destructive migrations; release builds require explicit migrations and will not drop existing data.
+     *
+     * @param ctx Application context used to construct the database.
+     * @return The constructed SynckroDatabase.
+     */
     @Provides @Singleton
     fun provideDatabase(@ApplicationContext ctx: Context): SynckroDatabase {
         val builder = Room.databaseBuilder(ctx, SynckroDatabase::class.java, SynckroDatabase.NAME)
@@ -32,18 +40,44 @@ object AppModule {
         return builder.build()
     }
 
-    @Provides fun provideSyncPairDao(db: SynckroDatabase): SyncPairDao = db.syncPairDao()
+    /**
+ * Provides the SyncPairDao associated with the given SynckroDatabase.
+ *
+ * @return The SyncPairDao instance retrieved from the database.
+ */
+@Provides fun provideSyncPairDao(db: SynckroDatabase): SyncPairDao = db.syncPairDao()
 
-    @Provides fun provideFileIndexDao(db: SynckroDatabase): FileIndexDao = db.fileIndexDao()
+    /**
+ * Provides the DAO for accessing file index records from the database.
+ *
+ * @return The FileIndexDao instance from the provided SynckroDatabase.
+ */
+@Provides fun provideFileIndexDao(db: SynckroDatabase): FileIndexDao = db.fileIndexDao()
 
-    @Provides @Singleton
+    /**
+         * Provides the application WorkManager instance.
+         *
+         * @param ctx The application Context used to obtain the WorkManager.
+         * @return The WorkManager instance for the provided application context.
+         */
+        @Provides @Singleton
     fun provideWorkManager(@ApplicationContext ctx: Context): WorkManager =
         WorkManager.getInstance(ctx)
 
-    @Provides @Singleton
+    /**
+         * Provides a SyncScheduler that orchestrates synchronization tasks using the supplied WorkManager.
+         *
+         * @return The created SyncScheduler instance.
+         */
+        @Provides @Singleton
     fun provideSyncScheduler(workManager: WorkManager): SyncScheduler =
         SyncScheduler(workManager)
 
+    /**
+     * Provides the application's synchronization engine used to coordinate sync tasks.
+     *
+     * @return A `SyncEngine` instance used to perform and manage synchronization operations.
+     */
     @Provides @Singleton
     fun provideSyncEngine(): SyncEngine = SyncEngine()
 }
