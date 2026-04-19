@@ -1,0 +1,3 @@
+# Example only — copy to `local.properties` and set your SDK path.
+# local.properties itself is gitignored.
+sdk.dir=/opt/android/sdk
