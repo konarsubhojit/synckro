@@ -1,0 +1,10 @@
+<resources>
+    <string name="app_name">Synckro</string>
+    <string name="onboarding_title">Welcome to Synckro</string>
+    <string name="onboarding_body">Keep a folder on your phone in sync with OneDrive or Google Drive.</string>
+    <string name="onboarding_cta">Get started</string>
+    <string name="home_title">Sync pairs</string>
+    <string name="home_empty">No sync pairs yet. Tap + to create one.</string>
+    <string name="add_sync_pair">Add sync pair</string>
+    <string name="sync_now">Sync now</string>
+</resources>

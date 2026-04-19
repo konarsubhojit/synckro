@@ -1,0 +1,69 @@
+package com.konarsubhojit.synckro.providers.gdrive
+
+import com.konarsubhojit.synckro.domain.provider.ChangesPage
+import com.konarsubhojit.synckro.domain.provider.CloudProvider
+import com.konarsubhojit.synckro.domain.provider.NotYetImplementedException
+import com.konarsubhojit.synckro.domain.provider.RemoteFile
+import java.io.InputStream
+
+/**
+ * Google Drive provider backed by the Drive REST v3 API.
+ *
+ * [ensureAuthenticated] returns false for now and the remaining operations
+ * throw [NotYetImplementedException] so the sync worker can treat them as a
+ * terminal configuration error instead of retrying forever.
+ *
+ * TODO (next milestones):
+ *  - Sign in with Credential Manager + Google Identity Services; request scope
+ *    `https://www.googleapis.com/auth/drive.file` (preferred) or
+ *    `drive` if the user needs to select pre-existing folders.
+ *  - Store refresh token in EncryptedSharedPreferences.
+ *  - Call Drive v3 endpoints under `https://www.googleapis.com/drive/v3/`:
+ *      - `files.list` with `q='parentId' in parents` for listing.
+ *      - `files.get?alt=media` for download.
+ *      - `upload/drive/v3/files?uploadType=resumable` for resumable upload.
+ *      - `files.update?uploadType=resumable` for overwrite.
+ *      - `changes.list` with `startPageToken` for incremental sync.
+ *  - Retry 429/5xx with exponential backoff honoring `Retry-After`.
+ */
+class GoogleDriveProvider : CloudProvider {
+    override val displayName: String = "Google Drive"
+
+    private fun unsupported(op: String): Nothing =
+        throw NotYetImplementedException("GoogleDriveProvider.$op is not implemented yet")
+
+    private fun unsupported(op: String, content: InputStream): Nothing {
+        try {
+            throw NotYetImplementedException("GoogleDriveProvider.$op is not implemented yet")
+        } finally {
+            content.close()
+        }
+    }
+
+    override suspend fun ensureAuthenticated(): Boolean = false
+    override suspend fun list(folderId: String?): List<RemoteFile> = unsupported("list")
+    override suspend fun getMetadata(id: String): RemoteFile = unsupported("getMetadata")
+    override suspend fun download(id: String): InputStream = unsupported("download")
+
+    override suspend fun uploadNew(
+        parentId: String,
+        name: String,
+        content: InputStream,
+        size: Long,
+        mimeType: String?,
+    ): RemoteFile = unsupported("uploadNew", content)
+
+    override suspend fun updateContent(
+        id: String,
+        content: InputStream,
+        size: Long,
+        mimeType: String?,
+    ): RemoteFile = unsupported("updateContent", content)
+
+    override suspend fun createFolder(parentId: String, name: String): RemoteFile =
+        unsupported("createFolder")
+
+    override suspend fun delete(id: String): Unit = unsupported("delete")
+
+    override suspend fun changesSince(token: String?): ChangesPage = unsupported("changesSince")
+}
