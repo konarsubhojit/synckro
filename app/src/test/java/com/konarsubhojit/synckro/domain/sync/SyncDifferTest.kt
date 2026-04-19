@@ -202,4 +202,76 @@ class SyncDifferTest {
         )
         assertEquals(listOf<SyncOp>(SyncOp.UpdateRemote("a.txt")), ops)
     }
+
+    @Test
+    fun `local changed remote deleted prefers local by recreating remote`() {
+        val ops = SyncDiffer.diff(
+            local = listOf(snap("a.txt", size = 20, mtime = 2_000)),
+            remote = emptyList(),
+            lastIndex = listOf(idx("a.txt")),
+            direction = SyncDirection.BIDIRECTIONAL,
+            conflictPolicy = ConflictPolicy.PREFER_LOCAL,
+        )
+        assertEquals(listOf<SyncOp>(SyncOp.UploadNew("a.txt")), ops)
+    }
+
+    @Test
+    fun `local changed remote deleted prefers remote by deleting local`() {
+        val ops = SyncDiffer.diff(
+            local = listOf(snap("a.txt", size = 20, mtime = 2_000)),
+            remote = emptyList(),
+            lastIndex = listOf(idx("a.txt")),
+            direction = SyncDirection.BIDIRECTIONAL,
+            conflictPolicy = ConflictPolicy.PREFER_REMOTE,
+        )
+        assertEquals(listOf<SyncOp>(SyncOp.DeleteLocal("a.txt")), ops)
+    }
+
+    @Test
+    fun `local changed remote deleted uses changed side for newest wins`() {
+        val ops = SyncDiffer.diff(
+            local = listOf(snap("a.txt", size = 20, mtime = 2_000)),
+            remote = emptyList(),
+            lastIndex = listOf(idx("a.txt")),
+            direction = SyncDirection.BIDIRECTIONAL,
+            conflictPolicy = ConflictPolicy.NEWEST_WINS,
+        )
+        assertEquals(listOf<SyncOp>(SyncOp.UploadNew("a.txt")), ops)
+    }
+
+    @Test
+    fun `remote changed local deleted prefers remote by recreating local`() {
+        val ops = SyncDiffer.diff(
+            local = emptyList(),
+            remote = listOf(snap("a.txt", size = 20, mtime = 2_000)),
+            lastIndex = listOf(idx("a.txt")),
+            direction = SyncDirection.BIDIRECTIONAL,
+            conflictPolicy = ConflictPolicy.PREFER_REMOTE,
+        )
+        assertEquals(listOf<SyncOp>(SyncOp.DownloadNew("a.txt")), ops)
+    }
+
+    @Test
+    fun `remote changed local deleted prefers local by deleting remote`() {
+        val ops = SyncDiffer.diff(
+            local = emptyList(),
+            remote = listOf(snap("a.txt", size = 20, mtime = 2_000)),
+            lastIndex = listOf(idx("a.txt")),
+            direction = SyncDirection.BIDIRECTIONAL,
+            conflictPolicy = ConflictPolicy.PREFER_LOCAL,
+        )
+        assertEquals(listOf<SyncOp>(SyncOp.DeleteRemote("a.txt")), ops)
+    }
+
+    @Test
+    fun `remote changed local deleted uses changed side for newest wins`() {
+        val ops = SyncDiffer.diff(
+            local = emptyList(),
+            remote = listOf(snap("a.txt", size = 20, mtime = 2_000)),
+            lastIndex = listOf(idx("a.txt")),
+            direction = SyncDirection.BIDIRECTIONAL,
+            conflictPolicy = ConflictPolicy.NEWEST_WINS,
+        )
+        assertEquals(listOf<SyncOp>(SyncOp.DownloadNew("a.txt")), ops)
+    }
 }

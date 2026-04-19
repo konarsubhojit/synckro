@@ -17,14 +17,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import com.konarsubhojit.synckro.R
 
-/**
- * Displays the app home UI with a top app bar, centered placeholder text, and a floating action button to add a sync pair.
- *
- * @param onAddSyncPair Callback invoked when the floating action button is clicked.
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen(onAddSyncPair: () -> Unit = {}) {
+fun HomeScreen(onAddSyncPair: () -> Unit) {
     Scaffold(
         topBar = { TopAppBar(title = { Text(stringResource(R.string.home_title)) }) },
         floatingActionButton = {

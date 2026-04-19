@@ -125,6 +125,7 @@ override suspend fun ensureAuthenticated(): Boolean = true
         mimeType: String?,
     ): RemoteFile = mutex.withLock {
         val existing = store[id] ?: error("Not found: $id")
+        require(!existing.meta.isFolder) { "Cannot update content of a folder: $id" }
         val bytes = content.use { it.readBytes() }
         val meta = existing.meta.copy(
             size = bytes.size.toLong(),

@@ -1,6 +1,7 @@
 # Gradle
 .gradle/
 build/
+/out/
 
 # Android Studio / IntelliJ
 .idea/
@@ -19,6 +20,7 @@ keystore.properties
 *.aab
 *.ap_
 *.dex
+*.class
 
 # Logs
 *.log

@@ -16,6 +16,7 @@ import com.konarsubhojit.synckro.domain.sync.SyncEngine
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.CancellationException
 import timber.log.Timber
 
 /**
@@ -81,8 +82,7 @@ class SyncWorker @AssistedInject constructor(
                 is SyncEngine.Result.Success -> Result.success()
                 is SyncEngine.Result.PartialFailure -> {
                     Timber.w("Sync for pair %d completed with %d errors", pairId, r.errors.size)
-                    // Partial failures are rescheduled so transient errors can recover.
-                    Result.retry()
+                    Result.success()
                 }
                 is SyncEngine.Result.Retriable -> {
                     Timber.i("Retrying sync for pair %d: %s", pairId, r.reason)
@@ -97,6 +97,8 @@ class SyncWorker @AssistedInject constructor(
                     Result.failure()
                 }
             }
+        } catch (c: CancellationException) {
+            throw c
         } catch (t: Throwable) {
             Timber.w(t, "Sync failed for pair %d", pairId)
             Result.retry()

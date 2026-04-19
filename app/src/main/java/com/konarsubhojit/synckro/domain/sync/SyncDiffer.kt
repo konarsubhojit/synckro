@@ -138,12 +138,23 @@ object SyncDiffer {
 
             // Local changed, remote deleted (or vice versa) → conflict too
             if (localChanged && remoteDeleted) {
-                // Treat as a conflict with "remote side missing".
-                ops += SyncOp.Conflict(path, localNewerThanRemote = true)
+                val op = resolveModifyDeleteConflict(
+                    path = path,
+                    changedSide = ChangedSide.LOCAL,
+                    policy = conflictPolicy,
+                    direction = direction,
+                )
+                if (op != null) ops += op
                 continue
             }
             if (remoteChanged && localDeleted) {
-                ops += SyncOp.Conflict(path, localNewerThanRemote = false)
+                val op = resolveModifyDeleteConflict(
+                    path = path,
+                    changedSide = ChangedSide.REMOTE,
+                    policy = conflictPolicy,
+                    direction = direction,
+                )
+                if (op != null) ops += op
                 continue
             }
             // Otherwise: no-op (both sides equal to index).
@@ -225,6 +236,38 @@ object SyncDiffer {
                 }
             ConflictPolicy.KEEP_BOTH ->
                 SyncOp.Conflict(path, localNewerThanRemote = local.lastModifiedMs >= remote.lastModifiedMs)
+        }
+    }
+
+    private enum class ChangedSide { LOCAL, REMOTE }
+
+    private fun resolveModifyDeleteConflict(
+        path: String,
+        changedSide: ChangedSide,
+        policy: ConflictPolicy,
+        direction: SyncDirection,
+    ): SyncOp? {
+        return when (policy) {
+            ConflictPolicy.KEEP_BOTH ->
+                SyncOp.Conflict(path, localNewerThanRemote = changedSide == ChangedSide.LOCAL)
+            ConflictPolicy.PREFER_LOCAL ->
+                if (changedSide == ChangedSide.LOCAL) {
+                    if (direction != SyncDirection.REMOTE_TO_LOCAL) SyncOp.UploadNew(path) else null
+                } else {
+                    if (direction != SyncDirection.REMOTE_TO_LOCAL) SyncOp.DeleteRemote(path) else null
+                }
+            ConflictPolicy.PREFER_REMOTE ->
+                if (changedSide == ChangedSide.LOCAL) {
+                    if (direction != SyncDirection.LOCAL_TO_REMOTE) SyncOp.DeleteLocal(path) else null
+                } else {
+                    if (direction != SyncDirection.LOCAL_TO_REMOTE) SyncOp.DownloadNew(path) else null
+                }
+            ConflictPolicy.NEWEST_WINS ->
+                if (changedSide == ChangedSide.LOCAL) {
+                    if (direction != SyncDirection.REMOTE_TO_LOCAL) SyncOp.UploadNew(path) else null
+                } else {
+                    if (direction != SyncDirection.LOCAL_TO_REMOTE) SyncOp.DownloadNew(path) else null
+                }
         }
     }
 }

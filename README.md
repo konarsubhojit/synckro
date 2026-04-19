@@ -68,6 +68,9 @@ app/src/main/java/com/konarsubhojit/synckro/
 Requires JDK 17 and the Android SDK (command-line tools or Android Studio).
 Copy `local.properties.example` to `local.properties` and set `sdk.dir` to your
 Android SDK location.
+The Gradle wrapper is committed in `gradlew`, `gradlew.bat`, and
+`gradle/wrapper/gradle-wrapper.jar`, so you can build immediately with
+`./gradlew` (or `gradlew.bat` on Windows).
 
 ### Common tasks
 
@@ -79,14 +82,14 @@ Android SDK location.
 
 ## CI / CD
 
-GitHub Actions builds the debug APK on every push to `main` / `master`, on
-pull requests, and on manual dispatch. Each run uploads the generated APK from
+GitHub Actions builds the debug APK on every push, on pull requests, and on
+manual dispatch. Each run uploads the generated APK from
 `app/build/outputs/apk/debug/` as an Actions artifact named
 `synckro-debug-apk-<run_number>`.
 
 ## Roadmap
 
-See the tracking PR for the full checklist. Near-term work:
+Near-term work:
 
 1. Wire up SAF folder picker and persist tree URIs.
 2. Implement real local-folder enumeration against a `DocumentFile` tree and
