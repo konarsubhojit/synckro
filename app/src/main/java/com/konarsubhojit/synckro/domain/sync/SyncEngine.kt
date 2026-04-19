@@ -10,11 +10,31 @@ import com.konarsubhojit.synckro.domain.model.SyncPair
  */
 class SyncEngine {
 
-    data class Result(
-        val applied: Int,
-        val conflicts: Int,
-        val errors: List<String>,
-    )
+    /**
+     * Outcome of a single [runOnce]. [Success] and [PartialFailure] both mean
+     * WorkManager should treat the run as complete; [Retriable] should be
+     * rescheduled with backoff; [Terminal] means the pair is mis-configured
+     * (revoked auth, unsupported provider, …) and periodic work should stop.
+     */
+    sealed interface Result {
+        val applied: Int
+        val conflicts: Int
+
+        data class Success(override val applied: Int, override val conflicts: Int) : Result
+        data class PartialFailure(
+            override val applied: Int,
+            override val conflicts: Int,
+            val errors: List<String>,
+        ) : Result
+        data class Retriable(val reason: String) : Result {
+            override val applied: Int = 0
+            override val conflicts: Int = 0
+        }
+        data class Terminal(val reason: String) : Result {
+            override val applied: Int = 0
+            override val conflicts: Int = 0
+        }
+    }
 
     suspend fun runOnce(pair: SyncPair): Result {
         // TODO:
@@ -23,6 +43,8 @@ class SyncEngine {
         //  3. Compute ops via SyncDiffer.diff(...).
         //  4. Apply ops (upload / download / delete / mkdir) with retries.
         //  5. Persist updated FileIndexEntry rows and the new delta token.
-        return Result(applied = 0, conflicts = 0, errors = emptyList())
+        // Until the pipeline is wired, treat every invocation as a terminal
+        // no-op so callers don't silently report stale data as "synced".
+        return Result.Terminal("SyncEngine not yet implemented")
     }
 }

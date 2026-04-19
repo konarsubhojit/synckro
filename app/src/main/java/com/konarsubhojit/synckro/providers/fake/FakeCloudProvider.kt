@@ -36,6 +36,7 @@ class FakeCloudProvider : CloudProvider {
 
     override suspend fun download(id: String): InputStream {
         val rec = store[id] ?: error("Not found: $id")
+        require(!rec.meta.isFolder) { "Cannot download a folder: $id" }
         return ByteArrayInputStream(rec.bytes)
     }
 
@@ -46,7 +47,7 @@ class FakeCloudProvider : CloudProvider {
         size: Long,
         mimeType: String?,
     ): RemoteFile = mutex.withLock {
-        val bytes = content.readBytes()
+        val bytes = content.use { it.readBytes() }
         val meta = RemoteFile(
             id = UUID.randomUUID().toString(),
             name = name,
@@ -69,7 +70,7 @@ class FakeCloudProvider : CloudProvider {
         mimeType: String?,
     ): RemoteFile = mutex.withLock {
         val existing = store[id] ?: error("Not found: $id")
-        val bytes = content.readBytes()
+        val bytes = content.use { it.readBytes() }
         val meta = existing.meta.copy(
             size = bytes.size.toLong(),
             lastModifiedMs = System.currentTimeMillis(),
@@ -104,8 +105,19 @@ class FakeCloudProvider : CloudProvider {
     }
 
     override suspend fun changesSince(token: String?): ChangesPage = mutex.withLock {
-        val start = token?.toIntOrNull() ?: 0
-        val slice = if (start >= changeLog.size) emptyList() else changeLog.subList(start, changeLog.size).toList()
+        // Contract: a null token establishes the initial delta state without
+        // replaying history — matches OneDrive `/delta` and Drive
+        // `changes.getStartPageToken` first-call behaviour.
+        if (token == null) {
+            return@withLock ChangesPage(
+                changes = emptyList(),
+                nextToken = changeLog.size.toString(),
+                hasMore = false,
+            )
+        }
+        val start = requireNotNull(token.toIntOrNull()) { "Malformed change token: $token" }
+        require(start in 0..changeLog.size) { "Change token out of range: $start" }
+        val slice = changeLog.subList(start, changeLog.size).toList()
         ChangesPage(
             changes = slice,
             nextToken = changeLog.size.toString(),

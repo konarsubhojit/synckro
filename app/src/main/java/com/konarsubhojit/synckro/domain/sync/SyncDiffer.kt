@@ -70,6 +70,17 @@ object SyncDiffer {
             val r = remoteByPath[path]
             val idx = indexByPath[path]
 
+            // Initial sync (no index) with a path that already exists on both
+            // sides: if the snapshots are equivalent, treat as a no-op so the
+            // engine can just persist the baseline index; otherwise fall
+            // through to conflict resolution.
+            if (idx == null && l != null && r != null) {
+                if (snapshotsEquivalent(l, r)) continue
+                val op = resolveConflict(path, l, r, conflictPolicy, direction)
+                if (op != null) ops += op
+                continue
+            }
+
             val localChanged = l != null && (idx == null || changed(l, idx))
             val remoteChanged = r != null && (idx == null || changedRemote(r, idx))
             val localDeleted = l == null && idx != null
@@ -133,6 +144,12 @@ object SyncDiffer {
     private fun changed(snap: FileSnapshot, idx: FileIndexEntry): Boolean {
         if (snap.hash != null && idx.localHash != null) return snap.hash != idx.localHash
         return snap.size != idx.localSize || snap.lastModifiedMs != idx.localLastModifiedMs
+    }
+
+    /** True when two same-path snapshots represent the same content. */
+    private fun snapshotsEquivalent(a: FileSnapshot, b: FileSnapshot): Boolean {
+        if (a.hash != null && b.hash != null) return a.hash == b.hash
+        return a.size == b.size && a.lastModifiedMs == b.lastModifiedMs
     }
 
     private fun changedRemote(snap: FileSnapshot, idx: FileIndexEntry): Boolean {

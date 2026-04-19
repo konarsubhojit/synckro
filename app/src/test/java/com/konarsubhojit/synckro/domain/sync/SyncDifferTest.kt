@@ -142,4 +142,64 @@ class SyncDifferTest {
         )
         assertTrue("expected no ops for remote-only change in LOCAL_TO_REMOTE", ops.isEmpty())
     }
+
+    @Test
+    fun `initial sync with identical snapshots on both sides is a no-op`() {
+        val ops = SyncDiffer.diff(
+            local = listOf(snap("a.txt", size = 10, mtime = 1_000)),
+            remote = listOf(snap("a.txt", size = 10, mtime = 1_000)),
+            lastIndex = emptyList(),
+            direction = SyncDirection.BIDIRECTIONAL,
+            conflictPolicy = ConflictPolicy.NEWEST_WINS,
+        )
+        assertTrue("expected no ops when both sides are already equivalent", ops.isEmpty())
+    }
+
+    @Test
+    fun `initial sync with divergent snapshots falls through conflict resolution`() {
+        val ops = SyncDiffer.diff(
+            local = listOf(snap("a.txt", size = 20, mtime = 3_000)),
+            remote = listOf(snap("a.txt", size = 30, mtime = 2_000)),
+            lastIndex = emptyList(),
+            direction = SyncDirection.BIDIRECTIONAL,
+            conflictPolicy = ConflictPolicy.NEWEST_WINS,
+        )
+        assertEquals(listOf<SyncOp>(SyncOp.UpdateRemote("a.txt")), ops)
+    }
+
+    @Test
+    fun `PREFER_LOCAL always updates remote on conflict`() {
+        val ops = SyncDiffer.diff(
+            local = listOf(snap("a.txt", size = 20, mtime = 2_000)),
+            remote = listOf(snap("a.txt", size = 30, mtime = 3_000)),
+            lastIndex = listOf(idx("a.txt")),
+            direction = SyncDirection.BIDIRECTIONAL,
+            conflictPolicy = ConflictPolicy.PREFER_LOCAL,
+        )
+        assertEquals(listOf<SyncOp>(SyncOp.UpdateRemote("a.txt")), ops)
+    }
+
+    @Test
+    fun `PREFER_REMOTE always updates local on conflict`() {
+        val ops = SyncDiffer.diff(
+            local = listOf(snap("a.txt", size = 20, mtime = 3_000)),
+            remote = listOf(snap("a.txt", size = 30, mtime = 2_000)),
+            lastIndex = listOf(idx("a.txt")),
+            direction = SyncDirection.BIDIRECTIONAL,
+            conflictPolicy = ConflictPolicy.PREFER_REMOTE,
+        )
+        assertEquals(listOf<SyncOp>(SyncOp.UpdateLocal("a.txt")), ops)
+    }
+
+    @Test
+    fun `NEWEST_WINS prefers local on exact-tie timestamps`() {
+        val ops = SyncDiffer.diff(
+            local = listOf(snap("a.txt", size = 20, mtime = 2_000)),
+            remote = listOf(snap("a.txt", size = 30, mtime = 2_000)),
+            lastIndex = listOf(idx("a.txt")),
+            direction = SyncDirection.BIDIRECTIONAL,
+            conflictPolicy = ConflictPolicy.NEWEST_WINS,
+        )
+        assertEquals(listOf<SyncOp>(SyncOp.UpdateRemote("a.txt")), ops)
+    }
 }

@@ -8,6 +8,12 @@ import java.io.InputStream
 /**
  * OneDrive provider backed by the Microsoft Graph API.
  *
+ * All methods currently throw [NotYetImplementedException] so callers
+ * (notably [com.konarsubhojit.synckro.data.worker.SyncWorker]) can treat them
+ * as a terminal configuration error instead of retrying forever. This type is
+ * intentionally distinct from Kotlin's `NotImplementedError` (which is a
+ * subclass of `Error` and should not be caught in production code).
+ *
  * TODO (next milestones):
  *  - Add MSAL dependency (`com.microsoft.identity.client:msal`) + Azure AD
  *    client registration and `res/raw/msal_config.json`.
@@ -23,16 +29,13 @@ import java.io.InputStream
 class OneDriveProvider : CloudProvider {
     override val displayName: String = "OneDrive"
 
-    override suspend fun ensureAuthenticated(): Boolean = TODO("MSAL token acquisition")
+    private fun unsupported(op: String): Nothing =
+        throw NotYetImplementedException("OneDriveProvider.$op is not implemented yet")
 
-    override suspend fun list(folderId: String?): List<RemoteFile> =
-        TODO("GET /me/drive/items/{id}/children")
-
-    override suspend fun getMetadata(id: String): RemoteFile =
-        TODO("GET /me/drive/items/{id}")
-
-    override suspend fun download(id: String): InputStream =
-        TODO("GET /me/drive/items/{id}/content")
+    override suspend fun ensureAuthenticated(): Boolean = unsupported("ensureAuthenticated")
+    override suspend fun list(folderId: String?): List<RemoteFile> = unsupported("list")
+    override suspend fun getMetadata(id: String): RemoteFile = unsupported("getMetadata")
+    override suspend fun download(id: String): InputStream = unsupported("download")
 
     override suspend fun uploadNew(
         parentId: String,
@@ -40,20 +43,26 @@ class OneDriveProvider : CloudProvider {
         content: InputStream,
         size: Long,
         mimeType: String?,
-    ): RemoteFile = TODO("Create upload session and chunked PUT")
+    ): RemoteFile = unsupported("uploadNew")
 
     override suspend fun updateContent(
         id: String,
         content: InputStream,
         size: Long,
         mimeType: String?,
-    ): RemoteFile = TODO("Create upload session against existing item id")
+    ): RemoteFile = unsupported("updateContent")
 
     override suspend fun createFolder(parentId: String, name: String): RemoteFile =
-        TODO("POST /me/drive/items/{parentId}/children with folder facet")
+        unsupported("createFolder")
 
-    override suspend fun delete(id: String): Unit = TODO("DELETE /me/drive/items/{id}")
+    override suspend fun delete(id: String): Unit = unsupported("delete")
 
-    override suspend fun changesSince(token: String?): ChangesPage =
-        TODO("GET /me/drive/root/delta (or continue with the token)")
+    override suspend fun changesSince(token: String?): ChangesPage = unsupported("changesSince")
 }
+
+/**
+ * Thrown by provider stubs to signal that the requested operation hasn't been
+ * implemented yet. Distinct from `kotlin.NotImplementedError` (an [Error])
+ * because callers MAY catch it and treat it as a terminal sync result.
+ */
+class NotYetImplementedException(message: String) : UnsupportedOperationException(message)

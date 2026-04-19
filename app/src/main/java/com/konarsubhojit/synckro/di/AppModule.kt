@@ -20,10 +20,17 @@ import javax.inject.Singleton
 object AppModule {
 
     @Provides @Singleton
-    fun provideDatabase(@ApplicationContext ctx: Context): SynckroDatabase =
-        Room.databaseBuilder(ctx, SynckroDatabase::class.java, SynckroDatabase.NAME)
-            .fallbackToDestructiveMigration() // pre-1.0; replace with real migrations before release
-            .build()
+    fun provideDatabase(@ApplicationContext ctx: Context): SynckroDatabase {
+        val builder = Room.databaseBuilder(ctx, SynckroDatabase::class.java, SynckroDatabase.NAME)
+        // Destructive fallback is only acceptable while the schema is still
+        // pre-1.0. In release builds we refuse to drop user sync state and
+        // require explicit migrations.
+        if (com.konarsubhojit.synckro.BuildConfig.DEBUG) {
+            @Suppress("DEPRECATION")
+            builder.fallbackToDestructiveMigration()
+        }
+        return builder.build()
+    }
 
     @Provides fun provideSyncPairDao(db: SynckroDatabase): SyncPairDao = db.syncPairDao()
 

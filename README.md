@@ -44,7 +44,7 @@ a folder on **OneDrive** or **Google Drive**.
 Currently a single-module project (`:app`) with a clean package layout so it can
 be split into Gradle modules later without code churn:
 
-```
+```text
 app/src/main/java/com/konarsubhojit/synckro/
 ├── SynckroApp.kt                       # Hilt Application
 ├── MainActivity.kt                     # Compose entry point
@@ -69,15 +69,29 @@ Requires JDK 17 and the Android SDK (command-line tools or Android Studio).
 Copy `local.properties.example` to `local.properties` and set `sdk.dir` to your
 Android SDK location.
 
+### One-time setup: generate the Gradle wrapper
+
+The Gradle wrapper scripts (`gradlew`, `gradlew.bat`) and JAR are **not**
+committed — this repo only ships `gradle/wrapper/gradle-wrapper.properties`.
+Run the following once with a locally installed Gradle (matching the
+distribution declared in `gradle/wrapper/gradle-wrapper.properties`) to
+generate the wrapper artifacts:
+
+```bash
+gradle wrapper
+```
+
+After that the commands below work on any checkout that has the generated
+wrapper in place. If you prefer not to commit the wrapper, you can substitute
+`gradle` for `./gradlew` in every command.
+
+### Common tasks
+
 ```bash
 ./gradlew assembleDebug        # build APK
 ./gradlew testDebugUnitTest    # run unit tests
 ./gradlew lintDebug            # Android lint
 ```
-
-The Gradle wrapper JAR is not committed; run `gradle wrapper` once with a local
-Gradle install (matching `gradle/wrapper/gradle-wrapper.properties`) to
-regenerate it.
 
 ## Roadmap
 

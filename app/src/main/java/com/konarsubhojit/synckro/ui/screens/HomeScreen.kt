@@ -19,11 +19,11 @@ import com.konarsubhojit.synckro.R
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen() {
+fun HomeScreen(onAddSyncPair: () -> Unit = {}) {
     Scaffold(
         topBar = { TopAppBar(title = { Text(stringResource(R.string.home_title)) }) },
         floatingActionButton = {
-            FloatingActionButton(onClick = { /* TODO: launch add-sync-pair flow */ }) {
+            FloatingActionButton(onClick = onAddSyncPair) {
                 Icon(Icons.Default.Add, contentDescription = stringResource(R.string.add_sync_pair))
             }
         },

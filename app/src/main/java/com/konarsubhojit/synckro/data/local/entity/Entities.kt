@@ -1,7 +1,7 @@
 package com.konarsubhojit.synckro.data.local.entity
 
 import androidx.room.Entity
-import androidx.room.Index
+import androidx.room.ForeignKey
 import androidx.room.PrimaryKey
 import com.konarsubhojit.synckro.domain.model.CloudProviderType
 import com.konarsubhojit.synckro.domain.model.ConflictPolicy
@@ -28,7 +28,17 @@ data class SyncPairEntity(
 @Entity(
     tableName = "file_index",
     primaryKeys = ["pairId", "relativePath"],
-    indices = [Index(value = ["pairId"])],
+    // The composite PK's leading column already indexes `pairId`; a
+    // standalone index would only duplicate it. A foreign key with cascading
+    // delete keeps the index consistent when a sync pair is removed.
+    foreignKeys = [
+        ForeignKey(
+            entity = SyncPairEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["pairId"],
+            onDelete = ForeignKey.CASCADE,
+        ),
+    ],
 )
 data class FileIndexEntity(
     val pairId: Long,

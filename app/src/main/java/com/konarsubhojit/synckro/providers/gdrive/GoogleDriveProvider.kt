@@ -3,10 +3,15 @@ package com.konarsubhojit.synckro.providers.gdrive
 import com.konarsubhojit.synckro.domain.provider.ChangesPage
 import com.konarsubhojit.synckro.domain.provider.CloudProvider
 import com.konarsubhojit.synckro.domain.provider.RemoteFile
+import com.konarsubhojit.synckro.providers.onedrive.NotYetImplementedException
 import java.io.InputStream
 
 /**
  * Google Drive provider backed by the Drive REST v3 API.
+ *
+ * All methods currently throw [NotYetImplementedException] so the sync worker
+ * can treat them as a terminal configuration error instead of retrying
+ * forever. See the OneDrive provider for the rationale.
  *
  * TODO (next milestones):
  *  - Sign in with Credential Manager + Google Identity Services; request scope
@@ -24,15 +29,13 @@ import java.io.InputStream
 class GoogleDriveProvider : CloudProvider {
     override val displayName: String = "Google Drive"
 
-    override suspend fun ensureAuthenticated(): Boolean = TODO("OAuth + access token")
+    private fun unsupported(op: String): Nothing =
+        throw NotYetImplementedException("GoogleDriveProvider.$op is not implemented yet")
 
-    override suspend fun list(folderId: String?): List<RemoteFile> =
-        TODO("files.list with parent filter")
-
-    override suspend fun getMetadata(id: String): RemoteFile = TODO("files.get")
-
-    override suspend fun download(id: String): InputStream =
-        TODO("files.get?alt=media")
+    override suspend fun ensureAuthenticated(): Boolean = unsupported("ensureAuthenticated")
+    override suspend fun list(folderId: String?): List<RemoteFile> = unsupported("list")
+    override suspend fun getMetadata(id: String): RemoteFile = unsupported("getMetadata")
+    override suspend fun download(id: String): InputStream = unsupported("download")
 
     override suspend fun uploadNew(
         parentId: String,
@@ -40,20 +43,19 @@ class GoogleDriveProvider : CloudProvider {
         content: InputStream,
         size: Long,
         mimeType: String?,
-    ): RemoteFile = TODO("Resumable multipart upload")
+    ): RemoteFile = unsupported("uploadNew")
 
     override suspend fun updateContent(
         id: String,
         content: InputStream,
         size: Long,
         mimeType: String?,
-    ): RemoteFile = TODO("files.update resumable upload")
+    ): RemoteFile = unsupported("updateContent")
 
     override suspend fun createFolder(parentId: String, name: String): RemoteFile =
-        TODO("files.create with mimeType application/vnd.google-apps.folder")
+        unsupported("createFolder")
 
-    override suspend fun delete(id: String): Unit = TODO("files.delete")
+    override suspend fun delete(id: String): Unit = unsupported("delete")
 
-    override suspend fun changesSince(token: String?): ChangesPage =
-        TODO("changes.list; if token is null fetch changes.getStartPageToken")
+    override suspend fun changesSince(token: String?): ChangesPage = unsupported("changesSince")
 }

@@ -17,11 +17,19 @@ data class RemoteFile(
     val mimeType: String?,
 )
 
-/** A single change reported by a provider's delta/changes endpoint. */
+/**
+ * A single change reported by a provider's delta/changes endpoint. Exactly one
+ * of [file] and [removedId] must be non-null.
+ */
 data class RemoteChange(
     val file: RemoteFile?,
     val removedId: String?,
 ) {
+    init {
+        require((file == null) != (removedId == null)) {
+            "Exactly one of file or removedId must be set on a RemoteChange"
+        }
+    }
     val isDeletion: Boolean get() = removedId != null
 }
 
@@ -63,6 +71,9 @@ interface CloudProvider {
      * Upload [content] as a new file under [parentId] with [name]. [size] may
      * be -1 if unknown — providers that require a known length MUST read into
      * a temporary buffer first.
+     *
+     * The provider takes ownership of [content] and MUST close it before
+     * returning, even on failure.
      */
     suspend fun uploadNew(
         parentId: String,
@@ -72,7 +83,12 @@ interface CloudProvider {
         mimeType: String?,
     ): RemoteFile
 
-    /** Overwrite the contents of an existing file. */
+    /**
+     * Overwrite the contents of an existing file.
+     *
+     * The provider takes ownership of [content] and MUST close it before
+     * returning, even on failure.
+     */
     suspend fun updateContent(
         id: String,
         content: InputStream,

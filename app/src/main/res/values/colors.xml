@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Branding colors. Keep in sync with the launcher adaptive icon. -->
+    <color name="launcher_background">#0F172A</color>
+</resources>

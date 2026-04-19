@@ -66,6 +66,11 @@ android {
     }
 }
 
+// Export Room schemas to a tracked folder so migrations can be reviewed in PRs.
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
+}
+
 dependencies {
     // Core / Compose
     implementation(libs.androidx.core.ktx)
