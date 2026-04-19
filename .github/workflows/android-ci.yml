@@ -19,6 +19,8 @@ jobs:
     timeout-minutes: 20
     env:
       ANDROID_SDK_ROOT: ${{ github.workspace }}/.android-sdk
+      ANDROID_API_LEVEL: '34'
+      ANDROID_BUILD_TOOLS_VERSION: '34.0.0'
 
     steps:
       - name: Check out repository
@@ -42,10 +44,10 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ env.ANDROID_SDK_ROOT }}
-          key: ${{ runner.os }}-android-sdk-34-build-tools-34.0.0-v1
+          key: ${{ runner.os }}-android-sdk-${{ env.ANDROID_API_LEVEL }}-build-tools-${{ env.ANDROID_BUILD_TOOLS_VERSION }}-v1
           restore-keys: |
-            ${{ runner.os }}-android-sdk-34-build-tools-34.0.0-
-            ${{ runner.os }}-android-sdk-34-
+            ${{ runner.os }}-android-sdk-${{ env.ANDROID_API_LEVEL }}-build-tools-${{ env.ANDROID_BUILD_TOOLS_VERSION }}-
+            ${{ runner.os }}-android-sdk-${{ env.ANDROID_API_LEVEL }}-
             ${{ runner.os }}-android-sdk-
 
       - name: Set up Android SDK
@@ -53,8 +55,8 @@ jobs:
         with:
           packages: >
             platform-tools
-            platforms;android-34
-            build-tools;34.0.0
+            platforms;android-${{ env.ANDROID_API_LEVEL }}
+            build-tools;${{ env.ANDROID_BUILD_TOOLS_VERSION }}
 
       - name: Run unit tests, lint, and assemble debug APK
         run: ./gradlew testDebugUnitTest lintDebug assembleDebug
