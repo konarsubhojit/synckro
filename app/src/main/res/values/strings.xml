@@ -37,6 +37,7 @@
     <string name="accounts_disconnect_failed_generic_format">Couldn\u0027t disconnect %1$s.</string>
     <string name="accounts_not_configured_detail_format">%1$s isn\u0027t configured: %2$s</string>
     <string name="accounts_host_unavailable">Internal error: host activity not available.</string>
+    <string name="accounts_reconcile_failed_format">Couldn\u0027t refresh %1$s accounts: %2$s</string>
 
     <!-- Provider-specific auth errors -->
     <string name="onedrive_not_configured">OneDrive is not configured. Set MS_CLIENT_ID and MSAL_REDIRECT_URI before building.</string>

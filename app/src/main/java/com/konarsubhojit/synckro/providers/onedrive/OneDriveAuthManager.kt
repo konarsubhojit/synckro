@@ -281,39 +281,9 @@ class OneDriveAuthManager @Inject constructor(
                         return
                     }
 
-                    val params = AcquireTokenSilentParameters.Builder()
-                        .forAccount(activeAccount)
-                        .fromAuthority(activeAccount.authority)
-                        .withScopes(scopes)
-                        .withCallback(object : SilentAuthenticationCallback {
-                            override fun onSuccess(authenticationResult: IAuthenticationResult?) {
-                                if (!cont.isActive) return
-                                val token = authenticationResult?.accessToken
-                                if (token.isNullOrBlank()) {
-                                    Timber.e("OneDriveAuthManager.acquireAccessToken: success but null/empty token")
-                                    cont.resume(AuthResult.NeedsInteractiveSignIn)
-                                } else {
-                                    Timber.d("OneDriveAuthManager.acquireAccessToken: acquired token successfully")
-                                    cont.resume(AuthResult.Success(token))
-                                }
-                            }
-
-                            override fun onError(exception: MsalException?) {
-                                if (!cont.isActive) return
-                                Timber.w(exception, "OneDriveAuthManager.acquireAccessToken: silent acquisition failed")
-                                val result = when (exception) {
-                                    is MsalUiRequiredException -> AuthResult.NeedsInteractiveSignIn
-                                    else -> AuthResult.Error(
-                                        exception?.message ?: "Silent token acquisition failed",
-                                        exception
-                                    )
-                                }
-                                cont.resume(result)
-                            }
-                        })
-                        .build()
-
-                    app.acquireTokenSilentAsync(params)
+                    // Delegate the silent-acquisition nested-callback logic to a dedicated helper
+                    // that resumes the continuation exactly once (guarded via cont.isActive).
+                    acquireTokenSilent(app, activeAccount, cont)
                 }
 
                 override fun onAccountChanged(priorAccount: IAccount?, currentAccount: IAccount?) {
@@ -329,5 +299,51 @@ class OneDriveAuthManager @Inject constructor(
                 }
             })
         }
+    }
+
+    /**
+     * Issues a silent token request for [activeAccount] and resumes [cont] with the result.
+     * The continuation is resumed at most once; every callback checks [cont]'s active state
+     * first so that this helper is safe to call from another MSAL callback without risking
+     * double-resume crashes.
+     */
+    private fun acquireTokenSilent(
+        app: ISingleAccountPublicClientApplication,
+        activeAccount: IAccount,
+        cont: kotlinx.coroutines.CancellableContinuation<AuthResult<String>>,
+    ) {
+        val params = AcquireTokenSilentParameters.Builder()
+            .forAccount(activeAccount)
+            .fromAuthority(activeAccount.authority)
+            .withScopes(scopes)
+            .withCallback(object : SilentAuthenticationCallback {
+                override fun onSuccess(authenticationResult: IAuthenticationResult?) {
+                    if (!cont.isActive) return
+                    val token = authenticationResult?.accessToken
+                    if (token.isNullOrBlank()) {
+                        Timber.e("OneDriveAuthManager.acquireAccessToken: success but null/empty token")
+                        cont.resume(AuthResult.NeedsInteractiveSignIn)
+                    } else {
+                        Timber.d("OneDriveAuthManager.acquireAccessToken: acquired token successfully")
+                        cont.resume(AuthResult.Success(token))
+                    }
+                }
+
+                override fun onError(exception: MsalException?) {
+                    if (!cont.isActive) return
+                    Timber.w(exception, "OneDriveAuthManager.acquireAccessToken: silent acquisition failed")
+                    val result = when (exception) {
+                        is MsalUiRequiredException -> AuthResult.NeedsInteractiveSignIn
+                        else -> AuthResult.Error(
+                            exception?.message ?: "Silent token acquisition failed",
+                            exception
+                        )
+                    }
+                    cont.resume(result)
+                }
+            })
+            .build()
+
+        app.acquireTokenSilentAsync(params)
     }
 }

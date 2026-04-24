@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Transaction
 import androidx.room.Upsert
 import com.konarsubhojit.synckro.data.local.entity.AccountEntity
 import com.konarsubhojit.synckro.data.local.entity.FileIndexEntity
@@ -95,6 +96,45 @@ interface AccountDao {
      */
     @Query("DELETE FROM account WHERE id = :id")
     suspend fun delete(id: String)
+
+    /**
+     * Atomically reconciles persisted accounts for [providerType] with [cached] (the provider's
+     * current token-cache snapshot):
+     * - upserts any cached account that is missing or whose metadata (displayName/email) has drifted,
+     * - deletes any persisted account not present in the cache.
+     *
+     * Runs as a single Room transaction so the database is never observed in a half-updated state,
+     * and failures mid-way roll back all writes.
+     */
+    @Transaction
+    suspend fun reconcileProvider(
+        providerType: CloudProviderType,
+        cached: List<AccountEntity>,
+    ) {
+        val persistedById = getByProvider(providerType).associateBy { it.id }
+        val cachedIds = HashSet<String>(cached.size)
+
+        cached.forEach { c ->
+            cachedIds.add(c.id)
+            val existing = persistedById[c.id]
+            if (existing == null ||
+                existing.displayName != c.displayName ||
+                existing.email != c.email
+            ) {
+                upsertPreservingCreatedAt(
+                    id = c.id,
+                    providerType = c.providerType,
+                    displayName = c.displayName,
+                    email = c.email,
+                    createdAtMillis = c.createdAtMillis,
+                )
+            }
+        }
+
+        persistedById.keys.forEach { id ->
+            if (id !in cachedIds) delete(id)
+        }
+    }
 }
 
 @Dao

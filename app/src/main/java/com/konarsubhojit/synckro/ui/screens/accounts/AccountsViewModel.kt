@@ -82,6 +82,11 @@ class AccountsViewModel @Inject constructor(
      * Deletions are skipped when the provider is not configured, to avoid
      * false-negative cache results wiping legitimately persisted accounts.
      * Metadata (displayName, email) is updated whenever it drifts from the cache.
+     *
+     * All persistent writes run inside a single Room transaction via
+     * [AccountRepository.reconcileProvider], so a mid-way failure rolls back all writes.
+     * Errors are logged and surfaced to the user via [UserMessageReporter], after which
+     * we fall back to returning the persisted list so the UI isn't left empty.
      */
     private suspend fun reconcileAccounts(manager: AuthManager): List<Account> {
         if (!manager.isConfigured()) {
@@ -91,35 +96,25 @@ class AccountsViewModel @Inject constructor(
         }
 
         val cachedAccounts = manager.currentAccounts()
-        val persistedAccounts = accountRepository.getByProvider(manager.providerType)
 
-        // Index persisted accounts by ID for O(1) lookups during reconciliation
-        val persistedById = persistedAccounts.associateBy { it.id }
-
-        // Persist new accounts and update stale metadata (displayName/email) for existing ones
-        cachedAccounts.forEach { cached ->
-            val persisted = persistedById[cached.id]
-            if (persisted == null ||
-                persisted.displayName != cached.displayName ||
-                persisted.email != cached.email
-            ) {
-                Timber.i("AccountsViewModel.reconcile: upserting account ${cached.id}")
-                accountRepository.upsert(cached)
-            }
+        return try {
+            accountRepository.reconcileProvider(manager.providerType, cachedAccounts)
+            cachedAccounts
+        } catch (t: Throwable) {
+            if (t is CancellationException) throw t
+            Timber.e(t, "AccountsViewModel.reconcile: transactional reconcile failed for ${manager.providerType}")
+            userMessages.reportError(
+                context.getString(
+                    R.string.accounts_reconcile_failed_format,
+                    manager.displayName,
+                    t.message ?: t.javaClass.simpleName,
+                ),
+                t,
+            )
+            // Fall back to the persisted list so the UI reflects the last known good state
+            // rather than an empty row.
+            accountRepository.getByProvider(manager.providerType)
         }
-
-        // Index cached accounts for O(1) stale-check
-        val cachedIds = cachedAccounts.mapTo(HashSet()) { it.id }
-
-        // If an account exists in the DB but not in the cache, remove it from DB
-        persistedAccounts.forEach { persisted ->
-            if (persisted.id !in cachedIds) {
-                Timber.i("AccountsViewModel.reconcile: removing stale persisted account ${persisted.id}")
-                accountRepository.delete(persisted.id)
-            }
-        }
-
-        return cachedAccounts
     }
 
     /**

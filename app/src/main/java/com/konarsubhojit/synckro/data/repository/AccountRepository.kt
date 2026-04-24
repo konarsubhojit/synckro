@@ -85,6 +85,32 @@ class AccountRepository @Inject constructor(
         Timber.d("AccountRepository.getByProvider(providerType=$providerType)")
         return accountDao.getByProvider(providerType).map { it.toDomain() }
     }
+
+    /**
+     * Atomically reconciles the persisted accounts for [providerType] against [cached] (the
+     * provider's current token-cache snapshot). Missing / drifted accounts are upserted and
+     * stale rows are deleted in a single Room transaction, so a mid-way failure rolls back
+     * all writes and the DB is never observed in a half-updated state.
+     *
+     * @param providerType The provider whose persisted accounts should be reconciled.
+     * @param cached The current account list from the provider's token cache.
+     */
+    suspend fun reconcileProvider(providerType: CloudProviderType, cached: List<Account>) {
+        Timber.i("AccountRepository.reconcileProvider(providerType=$providerType, cachedSize=${cached.size})")
+        val nowMs = System.currentTimeMillis()
+        val cachedEntities = cached.map { account ->
+            AccountEntity(
+                id = account.id,
+                providerType = account.provider,
+                displayName = account.displayName,
+                email = account.email,
+                // Only used for new inserts; updates preserve the existing createdAtMillis
+                // via the ON CONFLICT clause in upsertPreservingCreatedAt.
+                createdAtMillis = nowMs,
+            )
+        }
+        accountDao.reconcileProvider(providerType, cachedEntities)
+    }
 }
 
 /**
