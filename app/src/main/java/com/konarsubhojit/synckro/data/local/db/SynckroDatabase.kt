@@ -3,6 +3,8 @@ package com.konarsubhojit.synckro.data.local.db
 import androidx.room.Database
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import com.konarsubhojit.synckro.data.local.dao.AccountDao
 import com.konarsubhojit.synckro.data.local.dao.FileIndexDao
 import com.konarsubhojit.synckro.data.local.dao.SyncPairDao
@@ -88,5 +90,23 @@ abstract fun fileIndexDao(): FileIndexDao
 
     companion object {
         const val NAME = "synckro.db"
+
+        /**
+         * Migrates the database from version 1 to 2 by creating the `account` table.
+         * This is the explicit migration required for release builds upgrading from v1.
+         */
+        val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `account` (" +
+                        "`id` TEXT NOT NULL, " +
+                        "`providerType` TEXT NOT NULL, " +
+                        "`displayName` TEXT NOT NULL, " +
+                        "`email` TEXT, " +
+                        "`createdAtMillis` INTEGER NOT NULL, " +
+                        "PRIMARY KEY(`id`))"
+                )
+            }
+        }
     }
 }

@@ -78,22 +78,42 @@ class AccountsViewModel @Inject constructor(
     /**
      * Reconciles accounts for the given manager by merging token-cache accounts
      * with persisted accounts, ensuring consistency between the two.
+     *
+     * Deletions are skipped when the provider is not configured, to avoid
+     * false-negative cache results wiping legitimately persisted accounts.
+     * Metadata (displayName, email) is updated whenever it drifts from the cache.
      */
     private suspend fun reconcileAccounts(manager: AuthManager): List<Account> {
+        if (!manager.isConfigured()) {
+            // Provider not configured; skip cache query to avoid wiping persisted accounts
+            // due to an empty result that reflects missing config, not a real sign-out.
+            return accountRepository.getByProvider(manager.providerType)
+        }
+
         val cachedAccounts = manager.currentAccounts()
         val persistedAccounts = accountRepository.getByProvider(manager.providerType)
 
-        // If an account exists in the cache but not in the DB, persist it
+        // Index persisted accounts by ID for O(1) lookups during reconciliation
+        val persistedById = persistedAccounts.associateBy { it.id }
+
+        // Persist new accounts and update stale metadata (displayName/email) for existing ones
         cachedAccounts.forEach { cached ->
-            if (persistedAccounts.none { it.id == cached.id }) {
-                Timber.i("AccountsViewModel.reconcile: persisting cached account ${cached.id}")
+            val persisted = persistedById[cached.id]
+            if (persisted == null ||
+                persisted.displayName != cached.displayName ||
+                persisted.email != cached.email
+            ) {
+                Timber.i("AccountsViewModel.reconcile: upserting account ${cached.id}")
                 accountRepository.upsert(cached)
             }
         }
 
+        // Index cached accounts for O(1) stale-check
+        val cachedIds = cachedAccounts.mapTo(HashSet()) { it.id }
+
         // If an account exists in the DB but not in the cache, remove it from DB
         persistedAccounts.forEach { persisted ->
-            if (cachedAccounts.none { it.id == persisted.id }) {
+            if (persisted.id !in cachedIds) {
                 Timber.i("AccountsViewModel.reconcile: removing stale persisted account ${persisted.id}")
                 accountRepository.delete(persisted.id)
             }

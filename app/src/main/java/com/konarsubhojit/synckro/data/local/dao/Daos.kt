@@ -8,6 +8,7 @@ import androidx.room.Upsert
 import com.konarsubhojit.synckro.data.local.entity.AccountEntity
 import com.konarsubhojit.synckro.data.local.entity.FileIndexEntity
 import com.konarsubhojit.synckro.data.local.entity.SyncPairEntity
+import com.konarsubhojit.synckro.domain.model.CloudProviderType
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -31,6 +32,15 @@ interface AccountDao {
     suspend fun getAll(): List<AccountEntity>
 
     /**
+     * Fetches all accounts for the given provider type.
+     *
+     * @param providerType The cloud provider type to filter by.
+     * @return A list of `AccountEntity` rows matching the provider, ordered by creation time.
+     */
+    @Query("SELECT * FROM account WHERE providerType = :providerType ORDER BY createdAtMillis ASC")
+    suspend fun getByProvider(providerType: CloudProviderType): List<AccountEntity>
+
+    /**
      * Fetches the account with the given id.
      *
      * @param id The primary key id of the account to fetch.
@@ -46,6 +56,29 @@ interface AccountDao {
      */
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(account: AccountEntity)
+
+    /**
+     * Inserts or updates the given AccountEntity or updates an existing row with the same primary key.
+     * On conflict, all fields are updated **except** `createdAtMillis`, which is preserved from the
+     * existing row so that creation-time ordering remains stable.
+     *
+     * @param account The AccountEntity to insert or update in the `account` table.
+     */
+    @Query(
+        "INSERT INTO account (id, providerType, displayName, email, createdAtMillis) " +
+            "VALUES (:id, :providerType, :displayName, :email, :createdAtMillis) " +
+            "ON CONFLICT(id) DO UPDATE SET " +
+            "providerType = excluded.providerType, " +
+            "displayName = excluded.displayName, " +
+            "email = excluded.email"
+    )
+    suspend fun upsertPreservingCreatedAt(
+        id: String,
+        providerType: CloudProviderType,
+        displayName: String,
+        email: String?,
+        createdAtMillis: Long,
+    )
 
     /**
      * Inserts the given AccountEntity or updates an existing row with the same primary key.

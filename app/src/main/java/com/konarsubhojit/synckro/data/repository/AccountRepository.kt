@@ -49,12 +49,20 @@ class AccountRepository @Inject constructor(
 
     /**
      * Inserts or updates the given account. Logs the operation via Timber.
+     * Preserves the original [AccountEntity.createdAtMillis] on updates via a single SQL
+     * ON CONFLICT statement, so creation-time ordering remains stable without an extra read.
      *
      * @param account The account to save.
      */
     suspend fun upsert(account: Account) {
         Timber.i("AccountRepository.upsert(id=${account.id}, provider=${account.provider}, email=${account.email})")
-        accountDao.upsert(account.toEntity())
+        accountDao.upsertPreservingCreatedAt(
+            id = account.id,
+            providerType = account.provider,
+            displayName = account.displayName,
+            email = account.email,
+            createdAtMillis = System.currentTimeMillis(),
+        )
     }
 
     /**
@@ -75,15 +83,14 @@ class AccountRepository @Inject constructor(
      */
     suspend fun getByProvider(providerType: CloudProviderType): List<Account> {
         Timber.d("AccountRepository.getByProvider(providerType=$providerType)")
-        return accountDao.getAll()
-            .filter { it.providerType == providerType }
-            .map { it.toDomain() }
+        return accountDao.getByProvider(providerType).map { it.toDomain() }
     }
 }
 
 /**
- * Maps a domain [Account] to a Room [AccountEntity], capturing the current
- * timestamp for createdAtMillis if it hasn't been persisted yet.
+ * Maps a domain [Account] to a Room [AccountEntity] for use where a full entity is needed
+ * (e.g. direct inserts). For upserts that should preserve [AccountEntity.createdAtMillis],
+ * use [AccountDao.upsertPreservingCreatedAt] instead.
  */
 private fun Account.toEntity(): AccountEntity = AccountEntity(
     id = id,
