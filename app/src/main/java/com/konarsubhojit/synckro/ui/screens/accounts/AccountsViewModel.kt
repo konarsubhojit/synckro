@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.konarsubhojit.synckro.R
+import com.konarsubhojit.synckro.data.repository.AccountRepository
 import com.konarsubhojit.synckro.domain.auth.Account
 import com.konarsubhojit.synckro.domain.auth.AuthManager
 import com.konarsubhojit.synckro.domain.auth.AuthManagerRegistry
@@ -19,6 +20,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import timber.log.Timber
 
 /**
  * State machine for the accounts screen. Exposes one [AccountRow] per
@@ -26,11 +28,15 @@ import kotlinx.coroutines.launch
  * Reports every failure through [UserMessageReporter] so the user actually
  * sees what went wrong; this is the direct fix for the "+ button does
  * nothing" class of silent failure.
+ *
+ * Now with account persistence: signed-in accounts are saved to Room via
+ * [AccountRepository] and reconciled with each provider's token cache on refresh.
  */
 @HiltViewModel
 class AccountsViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val registry: AuthManagerRegistry,
+    private val accountRepository: AccountRepository,
     private val userMessages: UserMessageReporter,
 ) : ViewModel() {
 
@@ -54,15 +60,60 @@ class AccountsViewModel @Inject constructor(
 
     fun refresh() {
         viewModelScope.launch {
+            Timber.d("AccountsViewModel.refresh()")
             val rows = registry.all.map { manager ->
+                // Reconcile: merge accounts from manager's token cache with persisted accounts
+                val providerAccounts = reconcileAccounts(manager)
                 AccountRow(
                     providerDisplayName = manager.displayName,
                     providerKey = manager.providerType.name,
                     isConfigured = manager.isConfigured(),
-                    accounts = manager.currentAccounts(),
+                    accounts = providerAccounts,
                 )
             }
             _state.value = UiState(rows = rows, isLoading = false)
+        }
+    }
+
+    /**
+     * Reconciles accounts for the given manager by merging token-cache accounts
+     * with persisted accounts, ensuring consistency between the two.
+     *
+     * Deletions are skipped when the provider is not configured, to avoid
+     * false-negative cache results wiping legitimately persisted accounts.
+     * Metadata (displayName, email) is updated whenever it drifts from the cache.
+     *
+     * All persistent writes run inside a single Room transaction via
+     * [AccountRepository.reconcileProvider], so a mid-way failure rolls back all writes.
+     * Errors are logged and surfaced to the user via [UserMessageReporter], after which
+     * we fall back to returning the persisted list so the UI isn't left empty.
+     */
+    private suspend fun reconcileAccounts(manager: AuthManager): List<Account> {
+        if (!manager.isConfigured()) {
+            // Provider not configured; skip cache query to avoid wiping persisted accounts
+            // due to an empty result that reflects missing config, not a real sign-out.
+            return accountRepository.getByProvider(manager.providerType)
+        }
+
+        val cachedAccounts = manager.currentAccounts()
+
+        return try {
+            accountRepository.reconcileProvider(manager.providerType, cachedAccounts)
+            cachedAccounts
+        } catch (t: Throwable) {
+            if (t is CancellationException) throw t
+            Timber.e(t, "AccountsViewModel.reconcile: transactional reconcile failed for ${manager.providerType}")
+            userMessages.reportError(
+                context.getString(
+                    R.string.accounts_reconcile_failed_format,
+                    manager.displayName,
+                    t.message ?: t.javaClass.simpleName,
+                ),
+                t,
+            )
+            // Fall back to the persisted list so the UI reflects the last known good state
+            // rather than an empty row.
+            accountRepository.getByProvider(manager.providerType)
         }
     }
 
@@ -119,43 +170,60 @@ class AccountsViewModel @Inject constructor(
                 return@launch
             }
             when (val r = manager.signOut(account)) {
-                is AuthResult.Success -> userMessages.report(
-                    UserMessage(
-                        context.getString(R.string.accounts_disconnected_format, manager.displayName),
-                        UserMessage.Severity.INFO,
+                is AuthResult.Success -> {
+                    // Remove from Room after successful sign-out
+                    accountRepository.delete(account.id)
+                    userMessages.report(
+                        UserMessage(
+                            context.getString(R.string.accounts_disconnected_format, manager.displayName),
+                            UserMessage.Severity.INFO,
+                        )
                     )
-                )
-                is AuthResult.Error -> userMessages.reportError(
-                    context.getString(
-                        R.string.accounts_disconnect_failed_format,
-                        manager.displayName,
-                        r.message,
-                    ),
-                    r.cause,
-                )
-                else -> userMessages.reportError(
-                    context.getString(
-                        R.string.accounts_disconnect_failed_generic_format,
-                        manager.displayName,
+                }
+                is AuthResult.Error -> {
+                    // Do NOT delete from DB on sign-out failure — that would hide the
+                    // error and leave MSAL's token cache and Room out of sync. The user
+                    // can retry disconnect; a forced-local removal would be a separate flow.
+                    userMessages.reportError(
+                        context.getString(
+                            R.string.accounts_disconnect_failed_format,
+                            manager.displayName,
+                            r.message,
+                        ),
+                        r.cause,
                     )
-                )
+                }
+                else -> {
+                    // Same rationale as the Error branch: preserve DB row when sign-out
+                    // didn't positively succeed.
+                    userMessages.reportError(
+                        context.getString(
+                            R.string.accounts_disconnect_failed_generic_format,
+                            manager.displayName,
+                        )
+                    )
+                }
             }
             refresh()
         }
     }
 
-    private fun handleResult(manager: AuthManager, result: AuthResult<Account>) {
+    private suspend fun handleResult(manager: AuthManager, result: AuthResult<Account>) {
         when (result) {
-            is AuthResult.Success -> userMessages.report(
-                UserMessage(
-                    context.getString(
-                        R.string.accounts_connected_format,
-                        manager.displayName,
-                        result.value.email ?: result.value.displayName,
-                    ),
-                    UserMessage.Severity.INFO,
+            is AuthResult.Success -> {
+                // Persist the account to Room
+                accountRepository.upsert(result.value)
+                userMessages.report(
+                    UserMessage(
+                        context.getString(
+                            R.string.accounts_connected_format,
+                            manager.displayName,
+                            result.value.email ?: result.value.displayName,
+                        ),
+                        UserMessage.Severity.INFO,
+                    )
                 )
-            )
+            }
             AuthResult.Cancelled -> userMessages.report(
                 UserMessage(
                     context.getString(R.string.error_auth_cancelled),

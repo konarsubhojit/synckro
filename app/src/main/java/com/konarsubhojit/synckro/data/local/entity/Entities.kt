@@ -7,6 +7,15 @@ import com.konarsubhojit.synckro.domain.model.CloudProviderType
 import com.konarsubhojit.synckro.domain.model.ConflictPolicy
 import com.konarsubhojit.synckro.domain.model.SyncDirection
 
+@Entity(tableName = "account")
+data class AccountEntity(
+    @PrimaryKey val id: String,
+    val providerType: CloudProviderType,
+    val displayName: String,
+    val email: String?,
+    val createdAtMillis: Long,
+)
+
 @Entity(tableName = "sync_pair")
 data class SyncPairEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,

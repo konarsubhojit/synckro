@@ -246,6 +246,16 @@ dependencies {
     implementation(libs.retrofit)
     implementation(libs.retrofit.kotlinx.serialization)
 
+    // Cloud authentication
+    implementation(libs.msal) {
+        // Exclude Surface Duo dependency that is not in Maven Central
+        exclude(group = "com.microsoft.device.display", module = "display-mask")
+    }
+    implementation(libs.androidx.credentials)
+    implementation(libs.androidx.credentials.play.services)
+    implementation(libs.googleid)
+    implementation(libs.play.services.auth)
+
     // Logging
     implementation(libs.timber)
 
