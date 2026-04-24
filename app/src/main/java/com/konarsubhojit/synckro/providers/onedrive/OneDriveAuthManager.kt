@@ -10,7 +10,6 @@ import com.konarsubhojit.synckro.domain.auth.AuthResult
 import com.konarsubhojit.synckro.domain.auth.AuthUiHost
 import com.konarsubhojit.synckro.domain.model.CloudProviderType
 import com.konarsubhojit.synckro.ui.auth.ActivityAuthUiHost
-import com.microsoft.identity.client.AcquireTokenParameters
 import com.microsoft.identity.client.AcquireTokenSilentParameters
 import com.microsoft.identity.client.AuthenticationCallback
 import com.microsoft.identity.client.IAccount
