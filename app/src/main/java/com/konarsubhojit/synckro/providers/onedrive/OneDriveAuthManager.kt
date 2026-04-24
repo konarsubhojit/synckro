@@ -12,11 +12,14 @@ import com.konarsubhojit.synckro.domain.model.CloudProviderType
 import com.konarsubhojit.synckro.ui.auth.ActivityAuthUiHost
 import com.microsoft.identity.client.AcquireTokenParameters
 import com.microsoft.identity.client.AcquireTokenSilentParameters
+import com.microsoft.identity.client.AuthenticationCallback
 import com.microsoft.identity.client.IAccount
+import com.microsoft.identity.client.IAuthenticationResult
 import com.microsoft.identity.client.IPublicClientApplication
 import com.microsoft.identity.client.ISingleAccountPublicClientApplication
 import com.microsoft.identity.client.PublicClientApplication
 import com.microsoft.identity.client.SignInParameters
+import com.microsoft.identity.client.SilentAuthenticationCallback
 import com.microsoft.identity.client.exception.MsalClientException
 import com.microsoft.identity.client.exception.MsalException
 import com.microsoft.identity.client.exception.MsalServiceException
@@ -111,8 +114,8 @@ class OneDriveAuthManager @Inject constructor(
             val params = SignInParameters.builder()
                 .withActivity(activity)
                 .withScopes(scopes)
-                .withCallback(object : ISingleAccountPublicClientApplication.SignInCallback {
-                    override fun onSuccess(authenticationResult: com.microsoft.identity.client.IAuthenticationResult?) {
+                .withCallback(object : AuthenticationCallback {
+                    override fun onSuccess(authenticationResult: IAuthenticationResult?) {
                         if (authenticationResult == null || authenticationResult.account == null) {
                             Timber.e("OneDriveAuthManager.signIn: success but null result/account")
                             cont.resume(AuthResult.Error("Sign-in returned null account"))
@@ -273,8 +276,8 @@ class OneDriveAuthManager @Inject constructor(
                         .forAccount(activeAccount)
                         .fromAuthority(activeAccount.authority)
                         .withScopes(scopes)
-                        .withCallback(object : com.microsoft.identity.client.SilentAuthenticationCallback {
-                            override fun onSuccess(authenticationResult: com.microsoft.identity.client.IAuthenticationResult?) {
+                        .withCallback(object : SilentAuthenticationCallback {
+                            override fun onSuccess(authenticationResult: IAuthenticationResult?) {
                                 val token = authenticationResult?.accessToken
                                 if (token.isNullOrBlank()) {
                                     Timber.e("OneDriveAuthManager.acquireAccessToken: success but null/empty token")
