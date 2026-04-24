@@ -1,10 +1,39 @@
 <resources>
     <string name="app_name">Synckro</string>
+
+    <!-- Onboarding -->
     <string name="onboarding_title">Welcome to Synckro</string>
     <string name="onboarding_body">Keep a folder on your phone in sync with OneDrive or Google Drive.</string>
     <string name="onboarding_cta">Get started</string>
+
+    <!-- Home -->
     <string name="home_title">Sync pairs</string>
     <string name="home_empty">No sync pairs yet. Tap + to create one.</string>
+    <string name="home_empty_needs_account">Connect a cloud account first — tap Accounts, then the + button to add a sync pair.</string>
     <string name="add_sync_pair">Add sync pair</string>
     <string name="sync_now">Sync now</string>
+    <string name="accounts_action">Accounts</string>
+
+    <!-- Accounts -->
+    <string name="accounts_title">Cloud accounts</string>
+    <string name="accounts_body">Connect the cloud services you want to sync with. You can add more than one.</string>
+    <string name="accounts_connect_format">Connect %1$s</string>
+    <string name="accounts_disconnect">Disconnect</string>
+    <string name="accounts_empty">No accounts connected yet.</string>
+    <string name="accounts_not_configured_format">%1$s is not configured in this build.</string>
+    <string name="accounts_signed_in_format">Signed in as %1$s</string>
+
+    <!-- Add sync pair (placeholder for PR #1; full wizard arrives in PR #2) -->
+    <string name="add_pair_title">Add sync pair</string>
+    <string name="add_pair_needs_account">You need to connect a cloud account before adding a sync pair.</string>
+    <string name="add_pair_go_to_accounts">Go to accounts</string>
+    <string name="add_pair_coming_soon">The folder picker is coming in the next update. For now, connect an account so the sync pair wizard is ready to launch.</string>
+
+    <!-- Error messages -->
+    <string name="error_auth_cancelled">Sign-in was cancelled.</string>
+    <string name="error_auth_failed_format">Couldn\u0027t sign in to %1$s: %2$s</string>
+    <string name="error_auth_needs_interactive">Session expired — please sign in again.</string>
+
+    <!-- Navigation -->
+    <string name="nav_back">Back</string>
 </resources>
