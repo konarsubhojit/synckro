@@ -45,6 +45,25 @@
                 android:value="androidx.startup"
                 tools:node="remove" />
         </provider>
+
+        <!-- MSAL redirect. Host/path come from MSAL_REDIRECT_URI via Gradle
+             placeholders. Non-debug builds get an empty host and therefore an
+             unusable intent filter (acceptable: MSAL is only intended for debug
+             right now). -->
+        <activity
+            android:name="com.microsoft.identity.client.BrowserTabActivity"
+            android:exported="true"
+            tools:ignore="AppLinkUrlError,MissingClass">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="msauth"
+                    android:host="${msalHost}"
+                    android:path="${msalPath}" />
+            </intent-filter>
+        </activity>
     </application>
 
 </manifest>

@@ -31,6 +31,26 @@ android {
         vectorDrawables { useSupportLibrary = true }
         buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"\"")
         buildConfigField("String", "MS_CLIENT_ID", "\"\"")
+        manifestPlaceholders["msalHost"] = ""
+        manifestPlaceholders["msalPath"] = "/"
+    }
+
+    signingConfigs {
+        create("debugPinned") {
+            val ksPath = secretOrEmpty("DEBUG_KEYSTORE_PATH")
+                .ifEmpty { rootProject.file("debug.keystore").absolutePath }
+            val ksFile = file(ksPath)
+            if (ksFile.exists()
+                && secretOrEmpty("DEBUG_KEYSTORE_PASSWORD").isNotEmpty()
+            ) {
+                storeFile = ksFile
+                storePassword = secretOrEmpty("DEBUG_KEYSTORE_PASSWORD")
+                keyAlias = secretOrEmpty("DEBUG_KEY_ALIAS")
+                    .ifEmpty { "androiddebugkey" }
+                keyPassword = secretOrEmpty("DEBUG_KEY_PASSWORD")
+                    .ifEmpty { secretOrEmpty("DEBUG_KEYSTORE_PASSWORD") }
+            }
+        }
     }
 
     buildTypes {
@@ -46,6 +66,11 @@ android {
             isMinifyEnabled = false
             applicationIdSuffix = ".debug"
             versionNameSuffix = "-debug"
+            val pinned = signingConfigs.getByName("debugPinned")
+            if (pinned.storeFile != null) {
+                signingConfig = pinned
+            }
+            // else: AGP falls back to the default auto-generated debug keystore.
             buildConfigField(
                 "String",
                 "GOOGLE_WEB_CLIENT_ID",
@@ -56,6 +81,30 @@ android {
                 "MS_CLIENT_ID",
                 "\"${secretOrEmpty("MS_CLIENT_ID")}\""
             )
+            val msalRedirect = secretOrEmpty("MSAL_REDIRECT_URI")
+            val msalHost = msalRedirect
+                .substringAfter("msauth://", "")
+                .substringBefore("/", "")
+            val msalPath = if (msalRedirect.isNotEmpty() && msalHost.isNotEmpty())
+                "/" + msalRedirect.substringAfter("$msalHost/", "")
+            else "/"
+
+            // Sanity: if a redirect URI is provided, its host MUST match the debug
+            // applicationId. A mismatch silently breaks MSAL at runtime.
+            if (msalHost.isNotEmpty()) {
+                check(msalHost == "com.konarsubhojit.synckro.debug") {
+                    "MSAL_REDIRECT_URI host '$msalHost' must equal " +
+                        "'com.konarsubhojit.synckro.debug' (debug applicationId)."
+                }
+            }
+
+            buildConfigField(
+                "String",
+                "MSAL_REDIRECT_URI",
+                "\"$msalRedirect\""
+            )
+            manifestPlaceholders["msalHost"] = msalHost
+            manifestPlaceholders["msalPath"] = msalPath
         }
     }
 
@@ -84,6 +133,60 @@ android {
 
     testOptions {
         unitTests.isIncludeAndroidResources = true
+    }
+
+    sourceSets.getByName("main").res.srcDirs(
+        layout.buildDirectory.dir("generated/res/msal")
+    )
+}
+
+fun String.jsonEscape(): String =
+    replace("\\", "\\\\").replace("\"", "\\\"")
+
+val generateMsalConfig by tasks.registering {
+    val clientId = secretOrEmpty("MS_CLIENT_ID")
+    val redirect = secretOrEmpty("MSAL_REDIRECT_URI")
+    val outFile = layout.buildDirectory
+        .file("generated/res/msal/raw/msal_config.json")
+    inputs.property("clientId", clientId)
+    inputs.property("redirect", redirect)
+    outputs.file(outFile)
+    doLast {
+        // Escape inline to avoid capturing any Gradle script object references,
+        // which are disallowed by the configuration cache.
+        fun String.esc() = replace("\\", "\\\\").replace("\"", "\\\"")
+        val json = """
+        {
+          "client_id": "${clientId.esc()}",
+          "authorization_user_agent": "DEFAULT",
+          "redirect_uri": "${redirect.esc()}",
+          "account_mode": "SINGLE",
+          "broker_redirect_uri_registered": false,
+          "authorities": [
+            {
+              "type": "AAD",
+              "audience": {
+                "type": "AzureADandPersonalMicrosoftAccount",
+                "tenant_id": "common"
+              }
+            }
+          ]
+        }
+        """.trimIndent()
+        val f = outFile.get().asFile
+        f.parentFile.mkdirs()
+        f.writeText(json)
+    }
+}
+
+androidComponents {
+    onVariants { variant ->
+        val cap = variant.name.replaceFirstChar { it.uppercase() }
+        tasks.matching {
+            it.name == "generate${cap}Resources"
+                || it.name == "merge${cap}Resources"
+                || it.name == "map${cap}SourceSetPaths"
+        }.configureEach { dependsOn(generateMsalConfig) }
     }
 }
 
