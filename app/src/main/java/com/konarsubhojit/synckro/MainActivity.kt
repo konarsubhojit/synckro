@@ -75,7 +75,7 @@ class MainActivity : ComponentActivity() {
                                 .fillMaxSize()
                                 .padding(padding),
                         ) {
-                            SynckroNavHost()
+                            SynckroNavHost(activity = this@MainActivity)
                         }
                     }
                 }

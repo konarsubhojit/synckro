@@ -1,11 +1,14 @@
 package com.konarsubhojit.synckro.providers.onedrive
 
 import android.app.Activity
+import android.content.Context
 import com.konarsubhojit.synckro.BuildConfig
+import com.konarsubhojit.synckro.R
 import com.konarsubhojit.synckro.domain.auth.Account
 import com.konarsubhojit.synckro.domain.auth.AuthManager
 import com.konarsubhojit.synckro.domain.auth.AuthResult
 import com.konarsubhojit.synckro.domain.model.CloudProviderType
+import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -19,7 +22,9 @@ import javax.inject.Singleton
  * the user taps "Connect OneDrive" in the current PR.
  */
 @Singleton
-class OneDriveAuthManager @Inject constructor() : AuthManager {
+class OneDriveAuthManager @Inject constructor(
+    @ApplicationContext private val context: Context,
+) : AuthManager {
     override val providerType: CloudProviderType = CloudProviderType.ONEDRIVE
     override val displayName: String = "OneDrive"
 
@@ -27,13 +32,9 @@ class OneDriveAuthManager @Inject constructor() : AuthManager {
 
     override suspend fun signIn(activity: Activity): AuthResult<Account> {
         if (!isConfigured()) {
-            return AuthResult.NotConfigured(
-                "OneDrive is not configured. Set MS_CLIENT_ID and MSAL_REDIRECT_URI before building."
-            )
+            return AuthResult.NotConfigured(context.getString(R.string.onedrive_not_configured))
         }
-        return AuthResult.Error(
-            "OneDrive sign-in is coming in the next update."
-        )
+        return AuthResult.Error(context.getString(R.string.onedrive_signin_coming_soon))
     }
 
     override suspend fun signOut(account: Account): AuthResult<Unit> = AuthResult.Success(Unit)

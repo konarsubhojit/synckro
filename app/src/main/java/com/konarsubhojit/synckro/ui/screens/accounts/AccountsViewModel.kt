@@ -1,7 +1,9 @@
 package com.konarsubhojit.synckro.ui.screens.accounts
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.konarsubhojit.synckro.R
 import com.konarsubhojit.synckro.domain.auth.Account
 import com.konarsubhojit.synckro.domain.auth.AuthManager
 import com.konarsubhojit.synckro.domain.auth.AuthManagerRegistry
@@ -9,6 +11,7 @@ import com.konarsubhojit.synckro.domain.auth.AuthResult
 import com.konarsubhojit.synckro.util.error.UserMessage
 import com.konarsubhojit.synckro.util.error.UserMessageReporter
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -25,6 +28,7 @@ import kotlinx.coroutines.launch
  */
 @HiltViewModel
 class AccountsViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val registry: AuthManagerRegistry,
     private val userMessages: UserMessageReporter,
 ) : ViewModel() {
@@ -72,13 +76,19 @@ class AccountsViewModel @Inject constructor(
         viewModelScope.launch {
             val manager = registry.all.firstOrNull { it.providerType.name == providerKey } ?: run {
                 setBusy(providerKey, false)
-                userMessages.reportError("Unknown provider: $providerKey")
+                userMessages.reportError(
+                    context.getString(R.string.accounts_unknown_provider_format, providerKey)
+                )
                 return@launch
             }
             val result = runCatching { launchSignIn(manager) }.getOrElse { t ->
                 setBusy(providerKey, false)
                 userMessages.reportError(
-                    "Couldn't sign in to ${manager.displayName}: ${t.message ?: t.javaClass.simpleName}",
+                    context.getString(
+                        R.string.error_auth_failed_format,
+                        manager.displayName,
+                        t.message ?: t.javaClass.simpleName,
+                    ),
                     t,
                 )
                 return@launch
@@ -94,12 +104,25 @@ class AccountsViewModel @Inject constructor(
             val manager = registry.get(account.provider)
             when (val r = manager.signOut(account)) {
                 is AuthResult.Success -> userMessages.report(
-                    UserMessage("Disconnected ${manager.displayName}", UserMessage.Severity.INFO)
+                    UserMessage(
+                        context.getString(R.string.accounts_disconnected_format, manager.displayName),
+                        UserMessage.Severity.INFO,
+                    )
                 )
                 is AuthResult.Error -> userMessages.reportError(
-                    "Couldn't disconnect ${manager.displayName}: ${r.message}", r.cause,
+                    context.getString(
+                        R.string.accounts_disconnect_failed_format,
+                        manager.displayName,
+                        r.message,
+                    ),
+                    r.cause,
                 )
-                else -> userMessages.reportError("Couldn't disconnect ${manager.displayName}.")
+                else -> userMessages.reportError(
+                    context.getString(
+                        R.string.accounts_disconnect_failed_generic_format,
+                        manager.displayName,
+                    )
+                )
             }
             refresh()
         }
@@ -109,21 +132,40 @@ class AccountsViewModel @Inject constructor(
         when (result) {
             is AuthResult.Success -> userMessages.report(
                 UserMessage(
-                    "Connected ${manager.displayName} as ${result.value.email ?: result.value.displayName}",
+                    context.getString(
+                        R.string.accounts_connected_format,
+                        manager.displayName,
+                        result.value.email ?: result.value.displayName,
+                    ),
                     UserMessage.Severity.INFO,
                 )
             )
             AuthResult.Cancelled -> userMessages.report(
-                UserMessage("Sign-in was cancelled.", UserMessage.Severity.WARNING)
+                UserMessage(
+                    context.getString(R.string.error_auth_cancelled),
+                    UserMessage.Severity.WARNING,
+                )
             )
             AuthResult.NeedsInteractiveSignIn -> userMessages.report(
-                UserMessage("Session expired — please sign in again.", UserMessage.Severity.WARNING)
+                UserMessage(
+                    context.getString(R.string.error_auth_needs_interactive),
+                    UserMessage.Severity.WARNING,
+                )
             )
             is AuthResult.NotConfigured -> userMessages.reportError(
-                "${manager.displayName} isn't configured: ${result.message}"
+                context.getString(
+                    R.string.accounts_not_configured_detail_format,
+                    manager.displayName,
+                    result.message,
+                )
             )
             is AuthResult.Error -> userMessages.reportError(
-                "Couldn't sign in to ${manager.displayName}: ${result.message}", result.cause,
+                context.getString(
+                    R.string.error_auth_failed_format,
+                    manager.displayName,
+                    result.message,
+                ),
+                result.cause,
             )
         }
     }

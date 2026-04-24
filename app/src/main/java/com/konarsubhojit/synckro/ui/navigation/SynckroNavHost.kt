@@ -1,5 +1,6 @@
 package com.konarsubhojit.synckro.ui.navigation
 
+import androidx.activity.ComponentActivity
 import androidx.compose.runtime.Composable
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -17,7 +18,7 @@ object Routes {
 }
 
 @Composable
-fun SynckroNavHost() {
+fun SynckroNavHost(activity: ComponentActivity) {
     val nav = rememberNavController()
     NavHost(navController = nav, startDestination = Routes.ONBOARDING) {
         composable(Routes.ONBOARDING) {
@@ -34,7 +35,10 @@ fun SynckroNavHost() {
             )
         }
         composable(Routes.ACCOUNTS) {
-            AccountsScreen(onBack = { nav.popBackStack() })
+            AccountsScreen(
+                activity = activity,
+                onBack = { nav.popBackStack() },
+            )
         }
         composable(Routes.ADD_PAIR) {
             AddSyncPairScreen(

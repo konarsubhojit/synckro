@@ -29,6 +29,21 @@
     <string name="add_pair_go_to_accounts">Go to accounts</string>
     <string name="add_pair_coming_soon">The folder picker is coming in the next update. For now, connect an account so the sync pair wizard is ready to launch.</string>
 
+    <!-- Accounts – snackbar / status messages surfaced by AccountsViewModel -->
+    <string name="accounts_unknown_provider_format">Unknown provider: %1$s</string>
+    <string name="accounts_connected_format">Connected %1$s as %2$s</string>
+    <string name="accounts_disconnected_format">Disconnected %1$s</string>
+    <string name="accounts_disconnect_failed_format">Couldn\u0027t disconnect %1$s: %2$s</string>
+    <string name="accounts_disconnect_failed_generic_format">Couldn\u0027t disconnect %1$s.</string>
+    <string name="accounts_not_configured_detail_format">%1$s isn\u0027t configured: %2$s</string>
+    <string name="accounts_host_unavailable">Internal error: host activity not available.</string>
+
+    <!-- Provider-specific auth errors -->
+    <string name="onedrive_not_configured">OneDrive is not configured. Set MS_CLIENT_ID before building.</string>
+    <string name="onedrive_signin_coming_soon">OneDrive sign-in is coming in the next update.</string>
+    <string name="gdrive_not_configured">Google Drive is not configured. Set GOOGLE_WEB_CLIENT_ID before building.</string>
+    <string name="gdrive_signin_coming_soon">Google Drive sign-in is coming in the next update.</string>
+
     <!-- Error messages -->
     <string name="error_auth_cancelled">Sign-in was cancelled.</string>
     <string name="error_auth_failed_format">Couldn\u0027t sign in to %1$s: %2$s</string>

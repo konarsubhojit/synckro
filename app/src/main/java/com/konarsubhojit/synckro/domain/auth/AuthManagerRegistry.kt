@@ -13,7 +13,15 @@ import javax.inject.Singleton
 class AuthManagerRegistry @Inject constructor(
     private val managers: Map<CloudProviderType, @JvmSuppressWildcards AuthManager>,
 ) {
-    val all: List<AuthManager> get() = managers.values.toList()
+    /**
+     * Registered managers in a deterministic order (by [CloudProviderType]
+     * declaration order). Hilt's multibound map has no guaranteed iteration
+     * order, so we sort explicitly to keep the Accounts screen layout stable.
+     */
+    val all: List<AuthManager>
+        get() = managers.entries
+            .sortedBy { it.key.ordinal }
+            .map { it.value }
 
     fun get(type: CloudProviderType): AuthManager =
         managers[type] ?: error("No AuthManager registered for $type")

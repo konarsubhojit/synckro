@@ -27,25 +27,30 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.konarsubhojit.synckro.R
+import com.konarsubhojit.synckro.domain.auth.AuthResult
 
 /**
  * Lists connected / connectable cloud accounts. This is the "login first"
  * entry point the user lands on before adding a sync pair.
+ *
+ * [activity] is threaded in from the navigation host rather than retrieved by
+ * casting `LocalContext`, so the screen is safe to host from non-activity
+ * contexts (previews, multi-activity setups) — callers are forced to supply
+ * the concrete [ComponentActivity] used for interactive sign-in flows.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AccountsScreen(
+    activity: ComponentActivity,
     onBack: () -> Unit,
     viewModel: AccountsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    val activity = LocalContext.current as? ComponentActivity
 
     Scaffold(
         topBar = {
@@ -80,17 +85,7 @@ fun AccountsScreen(
                 AccountProviderCard(
                     row = row,
                     onConnect = {
-                        val host = activity
-                        if (host == null) {
-                            // Should never happen, but surface a readable error instead of crashing.
-                            viewModel.connect(row.providerKey) { _ ->
-                                com.konarsubhojit.synckro.domain.auth.AuthResult.Error(
-                                    "Internal error: host activity not available."
-                                )
-                            }
-                        } else {
-                            viewModel.connect(row.providerKey) { manager -> manager.signIn(host) }
-                        }
+                        viewModel.connect(row.providerKey) { manager -> manager.signIn(activity) }
                     },
                     onDisconnect = { viewModel.disconnect(it) },
                 )
