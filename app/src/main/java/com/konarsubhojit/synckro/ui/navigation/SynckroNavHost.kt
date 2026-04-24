@@ -30,8 +30,12 @@ fun SynckroNavHost(activity: ComponentActivity) {
         }
         composable(Routes.HOME) {
             HomeScreen(
-                onAddSyncPair = { nav.navigate(Routes.ADD_PAIR) },
-                onOpenAccounts = { nav.navigate(Routes.ACCOUNTS) },
+                onAddSyncPair = {
+                    nav.navigate(Routes.ADD_PAIR) { launchSingleTop = true }
+                },
+                onOpenAccounts = {
+                    nav.navigate(Routes.ACCOUNTS) { launchSingleTop = true }
+                },
             )
         }
         composable(Routes.ACCOUNTS) {
@@ -44,10 +48,13 @@ fun SynckroNavHost(activity: ComponentActivity) {
             AddSyncPairScreen(
                 onBack = { nav.popBackStack() },
                 onOpenAccounts = {
-                    // Pop the placeholder off the back stack before pushing
-                    // accounts so the user returns to Home, not back here.
-                    nav.popBackStack()
-                    nav.navigate(Routes.ACCOUNTS)
+                    // Atomic: remove the placeholder and launch Accounts in a
+                    // single navigate call, so the user can't race the two
+                    // ops and so the back stack can't hold duplicates.
+                    nav.navigate(Routes.ACCOUNTS) {
+                        popUpTo(Routes.ADD_PAIR) { inclusive = true }
+                        launchSingleTop = true
+                    }
                 },
             )
         }

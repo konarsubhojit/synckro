@@ -13,6 +13,7 @@ import com.konarsubhojit.synckro.util.error.UserMessageReporter
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
+import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -82,6 +83,9 @@ class AccountsViewModel @Inject constructor(
                 return@launch
             }
             val result = runCatching { launchSignIn(manager) }.getOrElse { t ->
+                // Never swallow cooperative cancellation — let the coroutine
+                // machinery propagate it so viewModelScope cancellation works.
+                if (t is CancellationException) throw t
                 setBusy(providerKey, false)
                 userMessages.reportError(
                     context.getString(
@@ -101,7 +105,19 @@ class AccountsViewModel @Inject constructor(
 
     fun disconnect(account: Account) {
         viewModelScope.launch {
-            val manager = registry.get(account.provider)
+            val manager = registry.find(account.provider) ?: run {
+                // Stale Account rows (e.g. from a removed provider) would
+                // otherwise crash the app; surface the same failure path as
+                // the "unknown provider" branch in [connect].
+                userMessages.reportError(
+                    context.getString(
+                        R.string.accounts_unknown_provider_format,
+                        account.provider.name,
+                    )
+                )
+                refresh()
+                return@launch
+            }
             when (val r = manager.signOut(account)) {
                 is AuthResult.Success -> userMessages.report(
                     UserMessage(

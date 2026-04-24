@@ -1,7 +1,5 @@
 package com.konarsubhojit.synckro.domain.auth
 
-import android.app.Activity
-
 /**
  * Outcome of an authentication operation. Using a sealed type here (instead
  * of returning nullable or throwing) forces every caller to handle the four
@@ -17,7 +15,8 @@ sealed interface AuthResult<out T> {
 
     /**
      * A silent / cached token is no longer valid; the caller must trigger an
-     * interactive sign-in with an [Activity] context.
+     * interactive sign-in by invoking [AuthManager.signIn] with a live
+     * [AuthUiHost].
      */
     data object NeedsInteractiveSignIn : AuthResult<Nothing>
 
@@ -34,7 +33,9 @@ sealed interface AuthResult<out T> {
  * Drive authorization for Google) and to persist only non-secret metadata.
  *
  * All methods are suspend so callers can compose them from `viewModelScope`
- * without leaking threads.
+ * without leaking threads. The domain API is intentionally Android-free —
+ * interactive flows receive a platform-neutral [AuthUiHost] that the
+ * platform implementation downcasts to access the underlying Activity.
  */
 interface AuthManager {
 
@@ -48,10 +49,10 @@ interface AuthManager {
     suspend fun isConfigured(): Boolean
 
     /**
-     * Launches the interactive sign-in flow. Requires a real [Activity] so the
-     * OAuth browser tab / credential chooser can be shown.
+     * Launches the interactive sign-in flow. Requires a live [AuthUiHost] so
+     * the OAuth browser tab / credential chooser can be shown.
      */
-    suspend fun signIn(activity: Activity): AuthResult<Account>
+    suspend fun signIn(host: AuthUiHost): AuthResult<Account>
 
     /** Revokes local credentials and forgets [account]. */
     suspend fun signOut(account: Account): AuthResult<Unit>

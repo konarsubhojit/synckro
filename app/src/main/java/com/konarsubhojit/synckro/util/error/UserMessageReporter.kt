@@ -57,9 +57,9 @@ class UserMessageReporter @Inject constructor() {
      */
     fun report(message: UserMessage, cause: Throwable? = null) {
         when (message.severity) {
-            UserMessage.Severity.INFO -> Timber.i("UX: %s", message.text)
-            UserMessage.Severity.WARNING -> Timber.w(cause, "UX: %s", message.text)
-            UserMessage.Severity.ERROR -> Timber.e(cause, "UX: %s", message.text)
+            UserMessage.Severity.INFO -> Timber.i(UX_LOG_FORMAT, message.text)
+            UserMessage.Severity.WARNING -> Timber.w(cause, UX_LOG_FORMAT, message.text)
+            UserMessage.Severity.ERROR -> Timber.e(cause, UX_LOG_FORMAT, message.text)
         }
         _messages.tryEmit(message)
     }
@@ -67,6 +67,11 @@ class UserMessageReporter @Inject constructor() {
     /** Convenience for the common "something failed" path. */
     fun reportError(text: String, cause: Throwable? = null, actionLabel: String? = null, onAction: (() -> Unit)? = null) {
         report(UserMessage(text, UserMessage.Severity.ERROR, actionLabel, onAction), cause)
+    }
+
+    private companion object {
+        /** Shared Timber format for user-facing messages mirrored to the log file. */
+        private const val UX_LOG_FORMAT = "UX: %s"
     }
 }
 

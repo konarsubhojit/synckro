@@ -38,13 +38,22 @@ class SynckroApp : Application(), Configuration.Provider {
     private fun installUncaughtExceptionHandler(fileTree: FileLoggingTree) {
         val previous = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
-            // Mirror the fatal to Timber so all planted trees (including the
-            // file tree) record it, then block briefly for the disk write.
-            Timber.e(throwable, "Uncaught exception on thread %s", thread.name)
-            fileTree.flushBlocking()
-            // Delegate to whatever was there before (usually the system
-            // handler that shows the "app has stopped" dialog).
-            previous?.uncaughtException(thread, throwable)
+            try {
+                // Mirror the fatal to Timber so all planted trees (including
+                // the file tree) record it, then block briefly for the disk
+                // write. Both calls are guarded so a logging-side failure
+                // never prevents us from delegating to the previous handler
+                // (usually the system one that shows "app has stopped").
+                Timber.e(throwable, "Uncaught exception on thread %s", thread.name)
+                fileTree.flushBlocking()
+            } catch (t: Throwable) {
+                // Intentionally swallowed: at this point the process is
+                // already going down, and the only thing worse than losing
+                // the log entry is losing the system crash dialog too.
+                android.util.Log.e("SynckroApp", "Failed to mirror uncaught exception to log", t)
+            } finally {
+                previous?.uncaughtException(thread, throwable)
+            }
         }
     }
 

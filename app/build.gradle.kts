@@ -31,6 +31,7 @@ android {
         vectorDrawables { useSupportLibrary = true }
         buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"\"")
         buildConfigField("String", "MS_CLIENT_ID", "\"\"")
+        buildConfigField("String", "MSAL_REDIRECT_URI", "\"\"")
         manifestPlaceholders["msalHost"] = ""
         manifestPlaceholders["msalPath"] = "/"
     }

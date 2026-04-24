@@ -39,7 +39,7 @@
     <string name="accounts_host_unavailable">Internal error: host activity not available.</string>
 
     <!-- Provider-specific auth errors -->
-    <string name="onedrive_not_configured">OneDrive is not configured. Set MS_CLIENT_ID before building.</string>
+    <string name="onedrive_not_configured">OneDrive is not configured. Set MS_CLIENT_ID and MSAL_REDIRECT_URI before building.</string>
     <string name="onedrive_signin_coming_soon">OneDrive sign-in is coming in the next update.</string>
     <string name="gdrive_not_configured">Google Drive is not configured. Set GOOGLE_WEB_CLIENT_ID before building.</string>
     <string name="gdrive_signin_coming_soon">Google Drive sign-in is coming in the next update.</string>

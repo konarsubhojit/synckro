@@ -25,4 +25,7 @@ class AuthManagerRegistry @Inject constructor(
 
     fun get(type: CloudProviderType): AuthManager =
         managers[type] ?: error("No AuthManager registered for $type")
+
+    /** Null-safe variant of [get] — for callers that need to handle an unknown/stale provider type gracefully. */
+    fun find(type: CloudProviderType): AuthManager? = managers[type]
 }

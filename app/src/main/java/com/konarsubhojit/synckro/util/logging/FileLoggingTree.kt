@@ -75,16 +75,38 @@ class FileLoggingTree(
 
     private fun rotateIfNeeded() {
         if (!logFile.exists() || logFile.length() < maxFileBytes) return
-        // Shift existing .N files up by one and drop the oldest.
+        // Shift existing .N files up by one and drop the oldest. Each
+        // delete()/renameTo() return value is checked — if any fails we log
+        // and abort to avoid leaving the rotation in an inconsistent state
+        // (e.g. primary log deleted but backup not moved).
         for (i in maxBackups downTo 1) {
             val src = backupFile(i - 1)
             val dst = backupFile(i)
-            if (src.exists()) {
-                if (dst.exists()) dst.delete()
-                src.renameTo(dst)
+            if (!src.exists()) continue
+            if (dst.exists() && !dst.delete()) {
+                Log.e(
+                    "FileLoggingTree",
+                    "Log rotation aborted: could not delete ${dst.name} " +
+                        "(maxFileBytes=$maxFileBytes, maxBackups=$maxBackups)",
+                )
+                return
+            }
+            if (!src.renameTo(dst)) {
+                Log.e(
+                    "FileLoggingTree",
+                    "Log rotation aborted: could not rename ${src.name} -> ${dst.name} " +
+                        "(maxFileBytes=$maxFileBytes, maxBackups=$maxBackups)",
+                )
+                return
             }
         }
-        if (logFile.exists()) logFile.renameTo(backupFile(1))
+        if (logFile.exists() && !logFile.renameTo(backupFile(1))) {
+            Log.e(
+                "FileLoggingTree",
+                "Log rotation aborted: could not rename ${logFile.name} -> ${backupFile(1).name} " +
+                    "(maxFileBytes=$maxFileBytes, maxBackups=$maxBackups)",
+            )
+        }
     }
 
     private fun backupFile(index: Int): File =

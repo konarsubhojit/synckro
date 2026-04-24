@@ -26,13 +26,14 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.konarsubhojit.synckro.R
-import com.konarsubhojit.synckro.domain.auth.AuthResult
+import com.konarsubhojit.synckro.ui.auth.ActivityAuthUiHost
 
 /**
  * Lists connected / connectable cloud accounts. This is the "login first"
@@ -51,6 +52,7 @@ fun AccountsScreen(
     viewModel: AccountsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val host = remember(activity) { ActivityAuthUiHost(activity) }
 
     Scaffold(
         topBar = {
@@ -85,7 +87,7 @@ fun AccountsScreen(
                 AccountProviderCard(
                     row = row,
                     onConnect = {
-                        viewModel.connect(row.providerKey) { manager -> manager.signIn(activity) }
+                        viewModel.connect(row.providerKey) { manager -> manager.signIn(host) }
                     },
                     onDisconnect = { viewModel.disconnect(it) },
                 )
@@ -140,7 +142,10 @@ private fun AccountProviderCard(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurface,
                     )
-                    OutlinedButton(onClick = { onDisconnect(account) }) {
+                    OutlinedButton(
+                        onClick = { onDisconnect(account) },
+                        enabled = !row.isBusy,
+                    ) {
                         Text(stringResource(R.string.accounts_disconnect))
                     }
                 }

@@ -1,12 +1,12 @@
 package com.konarsubhojit.synckro.providers.gdrive
 
-import android.app.Activity
 import android.content.Context
 import com.konarsubhojit.synckro.BuildConfig
 import com.konarsubhojit.synckro.R
 import com.konarsubhojit.synckro.domain.auth.Account
 import com.konarsubhojit.synckro.domain.auth.AuthManager
 import com.konarsubhojit.synckro.domain.auth.AuthResult
+import com.konarsubhojit.synckro.domain.auth.AuthUiHost
 import com.konarsubhojit.synckro.domain.model.CloudProviderType
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
@@ -26,7 +26,7 @@ class GoogleDriveAuthManager @Inject constructor(
 
     override suspend fun isConfigured(): Boolean = BuildConfig.GOOGLE_WEB_CLIENT_ID.isNotBlank()
 
-    override suspend fun signIn(activity: Activity): AuthResult<Account> {
+    override suspend fun signIn(host: AuthUiHost): AuthResult<Account> {
         if (!isConfigured()) {
             return AuthResult.NotConfigured(context.getString(R.string.gdrive_not_configured))
         }
@@ -37,6 +37,10 @@ class GoogleDriveAuthManager @Inject constructor(
 
     override suspend fun currentAccounts(): List<Account> = emptyList()
 
-    override suspend fun acquireAccessToken(account: Account): AuthResult<String> =
-        AuthResult.NeedsInteractiveSignIn
+    override suspend fun acquireAccessToken(account: Account): AuthResult<String> {
+        if (!isConfigured()) {
+            return AuthResult.NotConfigured(context.getString(R.string.gdrive_not_configured))
+        }
+        return AuthResult.NeedsInteractiveSignIn
+    }
 }

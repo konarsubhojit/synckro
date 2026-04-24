@@ -1,6 +1,5 @@
 package com.konarsubhojit.synckro.domain.auth
 
-import android.app.Activity
 import com.konarsubhojit.synckro.domain.model.CloudProviderType
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -26,7 +25,7 @@ class FakeAuthManager(
 
     override suspend fun isConfigured(): Boolean = configured
 
-    override suspend fun signIn(activity: Activity): AuthResult<Account> = mutex.withLock {
+    override suspend fun signIn(host: AuthUiHost): AuthResult<Account> = mutex.withLock {
         val override = nextSignInResult
         if (override != null) {
             nextSignInResult = null
@@ -45,6 +44,11 @@ class FakeAuthManager(
     }
 
     override suspend fun signOut(account: Account): AuthResult<Unit> = mutex.withLock {
+        if (account.provider != providerType) {
+            return AuthResult.Error(
+                "Account belongs to ${account.provider}, not $displayName."
+            )
+        }
         accounts.removeAll { it.id == account.id }
         AuthResult.Success(Unit)
     }
@@ -52,6 +56,11 @@ class FakeAuthManager(
     override suspend fun currentAccounts(): List<Account> = mutex.withLock { accounts.toList() }
 
     override suspend fun acquireAccessToken(account: Account): AuthResult<String> = mutex.withLock {
+        if (account.provider != providerType) {
+            return AuthResult.Error(
+                "Account belongs to ${account.provider}, not $displayName."
+            )
+        }
         if (accounts.none { it.id == account.id }) return AuthResult.NeedsInteractiveSignIn
         if (!configured) return AuthResult.NotConfigured("$displayName client id is not configured.")
         AuthResult.Success("fake-token-for-${account.id}")
