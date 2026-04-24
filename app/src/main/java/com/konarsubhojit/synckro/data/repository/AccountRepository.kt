@@ -88,19 +88,6 @@ class AccountRepository @Inject constructor(
 }
 
 /**
- * Maps a domain [Account] to a Room [AccountEntity] for use where a full entity is needed
- * (e.g. direct inserts). For upserts that should preserve [AccountEntity.createdAtMillis],
- * use [AccountDao.upsertPreservingCreatedAt] instead.
- */
-private fun Account.toEntity(): AccountEntity = AccountEntity(
-    id = id,
-    providerType = provider,
-    displayName = displayName,
-    email = email,
-    createdAtMillis = System.currentTimeMillis(),
-)
-
-/**
  * Maps a Room [AccountEntity] back to a domain [Account].
  */
 private fun AccountEntity.toDomain(): Account = Account(

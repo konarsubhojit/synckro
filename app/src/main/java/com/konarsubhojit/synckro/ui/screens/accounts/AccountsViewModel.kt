@@ -186,8 +186,9 @@ class AccountsViewModel @Inject constructor(
                     )
                 }
                 is AuthResult.Error -> {
-                    // Even if sign-out failed, remove from DB as a best-effort cleanup
-                    accountRepository.delete(account.id)
+                    // Do NOT delete from DB on sign-out failure — that would hide the
+                    // error and leave MSAL's token cache and Room out of sync. The user
+                    // can retry disconnect; a forced-local removal would be a separate flow.
                     userMessages.reportError(
                         context.getString(
                             R.string.accounts_disconnect_failed_format,
@@ -198,7 +199,8 @@ class AccountsViewModel @Inject constructor(
                     )
                 }
                 else -> {
-                    accountRepository.delete(account.id)
+                    // Same rationale as the Error branch: preserve DB row when sign-out
+                    // didn't positively succeed.
                     userMessages.reportError(
                         context.getString(
                             R.string.accounts_disconnect_failed_generic_format,

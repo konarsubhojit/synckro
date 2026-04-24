@@ -104,7 +104,7 @@ class OneDriveAuthManager @Inject constructor(
         }
 
         val app = getOrCreateMsalApp()
-            ?: return AuthResult.Error("Failed to initialize MSAL")
+            ?: return AuthResult.Error(context.getString(R.string.onedrive_init_failed))
 
         Timber.d("OneDriveAuthManager.signIn: launching interactive sign-in")
 
@@ -117,7 +117,7 @@ class OneDriveAuthManager @Inject constructor(
                         if (!cont.isActive) return
                         if (authenticationResult == null) {
                             Timber.e("OneDriveAuthManager.signIn: success but null result")
-                            cont.resume(AuthResult.Error("Sign-in returned null result"))
+                            cont.resume(AuthResult.Error(context.getString(R.string.onedrive_signin_null_result)))
                             return
                         }
 
@@ -256,7 +256,7 @@ class OneDriveAuthManager @Inject constructor(
         }
 
         val app = getOrCreateMsalApp()
-            ?: return AuthResult.Error("Failed to initialize MSAL")
+            ?: return AuthResult.Error(context.getString(R.string.onedrive_init_failed))
 
         Timber.d("OneDriveAuthManager.acquireAccessToken: attempting silent acquisition for ${account.id}")
 
