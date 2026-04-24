@@ -81,29 +81,23 @@ The Gradle wrapper is committed in `gradlew`, `gradlew.bat`, and
 ./gradlew lintDebug            # Android lint
 ```
 
-### Client IDs for debug builds
+### Client IDs and signing secrets for debug builds
 
-Debug builds read `GOOGLE_WEB_CLIENT_ID` and `MS_CLIENT_ID` from
-`local.properties` or environment variables and expose them in generated code as
-`BuildConfig.GOOGLE_WEB_CLIENT_ID` and `BuildConfig.MS_CLIENT_ID`.
+Debug builds read several values from `local.properties` or environment
+variables and expose them in generated code via `BuildConfig`.
 If unset, the build still succeeds but cloud auth will not work at runtime.
-In CI, these values come from repository secrets of the same name configured
-under **Settings → Secrets and variables → Actions**.
+In CI, these values come from repository secrets configured under
+**Settings → Secrets and variables → Actions**.
 
-How to obtain them:
+See **[docs/debug-auth-setup.md](docs/debug-auth-setup.md)** for the complete
+step-by-step instructions covering:
 
-- **Google** (`GOOGLE_WEB_CLIENT_ID`): Go to
-  [Google Cloud Console](https://console.cloud.google.com/) → APIs & Services →
-  Credentials → **Create credentials** → OAuth client ID → choose **Web
-  application**. Also create a separate **Android** OAuth client for the debug
-  signing SHA-1 with package name `com.konarsubhojit.synckro.debug` (note the
-  `.debug` `applicationIdSuffix` added by the debug build type).
-
-- **Microsoft** (`MS_CLIENT_ID`): Go to
-  [Microsoft Entra](https://entra.microsoft.com/) → App registrations → **New
-  registration**. Add an Android platform entry for package name
-  `com.konarsubhojit.synckro.debug` and the debug keystore signature hash. Copy
-  the **Application (client) ID**.
+- Creating a pinned debug keystore (required for stable SHA-1 fingerprints).
+- Registering the Android app in Google Cloud (for `GOOGLE_WEB_CLIENT_ID`).
+- Registering the app in Microsoft Entra / Azure AD (for `MS_CLIENT_ID` and
+  `MSAL_REDIRECT_URI`).
+- Adding all seven secrets to GitHub Actions.
+- Testing locally without secrets.
 
 ## CI / CD
 

@@ -31,6 +31,26 @@ android {
         vectorDrawables { useSupportLibrary = true }
         buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"\"")
         buildConfigField("String", "MS_CLIENT_ID", "\"\"")
+        manifestPlaceholders["msalHost"] = ""
+        manifestPlaceholders["msalPath"] = "/"
+    }
+
+    signingConfigs {
+        create("debugPinned") {
+            val ksPath = secretOrEmpty("DEBUG_KEYSTORE_PATH")
+                .ifEmpty { rootProject.file("debug.keystore").absolutePath }
+            val ksFile = file(ksPath)
+            if (ksFile.exists()
+                && secretOrEmpty("DEBUG_KEYSTORE_PASSWORD").isNotEmpty()
+            ) {
+                storeFile = ksFile
+                storePassword = secretOrEmpty("DEBUG_KEYSTORE_PASSWORD")
+                keyAlias = secretOrEmpty("DEBUG_KEY_ALIAS")
+                    .ifEmpty { "androiddebugkey" }
+                keyPassword = secretOrEmpty("DEBUG_KEY_PASSWORD")
+                    .ifEmpty { secretOrEmpty("DEBUG_KEYSTORE_PASSWORD") }
+            }
+        }
     }
 
     buildTypes {
@@ -46,6 +66,11 @@ android {
             isMinifyEnabled = false
             applicationIdSuffix = ".debug"
             versionNameSuffix = "-debug"
+            val pinned = signingConfigs.getByName("debugPinned")
+            if (pinned.storeFile != null) {
+                signingConfig = pinned
+            }
+            // else: AGP falls back to the default auto-generated debug keystore.
             buildConfigField(
                 "String",
                 "GOOGLE_WEB_CLIENT_ID",
@@ -56,6 +81,30 @@ android {
                 "MS_CLIENT_ID",
                 "\"${secretOrEmpty("MS_CLIENT_ID")}\""
             )
+            val msalRedirect = secretOrEmpty("MSAL_REDIRECT_URI")
+            val msalHost = msalRedirect
+                .substringAfter("msauth://", "")
+                .substringBefore("/", "")
+            val msalPath = if (msalRedirect.isNotEmpty() && msalHost.isNotEmpty())
+                "/" + msalRedirect.substringAfter("$msalHost/", "")
+            else "/"
+
+            // Sanity: if a redirect URI is provided, its host MUST match the debug
+            // applicationId. A mismatch silently breaks MSAL at runtime.
+            if (msalHost.isNotEmpty()) {
+                check(msalHost == "com.konarsubhojit.synckro.debug") {
+                    "MSAL_REDIRECT_URI host '$msalHost' must equal " +
+                        "'com.konarsubhojit.synckro.debug' (debug applicationId)."
+                }
+            }
+
+            buildConfigField(
+                "String",
+                "MSAL_REDIRECT_URI",
+                "\"$msalRedirect\""
+            )
+            manifestPlaceholders["msalHost"] = msalHost
+            manifestPlaceholders["msalPath"] = msalPath
         }
     }
 
@@ -84,6 +133,63 @@ android {
 
     testOptions {
         unitTests.isIncludeAndroidResources = true
+    }
+}
+
+/**
+ * Generates `msal_config.json` into the build directory so the MSAL client ID
+ * and redirect URI are never committed to source control.
+ *
+ * Declared as a typed task so that [addGeneratedSourceDirectory] can wire it
+ * into every variant's res source set via the stable AGP variant API.
+ */
+abstract class GenerateMsalConfigTask : DefaultTask() {
+    @get:Input abstract val clientId: Property<String>
+    @get:Input abstract val redirect: Property<String>
+    @get:OutputDirectory abstract val outputDir: DirectoryProperty
+
+    @TaskAction
+    fun execute() {
+        fun String.esc() = replace("\\", "\\\\").replace("\"", "\\\"")
+        val json = """
+        {
+          "client_id": "${clientId.get().esc()}",
+          "authorization_user_agent": "DEFAULT",
+          "redirect_uri": "${redirect.get().esc()}",
+          "account_mode": "SINGLE",
+          "broker_redirect_uri_registered": false,
+          "authorities": [
+            {
+              "type": "AAD",
+              "audience": {
+                "type": "AzureADandPersonalMicrosoftAccount",
+                "tenant_id": "common"
+              }
+            }
+          ]
+        }
+        """.trimIndent()
+        val raw = outputDir.get().asFile.resolve("raw")
+        raw.mkdirs()
+        raw.resolve("msal_config.json").writeText(json)
+    }
+}
+
+val generateMsalConfig by tasks.registering(GenerateMsalConfigTask::class) {
+    clientId.set(secretOrEmpty("MS_CLIENT_ID"))
+    redirect.set(secretOrEmpty("MSAL_REDIRECT_URI"))
+    outputDir.set(layout.buildDirectory.dir("generated/res/msal"))
+}
+
+androidComponents {
+    onVariants { variant ->
+        // Use the typed variant API to add the generated dir as a res source and
+        // automatically establish the task dependency — no brittle task-name
+        // string matching required.
+        variant.sources.res?.addGeneratedSourceDirectory(
+            generateMsalConfig,
+            GenerateMsalConfigTask::outputDir,
+        )
     }
 }
 
