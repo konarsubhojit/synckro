@@ -1,3 +1,12 @@
+import java.util.Properties
+
+val localProps = Properties().apply {
+    val f = rootProject.file("local.properties")
+    if (f.exists()) f.inputStream().use { load(it) }
+}
+fun secretOrEmpty(key: String): String =
+    (System.getenv(key) ?: localProps.getProperty(key) ?: "").trim()
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -20,6 +29,8 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
+        buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"\"")
+        buildConfigField("String", "MS_CLIENT_ID", "\"\"")
     }
 
     buildTypes {
@@ -35,6 +46,16 @@ android {
             isMinifyEnabled = false
             applicationIdSuffix = ".debug"
             versionNameSuffix = "-debug"
+            buildConfigField(
+                "String",
+                "GOOGLE_WEB_CLIENT_ID",
+                "\"${secretOrEmpty("GOOGLE_WEB_CLIENT_ID")}\""
+            )
+            buildConfigField(
+                "String",
+                "MS_CLIENT_ID",
+                "\"${secretOrEmpty("MS_CLIENT_ID")}\""
+            )
         }
     }
 

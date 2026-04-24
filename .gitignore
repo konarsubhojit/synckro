@@ -22,6 +22,9 @@ keystore.properties
 *.dex
 *.class
 
+# Kotlin compiler session files
+.kotlin/
+
 # Logs
 *.log
 
