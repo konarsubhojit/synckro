@@ -1,3 +1,9 @@
 # Example only — copy to `local.properties` and set your SDK path.
 # local.properties itself is gitignored.
 sdk.dir=/opt/android/sdk
+
+# OAuth client IDs used by debug builds. Leave blank if you are not
+# exercising cloud auth locally. In CI they come from GitHub Actions
+# secrets of the same name. local.properties itself is gitignored.
+GOOGLE_WEB_CLIENT_ID=
+MS_CLIENT_ID=
