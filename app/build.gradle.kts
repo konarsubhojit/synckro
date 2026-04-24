@@ -246,6 +246,13 @@ dependencies {
     implementation(libs.retrofit)
     implementation(libs.retrofit.kotlinx.serialization)
 
+    // Cloud authentication
+    implementation(libs.msal)
+    implementation(libs.androidx.credentials)
+    implementation(libs.androidx.credentials.play.services)
+    implementation(libs.googleid)
+    implementation(libs.play.services.auth)
+
     // Logging
     implementation(libs.timber)
 

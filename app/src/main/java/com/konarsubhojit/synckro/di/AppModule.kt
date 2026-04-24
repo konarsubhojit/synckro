@@ -3,6 +3,7 @@ package com.konarsubhojit.synckro.di
 import android.content.Context
 import androidx.room.Room
 import androidx.work.WorkManager
+import com.konarsubhojit.synckro.data.local.dao.AccountDao
 import com.konarsubhojit.synckro.data.local.dao.FileIndexDao
 import com.konarsubhojit.synckro.data.local.dao.SyncPairDao
 import com.konarsubhojit.synckro.data.local.db.SynckroDatabase
@@ -51,6 +52,13 @@ object AppModule {
  * @return The SyncPairDao instance retrieved from the database.
  */
 @Provides fun provideSyncPairDao(db: SynckroDatabase): SyncPairDao = db.syncPairDao()
+
+    /**
+ * Provides the AccountDao associated with the given SynckroDatabase.
+ *
+ * @return The AccountDao instance retrieved from the database.
+ */
+@Provides fun provideAccountDao(db: SynckroDatabase): AccountDao = db.accountDao()
 
     /**
  * Provides the DAO for accessing file index records from the database.

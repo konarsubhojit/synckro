@@ -5,9 +5,64 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Upsert
+import com.konarsubhojit.synckro.data.local.entity.AccountEntity
 import com.konarsubhojit.synckro.data.local.entity.FileIndexEntity
 import com.konarsubhojit.synckro.data.local.entity.SyncPairEntity
 import kotlinx.coroutines.flow.Flow
+
+@Dao
+interface AccountDao {
+    /**
+     * Observes all rows in the `account` table ordered by `createdAtMillis` ascending.
+     *
+     * Emits the current list of `AccountEntity` rows and subsequent updates whenever the table changes.
+     *
+     * @return A Flow that emits lists of `AccountEntity` containing all rows ordered by creation time; emits a new list on table changes.
+     */
+    @Query("SELECT * FROM account ORDER BY createdAtMillis ASC")
+    fun observeAll(): Flow<List<AccountEntity>>
+
+    /**
+     * Fetches all accounts synchronously.
+     *
+     * @return A list of all `AccountEntity` rows, or an empty list if none exist.
+     */
+    @Query("SELECT * FROM account ORDER BY createdAtMillis ASC")
+    suspend fun getAll(): List<AccountEntity>
+
+    /**
+     * Fetches the account with the given id.
+     *
+     * @param id The primary key id of the account to fetch.
+     * @return The matching `AccountEntity`, or `null` if no row matches.
+     */
+    @Query("SELECT * FROM account WHERE id = :id")
+    suspend fun getById(id: String): AccountEntity?
+
+    /**
+     * Inserts the given AccountEntity into the account table, replacing any existing row on primary-key conflict.
+     *
+     * @param account The AccountEntity to insert.
+     */
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insert(account: AccountEntity)
+
+    /**
+     * Inserts the given AccountEntity or updates an existing row with the same primary key.
+     *
+     * @param account The AccountEntity to insert or update in the `account` table.
+     */
+    @Upsert
+    suspend fun upsert(account: AccountEntity)
+
+    /**
+     * Deletes the account row with the specified id from the database.
+     *
+     * @param id The primary key of the account row to delete.
+     */
+    @Query("DELETE FROM account WHERE id = :id")
+    suspend fun delete(id: String)
+}
 
 @Dao
 interface SyncPairDao {
