@@ -7,12 +7,17 @@ import com.konarsubhojit.synckro.data.local.dao.FileIndexDao
 import com.konarsubhojit.synckro.data.local.dao.SyncPairDao
 import com.konarsubhojit.synckro.data.local.db.SynckroDatabase
 import com.konarsubhojit.synckro.data.worker.SyncScheduler
+import com.konarsubhojit.synckro.domain.auth.AuthManager
+import com.konarsubhojit.synckro.domain.model.CloudProviderType
 import com.konarsubhojit.synckro.domain.sync.SyncEngine
+import com.konarsubhojit.synckro.providers.gdrive.GoogleDriveAuthManager
+import com.konarsubhojit.synckro.providers.onedrive.OneDriveAuthManager
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
+import dagger.multibindings.IntoMap
 import javax.inject.Singleton
 
 @Module
@@ -80,4 +85,10 @@ object AppModule {
      */
     @Provides @Singleton
     fun provideSyncEngine(): SyncEngine = SyncEngine()
+
+    @Provides @IntoMap @CloudProviderKey(CloudProviderType.ONEDRIVE) @Singleton
+    fun provideOneDriveAuthManager(impl: OneDriveAuthManager): AuthManager = impl
+
+    @Provides @IntoMap @CloudProviderKey(CloudProviderType.GOOGLE_DRIVE) @Singleton
+    fun provideGoogleDriveAuthManager(impl: GoogleDriveAuthManager): AuthManager = impl
 }

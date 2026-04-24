@@ -1,5 +1,6 @@
 package com.konarsubhojit.synckro.ui.theme
 
+import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
@@ -8,27 +9,74 @@ import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalContext
-import android.os.Build
 
-private val LightColors = lightColorScheme()
-private val DarkColors = darkColorScheme()
+private val LightColors = lightColorScheme(
+    primary = BrandPrimary,
+    onPrimary = BrandOnPrimary,
+    primaryContainer = BrandPrimaryContainer,
+    onPrimaryContainer = BrandOnPrimaryContainer,
+    secondary = BrandSecondary,
+    onSecondary = BrandOnSecondary,
+    secondaryContainer = BrandSecondaryContainer,
+    onSecondaryContainer = BrandOnSecondaryContainer,
+    tertiary = BrandTertiary,
+    onTertiary = BrandOnTertiary,
+    tertiaryContainer = BrandTertiaryContainer,
+    onTertiaryContainer = BrandOnTertiaryContainer,
+    error = BrandError,
+    onError = BrandOnError,
+    errorContainer = BrandErrorContainer,
+    onErrorContainer = BrandOnErrorContainer,
+    background = LightBackground,
+    onBackground = LightOnBackground,
+    surface = LightSurface,
+    onSurface = LightOnSurface,
+    surfaceVariant = LightSurfaceVariant,
+    onSurfaceVariant = LightOnSurfaceVariant,
+    outline = LightOutline,
+)
+
+private val DarkColors = darkColorScheme(
+    primary = DarkPrimary,
+    onPrimary = DarkOnPrimary,
+    primaryContainer = DarkPrimaryContainer,
+    onPrimaryContainer = DarkOnPrimaryContainer,
+    secondary = DarkSecondary,
+    onSecondary = DarkOnSecondary,
+    secondaryContainer = DarkSecondaryContainer,
+    onSecondaryContainer = DarkOnSecondaryContainer,
+    tertiary = DarkTertiary,
+    onTertiary = DarkOnTertiary,
+    tertiaryContainer = DarkTertiaryContainer,
+    onTertiaryContainer = DarkOnTertiaryContainer,
+    error = DarkErrorColor,
+    onError = DarkOnErrorColor,
+    errorContainer = DarkErrorContainer,
+    onErrorContainer = DarkOnErrorContainer,
+    background = DarkBackground,
+    onBackground = DarkOnBackground,
+    surface = DarkSurface,
+    onSurface = DarkOnSurface,
+    surfaceVariant = DarkSurfaceVariant,
+    onSurfaceVariant = DarkOnSurfaceVariant,
+    outline = DarkOutline,
+)
 
 /**
- * Applies the app's Material 3 color scheme to the provided composable content, choosing between
- * light, dark, or Android 12+ dynamic system palettes based on the provided flags and device support.
+ * Applies the app's Material 3 color scheme.
  *
- * When `dynamicColor` is true and the device runs Android 12 or newer, a dynamic light or dark
- * color scheme is obtained from the system; otherwise the statically defined `LightColors` or
- * `DarkColors` are used. The selected scheme is passed to `MaterialTheme`.
- *
- * @param darkTheme If `true`, prefer a dark color scheme; defaults to the system dark/light setting.
- * @param dynamicColor If `true`, allow using Android 12+ dynamic system colors when supported.
- * @param content Composable content that will be wrapped with the selected `MaterialTheme`.
+ * Historically this defaulted to `dynamicColor = true`, which on Android 12+
+ * pulled the scheme from the system wallpaper. On many devices this produced
+ * very dark-on-dark combinations at night, rendering labels unreadable (the
+ * "everything is black" bug reported by users). The explicit [LightColors] /
+ * [DarkColors] defined above are tuned for WCAG AA contrast, so we default
+ * `dynamicColor` to `false` and only opt in when the caller explicitly asks
+ * for it.
  */
 @Composable
 fun SynckroTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    dynamicColor: Boolean = true,
+    dynamicColor: Boolean = false,
     content: @Composable () -> Unit,
 ) {
     val colorScheme = when {
