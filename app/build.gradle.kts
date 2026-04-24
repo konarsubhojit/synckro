@@ -134,32 +134,28 @@ android {
     testOptions {
         unitTests.isIncludeAndroidResources = true
     }
-
-    sourceSets.getByName("main").res.srcDirs(
-        layout.buildDirectory.dir("generated/res/msal")
-    )
 }
 
-fun String.jsonEscape(): String =
-    replace("\\", "\\\\").replace("\"", "\\\"")
+/**
+ * Generates `msal_config.json` into the build directory so the MSAL client ID
+ * and redirect URI are never committed to source control.
+ *
+ * Declared as a typed task so that [addGeneratedSourceDirectory] can wire it
+ * into every variant's res source set via the stable AGP variant API.
+ */
+abstract class GenerateMsalConfigTask : DefaultTask() {
+    @get:Input abstract val clientId: Property<String>
+    @get:Input abstract val redirect: Property<String>
+    @get:OutputDirectory abstract val outputDir: DirectoryProperty
 
-val generateMsalConfig by tasks.registering {
-    val clientId = secretOrEmpty("MS_CLIENT_ID")
-    val redirect = secretOrEmpty("MSAL_REDIRECT_URI")
-    val outFile = layout.buildDirectory
-        .file("generated/res/msal/raw/msal_config.json")
-    inputs.property("clientId", clientId)
-    inputs.property("redirect", redirect)
-    outputs.file(outFile)
-    doLast {
-        // Escape inline to avoid capturing any Gradle script object references,
-        // which are disallowed by the configuration cache.
+    @TaskAction
+    fun execute() {
         fun String.esc() = replace("\\", "\\\\").replace("\"", "\\\"")
         val json = """
         {
-          "client_id": "${clientId.esc()}",
+          "client_id": "${clientId.get().esc()}",
           "authorization_user_agent": "DEFAULT",
-          "redirect_uri": "${redirect.esc()}",
+          "redirect_uri": "${redirect.get().esc()}",
           "account_mode": "SINGLE",
           "broker_redirect_uri_registered": false,
           "authorities": [
@@ -173,20 +169,27 @@ val generateMsalConfig by tasks.registering {
           ]
         }
         """.trimIndent()
-        val f = outFile.get().asFile
-        f.parentFile.mkdirs()
-        f.writeText(json)
+        val raw = outputDir.get().asFile.resolve("raw")
+        raw.mkdirs()
+        raw.resolve("msal_config.json").writeText(json)
     }
+}
+
+val generateMsalConfig by tasks.registering(GenerateMsalConfigTask::class) {
+    clientId.set(secretOrEmpty("MS_CLIENT_ID"))
+    redirect.set(secretOrEmpty("MSAL_REDIRECT_URI"))
+    outputDir.set(layout.buildDirectory.dir("generated/res/msal"))
 }
 
 androidComponents {
     onVariants { variant ->
-        val cap = variant.name.replaceFirstChar { it.uppercase() }
-        tasks.matching {
-            it.name == "generate${cap}Resources"
-                || it.name == "merge${cap}Resources"
-                || it.name == "map${cap}SourceSetPaths"
-        }.configureEach { dependsOn(generateMsalConfig) }
+        // Use the typed variant API to add the generated dir as a res source and
+        // automatically establish the task dependency — no brittle task-name
+        // string matching required.
+        variant.sources.res?.addGeneratedSourceDirectory(
+            generateMsalConfig,
+            GenerateMsalConfigTask::outputDir,
+        )
     }
 }
 

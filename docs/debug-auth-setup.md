@@ -52,7 +52,7 @@ keytool -list -v \
 
 The output includes lines like:
 
-```
+```text
 Certificate fingerprints:
    SHA1: AA:BB:CC:DD:...
    SHA256: 11:22:33:44:...
@@ -142,11 +142,14 @@ These steps configure MSAL so it accepts a login from the CI-built debug APK.
      echo "AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99:AA:BB:CC:DD" \
        | xxd -r -p | base64
      ```
+
    - Click **Configure**.
    - Azure shows a **redirect URI** of the form:
-     ```
+
+     ```text
      msauth://com.konarsubhojit.synckro.debug/<base64-hash>
      ```
+
    - Copy this **entire URI verbatim** — this is your `MSAL_REDIRECT_URI`
      secret.
 
