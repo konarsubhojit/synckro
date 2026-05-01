@@ -127,6 +127,16 @@ private fun AccountProviderCard(
                     color = MaterialTheme.colorScheme.error,
                 )
             }
+            if (row.needsReauth) {
+                // Surface the terminal-auth state inline so the user understands
+                // why background sync stopped and what tapping the button below
+                // is for.
+                Text(
+                    text = stringResource(R.string.accounts_reauth_required),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
             if (row.accounts.isEmpty()) {
                 Text(
                     text = stringResource(R.string.accounts_empty),
@@ -162,7 +172,14 @@ private fun AccountProviderCard(
                         color = MaterialTheme.colorScheme.onPrimary,
                     )
                 } else {
-                    Text(stringResource(R.string.accounts_connect_format, row.providerDisplayName))
+                    // Re-authenticate when a pair for this provider is stuck in
+                    // NEEDS_REAUTH; otherwise the normal "Connect %provider" CTA.
+                    val label = if (row.needsReauth) {
+                        stringResource(R.string.accounts_reauth_button, row.providerDisplayName)
+                    } else {
+                        stringResource(R.string.accounts_connect_format, row.providerDisplayName)
+                    }
+                    Text(label)
                 }
             }
         }

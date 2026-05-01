@@ -4,11 +4,13 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.konarsubhojit.synckro.R
+import com.konarsubhojit.synckro.data.local.dao.SyncPairDao
 import com.konarsubhojit.synckro.data.repository.AccountRepository
 import com.konarsubhojit.synckro.domain.auth.Account
 import com.konarsubhojit.synckro.domain.auth.AuthManager
 import com.konarsubhojit.synckro.domain.auth.AuthManagerRegistry
 import com.konarsubhojit.synckro.domain.auth.AuthResult
+import com.konarsubhojit.synckro.domain.model.CloudProviderType
 import com.konarsubhojit.synckro.util.error.UserMessage
 import com.konarsubhojit.synckro.util.error.UserMessageReporter
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -18,6 +20,8 @@ import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import timber.log.Timber
@@ -37,6 +41,7 @@ class AccountsViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val registry: AuthManagerRegistry,
     private val accountRepository: AccountRepository,
+    private val syncPairDao: SyncPairDao,
     private val userMessages: UserMessageReporter,
 ) : ViewModel() {
 
@@ -46,6 +51,15 @@ class AccountsViewModel @Inject constructor(
         val isConfigured: Boolean,
         val accounts: List<Account>,
         val isBusy: Boolean = false,
+        /**
+         * True when at least one sync pair for this provider has reported a
+         * terminal authentication failure (token expired, account removed,
+         * scope revoked, `MsalUiRequiredException`, missing client ID, …) on
+         * its most recent run. The Accounts screen renders a "Re-authenticate"
+         * CTA whenever this is true so the user has an obvious recovery path
+         * and the periodic worker isn't silently looping in the background.
+         */
+        val needsReauth: Boolean = false,
     )
 
     data class UiState(
@@ -56,11 +70,33 @@ class AccountsViewModel @Inject constructor(
     private val _state = MutableStateFlow(UiState())
     val state: StateFlow<UiState> = _state.asStateFlow()
 
-    init { refresh() }
+    /** Latest snapshot of providers that have a pair stuck in NEEDS_REAUTH. */
+    private var providersNeedingReauth: Set<CloudProviderType> = emptySet()
+
+    init {
+        // Observe re-auth signals from sync_pair so the CTA appears as soon as
+        // SyncWorker persists a NEEDS_REAUTH outcome — without forcing the user
+        // to navigate away and back.
+        syncPairDao.observeProvidersNeedingReauth()
+            .onEach { providers ->
+                providersNeedingReauth = providers.toSet()
+                _state.update { cur ->
+                    cur.copy(rows = cur.rows.map { row ->
+                        row.copy(needsReauth = row.matchesAnyOf(providersNeedingReauth))
+                    })
+                }
+            }
+            .launchIn(viewModelScope)
+        refresh()
+    }
+
+    private fun AccountRow.matchesAnyOf(types: Set<CloudProviderType>): Boolean =
+        types.any { it.name == providerKey }
 
     fun refresh() {
         viewModelScope.launch {
             Timber.d("AccountsViewModel.refresh()")
+            val flagged = providersNeedingReauth
             val rows = registry.all.map { manager ->
                 // Reconcile: merge accounts from manager's token cache with persisted accounts
                 val providerAccounts = reconcileAccounts(manager)
@@ -69,6 +105,7 @@ class AccountsViewModel @Inject constructor(
                     providerKey = manager.providerType.name,
                     isConfigured = manager.isConfigured(),
                     accounts = providerAccounts,
+                    needsReauth = manager.providerType in flagged,
                 )
             }
             _state.value = UiState(rows = rows, isLoading = false)
@@ -213,6 +250,10 @@ class AccountsViewModel @Inject constructor(
             is AuthResult.Success -> {
                 // Persist the account to Room
                 accountRepository.upsert(result.value)
+                // Clear any lingering NEEDS_REAUTH state so the CTA disappears immediately
+                // instead of waiting for the next worker run to overwrite lastSyncResult.
+                runCatching { syncPairDao.clearNeedsReauthForProvider(manager.providerType) }
+                    .onFailure { Timber.w(it, "AccountsViewModel: failed to clear NEEDS_REAUTH for ${manager.providerType}") }
                 userMessages.report(
                     UserMessage(
                         context.getString(
