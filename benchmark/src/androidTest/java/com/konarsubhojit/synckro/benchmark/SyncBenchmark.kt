@@ -33,7 +33,7 @@ class SyncBenchmark {
     @get:Rule
     val benchmarkRule = MacrobenchmarkRule()
 
-    private val targetPackage = "com.konarsubhojit.synckro.debug"
+    private val targetPackage = "com.konarsubhojit.synckro"
 
     /**
      * Measures cold-startup time.
