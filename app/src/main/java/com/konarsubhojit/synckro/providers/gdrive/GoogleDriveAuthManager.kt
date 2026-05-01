@@ -100,7 +100,9 @@ class GoogleDriveAuthManager private constructor(
         prefsOverride ?: createEncryptedPrefs()
     }
 
-    @Suppress("DEPRECATION")
+    @Suppress("DEPRECATION") // MasterKey.Builder and EncryptedSharedPreferences.create are deprecated
+    // in security-crypto 1.1.0 but no stable non-deprecated replacement exists for the 5-arg
+    // static factory yet. The functionality is identical; suppress to keep clean builds.
     private fun createEncryptedPrefs(): SharedPreferences {
         val masterKey = MasterKey.Builder(context)
             .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
@@ -294,7 +296,7 @@ class GoogleDriveAuthManager private constructor(
         pendingIntent: PendingIntent,
     ): Boolean = withContext(Dispatchers.Main) {
         suspendCancellableCoroutine { cont ->
-            val key = "gdrive_consent_${System.nanoTime()}"
+            val key = "gdrive_consent_${java.util.UUID.randomUUID()}"
             var launcher: ActivityResultLauncher<IntentSenderRequest>? = null
             launcher = activity.activityResultRegistry.register(
                 key,
