@@ -494,6 +494,9 @@ class GoogleDriveRestClient @Inject constructor(
                                     statusResp.close()
                                     val serverNext =
                                         range?.substringAfter('-')?.toLongOrNull()?.plus(1)
+                                    // `end` here is the inclusive last byte of the chunk that
+                                    // just failed. serverNext > end+1 means the server already
+                                    // committed this chunk (and possibly part of the next one).
                                     if (serverNext != null && serverNext > end + 1) {
                                         // Server committed more data than the client thought —
                                         // skip ahead in the stream and advance the offset.

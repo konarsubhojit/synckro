@@ -364,7 +364,7 @@ class GoogleDriveRestClientTest {
 
         assertEquals("resumed-file-id", result.id)
 
-        // chunk1(308) + chunk2(disconnect) + status-GET(308) + chunk2-retry(200)
+        // chunk1(308) + chunk2(disconnect) + status-PUT(308) + chunk2-retry(200)
         assertEquals(4, server.requestCount)
 
         // Drain and inspect the status query.
