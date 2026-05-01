@@ -6,6 +6,7 @@ import androidx.work.WorkManager
 import com.konarsubhojit.synckro.data.local.dao.AccountDao
 import com.konarsubhojit.synckro.data.local.dao.ConflictRecordDao
 import com.konarsubhojit.synckro.data.local.dao.FileIndexDao
+import com.konarsubhojit.synckro.data.local.dao.SyncEventDao
 import com.konarsubhojit.synckro.data.local.dao.SyncPairDao
 import com.konarsubhojit.synckro.data.local.db.SynckroDatabase
 import com.konarsubhojit.synckro.data.repository.ConflictRepository
@@ -50,6 +51,7 @@ object AppModule {
                 SynckroDatabase.MIGRATION_2_3,
                 SynckroDatabase.MIGRATION_3_4,
                 SynckroDatabase.MIGRATION_4_5,
+                SynckroDatabase.MIGRATION_5_6,
             )
         // Destructive fallback is only acceptable while the schema is still
         // pre-1.0. In release builds we refuse to drop user sync state and
@@ -90,6 +92,14 @@ object AppModule {
 
     @Provides @Singleton
     fun provideFakeCloudProvider(): FakeCloudProvider = FakeCloudProvider()
+
+    /**
+     * Provides the DAO for reading and writing structured sync-event log entries.
+     *
+     * @return The [SyncEventDao] from the provided [SynckroDatabase].
+     */
+    @Provides
+    fun provideSyncEventDao(db: SynckroDatabase): SyncEventDao = db.syncEventDao()
 
     /**
      * Provides the application WorkManager instance.

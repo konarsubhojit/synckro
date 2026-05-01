@@ -128,4 +128,14 @@
     <string name="sync_channel_description">Shows progress while Synckro is transferring files in the background.</string>
     <string name="sync_notification_title">Syncing %1$s</string>
     <string name="sync_notification_content">Transfer in progress…</string>
+
+    <!-- Sync logs screen -->
+    <string name="logs_title">Sync logs</string>
+    <string name="logs_action">View logs</string>
+    <string name="logs_empty">No log entries yet. Run a sync to see events here.</string>
+    <string name="logs_copy">Copy to clipboard</string>
+    <string name="logs_copied">Log copied to clipboard</string>
+    <string name="logs_share">Share log</string>
+    <string name="logs_share_subject">Synckro sync log</string>
+    <string name="logs_share_chooser">Share log via…</string>
 </resources>

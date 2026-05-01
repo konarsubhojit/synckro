@@ -38,4 +38,20 @@ sealed class CloudProviderException(
     class NotConfigured(
         message: String,
     ) : CloudProviderException(message)
+
+    /**
+     * The provider responded with HTTP 429 (Too Many Requests) or an equivalent
+     * rate-limit signal.  Callers should honour the [retryAfterMs] delay before
+     * the next attempt.
+     *
+     * @param retryAfterMs Milliseconds to wait before the next attempt.  0 means
+     *   the caller may choose a default backoff.
+     * @param message Human-readable description.
+     * @param cause   Original exception, if any.
+     */
+    class RateLimited(
+        val retryAfterMs: Long,
+        message: String,
+        cause: Throwable? = null,
+    ) : CloudProviderException(message, cause)
 }

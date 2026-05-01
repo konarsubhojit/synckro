@@ -118,8 +118,8 @@ class SyncEngine(
                             id = 0,
                             pairId = pair.id,
                             relativePath = op.relativePath,
-                            localLastModifiedMs = if (op.localNewerThanRemote) now else now - 1_000,
-                            remoteLastModifiedMs = if (op.localNewerThanRemote) now - 1_000 else now,
+                            localLastModifiedMs = op.localLastModifiedMs,
+                            remoteLastModifiedMs = op.remoteLastModifiedMs,
                             detectedAtMs = now,
                         )
                     )

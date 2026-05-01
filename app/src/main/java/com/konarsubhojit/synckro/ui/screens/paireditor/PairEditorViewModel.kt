@@ -137,7 +137,9 @@ class PairEditorViewModel @Inject constructor(
                     direction = s.direction,
                     wifiOnly = s.wifiOnly,
                     requiresCharging = s.requiresCharging,
-                    scheduleIntervalMinutes = s.scheduleIntervalMinutes,
+                    // Enforce WorkManager's 15-minute floor here so the persisted value
+                    // always matches what the scheduler will actually use.
+                    scheduleIntervalMinutes = s.scheduleIntervalMinutes.coerceAtLeast(15L),
                     includeGlobs = s.includeGlobsText.split('\n').map { it.trim() }.filter { it.isNotBlank() },
                     excludeGlobs = s.excludeGlobsText.split('\n').map { it.trim() }.filter { it.isNotBlank() },
                 )

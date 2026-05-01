@@ -8,10 +8,12 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import com.konarsubhojit.synckro.data.local.dao.AccountDao
 import com.konarsubhojit.synckro.data.local.dao.ConflictRecordDao
 import com.konarsubhojit.synckro.data.local.dao.FileIndexDao
+import com.konarsubhojit.synckro.data.local.dao.SyncEventDao
 import com.konarsubhojit.synckro.data.local.dao.SyncPairDao
 import com.konarsubhojit.synckro.data.local.entity.AccountEntity
 import com.konarsubhojit.synckro.data.local.entity.ConflictRecordEntity
 import com.konarsubhojit.synckro.data.local.entity.FileIndexEntity
+import com.konarsubhojit.synckro.data.local.entity.SyncEventEntity
 import com.konarsubhojit.synckro.data.local.entity.SyncPairEntity
 import com.konarsubhojit.synckro.domain.model.CloudProviderType
 import com.konarsubhojit.synckro.domain.model.ConflictPolicy
@@ -64,8 +66,8 @@ class EnumConverters {
 }
 
 @Database(
-    entities = [AccountEntity::class, SyncPairEntity::class, FileIndexEntity::class, ConflictRecordEntity::class],
-    version = 5,
+    entities = [AccountEntity::class, SyncPairEntity::class, FileIndexEntity::class, SyncEventEntity::class, ConflictRecordEntity::class],
+    version = 6,
     exportSchema = true,
 )
 @TypeConverters(EnumConverters::class)
@@ -96,6 +98,13 @@ abstract fun fileIndexDao(): FileIndexDao
      * @return The [ConflictRecordDao] for performing operations on conflict inbox data.
      */
     abstract fun conflictRecordDao(): ConflictRecordDao
+
+    /**
+     * Returns the DAO for reading and writing structured sync-event log entries.
+     *
+     * @return The [SyncEventDao] for the `sync_event` table.
+     */
+    abstract fun syncEventDao(): SyncEventDao
 
     companion object {
         const val NAME = "synckro.db"
@@ -137,11 +146,33 @@ abstract fun fileIndexDao(): FileIndexDao
             }
         }
         /**
-         * Migrates the database from version 4 to 5:
-         * - Adds `scheduleIntervalMinutes` column to `sync_pair` (default 60 minutes).
-         * - Creates the `conflict_record` table for the conflict inbox.
+         * Migrates the database from version 4 to 5 by creating the `sync_event` table.
+         * This table stores structured log entries associated with sync-pair runs.
          */
         val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `sync_event` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`pairId` INTEGER, " +
+                        "`timestampMs` INTEGER NOT NULL, " +
+                        "`level` TEXT NOT NULL, " +
+                        "`tag` TEXT NOT NULL, " +
+                        "`message` TEXT NOT NULL, " +
+                        "FOREIGN KEY(`pairId`) REFERENCES `sync_pair`(`id`) ON DELETE CASCADE)"
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_sync_event_pairId` ON `sync_event` (`pairId`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_sync_event_timestampMs` ON `sync_event` (`timestampMs`)")
+            }
+        }
+
+        /**
+         * Migrates the database from version 5 to 6:
+         * - Adds `scheduleIntervalMinutes` column to `sync_pair` (default 60 minutes).
+         * - Creates the `conflict_record` table for the conflict inbox with a unique
+         *   constraint on `(pairId, relativePath)` to prevent duplicate entries.
+         */
+        val MIGRATION_5_6 = object : Migration(5, 6) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL(
                     "ALTER TABLE `sync_pair` ADD COLUMN `scheduleIntervalMinutes` INTEGER NOT NULL DEFAULT 60"
@@ -155,7 +186,8 @@ abstract fun fileIndexDao(): FileIndexDao
                         "`remoteLastModifiedMs` INTEGER NOT NULL, " +
                         "`detectedAtMs` INTEGER NOT NULL, " +
                         "`resolution` TEXT, " +
-                        "FOREIGN KEY(`pairId`) REFERENCES `sync_pair`(`id`) ON DELETE CASCADE)"
+                        "FOREIGN KEY(`pairId`) REFERENCES `sync_pair`(`id`) ON DELETE CASCADE, " +
+                        "UNIQUE(`pairId`, `relativePath`))"
                 )
                 db.execSQL(
                     "CREATE INDEX IF NOT EXISTS `index_conflict_record_pairId` " +

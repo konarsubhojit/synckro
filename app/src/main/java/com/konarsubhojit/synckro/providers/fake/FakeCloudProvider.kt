@@ -30,11 +30,22 @@ class FakeCloudProvider : CloudProvider {
      * Forced conflicts that will be drained on the next [drainForcedConflicts] call.
      * Call [forceConflict] to inject a conflict for the sync engine to detect.
      */
-    private val forcedConflicts = mutableListOf<Triple<String, Long, Long>>()
+    private val forcedConflicts = mutableListOf<PendingConflict>()
+
+    /**
+     * A synthetic conflict injected via [forceConflict], carrying the actual file timestamps
+     * so the [SyncEngine] can persist accurate [ConflictRecord] metadata.
+     */
+    data class PendingConflict(
+        val relativePath: String,
+        val localLastModifiedMs: Long,
+        val remoteLastModifiedMs: Long,
+    )
 
     /**
      * Schedules a synthetic conflict for the file at [relativePath]. On the next call to
-     * [drainForcedConflicts] this will be returned as a [com.konarsubhojit.synckro.domain.sync.SyncOp.Conflict].
+     * [drainForcedConflicts] this will be returned with the actual timestamps so the sync
+     * engine can persist accurate [ConflictRecord] rows.
      *
      * @param relativePath The relative path of the conflicting file.
      * @param localLastModifiedMs The local file's last-modified timestamp (epoch ms).
@@ -45,21 +56,16 @@ class FakeCloudProvider : CloudProvider {
         localLastModifiedMs: Long,
         remoteLastModifiedMs: Long,
     ) {
-        forcedConflicts += Triple(relativePath, localLastModifiedMs, remoteLastModifiedMs)
+        forcedConflicts += PendingConflict(relativePath, localLastModifiedMs, remoteLastModifiedMs)
     }
 
     /**
-     * Returns all pending forced conflicts and clears the internal list.
+     * Returns all pending forced conflicts (with their actual timestamps) and clears the list.
      * Called by the sync engine during a fake sync run.
      */
-    suspend fun drainForcedConflicts(): List<com.konarsubhojit.synckro.domain.sync.SyncOp.Conflict> =
+    suspend fun drainForcedConflicts(): List<PendingConflict> =
         mutex.withLock {
-            val result = forcedConflicts.map { (path, localMs, remoteMs) ->
-                com.konarsubhojit.synckro.domain.sync.SyncOp.Conflict(
-                    relativePath = path,
-                    localNewerThanRemote = localMs >= remoteMs,
-                )
-            }
+            val result = forcedConflicts.toList()
             forcedConflicts.clear()
             result
         }

@@ -11,6 +11,7 @@ import com.konarsubhojit.synckro.ui.screens.HomeScreen
 import com.konarsubhojit.synckro.ui.screens.OnboardingScreen
 import com.konarsubhojit.synckro.ui.screens.accounts.AccountsScreen
 import com.konarsubhojit.synckro.ui.screens.conflictinbox.ConflictInboxScreen
+import com.konarsubhojit.synckro.ui.screens.logs.LogsScreen
 import com.konarsubhojit.synckro.ui.screens.paireditor.PairEditorScreen
 import com.konarsubhojit.synckro.ui.screens.paireditor.PairEditorViewModel
 import com.konarsubhojit.synckro.ui.screens.pickfolder.PickLocalFolderScreen
@@ -23,8 +24,11 @@ object Routes {
     /** Optional query parameter `pairId`; defaults to 0 (create mode). */
     const val PAIR_EDITOR = "pair_editor?pairId={pairId}"
     const val PICK_FOLDER = "pick_folder"
+    /** Optional query parameter `pairId`; defaults to 0 (show all pairs). */
+    const val LOGS = "logs?pairId={pairId}"
 
     fun pairEditor(pairId: Long = 0L) = "pair_editor?pairId=$pairId"
+    fun logs(pairId: Long = 0L) = "logs?pairId=$pairId"
 }
 
 @Composable
@@ -51,6 +55,9 @@ fun SynckroNavHost(activity: ComponentActivity) {
                 },
                 onOpenConflictInbox = {
                     nav.navigate(Routes.CONFLICT_INBOX) { launchSingleTop = true }
+                },
+                onOpenLogs = {
+                    nav.navigate(Routes.logs()) { launchSingleTop = true }
                 },
             )
         }
@@ -96,6 +103,17 @@ fun SynckroNavHost(activity: ComponentActivity) {
             ConflictInboxScreen(
                 onBack = { nav.popBackStack() },
             )
+        }
+        composable(
+            route = Routes.LOGS,
+            arguments = listOf(
+                navArgument("pairId") {
+                    type = NavType.LongType
+                    defaultValue = 0L
+                },
+            ),
+        ) {
+            LogsScreen(onBack = { nav.popBackStack() })
         }
     }
 }

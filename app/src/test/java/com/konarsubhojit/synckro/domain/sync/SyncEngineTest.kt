@@ -62,6 +62,23 @@ class SyncEngineTest {
     }
 
     @Test
+    fun `FAKE provider with KEEP_BOTH uses actual timestamps not synthesized values`() = runTest {
+        val inserted = mutableListOf<ConflictRecord>()
+        coEvery { mockConflictRepo.getResolvedForPair(any()) } returns emptyList()
+        coEvery { mockConflictRepo.insert(any()) } coAnswers {
+            inserted += firstArg<ConflictRecord>()
+            inserted.size.toLong()
+        }
+
+        fakeProvider.forceConflict("docs/readme.txt", localLastModifiedMs = 2_000L, remoteLastModifiedMs = 1_000L)
+        engine.runOnce(pair(CloudProviderType.FAKE, ConflictPolicy.KEEP_BOTH))
+
+        assertEquals(1, inserted.size)
+        assertEquals(2_000L, inserted[0].localLastModifiedMs)
+        assertEquals(1_000L, inserted[0].remoteLastModifiedMs)
+    }
+
+    @Test
     fun `FAKE provider with PREFER_LOCAL does not write ConflictRecord for forced conflicts`() = runTest {
         coEvery { mockConflictRepo.getResolvedForPair(any()) } returns emptyList()
 

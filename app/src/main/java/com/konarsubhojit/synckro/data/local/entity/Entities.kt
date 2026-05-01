@@ -49,7 +49,7 @@ data class SyncPairEntity(
             onDelete = ForeignKey.CASCADE,
         ),
     ],
-    indices = [Index("pairId")],
+    indices = [Index("pairId"), Index(value = ["pairId", "relativePath"], unique = true)],
 )
 data class ConflictRecordEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,

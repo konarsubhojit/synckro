@@ -14,6 +14,7 @@ import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Inbox
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Warning
@@ -54,6 +55,7 @@ fun HomeScreen(
     onEditSyncPair: (Long) -> Unit,
     onOpenAccounts: () -> Unit,
     onOpenConflictInbox: () -> Unit,
+    onOpenLogs: () -> Unit,
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -76,6 +78,12 @@ fun HomeScreen(
                                 contentDescription = stringResource(R.string.conflict_inbox_title),
                             )
                         }
+                    }
+                    IconButton(onClick = onOpenLogs) {
+                        Icon(
+                            Icons.Default.History,
+                            contentDescription = stringResource(R.string.logs_action),
+                        )
                     }
                     IconButton(onClick = onOpenAccounts) {
                         Icon(
