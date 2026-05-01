@@ -14,6 +14,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
+import timber.log.Timber
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -108,7 +109,10 @@ internal object DefaultDocumentChildrenQuery : DocumentChildrenQuery {
  *      (the old hash is stale so it must be recomputed by the engine on demand).
  *    - If neither changed → the existing `localHash` is preserved (lazy SHA-256).
  * 4. Entries present in the index but not found during the scan are deleted.
- * 5. [ScanProgress.Scanning] is emitted every [PROGRESS_INTERVAL] files so the
+ * 5. Steps 3 and 4 are executed as a **single Room transaction** via
+ *    [FileIndexDao.reconcileForPair], so the index is never observed in a
+ *    half-updated state; a failure rolls back all writes.
+ * 6. [ScanProgress.Scanning] is emitted every [PROGRESS_INTERVAL] files so the
  *    UI can display a progress indicator; [ScanProgress.Done] is the terminal event.
  *
  * All IO runs on [Dispatchers.IO] via `flowOn`.
@@ -186,12 +190,13 @@ class LocalFolderScannerImpl internal constructor(
                 }
             }
         } catch (e: Exception) {
+            Timber.e(e, "LocalFolderScanner: scan failed for pairId=%d uri=%s", pairId, treeUri)
             emit(ScanProgress.Failed(e.message ?: "Scan failed"))
             return@flow
         }
 
-        // 3. Compute diff and apply to Room.
-        val seenPaths = scannedEntries.mapTo(HashSet(scannedEntries.size)) { it.relativePath }
+        // 3. Compute diff and apply to Room atomically.
+        val seenPaths = scannedEntries.mapTo(ArrayList(scannedEntries.size)) { it.relativePath }
 
         // Only upsert entries that are new or whose local metadata changed.
         val toUpsert = scannedEntries.filter { scanned ->
@@ -201,18 +206,12 @@ class LocalFolderScannerImpl internal constructor(
                 old.localLastModifiedMs != scanned.localLastModifiedMs
         }
 
-        if (toUpsert.isNotEmpty()) {
-            fileIndexDao.upsertAll(toUpsert)
-        }
-
-        // Delete stale entries (on-disk deletions).
-        val stale = existing.keys.filter { it !in seenPaths }
-        for (path in stale) {
-            fileIndexDao.delete(pairId, path)
-        }
+        // Single transactional reconcile: upsert changed entries and batch-delete stale ones.
+        fileIndexDao.reconcileForPair(pairId, toUpsert, seenPaths)
 
         val added = toUpsert.count { it.relativePath !in existing }
         val updated = toUpsert.size - added
-        emit(ScanProgress.Done(added = added, updated = updated, deleted = stale.size))
+        val deleted = existing.keys.count { it !in seenPaths }
+        emit(ScanProgress.Done(added = added, updated = updated, deleted = deleted))
     }.flowOn(Dispatchers.IO)
 }
