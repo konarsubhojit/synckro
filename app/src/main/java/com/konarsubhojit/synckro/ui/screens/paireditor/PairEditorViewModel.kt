@@ -16,9 +16,6 @@ import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.filterNotNull
-import kotlinx.coroutines.flow.launchIn
-import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import timber.log.Timber
@@ -26,8 +23,11 @@ import timber.log.Timber
 /**
  * ViewModel for [PairEditorScreen]. Supports both create (pairId == 0) and edit
  * (pairId > 0) modes. The local folder URI result from [PickLocalFolderScreen] is
- * received through the navigation back-stack's [SavedStateHandle] by the key
- * [KEY_LOCAL_TREE_URI].
+ * delivered by the navigation layer (which observes the back-stack entry's own
+ * [SavedStateHandle]) via [onLocalFolderPicked]. The Hilt-injected [SavedStateHandle]
+ * here is a distinct bucket from [androidx.navigation.NavBackStackEntry.savedStateHandle],
+ * so we cannot rely on it to receive nav results — the navigation layer must forward
+ * them explicitly.
  *
  * [strings] is injected as a [StringProvider] rather than [android.content.Context]
  * so the ViewModel stays decoupled from Android framework types and is straightforward
@@ -65,12 +65,22 @@ class PairEditorViewModel @Inject constructor(
     private val _state = MutableStateFlow(UiState())
     val state: StateFlow<UiState> = _state.asStateFlow()
 
+    /**
+     * Tracks whether the user has freshly picked a folder during this VM's lifetime.
+     * Used to prevent a slow [loadExisting] coroutine from clobbering a newly chosen
+     * URI that arrived via [onLocalFolderPicked] before the DB load completed.
+     */
+    private var userPickedFolder: Boolean = false
+
     init {
-        // Receive the folder URI result set by the nav host when PickLocalFolderScreen returns.
-        savedStateHandle.getStateFlow<String?>(KEY_LOCAL_TREE_URI, null)
-            .filterNotNull()
-            .onEach { uri -> _state.update { it.copy(localTreeUri = uri) } }
-            .launchIn(viewModelScope)
+        // Re-apply any URI restored from process death (the Hilt-injected SavedStateHandle
+        // can survive process recreation even though it does NOT receive nav-result writes).
+        savedStateHandle.get<String?>(KEY_LOCAL_TREE_URI)
+            ?.takeIf { it.isNotBlank() }
+            ?.let { restored ->
+                userPickedFolder = true
+                _state.update { it.copy(localTreeUri = restored) }
+            }
 
         if (pairId > 0L) loadExisting(pairId)
     }
@@ -84,12 +94,10 @@ class PairEditorViewModel @Inject constructor(
                     it.copy(
                         isLoading = false,
                         displayName = entity.displayName,
-                        // Prefer any URI already set via the savedStateHandle (e.g. freshly picked
-                        // before this coroutine completed) over the persisted value, to avoid a
-                        // race condition where loadExisting overwrites a new selection.
-                        localTreeUri = savedStateHandle.get<String?>(KEY_LOCAL_TREE_URI)
-                            ?.takeIf { uri -> uri.isNotBlank() }
-                            ?: entity.localTreeUri,
+                        // If the user already picked a folder before this coroutine
+                        // finished, keep their choice instead of clobbering it with
+                        // the persisted value.
+                        localTreeUri = if (userPickedFolder) it.localTreeUri else entity.localTreeUri,
                         provider = entity.provider,
                         remoteFolderId = entity.remoteFolderId,
                         conflictPolicy = entity.conflictPolicy,
@@ -106,6 +114,21 @@ class PairEditorViewModel @Inject constructor(
                 _state.update { it.copy(isLoading = false) }
             }
         }
+    }
+
+    /**
+     * Called by the navigation layer when [PickLocalFolderScreen] has returned a
+     * confirmed folder URI. The navigation host observes the back-stack entry's
+     * own [SavedStateHandle] (which is a different instance from the Hilt-injected
+     * [savedStateHandle] here) and forwards the result through this method.
+     */
+    fun onLocalFolderPicked(uri: String) {
+        if (uri.isBlank()) return
+        userPickedFolder = true
+        // Persist into the Hilt-injected SavedStateHandle too so the URI survives
+        // process death / configuration changes for this ViewModel.
+        savedStateHandle[KEY_LOCAL_TREE_URI] = uri
+        _state.update { it.copy(localTreeUri = uri) }
     }
 
     fun onDisplayNameChange(value: String) = _state.update { it.copy(displayName = value) }
@@ -174,7 +197,13 @@ class PairEditorViewModel @Inject constructor(
     fun clearSaveError() = _state.update { it.copy(saveError = null) }
 
     companion object {
-        /** Key used to pass the chosen folder URI from [PickLocalFolderScreen] back to the editor. */
+        /**
+         * Key used by the navigation layer to deliver the chosen folder URI from
+         * [PickLocalFolderScreen] back to the editor via the back-stack entry's
+         * own [SavedStateHandle]. The navigation host observes this key and forwards
+         * the value to the ViewModel through [onLocalFolderPicked]; it is also used
+         * by this ViewModel to persist the picked URI across process death.
+         */
         const val KEY_LOCAL_TREE_URI = "localTreeUri"
         /**
          * Key used to pass the current folder URI from [PairEditorScreen] to
