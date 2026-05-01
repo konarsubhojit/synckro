@@ -59,4 +59,6 @@ data class FileIndexEntity(
     val remoteETag: String?,
     val remoteSize: Long?,
     val remoteLastModifiedMs: Long?,
+    /** MIME type as reported by the SAF content provider. Null for directories or when unknown. */
+    val mimeType: String? = null,
 )

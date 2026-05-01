@@ -219,4 +219,46 @@ interface FileIndexDao {
      */
     @Query("DELETE FROM file_index WHERE pairId = :pairId")
     suspend fun clearForPair(pairId: Long)
+
+    /**
+     * Deletes file index entries for [pairId] whose [relativePath] is NOT in [seenPaths].
+     *
+     * Only call this when [seenPaths] is non-empty; an empty list would result in
+     * invalid SQL (`NOT IN ()`) — use [clearForPair] instead.
+     *
+     * @param pairId    The sync pair whose stale entries should be removed.
+     * @param seenPaths Paths that were found during the latest scan and must be kept.
+     */
+    @Query("DELETE FROM file_index WHERE pairId = :pairId AND relativePath NOT IN (:seenPaths)")
+    suspend fun deleteStaleForPair(pairId: Long, seenPaths: List<String>)
+
+    /**
+     * Atomically reconciles the Room index for [pairId] after a scan:
+     * - Upserts all changed/new entries in [toUpsert].
+     * - Deletes entries whose relative path is no longer present on disk.
+     *   When [seenPaths] is empty the entire pair index is cleared; otherwise
+     *   only rows whose path is absent from [seenPaths] are removed.
+     *
+     * Runs as a single Room transaction so the index is never observed in a
+     * half-updated state, and any failure rolls back all writes.
+     *
+     * @param pairId    The ID of the sync pair being reconciled.
+     * @param toUpsert  New or changed [FileIndexEntity] rows to write.
+     * @param seenPaths All relative paths discovered during the scan.
+     */
+    @Transaction
+    suspend fun reconcileForPair(
+        pairId: Long,
+        toUpsert: List<FileIndexEntity>,
+        seenPaths: List<String>,
+    ) {
+        if (toUpsert.isNotEmpty()) {
+            upsertAll(toUpsert)
+        }
+        if (seenPaths.isEmpty()) {
+            clearForPair(pairId)
+        } else {
+            deleteStaleForPair(pairId, seenPaths)
+        }
+    }
 }
