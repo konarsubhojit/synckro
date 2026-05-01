@@ -25,8 +25,10 @@ material = "1.12.0"
 junit = "4.13.2"
 androidxJunit = "1.2.1"
 espresso = "3.6.1"
+androidxTestCore = "1.6.1"
 mockk = "1.13.12"
 turbine = "1.1.0"
+robolectric = "4.13"
 coroutinesTest = "1.8.1"
 msal = "5.3.0"
 credentials = "1.3.0"
@@ -88,6 +90,8 @@ play-services-auth = { group = "com.google.android.gms", name = "play-services-a
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 mockk = { group = "io.mockk", name = "mockk", version.ref = "mockk" }
 turbine = { group = "app.cash.turbine", name = "turbine", version.ref = "turbine" }
+robolectric = { group = "org.robolectric", name = "robolectric", version.ref = "robolectric" }
+androidx-test-core = { group = "androidx.test", name = "core", version.ref = "androidxTestCore" }
 androidx-junit = { group = "androidx.test.ext", name = "junit", version.ref = "androidxJunit" }
 androidx-espresso-core = { group = "androidx.test.espresso", name = "espresso-core", version.ref = "espresso" }
 

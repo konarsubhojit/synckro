@@ -35,6 +35,7 @@ import com.konarsubhojit.synckro.R
 fun AddSyncPairScreen(
     onBack: () -> Unit,
     onOpenAccounts: () -> Unit,
+    onPickFolder: () -> Unit,
 ) {
     Scaffold(
         topBar = {
@@ -69,6 +70,9 @@ fun AddSyncPairScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(Modifier.height(8.dp))
+            Button(onClick = onPickFolder, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.add_pair_pick_folder))
+            }
             Button(onClick = onOpenAccounts, modifier = Modifier.fillMaxWidth()) {
                 Text(stringResource(R.string.add_pair_go_to_accounts))
             }

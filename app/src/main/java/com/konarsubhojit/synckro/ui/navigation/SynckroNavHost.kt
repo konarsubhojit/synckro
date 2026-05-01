@@ -9,12 +9,14 @@ import com.konarsubhojit.synckro.ui.screens.HomeScreen
 import com.konarsubhojit.synckro.ui.screens.OnboardingScreen
 import com.konarsubhojit.synckro.ui.screens.accounts.AccountsScreen
 import com.konarsubhojit.synckro.ui.screens.addpair.AddSyncPairScreen
+import com.konarsubhojit.synckro.ui.screens.pickfolder.PickLocalFolderScreen
 
 object Routes {
     const val ONBOARDING = "onboarding"
     const val HOME = "home"
     const val ACCOUNTS = "accounts"
     const val ADD_PAIR = "add_pair"
+    const val PICK_FOLDER = "pick_folder"
 }
 
 @Composable
@@ -56,6 +58,18 @@ fun SynckroNavHost(activity: ComponentActivity) {
                         launchSingleTop = true
                     }
                 },
+                onPickFolder = {
+                    nav.navigate(Routes.PICK_FOLDER) { launchSingleTop = true }
+                },
+            )
+        }
+        composable(Routes.PICK_FOLDER) {
+            PickLocalFolderScreen(
+                onFolderPicked = { uriString ->
+                    // The URI has been persisted; navigate back to Add Pair.
+                    nav.popBackStack()
+                },
+                onBack = { nav.popBackStack() },
             )
         }
     }
