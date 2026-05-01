@@ -8,6 +8,7 @@ import androidx.test.core.app.ApplicationProvider
 import com.konarsubhojit.synckro.data.local.dao.FileIndexDao
 import com.konarsubhojit.synckro.data.local.dao.SyncPairDao
 import com.konarsubhojit.synckro.data.local.db.SynckroDatabase
+import com.konarsubhojit.synckro.data.local.entity.FileIndexEntity
 import com.konarsubhojit.synckro.data.local.entity.SyncPairEntity
 import com.konarsubhojit.synckro.domain.model.CloudProviderType
 import com.konarsubhojit.synckro.domain.model.ConflictPolicy
@@ -202,7 +203,7 @@ class LocalFolderScannerImplTest {
         // Seed the index with a file that already has a hash.
         fileIndexDao.upsertAll(
             listOf(
-                com.konarsubhojit.synckro.data.local.entity.FileIndexEntity(
+                FileIndexEntity(
                     pairId = pairId,
                     relativePath = "readme.md",
                     localSize = 512L,
@@ -241,7 +242,7 @@ class LocalFolderScannerImplTest {
         // Seed with existing entry.
         fileIndexDao.upsertAll(
             listOf(
-                com.konarsubhojit.synckro.data.local.entity.FileIndexEntity(
+                FileIndexEntity(
                     pairId = pairId,
                     relativePath = "doc.pdf",
                     localSize = 1_000L,
@@ -418,7 +419,7 @@ class LocalFolderScannerImplTest {
         // Seed an entry that already has remote columns set (e.g. after a prior sync).
         fileIndexDao.upsertAll(
             listOf(
-                com.konarsubhojit.synckro.data.local.entity.FileIndexEntity(
+                FileIndexEntity(
                     pairId = pairId,
                     relativePath = "synced.txt",
                     localSize = 999L,
