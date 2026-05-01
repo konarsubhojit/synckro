@@ -64,6 +64,7 @@ import kotlin.coroutines.resume
 class GoogleDriveAuthManager private constructor(
     private val context: Context,
     private val prefsOverride: SharedPreferences?,
+    private val webClientId: String,
 ) : AuthManager {
 
     companion object {
@@ -77,19 +78,35 @@ class GoogleDriveAuthManager private constructor(
          * Creates an instance backed by a plain [SharedPreferences] instead of
          * [EncryptedSharedPreferences]. Use this in unit tests (Robolectric) where
          * the Android Keystore is unavailable.
+         *
+         * Passes an empty [webClientId] by default so [isConfigured] returns `false`
+         * regardless of what [BuildConfig.GOOGLE_WEB_CLIENT_ID] contains in the CI
+         * build environment.
          */
-        internal fun forTest(context: Context, testPrefs: SharedPreferences) =
-            GoogleDriveAuthManager(context, prefsOverride = testPrefs)
+        internal fun forTest(
+            context: Context,
+            testPrefs: SharedPreferences,
+            webClientId: String = "",
+        ) = GoogleDriveAuthManager(context, prefsOverride = testPrefs, webClientId = webClientId)
     }
 
     /** Hilt-injected constructor (production path). */
     @Inject
-    constructor(@ApplicationContext context: Context) : this(context, prefsOverride = null)
+    constructor(@ApplicationContext context: Context) :
+        this(context, prefsOverride = null, webClientId = BuildConfig.GOOGLE_WEB_CLIENT_ID)
 
     override val providerType: CloudProviderType = CloudProviderType.GOOGLE_DRIVE
     override val displayName: String = "Google Drive"
 
     private val credentialManager: CredentialManager = CredentialManager.create(context)
+
+    /**
+     * Reusable [AuthorizationRequest] for the Drive scope. Created once so both
+     * [signIn] and [acquireAccessToken] share the same request object.
+     */
+    private val driveAuthRequest: AuthorizationRequest = AuthorizationRequest.builder()
+        .setRequestedScopes(listOf(Scope(DRIVE_SCOPE)))
+        .build()
 
     /**
      * Lazily-created [EncryptedSharedPreferences] for persisting account metadata
@@ -100,7 +117,7 @@ class GoogleDriveAuthManager private constructor(
         prefsOverride ?: createEncryptedPrefs()
     }
 
-    @Suppress("DEPRECATION") // MasterKey.Builder and EncryptedSharedPreferences.create are deprecated
+    @Suppress("DEPRECATION") // MasterKey.Builder / EncryptedSharedPreferences.create are deprecated
     // in security-crypto 1.1.0 but no stable non-deprecated replacement exists for the 5-arg
     // static factory yet. The functionality is identical; suppress to keep clean builds.
     private fun createEncryptedPrefs(): SharedPreferences {
@@ -116,7 +133,7 @@ class GoogleDriveAuthManager private constructor(
         )
     }
 
-    override suspend fun isConfigured(): Boolean = BuildConfig.GOOGLE_WEB_CLIENT_ID.isNotBlank()
+    override suspend fun isConfigured(): Boolean = webClientId.isNotBlank()
 
     override suspend fun signIn(host: AuthUiHost): AuthResult<Account> {
         if (!isConfigured()) {
@@ -132,7 +149,7 @@ class GoogleDriveAuthManager private constructor(
         // Step 1: Obtain Google ID token via Credential Manager.
         val googleIdOption = GetGoogleIdOption.Builder()
             .setFilterByAuthorizedAccounts(false)
-            .setServerClientId(BuildConfig.GOOGLE_WEB_CLIENT_ID)
+            .setServerClientId(webClientId)
             .setAutoSelectEnabled(false)
             .build()
 
@@ -159,12 +176,8 @@ class GoogleDriveAuthManager private constructor(
         }
 
         // Step 2: Request Drive authorization (shows consent screen if needed).
-        val authRequest = AuthorizationRequest.builder()
-            .setRequestedScopes(listOf(Scope(DRIVE_SCOPE)))
-            .build()
-
         val authorizationResult = Identity.getAuthorizationClient(activity)
-            .authorize(authRequest)
+            .authorize(driveAuthRequest)
             .awaitTask()
             .getOrElse { e ->
                 Timber.e(e, "GoogleDriveAuthManager.signIn: authorization failed")
@@ -230,12 +243,8 @@ class GoogleDriveAuthManager private constructor(
 
         Timber.d("GoogleDriveAuthManager.acquireAccessToken: silent acquisition for ${account.id}")
 
-        val authRequest = AuthorizationRequest.builder()
-            .setRequestedScopes(listOf(Scope(DRIVE_SCOPE)))
-            .build()
-
         val authorizationResult = Identity.getAuthorizationClient(context)
-            .authorize(authRequest)
+            .authorize(driveAuthRequest)
             .awaitTask()
             .getOrElse { e ->
                 Timber.e(e, "GoogleDriveAuthManager.acquireAccessToken: authorization error")

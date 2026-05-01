@@ -20,12 +20,15 @@ import org.robolectric.annotation.Config
  * Unit tests for [GoogleDriveAuthManager] using Robolectric so that
  * [android.content.Context] is available without a device.
  *
- * A plain [SharedPreferences] is injected via the internal test constructor to
+ * A plain [SharedPreferences] is injected via [GoogleDriveAuthManager.forTest] to
  * avoid the Android Keystore requirement of [EncryptedSharedPreferences] which
  * is not available in the Robolectric JVM environment.
  *
- * Note: [com.konarsubhojit.synckro.BuildConfig.GOOGLE_WEB_CLIENT_ID] is empty
- * in the test build, so [GoogleDriveAuthManager.isConfigured] returns `false`.
+ * [GoogleDriveAuthManager.forTest] defaults [webClientId] to `""` so
+ * [GoogleDriveAuthManager.isConfigured] always returns `false` in these tests
+ * regardless of the [com.konarsubhojit.synckro.BuildConfig.GOOGLE_WEB_CLIENT_ID]
+ * value set in the CI build environment.
+ *
  * Tests that exercise the credential-manager / authorization-client paths
  * require Play Services and are covered by instrumentation tests on a real device.
  */
@@ -47,8 +50,9 @@ class GoogleDriveAuthManagerTest {
     }
 
     @Test
-    fun `isConfigured returns false when GOOGLE_WEB_CLIENT_ID is blank`() = runTest {
-        // BuildConfig.GOOGLE_WEB_CLIENT_ID is "" in the test build by default.
+    fun `isConfigured returns false when webClientId is blank`() = runTest {
+        // forTest() passes webClientId = "" by default, so isConfigured() is false
+        // regardless of what BuildConfig.GOOGLE_WEB_CLIENT_ID contains at build time.
         assertTrue(!authManager.isConfigured())
     }
 
