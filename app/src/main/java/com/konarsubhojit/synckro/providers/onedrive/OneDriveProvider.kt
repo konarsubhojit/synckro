@@ -4,9 +4,10 @@ import com.konarsubhojit.synckro.domain.auth.AuthResult
 import com.konarsubhojit.synckro.domain.provider.ChangesPage
 import com.konarsubhojit.synckro.domain.provider.CloudProvider
 import com.konarsubhojit.synckro.domain.provider.CloudProviderException
-import com.konarsubhojit.synckro.domain.provider.NotYetImplementedException
+import com.konarsubhojit.synckro.domain.provider.RemoteChange
 import com.konarsubhojit.synckro.domain.provider.RemoteFile
 import timber.log.Timber
+import java.io.IOException
 import java.io.InputStream
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -18,21 +19,13 @@ import javax.inject.Singleton
  * and throws a typed [CloudProviderException] when authentication fails — no raw
  * MSAL types cross the provider boundary.
  *
- * The remaining Graph operations throw [NotYetImplementedException] until the
- * REST client is implemented in a future milestone.
- *
- * TODO (next milestones):
- *  - Call Graph endpoints under `https://graph.microsoft.com/v1.0/me/drive`:
- *      - `/items/{id}:/children` for list
- *      - `/items/{id}/content` for download
- *      - Upload sessions (`/items/{id}:/{name}:/createUploadSession`) for
- *        files > 4 MB; simple PUT for small files.
- *      - `/items/{id}:/delta` (or `/root/delta`) for incremental changes.
- *  - Retry 429/5xx with backoff honoring `Retry-After`.
+ * All Graph operations are delegated to [OneDriveGraphClient], which handles
+ * chunked resumable uploads, delta-based change enumeration, and 429/5xx retries.
  */
 @Singleton
 class OneDriveProvider @Inject constructor(
     private val authManager: OneDriveAuthManager,
+    private val graphClient: OneDriveGraphClient,
 ) : CloudProvider {
     override val displayName: String = "OneDrive"
 
@@ -46,14 +39,32 @@ class OneDriveProvider @Inject constructor(
     @Volatile
     private var cachedAccessToken: String? = null
 
-    private fun unsupported(op: String): Nothing =
-        throw NotYetImplementedException("OneDriveProvider.$op is not implemented yet")
+    /**
+     * Returns the cached access token or throws [CloudProviderException.AuthenticationRequired]
+     * if [ensureAuthenticated] has not been called successfully yet.
+     */
+    private fun requireToken(): String =
+        cachedAccessToken
+            ?: throw CloudProviderException.AuthenticationRequired(
+                "No cached access token. Call ensureAuthenticated() first."
+            )
 
-    private fun unsupported(op: String, content: InputStream): Nothing {
-        try {
-            throw NotYetImplementedException("OneDriveProvider.$op is not implemented yet")
-        } finally {
-            content.close()
+    /**
+     * Executes [block] and maps a [GraphApiException] with status 401 to
+     * [CloudProviderException.AuthenticationRequired], clearing the cached token
+     * so the next call to [ensureAuthenticated] will force a fresh acquisition.
+     */
+    private suspend fun <T> graphCall(block: suspend () -> T): T {
+        return try {
+            block()
+        } catch (e: GraphApiException) {
+            if (e.statusCode == 401) {
+                cachedAccessToken = null
+                throw CloudProviderException.AuthenticationRequired(
+                    "OneDrive access token rejected by Graph API (401). Please re-authenticate."
+                )
+            }
+            throw e
         }
     }
 
@@ -112,9 +123,17 @@ class OneDriveProvider @Inject constructor(
         }
     }
 
-    override suspend fun list(folderId: String?): List<RemoteFile> = unsupported("list")
-    override suspend fun getMetadata(id: String): RemoteFile = unsupported("getMetadata")
-    override suspend fun download(id: String): InputStream = unsupported("download")
+    override suspend fun list(folderId: String?): List<RemoteFile> = graphCall {
+        graphClient.list(requireToken(), folderId).map { it.toRemoteFile() }
+    }
+
+    override suspend fun getMetadata(id: String): RemoteFile = graphCall {
+        graphClient.getMetadata(requireToken(), id).toRemoteFile()
+    }
+
+    override suspend fun download(id: String): InputStream = graphCall {
+        graphClient.download(requireToken(), id)
+    }
 
     override suspend fun uploadNew(
         parentId: String,
@@ -122,19 +141,75 @@ class OneDriveProvider @Inject constructor(
         content: InputStream,
         size: Long,
         mimeType: String?,
-    ): RemoteFile = unsupported("uploadNew", content)
+    ): RemoteFile = graphCall {
+        graphClient.uploadNew(requireToken(), parentId, name, content, size, mimeType)
+            .toRemoteFile()
+    }
 
     override suspend fun updateContent(
         id: String,
         content: InputStream,
         size: Long,
         mimeType: String?,
-    ): RemoteFile = unsupported("updateContent", content)
+    ): RemoteFile = graphCall {
+        graphClient.updateContent(requireToken(), id, content, size, mimeType).toRemoteFile()
+    }
 
-    override suspend fun createFolder(parentId: String, name: String): RemoteFile =
-        unsupported("createFolder")
+    override suspend fun createFolder(parentId: String, name: String): RemoteFile = graphCall {
+        graphClient.createFolder(requireToken(), parentId, name).toRemoteFile()
+    }
 
-    override suspend fun delete(id: String): Unit = unsupported("delete")
+    override suspend fun delete(id: String): Unit = graphCall {
+        graphClient.delete(requireToken(), id)
+    }
 
-    override suspend fun changesSince(token: String?): ChangesPage = unsupported("changesSince")
+    /**
+     * Retrieves incremental changes since [token].
+     *
+     * Pass `null` on the first call to establish a baseline (returns empty changes with an
+     * initial delta token). On subsequent calls pass the token returned by this method.
+     *
+     * @param token Delta token returned by a previous call, or `null` to initialise.
+     * @return A [ChangesPage] containing the changes since [token] and the next token.
+     * @throws IOException on network failures.
+     * @throws CloudProviderException on authentication errors.
+     */
+    override suspend fun changesSince(token: String?): ChangesPage = graphCall {
+        val (items, nextDeltaLink) = graphClient.changesSince(requireToken(), token)
+        val changes = items.mapNotNull { item ->
+            when {
+                item.deleted != null -> RemoteChange(file = null, removedId = item.id)
+                item.id.isNotEmpty() -> RemoteChange(file = item.toRemoteFile(), removedId = null)
+                else -> null
+            }
+        }
+        ChangesPage(
+            changes = changes,
+            nextToken = nextDeltaLink,
+            hasMore = false,
+        )
+    }
 }
+
+// ---------------------------------------------------------------------------
+// Extension: map GraphDriveItem → RemoteFile
+// ---------------------------------------------------------------------------
+
+/**
+ * Maps a Graph API [GraphDriveItem] to the provider-agnostic [RemoteFile].
+ *
+ * - The `eTag` from Graph is wrapped in double-quotes; they are stripped here.
+ * - `lastModifiedDateTime` is parsed from ISO-8601 (UTC) to epoch millis.
+ */
+internal fun GraphDriveItem.toRemoteFile(): RemoteFile = RemoteFile(
+    id = id,
+    name = name,
+    parentId = parentReference?.id,
+    isFolder = folder != null,
+    size = size,
+    lastModifiedMs = lastModifiedDateTime?.let {
+        runCatching { java.time.Instant.parse(it).toEpochMilli() }.getOrNull()
+    },
+    eTag = eTag?.trim('"'),
+    mimeType = file?.mimeType,
+)
