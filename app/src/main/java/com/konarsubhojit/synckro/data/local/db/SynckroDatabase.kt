@@ -90,6 +90,11 @@ abstract class SynckroDatabase : RoomDatabase() {
  */
 abstract fun fileIndexDao(): FileIndexDao
 
+    /**
+     * Returns the DAO used to access and modify conflict record entities.
+     *
+     * @return The [ConflictRecordDao] for performing operations on conflict inbox data.
+     */
     abstract fun conflictRecordDao(): ConflictRecordDao
 
     companion object {

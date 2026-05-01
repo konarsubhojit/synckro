@@ -55,6 +55,7 @@
     <string name="pair_editor_requires_charging">Sync only while charging</string>
     <string name="pair_editor_save">Save</string>
     <string name="pair_editor_schedule_interval">Sync interval (minutes)</string>
+    <string name="pair_editor_schedule_interval_min_warning">Minimum interval is 15 minutes (WorkManager limit)</string>
     <string name="pair_editor_include_globs">Include patterns (one per line)</string>
     <string name="pair_editor_exclude_globs">Exclude patterns (one per line)</string>
     <string name="pair_editor_globs_hint">e.g. *.jpg or docs/**</string>

@@ -214,6 +214,15 @@ fun PairEditorScreen(
                         v.toLongOrNull()?.let { viewModel.onScheduleIntervalChange(it) }
                     },
                     label = { Text(stringResource(R.string.pair_editor_schedule_interval)) },
+                    supportingText = {
+                        if (state.scheduleIntervalMinutes < 15L) {
+                            Text(
+                                text = stringResource(R.string.pair_editor_schedule_interval_min_warning),
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                        }
+                    },
+                    isError = state.scheduleIntervalMinutes < 15L,
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
