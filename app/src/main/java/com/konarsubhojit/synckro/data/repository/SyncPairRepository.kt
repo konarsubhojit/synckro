@@ -122,6 +122,8 @@ private fun SyncPairEntity.toDomain(needsReLink: Boolean): SyncPair = SyncPair(
     needsReLink = needsReLink,
     lastSyncAtMs = lastSyncAtMs,
     lastSyncResult = lastSyncResult,
+    deltaToken = lastDeltaToken,
+    lastFullScanAtMs = lastFullScanAtMs,
 )
 
 private fun SyncPair.toEntity(): SyncPairEntity = SyncPairEntity(
@@ -137,4 +139,6 @@ private fun SyncPair.toEntity(): SyncPairEntity = SyncPairEntity(
     wifiOnly = wifiOnly,
     requiresCharging = requiresCharging,
     scheduleIntervalMinutes = scheduleIntervalMinutes,
+    lastDeltaToken = deltaToken,
+    lastFullScanAtMs = lastFullScanAtMs,
 )

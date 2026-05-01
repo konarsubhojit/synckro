@@ -34,4 +34,8 @@ data class SyncPair(
     val lastSyncAtMs: Long? = null,
     /** Human-readable outcome of the last sync run: "SUCCESS", "PARTIAL_FAILURE", or "FAILURE". Null if never synced. */
     val lastSyncResult: String? = null,
+    /** Opaque delta/page token from the cloud provider, persisted across sync runs. Null until the first sync completes. */
+    val deltaToken: String? = null,
+    /** Epoch-milliseconds timestamp of the last completed full local scan, or null if never scanned. */
+    val lastFullScanAtMs: Long? = null,
 )

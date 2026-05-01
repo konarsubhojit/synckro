@@ -37,6 +37,8 @@ data class SyncPairEntity(
     val lastSyncResult: String? = null,
     /** Desired periodic sync interval in minutes (minimum 15, WorkManager floor). */
     val scheduleIntervalMinutes: Long = 60,
+    /** Epoch-milliseconds timestamp of the last completed full local scan, or null if never scanned. */
+    val lastFullScanAtMs: Long? = null,
 )
 
 @Entity(
@@ -89,4 +91,37 @@ data class FileIndexEntity(
     val remoteLastModifiedMs: Long?,
     /** MIME type as reported by the SAF content provider. Null for directories or when unknown. */
     val mimeType: String? = null,
+)
+
+/**
+ * A lightweight local-file snapshot stored in the `local_index` table, used to
+ * compute diffs between sync runs without re-hashing every file.
+ *
+ * Uses a composite primary key on `(pairId, relativePath)`, which enforces
+ * uniqueness and acts as the upsert key for [LocalIndexDao].
+ *
+ * Rows are removed automatically (CASCADE) when the parent [SyncPairEntity] is
+ * deleted.
+ */
+@Entity(
+    tableName = "local_index",
+    primaryKeys = ["pairId", "relativePath"],
+    foreignKeys = [
+        ForeignKey(
+            entity = SyncPairEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["pairId"],
+            onDelete = ForeignKey.CASCADE,
+        ),
+    ],
+)
+data class LocalIndexEntity(
+    val pairId: Long,
+    val relativePath: String,
+    val sizeBytes: Long,
+    val mtimeMs: Long,
+    /** Optional content hash (e.g. SHA-256 or provider quickXorHash). */
+    val contentHash: String? = null,
+    /** Provider-specific remote item ID; null until the item has been synced at least once. */
+    val remoteId: String? = null,
 )
