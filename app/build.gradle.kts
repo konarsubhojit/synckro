@@ -67,6 +67,8 @@ android {
             isMinifyEnabled = false
             applicationIdSuffix = ".debug"
             versionNameSuffix = "-debug"
+            enableUnitTestCoverage = true
+            enableAndroidTestCoverage = true
             val pinned = signingConfigs.getByName("debugPinned")
             if (pinned.storeFile != null) {
                 signingConfig = pinned
@@ -134,6 +136,16 @@ android {
 
     testOptions {
         unitTests.isIncludeAndroidResources = true
+    }
+
+    lint {
+        // Treat lint errors as build failures. New issues not captured in the
+        // baseline below will break the build so regressions are caught in CI.
+        abortOnError = true
+        warningsAsErrors = false
+        // Baseline captures pre-existing issues; only NEW problems fail the build.
+        // Regenerate with: ./gradlew lintDebug -Dlint.baselines.continue=true
+        baseline = file("lint-baseline.xml")
     }
 }
 
@@ -258,6 +270,9 @@ dependencies {
 
     // Logging
     implementation(libs.timber)
+
+    // Macrobenchmark: baseline-profile precompilation support.
+    implementation(libs.profileinstaller)
 
     // Unit tests
     testImplementation(libs.junit)
