@@ -46,6 +46,20 @@ class GoogleDriveProvider @Inject constructor(
             )
 
     /**
+     * Ensures a valid bearer token is cached and returns it. Used by
+     * [com.konarsubhojit.synckro.domain.sync.RemoteEnumerator] implementations
+     * that need to make Drive calls outside the [CloudProvider] surface.
+     *
+     * Follows the same concurrency contract as [ensureAuthenticated]: callers
+     * must ensure sequential access (the cached-token field is `@Volatile`,
+     * but this method does not serialize concurrent invocations itself).
+     */
+    internal suspend fun obtainAccessToken(): String {
+        if (cachedAccessToken == null) ensureAuthenticated()
+        return requireToken()
+    }
+
+    /**
      * Executes [block] and maps a [DriveApiException] with status 401 to
      * [CloudProviderException.AuthenticationRequired], clearing the cached token
      * so the next call to [ensureAuthenticated] will force a fresh acquisition.
