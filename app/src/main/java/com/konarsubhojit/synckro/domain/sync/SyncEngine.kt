@@ -48,7 +48,21 @@ class SyncEngine(
             override val applied: Int = 0
             override val conflicts: Int = 0
         }
-        data class Terminal(val reason: String) : Result {
+        /**
+         * Permanent failure for this pair; periodic work should stop until the
+         * user takes action.
+         *
+         * @param reason       Short human-readable description (surfaced in logs).
+         * @param needsReauth  True when the failure is auth-related (token expired /
+         *   account removed / scope revoked / `MsalUiRequiredException` /
+         *   `NotConfigured`). The Accounts screen uses this to show a "Re-authenticate"
+         *   CTA, and [com.konarsubhojit.synckro.data.worker.SyncWorker] uses it to
+         *   persist a distinct `lastSyncResult` and emit ERROR events tagged `auth`.
+         */
+        data class Terminal(
+            val reason: String,
+            val needsReauth: Boolean = false,
+        ) : Result {
             override val applied: Int = 0
             override val conflicts: Int = 0
         }

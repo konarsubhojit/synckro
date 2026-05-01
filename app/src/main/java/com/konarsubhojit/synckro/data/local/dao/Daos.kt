@@ -213,6 +213,34 @@ interface SyncPairDao {
      */
     @Query("UPDATE sync_pair SET lastFullScanAtMs = :timestampMs WHERE id = :pairId")
     suspend fun updateLastFullScanAtMs(pairId: Long, timestampMs: Long?)
+
+    /**
+     * Observes which providers currently have at least one sync pair stuck in a
+     * "needs re-authentication" state (see
+     * [com.konarsubhojit.synckro.data.worker.SyncWorker.RESULT_NEEDS_REAUTH]).
+     *
+     * The accounts screen consumes this to render a "Re-authenticate" CTA on the
+     * affected provider card.
+     *
+     * @return A Flow emitting the set of providers (as their enum names) with at
+     *   least one pair whose last sync ended in [RESULT_NEEDS_REAUTH]. The list is
+     *   distinct.
+     */
+    @Query("SELECT DISTINCT provider FROM sync_pair WHERE lastSyncResult = 'NEEDS_REAUTH'")
+    fun observeProvidersNeedingReauth(): Flow<List<CloudProviderType>>
+
+    /**
+     * Clears the [com.konarsubhojit.synckro.data.worker.SyncWorker.RESULT_NEEDS_REAUTH]
+     * outcome for every sync pair belonging to [providerType]. Called after a
+     * successful interactive sign-in so the "Re-authenticate" CTA on the Accounts
+     * screen disappears immediately, instead of waiting for the next periodic run
+     * to overwrite `lastSyncResult`.
+     *
+     * @param providerType The provider whose pairs should have their
+     *   `NEEDS_REAUTH` outcome cleared.
+     */
+    @Query("UPDATE sync_pair SET lastSyncResult = NULL WHERE provider = :providerType AND lastSyncResult = 'NEEDS_REAUTH'")
+    suspend fun clearNeedsReauthForProvider(providerType: CloudProviderType)
 }
 
 @Dao

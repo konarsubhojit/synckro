@@ -20,6 +20,8 @@ import com.konarsubhojit.synckro.data.local.dao.SyncPairDao
 import com.konarsubhojit.synckro.data.repository.SyncEventRepository
 import com.konarsubhojit.synckro.domain.model.SyncEventLevel
 import com.konarsubhojit.synckro.domain.model.SyncPair
+import com.konarsubhojit.synckro.domain.provider.CloudProviderException
+import com.konarsubhojit.synckro.domain.sync.CloudExceptionMapper
 import com.konarsubhojit.synckro.domain.sync.SyncEngine
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
@@ -157,8 +159,14 @@ class SyncWorker @AssistedInject constructor(
                         // Don't retry forever — cancel the periodic chain so the
                         // user can re-authenticate / reconfigure the pair.
                         Timber.w("Terminal sync failure for pair %d: %s", pairId, r.reason)
-                        syncPairDao.updateLastSyncResult(pairId, System.currentTimeMillis(), RESULT_FAILURE)
-                        syncEventRepository.log(pairId, SyncEventLevel.ERROR, LOG_TAG, "Sync failed (terminal): ${r.reason}")
+                        val outcome = if (r.needsReauth) RESULT_NEEDS_REAUTH else RESULT_FAILURE
+                        syncPairDao.updateLastSyncResult(pairId, System.currentTimeMillis(), outcome)
+                        if (r.needsReauth) {
+                            // Tag `auth` so the user can filter/copy these from LogsScreen.
+                            syncEventRepository.log(pairId, SyncEventLevel.ERROR, LOG_TAG_AUTH, "Re-authentication required: ${r.reason}")
+                        } else {
+                            syncEventRepository.log(pairId, SyncEventLevel.ERROR, LOG_TAG, "Sync failed (terminal): ${r.reason}")
+                        }
                         WorkManager.getInstance(applicationContext).cancelUniqueWork(uniqueName(pairId))
                         Result.failure()
                     }
@@ -166,6 +174,31 @@ class SyncWorker @AssistedInject constructor(
             } catch (c: CancellationException) {
                 foregroundJob.cancel()
                 throw c
+            } catch (e: CloudProviderException) {
+                // A provider escaped the engine without being mapped to a Result —
+                // run it through CloudExceptionMapper so we don't slip into an
+                // infinite Result.retry() storm on AuthenticationRequired / NotConfigured.
+                when (val mapped = CloudExceptionMapper.toResult(e)) {
+                    is SyncEngine.Result.Terminal -> {
+                        Timber.w(e, "Terminal CloudProviderException for pair %d: %s", pairId, mapped.reason)
+                        val outcome = if (mapped.needsReauth) RESULT_NEEDS_REAUTH else RESULT_FAILURE
+                        syncPairDao.updateLastSyncResult(pairId, System.currentTimeMillis(), outcome)
+                        val tag = if (mapped.needsReauth) LOG_TAG_AUTH else LOG_TAG
+                        syncEventRepository.log(pairId, SyncEventLevel.ERROR, tag, "Sync failed (terminal): ${mapped.reason}")
+                        WorkManager.getInstance(applicationContext).cancelUniqueWork(uniqueName(pairId))
+                        Result.failure()
+                    }
+                    is SyncEngine.Result.Retriable -> {
+                        Timber.i(e, "Retriable CloudProviderException for pair %d: %s", pairId, mapped.reason)
+                        // Auth-related retriable failures (e.g. AuthenticationFailed during refresh)
+                        // are still tagged `auth` so the user can find them in LogsScreen.
+                        val tag = if (e is CloudProviderException.AuthenticationFailed) LOG_TAG_AUTH else LOG_TAG
+                        syncEventRepository.log(pairId, SyncEventLevel.WARN, tag, "Sync retriable, will retry: ${mapped.reason}")
+                        Result.retry()
+                    }
+                    // Mapper never returns Success / PartialFailure for an exception input.
+                    else -> Result.retry()
+                }
             } catch (t: Throwable) {
                 Timber.w(t, "Sync failed for pair %d", pairId)
                 syncEventRepository.log(pairId, SyncEventLevel.ERROR, LOG_TAG, "Sync threw an exception, will retry: ${t.message}")
@@ -221,8 +254,22 @@ class SyncWorker @AssistedInject constructor(
         const val RESULT_PARTIAL_FAILURE = "PARTIAL_FAILURE"
         const val RESULT_FAILURE = "FAILURE"
 
+        /**
+         * Outcome string written when the engine returns a [SyncEngine.Result.Terminal]
+         * with `needsReauth = true` (token expired, account removed, scope revoked,
+         * `MsalUiRequiredException`, missing client ID, …). The Accounts screen reads
+         * this to decide whether to show a "Re-authenticate" CTA on the provider card.
+         */
+        const val RESULT_NEEDS_REAUTH = "NEEDS_REAUTH"
+
         /** Tag used for [SyncEventRepository] log entries written by this worker. */
         private const val LOG_TAG = "SyncWorker"
+
+        /**
+         * Tag used for auth-related log entries (re-auth required, MSAL refresh failure, …).
+         * Kept short and stable so users can filter / share these entries from `LogsScreen`.
+         */
+        const val LOG_TAG_AUTH = "auth"
 
         /** Maximum number of error strings included in the partial-failure log message. */
         private const val MAX_LOGGED_ERRORS = 5

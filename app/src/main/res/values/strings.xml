@@ -30,6 +30,8 @@
     <string name="accounts_empty">No accounts connected yet.</string>
     <string name="accounts_not_configured_format">%1$s is not configured in this build.</string>
     <string name="accounts_signed_in_format">Signed in as %1$s</string>
+    <string name="accounts_reauth_required">Sign-in expired or access was revoked. Sync stopped — tap below to re-authenticate.</string>
+    <string name="accounts_reauth_button">Re-authenticate %1$s</string>
 
     <!-- Add sync pair (placeholder for PR #1; full wizard arrives in PR #2) -->
     <string name="add_pair_title">Add sync pair</string>
