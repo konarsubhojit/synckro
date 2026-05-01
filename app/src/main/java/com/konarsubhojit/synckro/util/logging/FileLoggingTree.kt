@@ -13,11 +13,12 @@ import java.util.concurrent.TimeUnit
 import timber.log.Timber
 
 /**
- * [Timber.Tree] that appends log records to a file under the app's external
- * files directory (`Android/data/<applicationId>/files/logs/`). This path is
- * app-scoped on Android 11+, requires no runtime permission, and is readable
- * by the user via a file manager or `adb pull` — ideal for debug builds where
- * developers and testers need to share logs without a USB cable.
+ * [Timber.Tree] that appends log records to a file under the app's internal
+ * files directory (`data/data/<applicationId>/files/logs/`). This path is
+ * always available, requires no runtime permission, and the log file can be
+ * exported to a readable location (e.g. Downloads) by the debug export button.
+ * On Android 11+ `Android/data/` is not browsable by file managers, so using
+ * internal storage avoids that restriction while still allowing export.
  *
  * Writes happen on a single-threaded executor so callers never block on disk
  * I/O. The current log file is rotated when it exceeds [maxFileBytes];
@@ -32,12 +33,9 @@ class FileLoggingTree(
     private val maxBackups: Int = DEFAULT_MAX_BACKUPS,
 ) : Timber.Tree() {
 
-    private val logDir: File = File(
-        context.getExternalFilesDir(null) ?: context.filesDir,
-        "logs",
-    ).apply { mkdirs() }
+    private val logDir: File = File(context.filesDir, "logs").apply { mkdirs() }
 
-    private val logFile: File = File(logDir, "synckro-debug.log")
+    private val logFile: File = File(context.filesDir, LOG_RELATIVE_PATH)
     private val executor = Executors.newSingleThreadExecutor { r ->
         Thread(r, "synckro-file-logger").apply { isDaemon = true }
     }
@@ -142,5 +140,8 @@ class FileLoggingTree(
     companion object {
         const val DEFAULT_MAX_FILE_BYTES: Long = 1L * 1024 * 1024 // 1 MB
         const val DEFAULT_MAX_BACKUPS: Int = 3
+
+        /** Sub-directory and file name used for the debug log file (relative to the storage root). */
+        const val LOG_RELATIVE_PATH: String = "logs/synckro-debug.log"
     }
 }
