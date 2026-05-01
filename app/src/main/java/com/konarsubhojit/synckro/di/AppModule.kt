@@ -14,6 +14,7 @@ import com.konarsubhojit.synckro.data.scanner.LocalFolderScannerImpl
 import com.konarsubhojit.synckro.data.worker.SyncScheduler
 import com.konarsubhojit.synckro.domain.auth.AuthManager
 import com.konarsubhojit.synckro.domain.model.CloudProviderType
+import com.konarsubhojit.synckro.domain.provider.CloudProvider
 import com.konarsubhojit.synckro.domain.scan.LocalFolderScanner
 import com.konarsubhojit.synckro.domain.sync.SyncEngine
 import com.konarsubhojit.synckro.providers.fake.FakeCloudProvider
@@ -128,8 +129,8 @@ object AppModule {
     @Provides @Singleton
     fun provideSyncEngine(
         conflictRepository: ConflictRepository,
-        fakeProvider: FakeCloudProvider,
-    ): SyncEngine = SyncEngine(conflictRepository, fakeProvider)
+        providers: Map<CloudProviderType, @JvmSuppressWildcards CloudProvider>,
+    ): SyncEngine = SyncEngine(conflictRepository, providers)
 
     @Provides @IntoMap @CloudProviderKey(CloudProviderType.ONEDRIVE) @Singleton
     fun provideOneDriveAuthManager(impl: OneDriveAuthManager): AuthManager = impl

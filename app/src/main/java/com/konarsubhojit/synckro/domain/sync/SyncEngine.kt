@@ -5,6 +5,7 @@ import com.konarsubhojit.synckro.domain.model.CloudProviderType
 import com.konarsubhojit.synckro.domain.model.ConflictPolicy
 import com.konarsubhojit.synckro.domain.model.ConflictRecord
 import com.konarsubhojit.synckro.domain.model.SyncPair
+import com.konarsubhojit.synckro.domain.provider.CloudProvider
 import com.konarsubhojit.synckro.providers.fake.FakeCloudProvider
 import timber.log.Timber
 
@@ -18,10 +19,13 @@ import timber.log.Timber
  * (in-memory) sync pass: it drains any forced conflicts from [FakeCloudProvider],
  * applies resolutions that were set by the user, and writes new [ConflictRecord]
  * rows for unresolved [ConflictPolicy.KEEP_BOTH] conflicts.
+ *
+ * @param providers Map of all registered [CloudProvider] implementations, keyed by
+ *   [CloudProviderType]. Injected by Hilt via [com.konarsubhojit.synckro.di.CloudProviderModule].
  */
 class SyncEngine(
     private val conflictRepository: ConflictRepository,
-    private val fakeProvider: FakeCloudProvider,
+    private val providers: Map<CloudProviderType, @JvmSuppressWildcards CloudProvider>,
 ) {
 
     /**
@@ -63,8 +67,10 @@ class SyncEngine(
      * @return A [Result] describing the sync outcome (`Success`, `PartialFailure`, `Retriable`, or `Terminal`).
      */
     suspend fun runOnce(pair: SyncPair): Result {
+        val provider = providers[pair.provider]
+            ?: return Result.Terminal("Unsupported provider: ${pair.provider}")
         if (pair.provider == CloudProviderType.FAKE) {
-            return runFake(pair)
+            return runFake(pair, provider as FakeCloudProvider)
         }
         // TODO:
         //  1. Enumerate local files via SAF DocumentFile tree into List<FileSnapshot>.
@@ -74,16 +80,16 @@ class SyncEngine(
         //  5. Persist updated FileIndexEntry rows and the new delta token.
         // Until the pipeline is wired, treat every invocation as a terminal
         // no-op so callers don't silently report stale data as "synced".
-        return Result.Terminal("SyncEngine not yet implemented")
+        return Result.Terminal("SyncEngine not yet implemented for ${pair.provider}")
     }
 
     /**
      * Fake-provider sync pass:
      * 1. Apply any resolutions the user set since the last run.
-     * 2. Drain forced conflicts from [fakeProvider].
+     * 2. Drain forced conflicts from the given [fakeProvider] parameter.
      * 3. For each new conflict, write a [ConflictRecord] if the pair policy is [ConflictPolicy.KEEP_BOTH].
      */
-    private suspend fun runFake(pair: SyncPair): Result {
+    private suspend fun runFake(pair: SyncPair, fakeProvider: FakeCloudProvider): Result {
         var applied = 0
         val errors = mutableListOf<String>()
 

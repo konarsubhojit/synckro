@@ -6,6 +6,7 @@ import com.konarsubhojit.synckro.domain.model.ConflictPolicy
 import com.konarsubhojit.synckro.domain.model.ConflictRecord
 import com.konarsubhojit.synckro.domain.model.SyncDirection
 import com.konarsubhojit.synckro.domain.model.SyncPair
+import com.konarsubhojit.synckro.domain.provider.CloudProvider
 import com.konarsubhojit.synckro.providers.fake.FakeCloudProvider
 import io.mockk.coEvery
 import io.mockk.mockk
@@ -18,7 +19,10 @@ class SyncEngineTest {
 
     private val mockConflictRepo: ConflictRepository = mockk(relaxed = true)
     private val fakeProvider = FakeCloudProvider()
-    private val engine = SyncEngine(mockConflictRepo, fakeProvider)
+    private val providers: Map<CloudProviderType, CloudProvider> = mapOf(
+        CloudProviderType.FAKE to fakeProvider,
+    )
+    private val engine = SyncEngine(mockConflictRepo, providers)
 
     private fun pair(
         provider: CloudProviderType,
@@ -123,5 +127,46 @@ class SyncEngineTest {
             "Expected Terminal for GOOGLE_DRIVE provider",
             result is SyncEngine.Result.Terminal,
         )
+    }
+
+    @Test
+    fun `provider not in map returns Terminal with unsupported message`() = runTest {
+        // Engine with only the FAKE provider registered — ONEDRIVE is absent.
+        val partialProviders: Map<CloudProviderType, CloudProvider> = mapOf(
+            CloudProviderType.FAKE to fakeProvider,
+        )
+        val engineWithPartialMap = SyncEngine(mockConflictRepo, partialProviders)
+        val result = engineWithPartialMap.runOnce(pair(CloudProviderType.ONEDRIVE))
+        assertTrue("Expected Terminal when provider missing from map", result is SyncEngine.Result.Terminal)
+    }
+
+    @Test
+    fun `provider map wiring resolves correct provider per CloudProviderType`() = runTest {
+        coEvery { mockConflictRepo.getResolvedForPair(any()) } returns emptyList()
+
+        val localFake = FakeCloudProvider()
+        val mockOneDrive: CloudProvider = mockk(relaxed = true)
+        val mockGoogleDrive: CloudProvider = mockk(relaxed = true)
+
+        val multiEngine = SyncEngine(
+            mockConflictRepo,
+            mapOf(
+                CloudProviderType.FAKE to localFake,
+                CloudProviderType.ONEDRIVE to mockOneDrive,
+                CloudProviderType.GOOGLE_DRIVE to mockGoogleDrive,
+            ),
+        )
+
+        // FAKE resolves to Success (real in-memory run)
+        val fakeResult = multiEngine.runOnce(pair(CloudProviderType.FAKE))
+        assertTrue("FAKE provider resolves to Success", fakeResult is SyncEngine.Result.Success)
+
+        // ONEDRIVE resolves to Terminal (not yet implemented)
+        val oneDriveResult = multiEngine.runOnce(pair(CloudProviderType.ONEDRIVE))
+        assertTrue("ONEDRIVE resolves to Terminal", oneDriveResult is SyncEngine.Result.Terminal)
+
+        // GOOGLE_DRIVE resolves to Terminal (not yet implemented)
+        val googleDriveResult = multiEngine.runOnce(pair(CloudProviderType.GOOGLE_DRIVE))
+        assertTrue("GOOGLE_DRIVE resolves to Terminal", googleDriveResult is SyncEngine.Result.Terminal)
     }
 }
