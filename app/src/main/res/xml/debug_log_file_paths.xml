@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  FileProvider path descriptor used by the debug-only log-export feature.
+  Declares the two locations FileLoggingTree may write to:
+    1. getExternalFilesDir(null)/logs/ — the preferred path (no permission needed on API 29+)
+    2. filesDir/logs/                  — fallback used when external storage is unavailable
+  This file is referenced only from the debug-variant AndroidManifest.xml.
+-->
+<paths>
+    <external-files-path name="debug_logs" path="logs/" />
+    <files-path name="debug_logs_fallback" path="logs/" />
+</paths>

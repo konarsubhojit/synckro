@@ -1,5 +1,8 @@
 package com.konarsubhojit.synckro.ui.screens.accounts
 
+import android.content.Context
+import android.content.Intent
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -28,12 +31,16 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.konarsubhojit.synckro.BuildConfig
 import com.konarsubhojit.synckro.R
 import com.konarsubhojit.synckro.ui.auth.ActivityAuthUiHost
+import java.io.File
 
 /**
  * Lists connected / connectable cloud accounts. This is the "login first"
@@ -92,7 +99,59 @@ fun AccountsScreen(
                     onDisconnect = { viewModel.disconnect(it) },
                 )
             }
+
+            // Temporary debug-only button: exports the file log so login failures
+            // can be inspected without a USB cable. Absent in release builds.
+            if (BuildConfig.DEBUG) {
+                val context = LocalContext.current
+                Spacer(Modifier.height(8.dp))
+                ExportDebugLogButton(context)
+            }
         }
+    }
+}
+
+/**
+ * Constructs a content:// URI for the current debug log file via
+ * [FileProvider] and fires an ACTION_SEND chooser. Declared separately so
+ * the Compose tree stays readable.
+ *
+ * Only compiled into debug builds (guarded by [BuildConfig.DEBUG] at the
+ * call site); the FileProvider authority `${packageName}.fileprovider` is
+ * registered exclusively in the debug-variant AndroidManifest.
+ */
+@Composable
+private fun ExportDebugLogButton(context: Context) {
+    val noLogMsg = stringResource(R.string.accounts_export_debug_log_none)
+    val subject = stringResource(R.string.accounts_export_debug_log_subject)
+    val chooser = stringResource(R.string.accounts_export_debug_log_chooser)
+
+    Button(
+        onClick = {
+            val logFile = File(
+                context.getExternalFilesDir(null) ?: context.filesDir,
+                "logs/synckro-debug.log",
+            )
+            if (!logFile.exists()) {
+                Toast.makeText(context, noLogMsg, Toast.LENGTH_LONG).show()
+                return@Button
+            }
+            val uri = FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.fileprovider",
+                logFile,
+            )
+            val intent = Intent(Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(Intent.EXTRA_STREAM, uri)
+                putExtra(Intent.EXTRA_SUBJECT, subject)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            context.startActivity(Intent.createChooser(intent, chooser))
+        },
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Text(stringResource(R.string.accounts_export_debug_log))
     }
 }
 
