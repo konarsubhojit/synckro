@@ -250,6 +250,9 @@ class SyncOpApplier(
         val remote = withRetry(onRetry = { _, _ -> retried = true }) {
             val stream = localFileAccess.openRead(op.relativePath)
                 ?: error("Cannot read local file for UploadNew: ${op.relativePath}")
+            // Use only the leaf filename; nested folder creation is out of scope
+            // for this applier — callers are responsible for pre-creating remote
+            // parent directories when needed.
             provider.uploadNew(
                 parentId = pair.remoteFolderId,
                 name = op.relativePath.substringAfterLast('/'),
@@ -441,14 +444,14 @@ class SyncOpApplier(
                 // Delegate to local-wins or remote-wins based on which side SyncDiffer says is newer.
                 if (op.localNewerThanRemote) {
                     applyConflict(
-                        op.copy(localNewerThanRemote = true),
+                        op,
                         pair.copy(conflictPolicy = ConflictPolicy.PREFER_LOCAL),
                         remoteFilesByPath,
                         localIndexByPath,
                     )
                 } else {
                     applyConflict(
-                        op.copy(localNewerThanRemote = false),
+                        op,
                         pair.copy(conflictPolicy = ConflictPolicy.PREFER_REMOTE),
                         remoteFilesByPath,
                         localIndexByPath,
