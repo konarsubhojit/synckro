@@ -1,6 +1,8 @@
 package com.konarsubhojit.synckro.providers.onedrive
 
 import android.content.Context
+import androidx.security.crypto.EncryptedSharedPreferences
+import androidx.security.crypto.MasterKey
 import com.konarsubhojit.synckro.BuildConfig
 import com.konarsubhojit.synckro.R
 import com.konarsubhojit.synckro.domain.auth.Account
@@ -35,6 +37,10 @@ import kotlin.coroutines.resume
  * MSAL token-cache operations; persistent database cleanup (Room) is the
  * responsibility of the caller (e.g. AccountsViewModel).
  *
+ * The signed-in account hint (email) is persisted in [EncryptedSharedPreferences]
+ * so that [com.konarsubhojit.synckro.providers.onedrive.OneDriveProvider] can
+ * surface a user-friendly error when no account is cached.
+ *
  * All failures are logged via Timber and reported through [AuthResult].
  */
 @Singleton
@@ -45,6 +51,45 @@ class OneDriveAuthManager @Inject constructor(
     override val displayName: String = "OneDrive"
 
     private var msalApp: ISingleAccountPublicClientApplication? = null
+
+    /**
+     * Encrypted preferences used to persist the account hint (email / display
+     * name) across process restarts. The hint is saved after a successful
+     * interactive sign-in and cleared on sign-out.
+     *
+     * Initialisation is lazy so that tests and builds without the security
+     * library on the class-path do not crash at class-load time.
+     */
+    private val encryptedPrefs by lazy {
+        try {
+            val masterKey = MasterKey.Builder(context)
+                .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+                .build()
+            EncryptedSharedPreferences.create(
+                context,
+                PREFS_FILE,
+                masterKey,
+                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
+            )
+        } catch (e: Exception) {
+            Timber.e(e, "OneDriveAuthManager: failed to create EncryptedSharedPreferences")
+            null
+        }
+    }
+
+    /** Stores [email] as the account hint, or clears it when [email] is null. */
+    internal fun setAccountHint(email: String?) {
+        val prefs = encryptedPrefs ?: return
+        if (email == null) {
+            prefs.edit().remove(KEY_ACCOUNT_HINT).apply()
+        } else {
+            prefs.edit().putString(KEY_ACCOUNT_HINT, email).apply()
+        }
+    }
+
+    /** Returns the persisted account hint, or null if none is stored. */
+    fun getAccountHint(): String? = encryptedPrefs?.getString(KEY_ACCOUNT_HINT, null)
 
     private val scopes = listOf(
         "Files.ReadWrite",
@@ -131,6 +176,7 @@ class OneDriveAuthManager @Inject constructor(
                             email = msalAccount.username,
                         )
 
+                        setAccountHint(msalAccount.username)
                         cont.resume(AuthResult.Success(account))
                     }
 
@@ -198,6 +244,7 @@ class OneDriveAuthManager @Inject constructor(
                 override fun onSignOut() {
                     if (!cont.isActive) return
                     Timber.i("OneDriveAuthManager.signOut: MSAL sign-out successful")
+                    setAccountHint(null)
                     cont.resume(AuthResult.Success(Unit))
                 }
 
@@ -345,5 +392,10 @@ class OneDriveAuthManager @Inject constructor(
             .build()
 
         app.acquireTokenSilentAsync(params)
+    }
+
+    companion object {
+        private const val PREFS_FILE = "onedrive_auth_prefs"
+        internal const val KEY_ACCOUNT_HINT = "account_hint"
     }
 }
