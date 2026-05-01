@@ -64,6 +64,17 @@ app/src/main/java/com/konarsubhojit/synckro/
 └── di/                                 # Hilt modules
 ```
 
+## Getting started
+
+1. Clone the repository and open it in Android Studio (or use the Gradle wrapper
+   from the command line).
+2. Follow **[docs/debug-auth-setup.md](docs/debug-auth-setup.md)** to create a
+   pinned debug keystore and register the app in Google Cloud and Azure.
+3. Follow **[docs/login-setup.md](docs/login-setup.md)** for a complete
+   end-to-end walkthrough of signing into the app with Google Drive and
+   OneDrive, including provider-side console setup, first-run consent flows,
+   and troubleshooting tips.
+
 ## Building
 
 Requires JDK 17 and the Android SDK (command-line tools or Android Studio).
