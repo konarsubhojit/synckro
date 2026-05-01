@@ -7,9 +7,11 @@ import com.konarsubhojit.synckro.data.local.dao.AccountDao
 import com.konarsubhojit.synckro.data.local.dao.FileIndexDao
 import com.konarsubhojit.synckro.data.local.dao.SyncPairDao
 import com.konarsubhojit.synckro.data.local.db.SynckroDatabase
+import com.konarsubhojit.synckro.data.scanner.LocalFolderScannerImpl
 import com.konarsubhojit.synckro.data.worker.SyncScheduler
 import com.konarsubhojit.synckro.domain.auth.AuthManager
 import com.konarsubhojit.synckro.domain.model.CloudProviderType
+import com.konarsubhojit.synckro.domain.scan.LocalFolderScanner
 import com.konarsubhojit.synckro.domain.sync.SyncEngine
 import com.konarsubhojit.synckro.providers.gdrive.GoogleDriveAuthManager
 import com.konarsubhojit.synckro.providers.onedrive.OneDriveAuthManager
@@ -37,7 +39,7 @@ object AppModule {
     @Provides @Singleton
     fun provideDatabase(@ApplicationContext ctx: Context): SynckroDatabase {
         val builder = Room.databaseBuilder(ctx, SynckroDatabase::class.java, SynckroDatabase.NAME)
-            .addMigrations(SynckroDatabase.MIGRATION_1_2)
+            .addMigrations(SynckroDatabase.MIGRATION_1_2, SynckroDatabase.MIGRATION_2_3)
         // Destructive fallback is only acceptable while the schema is still
         // pre-1.0. In release builds we refuse to drop user sync state and
         // require explicit migrations.
@@ -104,4 +106,13 @@ object AppModule {
 
     @Provides @IntoMap @CloudProviderKey(CloudProviderType.GOOGLE_DRIVE) @Singleton
     fun provideGoogleDriveAuthManager(impl: GoogleDriveAuthManager): AuthManager = impl
+
+    /**
+     * Provides the [LocalFolderScanner] that walks SAF document trees and reconciles
+     * the result with the Room file index.
+     *
+     * @return A [LocalFolderScannerImpl] backed by DocumentsContract.
+     */
+    @Provides @Singleton
+    fun provideLocalFolderScanner(impl: LocalFolderScannerImpl): LocalFolderScanner = impl
 }

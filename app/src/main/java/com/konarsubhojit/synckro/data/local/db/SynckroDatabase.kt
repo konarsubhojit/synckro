@@ -63,7 +63,7 @@ class EnumConverters {
 
 @Database(
     entities = [AccountEntity::class, SyncPairEntity::class, FileIndexEntity::class],
-    version = 2,
+    version = 3,
     exportSchema = true,
 )
 @TypeConverters(EnumConverters::class)
@@ -106,6 +106,16 @@ abstract fun fileIndexDao(): FileIndexDao
                         "`createdAtMillis` INTEGER NOT NULL, " +
                         "PRIMARY KEY(`id`))"
                 )
+            }
+        }
+
+        /**
+         * Migrates the database from version 2 to 3 by adding the `mimeType` column
+         * to `file_index`.  Existing rows will have NULL for the new column.
+         */
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `file_index` ADD COLUMN `mimeType` TEXT")
             }
         }
     }

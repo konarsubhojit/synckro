@@ -16,6 +16,8 @@ data class FileIndexEntry(
     val remoteETag: String? = null,
     val remoteSize: Long? = null,
     val remoteLastModifiedMs: Long? = null,
+    /** MIME type of the local file (e.g. "text/plain", "image/jpeg"). Null for directories. */
+    val mimeType: String? = null,
 ) {
     val isDirectory: Boolean get() = relativePath.endsWith('/')
 }
