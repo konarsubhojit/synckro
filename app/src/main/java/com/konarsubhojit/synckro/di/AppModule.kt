@@ -42,7 +42,7 @@ object AppModule {
     @Provides @Singleton
     fun provideDatabase(@ApplicationContext ctx: Context): SynckroDatabase {
         val builder = Room.databaseBuilder(ctx, SynckroDatabase::class.java, SynckroDatabase.NAME)
-            .addMigrations(SynckroDatabase.MIGRATION_1_2, SynckroDatabase.MIGRATION_2_3)
+            .addMigrations(SynckroDatabase.MIGRATION_1_2, SynckroDatabase.MIGRATION_2_3, SynckroDatabase.MIGRATION_3_4)
         // Destructive fallback is only acceptable while the schema is still
         // pre-1.0. In release builds we refuse to drop user sync state and
         // require explicit migrations.

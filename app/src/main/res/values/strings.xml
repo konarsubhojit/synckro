@@ -107,4 +107,10 @@
 
     <!-- Navigation -->
     <string name="nav_back">Back</string>
+
+    <!-- Sync notification (shown when a transfer runs as a foreground service) -->
+    <string name="sync_channel_name">Sync progress</string>
+    <string name="sync_channel_description">Shows progress while Synckro is transferring files in the background.</string>
+    <string name="sync_notification_title">Syncing %1$s</string>
+    <string name="sync_notification_content">Transfer in progress…</string>
 </resources>

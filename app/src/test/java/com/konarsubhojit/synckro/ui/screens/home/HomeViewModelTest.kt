@@ -143,7 +143,7 @@ class HomeViewModelTest {
 
         vm.syncNow(testPair)
 
-        verify { mockWorkManager.enqueueUniqueWork("syncnow-5", ExistingWorkPolicy.REPLACE, any<OneTimeWorkRequest>()) }
+        verify { mockWorkManager.enqueueUniqueWork("syncnow-5", ExistingWorkPolicy.KEEP, any<OneTimeWorkRequest>()) }
     }
 
     @Test
