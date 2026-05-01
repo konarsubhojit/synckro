@@ -74,14 +74,14 @@ class SyncBenchmark {
     }
 
     /**
-     * Measures "first sync" startup: cold launch of the app when at least one
-     * sync pair exists in the DB (seeded by a prior test iteration via Room
-     * direct insert is not possible here, so we measure the path where the
-     * home screen loads with an empty list — representative of first-run cost).
+     * Measures "first sync" startup: cold launch of the app as a new user
+     * (empty DB, no sync pairs configured). This represents the first-run
+     * experience and captures the cost of WorkManager initialisation and the
+     * initial home-screen render with an empty pair list.
      *
-     * The WorkManager one-shot sync for FakeCloudProvider completes in-process
-     * with no network I/O, so the metric captures the overhead of WorkManager
-     * enqueueing + SyncEngine dispatch + DB write-back.
+     * Once the sync engine is fully wired, a more complete benchmark should
+     * seed a sync pair via Room's test helpers and measure the time from launch
+     * to WorkManager completing the first FakeCloudProvider sync run.
      */
     @Test
     fun firstSyncColdStart() = benchmarkRule.measureRepeated(

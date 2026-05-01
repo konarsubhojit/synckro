@@ -242,9 +242,7 @@ jobs:
           force-avd-creation: false
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: true
-          script: >
-            ./gradlew :benchmark:connectedBenchmarkAndroidTest
-            -Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.suppressErrors=EMULATOR,LOW-BATTERY,NOT-PROFILEABLE,UNLOCKED
+          script: ./gradlew :benchmark:connectedBenchmarkAndroidTest
 
       - name: Upload macrobenchmark results
         if: always()

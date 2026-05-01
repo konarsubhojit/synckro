@@ -18,6 +18,9 @@ android {
         //   LOW-BATTERY       – emulator battery state is unknown / low
         //   NOT-PROFILEABLE   – profiling unavailable on emulator
         //   UNLOCKED          – device lock-screen state; emulators are always unlocked
+        //   ACTIVITY-MISSING  – raised when the activity under test is not found via
+        //                       the default intent (e.g. when the launcher has not yet
+        //                       registered the activity after a fresh install on the emulator)
         testInstrumentationRunnerArguments["androidx.benchmark.suppressErrors"] =
             "EMULATOR,LOW-BATTERY,NOT-PROFILEABLE,UNLOCKED,ACTIVITY-MISSING"
     }
