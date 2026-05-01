@@ -1,7 +1,8 @@
 name: 'Set up Android emulator environment'
 description: >
-  Checks out the repository, sets up JDK 21 and Gradle, enables KVM group
-  permissions, and optionally decodes a base64-encoded debug keystore.
+  Sets up JDK 21 and Gradle, enables KVM group permissions, and optionally
+  decodes a base64-encoded debug keystore. The caller must check out the
+  repository before invoking this action.
 
 inputs:
   keystore-base64:
@@ -12,9 +13,6 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Check out repository
-      uses: actions/checkout@v4
-
     - name: Set up JDK 21
       uses: actions/setup-java@v4
       with:
