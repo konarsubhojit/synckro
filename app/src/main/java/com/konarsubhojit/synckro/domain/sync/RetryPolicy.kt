@@ -2,6 +2,7 @@ package com.konarsubhojit.synckro.domain.sync
 
 import com.konarsubhojit.synckro.domain.provider.CloudProviderException
 import kotlin.math.min
+import kotlin.random.Random
 import kotlinx.coroutines.delay
 
 /**
@@ -63,7 +64,7 @@ suspend fun <T> withRetry(
                 else -> delayMs
             }
 
-            val jitter = (baseDelay * jitterFraction * (Math.random() * 2 - 1)).toLong()
+            val jitter = (baseDelay * jitterFraction * (Random.nextDouble() * 2 - 1)).toLong()
             val actualDelay = (baseDelay + jitter).coerceAtLeast(0L)
 
             onRetry?.invoke(attempt, e)

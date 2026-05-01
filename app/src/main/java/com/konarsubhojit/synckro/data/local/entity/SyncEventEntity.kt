@@ -8,7 +8,7 @@ import androidx.room.PrimaryKey
 /**
  * Room entity for a single structured sync-event log entry.
  *
- * Rows are soft-capped at [MAX_EVENTS_PER_PAIR] per pair and [MAX_GLOBAL_EVENTS] globally.
+ * Rows are soft-capped at [SyncEventDao.MAX_EVENTS_PER_PAIR] per pair and [SyncEventDao.MAX_EVENTS_GLOBAL] globally.
  * Rolling deletion removes the oldest entries beyond those limits after each insert.
  *
  * The foreign key ON DELETE CASCADE ensures that all events for a pair are removed

@@ -52,8 +52,6 @@ import java.util.Date
 import java.util.Locale
 import kotlinx.coroutines.launch
 
-private val DATE_FORMAT = SimpleDateFormat("MM-dd HH:mm:ss.SSS", Locale.US)
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LogsScreen(
@@ -65,9 +63,10 @@ fun LogsScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val copiedMsg = stringResource(R.string.logs_copied)
+    val dateFormat = remember { SimpleDateFormat("MM-dd HH:mm:ss.SSS", Locale.US) }
 
     val buildLogText: () -> String = {
-        state.events.joinToString("\n") { it.toLogLine() }
+        state.events.joinToString("\n") { it.toLogLine(dateFormat) }
     }
 
     Scaffold(
@@ -146,7 +145,7 @@ fun LogsScreen(
                 verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
                 items(state.events, key = { it.id }) { event ->
-                    LogEntryRow(event = event)
+                    LogEntryRow(event = event, dateFormat = dateFormat)
                 }
             }
         }
@@ -154,7 +153,7 @@ fun LogsScreen(
 }
 
 @Composable
-private fun LogEntryRow(event: SyncEvent) {
+private fun LogEntryRow(event: SyncEvent, dateFormat: SimpleDateFormat) {
     val levelColor = when (event.level) {
         SyncEventLevel.INFO  -> MaterialTheme.colorScheme.onSurface
         SyncEventLevel.WARN  -> Color(0xFFF59E0B) // Amber-500
@@ -168,7 +167,7 @@ private fun LogEntryRow(event: SyncEvent) {
         Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    text = DATE_FORMAT.format(Date(event.timestampMs)),
+                    text = dateFormat.format(Date(event.timestampMs)),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontFamily = FontFamily.Monospace,
@@ -198,7 +197,7 @@ private fun LogEntryRow(event: SyncEvent) {
     }
 }
 
-private fun SyncEvent.toLogLine(): String {
-    val ts = DATE_FORMAT.format(Date(timestampMs))
+private fun SyncEvent.toLogLine(dateFormat: SimpleDateFormat): String {
+    val ts = dateFormat.format(Date(timestampMs))
     return "$ts ${level.name.padEnd(5)} [$tag] $message"
 }

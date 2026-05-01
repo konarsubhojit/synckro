@@ -141,7 +141,9 @@ class SyncWorker @AssistedInject constructor(
                     is SyncEngine.Result.PartialFailure -> {
                         Timber.w("Sync for pair %d completed with %d errors", pairId, r.errors.size)
                         syncPairDao.updateLastSyncResult(pairId, System.currentTimeMillis(), RESULT_PARTIAL_FAILURE)
-                        syncEventRepository.log(pairId, SyncEventLevel.WARN, LOG_TAG, "Sync partial failure: ${r.applied} applied, ${r.errors.size} errors — ${r.errors.joinToString("; ")}")
+                        val errorSummary = r.errors.take(MAX_LOGGED_ERRORS).joinToString("; ") +
+                            if (r.errors.size > MAX_LOGGED_ERRORS) " … (${r.errors.size - MAX_LOGGED_ERRORS} more)" else ""
+                        syncEventRepository.log(pairId, SyncEventLevel.WARN, LOG_TAG, "Sync partial failure: ${r.applied} applied, ${r.errors.size} errors — $errorSummary")
                         Result.success()
                     }
                     is SyncEngine.Result.Retriable -> {
@@ -220,6 +222,9 @@ class SyncWorker @AssistedInject constructor(
 
         /** Tag used for [SyncEventRepository] log entries written by this worker. */
         private const val LOG_TAG = "SyncWorker"
+
+        /** Maximum number of error strings included in the partial-failure log message. */
+        private const val MAX_LOGGED_ERRORS = 5
 
         /**
          * Produces a deterministic unique WorkManager name for a SyncPair.
