@@ -5,6 +5,7 @@ import com.konarsubhojit.synckro.domain.model.ConflictPolicy
 import com.konarsubhojit.synckro.domain.model.SyncDirection
 import com.konarsubhojit.synckro.domain.model.SyncPair
 import kotlinx.coroutines.test.runTest
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -31,8 +32,8 @@ class SyncEngineTest {
     @Test
     fun `FAKE provider success has zero applied and conflicts`() = runTest {
         val result = engine.runOnce(pair(CloudProviderType.FAKE)) as SyncEngine.Result.Success
-        assert(result.applied == 0)
-        assert(result.conflicts == 0)
+        assertEquals(0, result.applied)
+        assertEquals(0, result.conflicts)
     }
 
     @Test

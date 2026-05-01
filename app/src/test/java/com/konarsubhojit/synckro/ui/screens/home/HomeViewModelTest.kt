@@ -115,6 +115,7 @@ class HomeViewModelTest {
         pairsFlow.value = emptyList()
         advanceUntilIdle()
         assertEquals(0, vm.state.value.pairs.size)
+
         collectJob.cancel()
     }
 

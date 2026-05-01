@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.konarsubhojit.synckro.R
 import com.konarsubhojit.synckro.data.repository.SyncPairRepository
 import com.konarsubhojit.synckro.domain.model.CloudProviderType
 import com.konarsubhojit.synckro.domain.model.ConflictPolicy
@@ -104,7 +105,7 @@ class PairEditorViewModel @Inject constructor(
     fun save(onSaved: (Long) -> Unit) {
         val s = _state.value
         if (s.displayName.isBlank()) {
-            _state.update { it.copy(saveError = "Display name is required") }
+            _state.update { it.copy(saveError = context.getString(R.string.pair_editor_error_name_required)) }
             return
         }
         _state.update { it.copy(isSaving = true, saveError = null) }
@@ -128,7 +129,12 @@ class PairEditorViewModel @Inject constructor(
                 onSaved(savedId)
             }.onFailure { t ->
                 Timber.e(t, "PairEditorViewModel.save: failed")
-                _state.update { it.copy(isSaving = false, saveError = t.message ?: "Save failed") }
+                _state.update {
+                    it.copy(
+                        isSaving = false,
+                        saveError = t.message ?: context.getString(R.string.pair_editor_error_save_failed),
+                    )
+                }
             }
         }
     }

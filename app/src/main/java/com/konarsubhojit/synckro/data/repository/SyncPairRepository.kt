@@ -46,7 +46,10 @@ class SyncPairRepository @Inject constructor(
 
     /**
      * Returns the sync pair with [id], or null if not found.
-     * [SyncPair.needsReLink] is computed against [contentResolver].
+     * [SyncPair.needsReLink] is set to `false` — callers that need the relink
+     * flag should use [observeAll] or pass a [ContentResolver] explicitly.
+     * This method is intended for the pair editor, which does not display
+     * the relink status.
      */
     suspend fun getById(id: Long): SyncPair? {
         val entity = syncPairDao.getById(id) ?: return null

@@ -54,6 +54,8 @@
     <string name="pair_editor_wifi_only">Sync on Wi-Fi only</string>
     <string name="pair_editor_requires_charging">Sync only while charging</string>
     <string name="pair_editor_save">Save</string>
+    <string name="pair_editor_error_name_required">Display name is required</string>
+    <string name="pair_editor_error_save_failed">Save failed</string>
 
     <!-- Pick local folder (SAF tree-URI picker) -->
     <string name="pick_folder_title">Pick local folder</string>
