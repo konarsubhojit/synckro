@@ -2,21 +2,27 @@ package com.konarsubhojit.synckro.ui.navigation
 
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.Composable
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import com.konarsubhojit.synckro.ui.screens.HomeScreen
 import com.konarsubhojit.synckro.ui.screens.OnboardingScreen
 import com.konarsubhojit.synckro.ui.screens.accounts.AccountsScreen
-import com.konarsubhojit.synckro.ui.screens.addpair.AddSyncPairScreen
+import com.konarsubhojit.synckro.ui.screens.paireditor.PairEditorScreen
+import com.konarsubhojit.synckro.ui.screens.paireditor.PairEditorViewModel
 import com.konarsubhojit.synckro.ui.screens.pickfolder.PickLocalFolderScreen
 
 object Routes {
     const val ONBOARDING = "onboarding"
     const val HOME = "home"
     const val ACCOUNTS = "accounts"
-    const val ADD_PAIR = "add_pair"
+    /** Optional query parameter `pairId`; defaults to 0 (create mode). */
+    const val PAIR_EDITOR = "pair_editor?pairId={pairId}"
     const val PICK_FOLDER = "pick_folder"
+
+    fun pairEditor(pairId: Long = 0L) = "pair_editor?pairId=$pairId"
 }
 
 @Composable
@@ -33,7 +39,10 @@ fun SynckroNavHost(activity: ComponentActivity) {
         composable(Routes.HOME) {
             HomeScreen(
                 onAddSyncPair = {
-                    nav.navigate(Routes.ADD_PAIR) { launchSingleTop = true }
+                    nav.navigate(Routes.pairEditor()) { launchSingleTop = true }
+                },
+                onEditSyncPair = { pairId ->
+                    nav.navigate(Routes.pairEditor(pairId)) { launchSingleTop = true }
                 },
                 onOpenAccounts = {
                     nav.navigate(Routes.ACCOUNTS) { launchSingleTop = true }
@@ -46,27 +55,33 @@ fun SynckroNavHost(activity: ComponentActivity) {
                 onBack = { nav.popBackStack() },
             )
         }
-        composable(Routes.ADD_PAIR) {
-            AddSyncPairScreen(
-                onBack = { nav.popBackStack() },
-                onOpenAccounts = {
-                    // Atomic: remove the placeholder and launch Accounts in a
-                    // single navigate call, so the user can't race the two
-                    // ops and so the back stack can't hold duplicates.
-                    nav.navigate(Routes.ACCOUNTS) {
-                        popUpTo(Routes.ADD_PAIR) { inclusive = true }
-                        launchSingleTop = true
-                    }
+        composable(
+            route = Routes.PAIR_EDITOR,
+            arguments = listOf(
+                navArgument("pairId") {
+                    type = NavType.LongType
+                    defaultValue = 0L
                 },
+            ),
+        ) { backStackEntry ->
+            val pairId = backStackEntry.arguments?.getLong("pairId") ?: 0L
+            PairEditorScreen(
+                pairId = pairId,
+                onBack = { nav.popBackStack() },
                 onPickFolder = {
                     nav.navigate(Routes.PICK_FOLDER) { launchSingleTop = true }
                 },
+                onSaved = { nav.popBackStack() },
             )
         }
         composable(Routes.PICK_FOLDER) {
             PickLocalFolderScreen(
                 onFolderPicked = { uriString ->
-                    // The URI has been persisted; navigate back to Add Pair.
+                    // Pass the chosen URI back to the PairEditorScreen via its
+                    // SavedStateHandle so PairEditorViewModel can update its state.
+                    nav.previousBackStackEntry
+                        ?.savedStateHandle
+                        ?.set(PairEditorViewModel.KEY_LOCAL_TREE_URI, uriString)
                     nav.popBackStack()
                 },
                 onBack = { nav.popBackStack() },
