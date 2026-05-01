@@ -1,7 +1,11 @@
 package com.konarsubhojit.synckro.ui.screens.accounts
 
+import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
+import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.Arrangement
@@ -40,6 +44,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.konarsubhojit.synckro.BuildConfig
 import com.konarsubhojit.synckro.R
 import com.konarsubhojit.synckro.ui.auth.ActivityAuthUiHost
+import com.konarsubhojit.synckro.util.logging.FileLoggingTree
 import java.io.File
 
 /**
@@ -112,46 +117,96 @@ fun AccountsScreen(
 }
 
 /**
- * Constructs a content:// URI for the current debug log file via
- * [FileProvider] and fires an ACTION_SEND chooser. Declared separately so
- * the Compose tree stays readable.
+ * Temporary debug-only button that exports the in-app log file to the
+ * public Downloads folder on API 29+ (no permission required), or fires an
+ * ACTION_SEND chooser on API 26–28 via FileProvider.
  *
- * Only compiled into debug builds (guarded by [BuildConfig.DEBUG] at the
- * call site); the FileProvider authority `${packageName}.fileprovider` is
- * registered exclusively in the debug-variant AndroidManifest.
+ * This button is only shown when [BuildConfig.DEBUG] is true (see call site).
+ * The FileProvider authority `${packageName}.fileprovider` is declared
+ * exclusively in the debug-variant AndroidManifest, so it is absent from
+ * release builds.
  */
 @Composable
 private fun ExportDebugLogButton(context: Context) {
     val noLogMsg = stringResource(R.string.accounts_export_debug_log_none)
+    val insertFailMsg = stringResource(R.string.accounts_export_debug_log_insert_failed)
+    val savedMsg = stringResource(R.string.accounts_export_debug_log_saved)
     val subject = stringResource(R.string.accounts_export_debug_log_subject)
     val chooser = stringResource(R.string.accounts_export_debug_log_chooser)
 
     Button(
-        onClick = {
-            val logFile = File(
-                context.getExternalFilesDir(null) ?: context.filesDir,
-                "logs/synckro-debug.log",
-            )
-            if (!logFile.exists()) {
-                Toast.makeText(context, noLogMsg, Toast.LENGTH_LONG).show()
-                return@Button
-            }
-            val uri = FileProvider.getUriForFile(
-                context,
-                "${context.packageName}.fileprovider",
-                logFile,
-            )
-            val intent = Intent(Intent.ACTION_SEND).apply {
-                type = "text/plain"
-                putExtra(Intent.EXTRA_STREAM, uri)
-                putExtra(Intent.EXTRA_SUBJECT, subject)
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            }
-            context.startActivity(Intent.createChooser(intent, chooser))
-        },
+        onClick = { exportLog(context, noLogMsg, insertFailMsg, savedMsg, subject, chooser) },
         modifier = Modifier.fillMaxWidth(),
     ) {
         Text(stringResource(R.string.accounts_export_debug_log))
+    }
+}
+
+/**
+ * Copies the debug log to the public Downloads folder (MediaStore, API 29+)
+ * or fires an ACTION_SEND share-intent (API 26–28). Both paths require no
+ * extra storage permissions.
+ */
+private fun exportLog(
+    context: Context,
+    noLogMsg: String,
+    insertFailMsg: String,
+    savedMsg: String,
+    subject: String,
+    chooser: String,
+) {
+    val logFile = File(context.filesDir, FileLoggingTree.LOG_RELATIVE_PATH)
+    if (!logFile.exists()) {
+        Toast.makeText(context, noLogMsg, Toast.LENGTH_LONG).show()
+        return
+    }
+
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        // API 29+: insert directly into MediaStore Downloads — no permission needed.
+        val destName = "synckro-debug.log"
+        val resolver = context.contentResolver
+        val values = ContentValues().apply {
+            put(MediaStore.Downloads.DISPLAY_NAME, destName)
+            put(MediaStore.Downloads.MIME_TYPE, "text/plain")
+            put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+            put(MediaStore.Downloads.IS_PENDING, 1)
+        }
+        val collection = MediaStore.Downloads.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+        val itemUri = resolver.insert(collection, values) ?: run {
+            Toast.makeText(context, insertFailMsg, Toast.LENGTH_LONG).show()
+            return
+        }
+        try {
+            resolver.openOutputStream(itemUri)?.use { out ->
+                logFile.inputStream().use { it.copyTo(out) }
+            }
+            values.clear()
+            values.put(MediaStore.Downloads.IS_PENDING, 0)
+            resolver.update(itemUri, values, null, null)
+            Toast.makeText(
+                context,
+                savedMsg.format(destName),
+                Toast.LENGTH_LONG,
+            ).show()
+        } catch (e: Exception) {
+            runCatching { resolver.delete(itemUri, null, null) }
+                .onFailure { android.util.Log.w("ExportLog", "Failed to clean up pending MediaStore entry", it) }
+            Toast.makeText(context, e.localizedMessage ?: insertFailMsg, Toast.LENGTH_LONG).show()
+        }
+    } else {
+        // API 26–28 fallback: share via FileProvider content URI so any app can receive it.
+        val uri = FileProvider.getUriForFile(
+            context,
+            "${context.packageName}.fileprovider",
+            logFile,
+        )
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_STREAM, uri)
+            putExtra(Intent.EXTRA_SUBJECT, subject)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        context.startActivity(Intent.createChooser(intent, chooser))
     }
 }
 

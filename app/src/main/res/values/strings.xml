@@ -137,6 +137,8 @@
     <string name="accounts_export_debug_log_subject">Synckro debug log</string>
     <string name="accounts_export_debug_log_chooser">Share debug log via…</string>
     <string name="accounts_export_debug_log_none">No debug log file found yet. Run the app for a moment and try again.</string>
+    <string name="accounts_export_debug_log_insert_failed">Couldn\u0027t create the log file in Downloads. Please try again.</string>
+    <string name="accounts_export_debug_log_saved">Debug log saved to Downloads/%1$s</string>
 
     <!-- Sync logs screen -->
     <string name="logs_title">Sync logs</string>
