@@ -21,4 +21,11 @@ data class SyncPair(
     val excludeGlobs: List<String> = emptyList(),
     val wifiOnly: Boolean = true,
     val requiresCharging: Boolean = false,
+    /**
+     * True when the persisted SAF tree-URI permission for [localTreeUri] is no
+     * longer held (e.g. the user revoked it or moved the SD card). Not stored
+     * in the database; recomputed at runtime from
+     * [ContentResolver.persistedUriPermissions].
+     */
+    val needsReLink: Boolean = false,
 )

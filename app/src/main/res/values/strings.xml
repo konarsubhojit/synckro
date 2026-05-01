@@ -28,6 +28,15 @@
     <string name="add_pair_needs_account">You need to connect a cloud account before adding a sync pair.</string>
     <string name="add_pair_go_to_accounts">Go to accounts</string>
     <string name="add_pair_coming_soon">The folder picker is coming in the next update. For now, connect an account so the sync pair wizard is ready to launch.</string>
+    <string name="add_pair_pick_folder">Pick local folder</string>
+
+    <!-- Pick local folder (SAF tree-URI picker) -->
+    <string name="pick_folder_title">Pick local folder</string>
+    <string name="pick_folder_body">Select the folder on your device that you want to keep in sync. Both internal storage and SD card folders are supported.</string>
+    <string name="pick_folder_button">Browse folders…</string>
+    <string name="pick_folder_selected_label">Selected folder</string>
+    <string name="pick_folder_confirm">Use this folder</string>
+    <string name="pick_folder_needs_relink">Folder access was revoked. Tap to re-select the folder.</string>
 
     <!-- Accounts – snackbar / status messages surfaced by AccountsViewModel -->
     <string name="accounts_unknown_provider_format">Unknown provider: %1$s</string>
