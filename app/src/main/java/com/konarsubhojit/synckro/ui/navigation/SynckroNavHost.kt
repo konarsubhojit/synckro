@@ -65,7 +65,7 @@ fun SynckroNavHost(activity: ComponentActivity) {
         }
         composable(Routes.PICK_FOLDER) {
             PickLocalFolderScreen(
-                onFolderPicked = { _ ->
+                onFolderPicked = { uriString ->
                     // The URI has been persisted; navigate back to Add Pair.
                     nav.popBackStack()
                 },

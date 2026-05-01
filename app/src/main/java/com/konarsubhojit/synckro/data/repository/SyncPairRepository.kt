@@ -7,6 +7,7 @@ import com.konarsubhojit.synckro.data.local.dao.SyncPairDao
 import com.konarsubhojit.synckro.data.local.entity.SyncPairEntity
 import com.konarsubhojit.synckro.domain.model.SyncPair
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import timber.log.Timber
 import javax.inject.Inject
@@ -31,8 +32,7 @@ class SyncPairRepository @Inject constructor(
      */
     fun observeAll(contentResolver: ContentResolver): Flow<List<SyncPair>> =
         syncPairDao.observeAll().map { entities ->
-            val granted = persistedUriStrings(contentResolver)
-            entities.map { it.toDomain(needsReLink = it.localTreeUri !in granted) }
+            toDomainList(entities, contentResolver)
         }
 
     /**
@@ -41,17 +41,7 @@ class SyncPairRepository @Inject constructor(
      */
     suspend fun getAll(contentResolver: ContentResolver): List<SyncPair> {
         Timber.d("SyncPairRepository.getAll()")
-        val granted = persistedUriStrings(contentResolver)
-        return syncPairDao.observeAll()
-            .map { entities ->
-                entities.map { it.toDomain(needsReLink = it.localTreeUri !in granted) }
-            }
-            .let { flow ->
-                // Collect first emission from the DB flow synchronously.
-                var result: List<SyncPair> = emptyList()
-                flow.collect { result = it }
-                result
-            }
+        return toDomainList(syncPairDao.observeAll().first(), contentResolver)
     }
 
     /**
@@ -95,6 +85,14 @@ class SyncPairRepository @Inject constructor(
                 perm.isReadPermission && perm.isWritePermission
             }
             .mapTo(HashSet()) { it.uri.toString() }
+
+    private fun toDomainList(
+        entities: List<SyncPairEntity>,
+        contentResolver: ContentResolver,
+    ): List<SyncPair> {
+        val granted = persistedUriStrings(contentResolver)
+        return entities.map { it.toDomain(needsReLink = it.localTreeUri !in granted) }
+    }
 }
 
 private fun SyncPairEntity.toDomain(needsReLink: Boolean): SyncPair = SyncPair(
