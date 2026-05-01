@@ -28,4 +28,8 @@ data class SyncPair(
      * [ContentResolver.persistedUriPermissions].
      */
     val needsReLink: Boolean = false,
+    /** Epoch-milliseconds timestamp of the last completed sync run, or null if never synced. */
+    val lastSyncAtMs: Long? = null,
+    /** Human-readable outcome of the last sync run: "SUCCESS", "PARTIAL_FAILURE", or "FAILURE". Null if never synced. */
+    val lastSyncResult: String? = null,
 )

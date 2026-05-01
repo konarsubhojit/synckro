@@ -2,6 +2,7 @@ package com.konarsubhojit.synckro.ui.screens.paireditor
 
 import androidx.lifecycle.SavedStateHandle
 import com.konarsubhojit.synckro.data.repository.SyncPairRepository
+import com.konarsubhojit.synckro.data.worker.SyncScheduler
 import com.konarsubhojit.synckro.domain.model.CloudProviderType
 import com.konarsubhojit.synckro.domain.model.ConflictPolicy
 import com.konarsubhojit.synckro.domain.model.SyncPair
@@ -31,6 +32,7 @@ class PairEditorViewModelTest {
     private val testDispatcher = StandardTestDispatcher()
     private lateinit var mockRepo: SyncPairRepository
     private lateinit var mockStrings: StringProvider
+    private lateinit var mockSyncScheduler: SyncScheduler
 
     @Before
     fun setUp() {
@@ -40,6 +42,7 @@ class PairEditorViewModelTest {
             every { getString(any()) } returns "error"
             every { getString(any(), *anyVararg()) } returns "error"
         }
+        mockSyncScheduler = mockk(relaxed = true)
     }
 
     @After
@@ -51,6 +54,7 @@ class PairEditorViewModelTest {
         savedStateHandle = SavedStateHandle(mapOf("pairId" to pairId)),
         strings = mockStrings,
         syncPairRepository = mockRepo,
+        syncScheduler = mockSyncScheduler,
     )
 
     // -------------------------------------------------------------------------
@@ -121,6 +125,35 @@ class PairEditorViewModelTest {
         assertFalse(vm.state.value.isSaving)
     }
 
+    @Test
+    fun `save with valid state schedules periodic sync`() = runTest {
+        coEvery { mockRepo.upsert(any()) } returns 42L
+
+        val vm = createVm()
+        vm.onDisplayNameChange("Test Pair")
+        vm.save {}
+        advanceUntilIdle()
+
+        coVerify { mockSyncScheduler.schedulePeriodic(any(), any()) }
+    }
+
+    @Test
+    fun `save sets error state when schedulePeriodic throws`() = runTest {
+        coEvery { mockRepo.upsert(any()) } returns 42L
+        every { mockSyncScheduler.schedulePeriodic(any(), any()) } throws RuntimeException("WorkManager unavailable")
+
+        val vm = createVm()
+        vm.onDisplayNameChange("Test Pair")
+        var savedId: Long? = null
+        vm.save { savedId = it }
+        advanceUntilIdle()
+
+        // schedulePeriodic is inside runCatching so the exception is caught and
+        // onSaved must NOT be called; an error message should be set instead.
+        assertNull("onSaved must not be called when scheduling fails", savedId)
+        assertTrue(vm.state.value.saveError?.isNotEmpty() == true)
+    }
+
     // -------------------------------------------------------------------------
     // Folder URI from navigation back-stack
     // -------------------------------------------------------------------------
@@ -132,6 +165,7 @@ class PairEditorViewModelTest {
             savedStateHandle = savedStateHandle,
             strings = mockStrings,
             syncPairRepository = mockRepo,
+            syncScheduler = mockSyncScheduler,
         )
 
         val uri = "content://com.android.externalstorage.documents/tree/primary%3ADownloads"

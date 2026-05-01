@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.konarsubhojit.synckro.R
 import com.konarsubhojit.synckro.data.repository.SyncPairRepository
+import com.konarsubhojit.synckro.data.worker.SyncScheduler
 import com.konarsubhojit.synckro.domain.model.CloudProviderType
 import com.konarsubhojit.synckro.domain.model.ConflictPolicy
 import com.konarsubhojit.synckro.domain.model.SyncDirection
@@ -37,6 +38,7 @@ class PairEditorViewModel @Inject constructor(
     private val savedStateHandle: SavedStateHandle,
     private val strings: StringProvider,
     private val syncPairRepository: SyncPairRepository,
+    private val syncScheduler: SyncScheduler,
 ) : ViewModel() {
 
     private val pairId: Long = savedStateHandle.get<Long>("pairId") ?: 0L
@@ -125,7 +127,12 @@ class PairEditorViewModel @Inject constructor(
                     wifiOnly = s.wifiOnly,
                     requiresCharging = s.requiresCharging,
                 )
-                syncPairRepository.upsert(pair)
+                val savedId = syncPairRepository.upsert(pair)
+                // Schedule periodic sync for this pair now that it is persisted.
+                // Using the saved id so the pair object has the correct primary key
+                // even when creating a new pair (pairId == 0 → savedId != 0).
+                syncScheduler.schedulePeriodic(pair.copy(id = savedId))
+                savedId
             }.onSuccess { savedId ->
                 _state.update { it.copy(isSaving = false) }
                 Timber.i("PairEditorViewModel.save: saved pair id=$savedId")

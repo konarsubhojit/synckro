@@ -63,7 +63,7 @@ class EnumConverters {
 
 @Database(
     entities = [AccountEntity::class, SyncPairEntity::class, FileIndexEntity::class],
-    version = 3,
+    version = 4,
     exportSchema = true,
 )
 @TypeConverters(EnumConverters::class)
@@ -116,6 +116,15 @@ abstract fun fileIndexDao(): FileIndexDao
         val MIGRATION_2_3 = object : Migration(2, 3) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE `file_index` ADD COLUMN `mimeType` TEXT")
+            }
+        }
+        /**
+         * Migrates the database from version 3 to 4 by adding the `lastSyncResult` column
+         * to `sync_pair`. Existing rows will have NULL for the new column.
+         */
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `sync_pair` ADD COLUMN `lastSyncResult` TEXT")
             }
         }
     }

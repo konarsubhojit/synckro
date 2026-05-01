@@ -32,6 +32,8 @@ data class SyncPairEntity(
     /** Opaque delta/changes token from the provider. */
     val lastDeltaToken: String? = null,
     val lastSyncAtMs: Long? = null,
+    /** Human-readable outcome of the last sync run: "SUCCESS", "PARTIAL_FAILURE", or "FAILURE". */
+    val lastSyncResult: String? = null,
 )
 
 @Entity(

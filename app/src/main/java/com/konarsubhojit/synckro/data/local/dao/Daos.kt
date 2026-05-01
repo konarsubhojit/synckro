@@ -182,6 +182,16 @@ interface SyncPairDao {
      */
     @Query("DELETE FROM sync_pair WHERE id = :id")
     suspend fun delete(id: Long)
+
+    /**
+     * Updates the last sync timestamp and result for the given pair.
+     *
+     * @param pairId      The primary key of the sync pair.
+     * @param timestampMs The epoch-millisecond time at which the sync run completed.
+     * @param result      A short outcome string: "SUCCESS", "PARTIAL_FAILURE", or "FAILURE".
+     */
+    @Query("UPDATE sync_pair SET lastSyncAtMs = :timestampMs, lastSyncResult = :result WHERE id = :pairId")
+    suspend fun updateLastSyncResult(pairId: Long, timestampMs: Long, result: String)
 }
 
 @Dao

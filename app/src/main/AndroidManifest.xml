@@ -46,6 +46,14 @@
                 tools:node="remove" />
         </provider>
 
+        <!-- Declare the foreground-service type required on API 34+ for data-sync workers.
+             The `tools:node="merge"` directive merges this entry with the matching declaration
+             from WorkManager's own manifest so the system allows FOREGROUND_SERVICE_DATA_SYNC. -->
+        <service
+            android:name="androidx.work.impl.foreground.SystemForegroundService"
+            android:foregroundServiceType="dataSync"
+            tools:node="merge" />
+
         <!-- MSAL redirect. Host/path come from MSAL_REDIRECT_URI via Gradle
              placeholders. Non-debug builds get an empty host and therefore an
              unusable intent filter (acceptable: MSAL is only intended for debug

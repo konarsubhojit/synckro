@@ -119,6 +119,8 @@ private fun SyncPairEntity.toDomain(needsReLink: Boolean): SyncPair = SyncPair(
     wifiOnly = wifiOnly,
     requiresCharging = requiresCharging,
     needsReLink = needsReLink,
+    lastSyncAtMs = lastSyncAtMs,
+    lastSyncResult = lastSyncResult,
 )
 
 private fun SyncPair.toEntity(): SyncPairEntity = SyncPairEntity(

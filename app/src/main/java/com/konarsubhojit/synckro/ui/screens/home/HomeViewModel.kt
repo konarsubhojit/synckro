@@ -53,7 +53,7 @@ class HomeViewModel @Inject constructor(
 
     /**
      * Enqueues a one-shot [SyncWorker] for [pair]. Any in-flight one-shot run for
-     * the same pair is replaced so the user never queues duplicate manual syncs.
+     * the same pair is kept so the user never interrupts an ongoing sync.
      */
     fun syncNow(pair: SyncPair) {
         Timber.i("HomeViewModel.syncNow(id=${pair.id})")
@@ -62,7 +62,7 @@ class HomeViewModel @Inject constructor(
             .build()
         workManager.enqueueUniqueWork(
             "syncnow-${pair.id}",
-            ExistingWorkPolicy.REPLACE,
+            ExistingWorkPolicy.KEEP,
             req,
         )
     }
