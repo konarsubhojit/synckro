@@ -142,7 +142,9 @@ class SyncEngineRealIntegrationTest {
             resolver = context.contentResolver,
             localIndexDao = localIndexDao,
             childrenQuery = inMemoryChildren,
-            fsAccess = { _, _ -> null }, // no-op FsAccess (no hashing needed for empty FS)
+            // FsAccess opens file streams for SHA-256 hashing; returning null disables
+            // hashing so tests focus on size/mtime diffing without needing real streams.
+            fsAccess = { _, _ -> null },
         )
     }
 

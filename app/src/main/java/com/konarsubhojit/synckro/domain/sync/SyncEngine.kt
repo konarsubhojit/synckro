@@ -240,15 +240,26 @@ class SyncEngine(
             )
         }
         // Apply remote delta: ADD/MODIFY override the baseline; DELETE removes.
+        // For ADD/MODIFY, only update if we have concrete metadata; if both the
+        // delta and the baseline lack size/mtime (provider returned a partial
+        // change record), leave the existing baseline entry unchanged.
         for (change in remoteSnapshot.changes) {
             when (change.type) {
-                RemoteChangeType.ADD, RemoteChangeType.MODIFY ->
-                    syntheticRemote[change.relativePath] = FileSnapshot(
-                        relativePath = change.relativePath,
-                        size = change.sizeBytes ?: syntheticRemote[change.relativePath]?.size ?: 0L,
-                        lastModifiedMs = change.mtimeMs ?: syntheticRemote[change.relativePath]?.lastModifiedMs ?: 0L,
-                        hash = change.etag,
-                    )
+                RemoteChangeType.ADD, RemoteChangeType.MODIFY -> {
+                    val baseline = syntheticRemote[change.relativePath]
+                    val resolvedSize = change.sizeBytes ?: baseline?.size
+                    val resolvedMtime = change.mtimeMs ?: baseline?.lastModifiedMs
+                    if (resolvedSize != null && resolvedMtime != null) {
+                        syntheticRemote[change.relativePath] = FileSnapshot(
+                            relativePath = change.relativePath,
+                            size = resolvedSize,
+                            lastModifiedMs = resolvedMtime,
+                            hash = change.etag,
+                        )
+                    }
+                    // If no size/mtime available (neither delta nor baseline), skip rather
+                    // than inserting a FS(0, 0) stub that would trigger spurious ops.
+                }
                 RemoteChangeType.DELETE ->
                     syntheticRemote.remove(change.relativePath)
             }
