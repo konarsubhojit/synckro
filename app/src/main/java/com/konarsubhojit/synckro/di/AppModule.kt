@@ -5,6 +5,7 @@ import androidx.room.Room
 import androidx.work.WorkManager
 import com.konarsubhojit.synckro.data.local.dao.AccountDao
 import com.konarsubhojit.synckro.data.local.dao.FileIndexDao
+import com.konarsubhojit.synckro.data.local.dao.SyncEventDao
 import com.konarsubhojit.synckro.data.local.dao.SyncPairDao
 import com.konarsubhojit.synckro.data.local.db.SynckroDatabase
 import com.konarsubhojit.synckro.data.scanner.LocalFolderScannerImpl
@@ -42,7 +43,12 @@ object AppModule {
     @Provides @Singleton
     fun provideDatabase(@ApplicationContext ctx: Context): SynckroDatabase {
         val builder = Room.databaseBuilder(ctx, SynckroDatabase::class.java, SynckroDatabase.NAME)
-            .addMigrations(SynckroDatabase.MIGRATION_1_2, SynckroDatabase.MIGRATION_2_3, SynckroDatabase.MIGRATION_3_4)
+            .addMigrations(
+                SynckroDatabase.MIGRATION_1_2,
+                SynckroDatabase.MIGRATION_2_3,
+                SynckroDatabase.MIGRATION_3_4,
+                SynckroDatabase.MIGRATION_4_5,
+            )
         // Destructive fallback is only acceptable while the schema is still
         // pre-1.0. In release builds we refuse to drop user sync state and
         // require explicit migrations.
@@ -76,6 +82,14 @@ object AppModule {
      */
     @Provides
     fun provideFileIndexDao(db: SynckroDatabase): FileIndexDao = db.fileIndexDao()
+
+    /**
+     * Provides the DAO for reading and writing structured sync-event log entries.
+     *
+     * @return The [SyncEventDao] from the provided [SynckroDatabase].
+     */
+    @Provides
+    fun provideSyncEventDao(db: SynckroDatabase): SyncEventDao = db.syncEventDao()
 
     /**
      * Provides the application WorkManager instance.

@@ -8,6 +8,7 @@ import androidx.room.Transaction
 import androidx.room.Upsert
 import com.konarsubhojit.synckro.data.local.entity.AccountEntity
 import com.konarsubhojit.synckro.data.local.entity.FileIndexEntity
+import com.konarsubhojit.synckro.data.local.entity.SyncEventEntity
 import com.konarsubhojit.synckro.data.local.entity.SyncPairEntity
 import com.konarsubhojit.synckro.domain.model.CloudProviderType
 import kotlinx.coroutines.flow.Flow
@@ -270,5 +271,87 @@ interface FileIndexDao {
         } else {
             deleteStaleForPair(pairId, seenPaths)
         }
+    }
+}
+
+@Dao
+interface SyncEventDao {
+
+    /**
+     * Inserts a single [SyncEventEntity] into the database.
+     *
+     * @param event The event to persist.
+     * @return The row id of the inserted entry.
+     */
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insert(event: SyncEventEntity): Long
+
+    /**
+     * Returns all events, newest first, up to [limit] rows.
+     *
+     * @param limit Maximum number of rows to return.
+     * @return A [Flow] that re-emits the list whenever the table changes.
+     */
+    @Query("SELECT * FROM sync_event ORDER BY timestampMs DESC LIMIT :limit")
+    fun observeAll(limit: Int = MAX_EVENTS_GLOBAL): Flow<List<SyncEventEntity>>
+
+    /**
+     * Returns events for the given pair, newest first, up to [limit] rows.
+     *
+     * @param pairId  The sync pair whose events should be observed.
+     * @param limit   Maximum number of rows to return.
+     * @return A [Flow] that re-emits whenever the table changes.
+     */
+    @Query(
+        "SELECT * FROM sync_event WHERE pairId = :pairId ORDER BY timestampMs DESC LIMIT :limit",
+    )
+    fun observeForPair(pairId: Long, limit: Int = MAX_EVENTS_PER_PAIR): Flow<List<SyncEventEntity>>
+
+    /**
+     * Deletes the oldest global rows beyond [maxRows], keeping the most-recent ones.
+     * Called after every insert to enforce the rolling global cap.
+     *
+     * @param maxRows Maximum number of rows to retain in the table.
+     */
+    @Query(
+        "DELETE FROM sync_event WHERE id NOT IN " +
+            "(SELECT id FROM sync_event ORDER BY timestampMs DESC LIMIT :maxRows)",
+    )
+    suspend fun pruneGlobal(maxRows: Int = MAX_EVENTS_GLOBAL)
+
+    /**
+     * Deletes the oldest rows for [pairId] beyond [maxRows].
+     * Called after every pair-scoped insert to enforce the per-pair rolling cap.
+     *
+     * @param pairId  The pair whose log should be pruned.
+     * @param maxRows Maximum rows to keep for this pair.
+     */
+    @Query(
+        "DELETE FROM sync_event WHERE pairId = :pairId AND id NOT IN " +
+            "(SELECT id FROM sync_event WHERE pairId = :pairId " +
+            "ORDER BY timestampMs DESC LIMIT :maxRows)",
+    )
+    suspend fun pruneForPair(pairId: Long, maxRows: Int = MAX_EVENTS_PER_PAIR)
+
+    /**
+     * Inserts a log entry and immediately prunes the table to stay within the
+     * rolling caps.  Runs as a single transaction so reads never see an over-full table.
+     *
+     * @param event    The event to persist.
+     */
+    @Transaction
+    suspend fun insertAndPrune(event: SyncEventEntity) {
+        insert(event)
+        if (event.pairId != null) {
+            pruneForPair(event.pairId)
+        }
+        pruneGlobal()
+    }
+
+    companion object {
+        /** Maximum events retained per sync-pair (oldest are discarded first). */
+        const val MAX_EVENTS_PER_PAIR = 500
+        /** Maximum total events retained across all pairs. */
+        const val MAX_EVENTS_GLOBAL = 2_000
     }
 }

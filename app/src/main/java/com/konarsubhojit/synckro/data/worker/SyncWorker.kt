@@ -17,6 +17,8 @@ import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import com.konarsubhojit.synckro.R
 import com.konarsubhojit.synckro.data.local.dao.SyncPairDao
+import com.konarsubhojit.synckro.data.repository.SyncEventRepository
+import com.konarsubhojit.synckro.domain.model.SyncEventLevel
 import com.konarsubhojit.synckro.domain.model.SyncPair
 import com.konarsubhojit.synckro.domain.sync.SyncEngine
 import dagger.assisted.Assisted
@@ -44,6 +46,7 @@ class SyncWorker @AssistedInject constructor(
     @Assisted params: WorkerParameters,
     private val syncPairDao: SyncPairDao,
     private val engine: SyncEngine,
+    private val syncEventRepository: SyncEventRepository,
 ) : CoroutineWorker(appContext, params) {
 
     /**
@@ -112,6 +115,8 @@ class SyncWorker @AssistedInject constructor(
             requiresCharging = entity.requiresCharging,
         )
 
+        syncEventRepository.log(pairId, SyncEventLevel.INFO, LOG_TAG, "Sync started for \"${pair.displayName}\" (attempt ${runAttemptCount + 1})")
+
         return coroutineScope {
             // Promote to a foreground service if the sync takes longer than the threshold.
             // This keeps the transfer alive when the app is killed and prevents Doze
@@ -130,15 +135,18 @@ class SyncWorker @AssistedInject constructor(
                 when (val r = engine.runOnce(pair)) {
                     is SyncEngine.Result.Success -> {
                         syncPairDao.updateLastSyncResult(pairId, System.currentTimeMillis(), RESULT_SUCCESS)
+                        syncEventRepository.log(pairId, SyncEventLevel.INFO, LOG_TAG, "Sync succeeded: ${r.applied} applied, ${r.conflicts} conflicts")
                         Result.success()
                     }
                     is SyncEngine.Result.PartialFailure -> {
                         Timber.w("Sync for pair %d completed with %d errors", pairId, r.errors.size)
                         syncPairDao.updateLastSyncResult(pairId, System.currentTimeMillis(), RESULT_PARTIAL_FAILURE)
+                        syncEventRepository.log(pairId, SyncEventLevel.WARN, LOG_TAG, "Sync partial failure: ${r.applied} applied, ${r.errors.size} errors — ${r.errors.joinToString("; ")}")
                         Result.success()
                     }
                     is SyncEngine.Result.Retriable -> {
                         Timber.i("Retrying sync for pair %d: %s", pairId, r.reason)
+                        syncEventRepository.log(pairId, SyncEventLevel.WARN, LOG_TAG, "Sync retriable, will retry: ${r.reason}")
                         Result.retry()
                     }
                     is SyncEngine.Result.Terminal -> {
@@ -147,6 +155,7 @@ class SyncWorker @AssistedInject constructor(
                         // user can re-authenticate / reconfigure the pair.
                         Timber.w("Terminal sync failure for pair %d: %s", pairId, r.reason)
                         syncPairDao.updateLastSyncResult(pairId, System.currentTimeMillis(), RESULT_FAILURE)
+                        syncEventRepository.log(pairId, SyncEventLevel.ERROR, LOG_TAG, "Sync failed (terminal): ${r.reason}")
                         WorkManager.getInstance(applicationContext).cancelUniqueWork(uniqueName(pairId))
                         Result.failure()
                     }
@@ -156,6 +165,7 @@ class SyncWorker @AssistedInject constructor(
                 throw c
             } catch (t: Throwable) {
                 Timber.w(t, "Sync failed for pair %d", pairId)
+                syncEventRepository.log(pairId, SyncEventLevel.ERROR, LOG_TAG, "Sync threw an exception, will retry: ${t.message}")
                 Result.retry()
             } finally {
                 foregroundJob.cancel()
@@ -207,6 +217,9 @@ class SyncWorker @AssistedInject constructor(
         const val RESULT_SUCCESS = "SUCCESS"
         const val RESULT_PARTIAL_FAILURE = "PARTIAL_FAILURE"
         const val RESULT_FAILURE = "FAILURE"
+
+        /** Tag used for [SyncEventRepository] log entries written by this worker. */
+        private const val LOG_TAG = "SyncWorker"
 
         /**
          * Produces a deterministic unique WorkManager name for a SyncPair.
