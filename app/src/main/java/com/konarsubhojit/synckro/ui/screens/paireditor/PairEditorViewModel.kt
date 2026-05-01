@@ -84,7 +84,12 @@ class PairEditorViewModel @Inject constructor(
                     it.copy(
                         isLoading = false,
                         displayName = entity.displayName,
-                        localTreeUri = entity.localTreeUri,
+                        // Prefer any URI already set via the savedStateHandle (e.g. freshly picked
+                        // before this coroutine completed) over the persisted value, to avoid a
+                        // race condition where loadExisting overwrites a new selection.
+                        localTreeUri = savedStateHandle.get<String?>(KEY_LOCAL_TREE_URI)
+                            ?.takeIf { uri -> uri.isNotBlank() }
+                            ?: entity.localTreeUri,
                         provider = entity.provider,
                         remoteFolderId = entity.remoteFolderId,
                         conflictPolicy = entity.conflictPolicy,
@@ -122,6 +127,10 @@ class PairEditorViewModel @Inject constructor(
         val s = _state.value
         if (s.displayName.isBlank()) {
             _state.update { it.copy(saveError = strings.getString(R.string.pair_editor_error_name_required)) }
+            return
+        }
+        if (s.localTreeUri.isBlank()) {
+            _state.update { it.copy(saveError = strings.getString(R.string.pair_editor_error_folder_required)) }
             return
         }
         _state.update { it.copy(isSaving = true, saveError = null) }
@@ -167,5 +176,10 @@ class PairEditorViewModel @Inject constructor(
     companion object {
         /** Key used to pass the chosen folder URI from [PickLocalFolderScreen] back to the editor. */
         const val KEY_LOCAL_TREE_URI = "localTreeUri"
+        /**
+         * Key used to pass the current folder URI from [PairEditorScreen] to
+         * [PickLocalFolderScreen] so the picker can pre-populate the current selection.
+         */
+        const val KEY_PICK_FOLDER_INITIAL_URI = "pickFolderInitialUri"
     }
 }

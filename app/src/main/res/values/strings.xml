@@ -60,6 +60,7 @@
     <string name="pair_editor_exclude_globs">Exclude patterns (one per line)</string>
     <string name="pair_editor_globs_hint">e.g. *.jpg or docs/**</string>
     <string name="pair_editor_error_name_required">Display name is required</string>
+    <string name="pair_editor_error_folder_required">Please select a local folder</string>
     <string name="pair_editor_error_save_failed">Save failed</string>
 
     <!-- Provider display names -->

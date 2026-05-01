@@ -57,6 +57,27 @@ class PairEditorViewModelTest {
         syncScheduler = mockSyncScheduler,
     )
 
+    /**
+     * Creates a [PairEditorViewModel] that already has a local folder URI set in the
+     * [SavedStateHandle], simulating what happens after the user picks a folder from
+     * [PickLocalFolderScreen]. The caller should still call `advanceUntilIdle()` inside
+     * a `runTest` block so the StateFlow emission is processed.
+     */
+    private fun createVmWithFolder(
+        folderUri: String = "content://com.android.externalstorage.documents/tree/primary%3ADownloads",
+        pairId: Long = 0L,
+    ): PairEditorViewModel = PairEditorViewModel(
+        savedStateHandle = SavedStateHandle(
+            mapOf(
+                "pairId" to pairId,
+                PairEditorViewModel.KEY_LOCAL_TREE_URI to folderUri,
+            ),
+        ),
+        strings = mockStrings,
+        syncPairRepository = mockRepo,
+        syncScheduler = mockSyncScheduler,
+    )
+
     // -------------------------------------------------------------------------
     // Initial state
     // -------------------------------------------------------------------------
@@ -110,11 +131,26 @@ class PairEditorViewModelTest {
     }
 
     @Test
+    fun `save with blank localTreeUri sets saveError`() = runTest {
+        val vm = createVm()
+        vm.onDisplayNameChange("Test Pair")
+        // localTreeUri is empty by default
+        var savedId: Long? = null
+        vm.save { savedId = it }
+        advanceUntilIdle()
+
+        assertNull("onSaved must not be called when local folder is missing", savedId)
+        assertTrue(vm.state.value.saveError?.isNotEmpty() == true)
+    }
+
+    @Test
     fun `save with valid state calls repository upsert`() = runTest {
         coEvery { mockRepo.upsert(any()) } returns 42L
 
-        val vm = createVm()
+        val vm = createVmWithFolder()
         vm.onDisplayNameChange("Test Pair")
+        advanceUntilIdle()
+
         var savedId: Long? = null
         vm.save { savedId = it }
         advanceUntilIdle()
@@ -129,8 +165,10 @@ class PairEditorViewModelTest {
     fun `save with valid state schedules periodic sync`() = runTest {
         coEvery { mockRepo.upsert(any()) } returns 42L
 
-        val vm = createVm()
+        val vm = createVmWithFolder()
         vm.onDisplayNameChange("Test Pair")
+        advanceUntilIdle()
+
         vm.save {}
         advanceUntilIdle()
 
@@ -142,8 +180,10 @@ class PairEditorViewModelTest {
         coEvery { mockRepo.upsert(any()) } returns 42L
         every { mockSyncScheduler.schedulePeriodic(any(), any()) } throws RuntimeException("WorkManager unavailable")
 
-        val vm = createVm()
+        val vm = createVmWithFolder()
         vm.onDisplayNameChange("Test Pair")
+        advanceUntilIdle()
+
         var savedId: Long? = null
         vm.save { savedId = it }
         advanceUntilIdle()
@@ -173,6 +213,37 @@ class PairEditorViewModelTest {
         advanceUntilIdle()
 
         assertEquals(uri, vm.state.value.localTreeUri)
+    }
+
+    @Test
+    fun `freshly picked folder URI is not overwritten by loadExisting`() = runTest {
+        val freshUri = "content://com.android.externalstorage.documents/tree/primary%3ANewFolder"
+        val savedStateHandle = SavedStateHandle(
+            mapOf(
+                "pairId" to 7L,
+                PairEditorViewModel.KEY_LOCAL_TREE_URI to freshUri,
+            ),
+        )
+        val existingPair = SyncPair(
+            id = 7L,
+            displayName = "Existing Pair",
+            localTreeUri = "content://old/uri",
+            provider = CloudProviderType.FAKE,
+            remoteFolderId = "remote",
+        )
+        coEvery { mockRepo.getById(7L) } returns existingPair
+
+        val vm = PairEditorViewModel(
+            savedStateHandle = savedStateHandle,
+            strings = mockStrings,
+            syncPairRepository = mockRepo,
+            syncScheduler = mockSyncScheduler,
+        )
+        advanceUntilIdle()
+
+        // The freshly picked URI in the savedStateHandle must take priority over the
+        // stored URI loaded by loadExisting().
+        assertEquals(freshUri, vm.state.value.localTreeUri)
     }
 
     // -------------------------------------------------------------------------

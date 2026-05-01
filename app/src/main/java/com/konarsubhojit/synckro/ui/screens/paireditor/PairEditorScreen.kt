@@ -38,8 +38,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.documentfile.provider.DocumentFile
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.konarsubhojit.synckro.R
@@ -64,12 +66,13 @@ import com.konarsubhojit.synckro.domain.model.SyncDirection
 fun PairEditorScreen(
     pairId: Long = 0L,
     onBack: () -> Unit,
-    onPickFolder: () -> Unit,
+    onPickFolder: (String?) -> Unit,
     onSaved: (Long) -> Unit,
     viewModel: PairEditorViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
+    val context = LocalContext.current
 
     LaunchedEffect(state.saveError) {
         val err = state.saveError ?: return@LaunchedEffect
@@ -127,14 +130,26 @@ fun PairEditorScreen(
                 )
 
                 // Local folder picker
+                val localFolderDisplayName = remember(state.localTreeUri) {
+                    if (state.localTreeUri.isEmpty()) {
+                        ""
+                    } else {
+                        runCatching {
+                            val uri = android.net.Uri.parse(state.localTreeUri)
+                            DocumentFile.fromTreeUri(context, uri)?.name ?: state.localTreeUri
+                        }.getOrDefault(state.localTreeUri)
+                    }
+                }
                 OutlinedTextField(
-                    value = state.localTreeUri,
+                    value = localFolderDisplayName,
                     onValueChange = {},
                     readOnly = true,
                     label = { Text(stringResource(R.string.pair_editor_local_folder)) },
                     placeholder = { Text(stringResource(R.string.pair_editor_local_folder_hint)) },
                     trailingIcon = {
-                        IconButton(onClick = onPickFolder) {
+                        IconButton(onClick = {
+                            onPickFolder(state.localTreeUri.ifEmpty { null })
+                        }) {
                             Icon(
                                 Icons.Filled.FolderOpen,
                                 contentDescription = stringResource(R.string.pair_editor_pick_folder),
