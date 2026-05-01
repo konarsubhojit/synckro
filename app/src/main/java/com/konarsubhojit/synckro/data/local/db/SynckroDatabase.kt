@@ -7,9 +7,11 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.konarsubhojit.synckro.data.local.dao.AccountDao
 import com.konarsubhojit.synckro.data.local.dao.FileIndexDao
+import com.konarsubhojit.synckro.data.local.dao.SyncEventDao
 import com.konarsubhojit.synckro.data.local.dao.SyncPairDao
 import com.konarsubhojit.synckro.data.local.entity.AccountEntity
 import com.konarsubhojit.synckro.data.local.entity.FileIndexEntity
+import com.konarsubhojit.synckro.data.local.entity.SyncEventEntity
 import com.konarsubhojit.synckro.data.local.entity.SyncPairEntity
 import com.konarsubhojit.synckro.domain.model.CloudProviderType
 import com.konarsubhojit.synckro.domain.model.ConflictPolicy
@@ -62,8 +64,8 @@ class EnumConverters {
 }
 
 @Database(
-    entities = [AccountEntity::class, SyncPairEntity::class, FileIndexEntity::class],
-    version = 4,
+    entities = [AccountEntity::class, SyncPairEntity::class, FileIndexEntity::class, SyncEventEntity::class],
+    version = 5,
     exportSchema = true,
 )
 @TypeConverters(EnumConverters::class)
@@ -87,6 +89,13 @@ abstract class SynckroDatabase : RoomDatabase() {
  * @return The {@link FileIndexDao} used to access and modify file index data.
  */
 abstract fun fileIndexDao(): FileIndexDao
+
+    /**
+     * Returns the DAO for reading and writing structured sync-event log entries.
+     *
+     * @return The [SyncEventDao] for the `sync_event` table.
+     */
+    abstract fun syncEventDao(): SyncEventDao
 
     companion object {
         const val NAME = "synckro.db"
@@ -125,6 +134,27 @@ abstract fun fileIndexDao(): FileIndexDao
         val MIGRATION_3_4 = object : Migration(3, 4) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE `sync_pair` ADD COLUMN `lastSyncResult` TEXT")
+            }
+        }
+
+        /**
+         * Migrates the database from version 4 to 5 by creating the `sync_event` table.
+         * This table stores structured log entries associated with sync-pair runs.
+         */
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `sync_event` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`pairId` INTEGER, " +
+                        "`timestampMs` INTEGER NOT NULL, " +
+                        "`level` TEXT NOT NULL, " +
+                        "`tag` TEXT NOT NULL, " +
+                        "`message` TEXT NOT NULL, " +
+                        "FOREIGN KEY(`pairId`) REFERENCES `sync_pair`(`id`) ON DELETE CASCADE)"
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_sync_event_pairId` ON `sync_event` (`pairId`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_sync_event_timestampMs` ON `sync_event` (`timestampMs`)")
             }
         }
     }

@@ -14,6 +14,7 @@ import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
@@ -50,6 +51,7 @@ fun HomeScreen(
     onAddSyncPair: () -> Unit,
     onEditSyncPair: (Long) -> Unit,
     onOpenAccounts: () -> Unit,
+    onOpenLogs: () -> Unit,
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -59,6 +61,12 @@ fun HomeScreen(
             TopAppBar(
                 title = { Text(stringResource(R.string.home_title)) },
                 actions = {
+                    IconButton(onClick = onOpenLogs) {
+                        Icon(
+                            Icons.Default.History,
+                            contentDescription = stringResource(R.string.logs_action),
+                        )
+                    }
                     IconButton(onClick = onOpenAccounts) {
                         Icon(
                             Icons.Default.AccountCircle,
