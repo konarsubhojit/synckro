@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Lint baseline for Synckro. Lists pre-existing lint issues that are
+    intentionally suppressed so that only NEW warnings introduced after this
+    baseline was generated fail the build.
+
+    To regenerate after resolving issues or after a large merge:
+        ./gradlew lintDebug -Dlint.baselines.continue=true
+    or:
+        ./gradlew updateLintBaseline
+-->
+<issues format="6" by="lint 8.5.2">
+
+</issues>

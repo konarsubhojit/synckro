@@ -63,10 +63,22 @@ android {
                 "proguard-rules.pro",
             )
         }
+        // Benchmark build type: inherits release settings (no debug overhead) but disables
+        // R8 minification and resource shrinking so the build completes cleanly on CI.
+        // The :benchmark module's own "benchmark" build type matches this by name, so no
+        // matchingFallbacks override is needed in benchmark/build.gradle.kts.
+        create("benchmark") {
+            initWith(getByName("release"))
+            isMinifyEnabled = false
+            isShrinkResources = false
+            signingConfig = signingConfigs.getByName("debug")
+        }
         debug {
             isMinifyEnabled = false
             applicationIdSuffix = ".debug"
             versionNameSuffix = "-debug"
+            enableUnitTestCoverage = true
+            enableAndroidTestCoverage = true
             val pinned = signingConfigs.getByName("debugPinned")
             if (pinned.storeFile != null) {
                 signingConfig = pinned
@@ -134,6 +146,16 @@ android {
 
     testOptions {
         unitTests.isIncludeAndroidResources = true
+    }
+
+    lint {
+        // Treat lint errors as build failures. New issues not captured in the
+        // baseline below will break the build so regressions are caught in CI.
+        abortOnError = true
+        warningsAsErrors = false
+        // Baseline captures pre-existing issues; only NEW problems fail the build.
+        // Regenerate with: ./gradlew lintDebug -Dlint.baselines.continue=true
+        baseline = file("lint-baseline.xml")
     }
 }
 
@@ -258,6 +280,9 @@ dependencies {
 
     // Logging
     implementation(libs.timber)
+
+    // Macrobenchmark: baseline-profile precompilation support.
+    implementation(libs.profileinstaller)
 
     // Unit tests
     testImplementation(libs.junit)

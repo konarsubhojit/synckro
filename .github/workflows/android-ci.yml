@@ -59,7 +59,7 @@ jobs:
             build-tools;${{ env.ANDROID_BUILD_TOOLS_VERSION }}
 
       - name: Decode debug keystore
-        if: env.DEBUG_KEYSTORE_BASE64 != ''
+        if: secrets.DEBUG_KEYSTORE_BASE64 != ''
         env:
           DEBUG_KEYSTORE_BASE64: ${{ secrets.DEBUG_KEYSTORE_BASE64 }}
         run: echo "$DEBUG_KEYSTORE_BASE64" | base64 --decode > "${{ github.workspace }}/debug.keystore"
@@ -74,10 +74,133 @@ jobs:
           DEBUG_KEY_ALIAS: ${{ secrets.DEBUG_KEY_ALIAS }}
           DEBUG_KEY_PASSWORD: ${{ secrets.DEBUG_KEY_PASSWORD }}
         run: ./gradlew testDebugUnitTest lintDebug assembleDebug
+
       - name: Upload debug APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: synckro-debug-apk-${{ github.run_number }}
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload unit-test coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-unit-tests-${{ github.run_number }}
+          path: app/build/reports/coverage/test/debug/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  instrumentation-tests:
+    name: Instrumentation tests (API ${{ matrix.api-level }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        api-level: [26, 34]
+
+    steps:
+      - name: Set up emulator environment
+        uses: ./.github/actions/setup-emulator-env
+        with:
+          keystore-base64: ${{ secrets.DEBUG_KEYSTORE_BASE64 }}
+
+      - name: Cache AVD
+        uses: actions/cache@v4
+        id: avd-cache
+        with:
+          path: |
+            ~/.android/avd/*
+            ~/.android/adb*
+          key: avd-api-${{ matrix.api-level }}-v1
+
+      - name: Run instrumentation tests on API ${{ matrix.api-level }}
+        uses: reactivecircus/android-emulator-runner@v2
+        env:
+          GOOGLE_WEB_CLIENT_ID: ${{ secrets.GOOGLE_WEB_CLIENT_ID }}
+          MS_CLIENT_ID: ${{ secrets.MS_CLIENT_ID }}
+          MSAL_REDIRECT_URI: ${{ secrets.MSAL_REDIRECT_URI }}
+          DEBUG_KEYSTORE_PATH: ${{ github.workspace }}/debug.keystore
+          DEBUG_KEYSTORE_PASSWORD: ${{ secrets.DEBUG_KEYSTORE_PASSWORD }}
+          DEBUG_KEY_ALIAS: ${{ secrets.DEBUG_KEY_ALIAS }}
+          DEBUG_KEY_PASSWORD: ${{ secrets.DEBUG_KEY_PASSWORD }}
+        with:
+          api-level: ${{ matrix.api-level }}
+          arch: x86_64
+          profile: pixel_3a
+          target: google_apis
+          avd-name: synckro-avd-api${{ matrix.api-level }}
+          force-avd-creation: false
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          script: ./gradlew connectedDebugAndroidTest
+
+      - name: Upload instrumentation test results (API ${{ matrix.api-level }})
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: instrumentation-test-results-api${{ matrix.api-level }}-${{ github.run_number }}
+          path: |
+            app/build/reports/androidTests/connected/
+            app/build/outputs/androidTest-results/
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Upload connected-test coverage report (API ${{ matrix.api-level }})
+        if: matrix.api-level == 34
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-connected-tests-api${{ matrix.api-level }}-${{ github.run_number }}
+          path: app/build/reports/coverage/androidTest/debug/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  macrobenchmark:
+    name: Macrobenchmark (API 34)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Set up emulator environment
+        uses: ./.github/actions/setup-emulator-env
+        with:
+          keystore-base64: ${{ secrets.DEBUG_KEYSTORE_BASE64 }}
+
+      - name: Cache AVD (macrobenchmark)
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.android/avd/*
+            ~/.android/adb*
+          key: avd-api-34-benchmark-v1
+
+      - name: Run macrobenchmarks
+        uses: reactivecircus/android-emulator-runner@v2
+        env:
+          GOOGLE_WEB_CLIENT_ID: ${{ secrets.GOOGLE_WEB_CLIENT_ID }}
+          MS_CLIENT_ID: ${{ secrets.MS_CLIENT_ID }}
+          MSAL_REDIRECT_URI: ${{ secrets.MSAL_REDIRECT_URI }}
+          DEBUG_KEYSTORE_PATH: ${{ github.workspace }}/debug.keystore
+          DEBUG_KEYSTORE_PASSWORD: ${{ secrets.DEBUG_KEYSTORE_PASSWORD }}
+          DEBUG_KEY_ALIAS: ${{ secrets.DEBUG_KEY_ALIAS }}
+          DEBUG_KEY_PASSWORD: ${{ secrets.DEBUG_KEY_PASSWORD }}
+        with:
+          api-level: 34
+          arch: x86_64
+          profile: pixel_3a
+          target: google_apis
+          avd-name: synckro-avd-api34-benchmark
+          force-avd-creation: false
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          script: ./gradlew :benchmark:connectedBenchmarkAndroidTest
+
+      - name: Upload macrobenchmark results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: macrobenchmark-results-${{ github.run_number }}
+          path: benchmark/build/outputs/androidTest-results/
+          if-no-files-found: ignore
           retention-days: 14
