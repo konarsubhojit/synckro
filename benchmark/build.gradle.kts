@@ -35,12 +35,12 @@ android {
     }
 
     buildTypes {
-        // "benchmark" build type: debuggable so the test APK can attach, but
-        // compiled with release-like optimisations via matchingFallbacks.
+        // "benchmark" build type: debuggable so the test APK can attach to the
+        // profiled process. Matches the "benchmark" build type in :app by name,
+        // so no matchingFallbacks are required.
         create("benchmark") {
             isDebuggable = true
             signingConfig = signingConfigs.getByName("debug")
-            matchingFallbacks += listOf("release")
         }
     }
 

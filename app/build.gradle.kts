@@ -63,6 +63,16 @@ android {
                 "proguard-rules.pro",
             )
         }
+        // Benchmark build type: inherits release settings (no debug overhead) but disables
+        // R8 minification and resource shrinking so the build completes cleanly on CI.
+        // The :benchmark module's own "benchmark" build type matches this by name, so no
+        // matchingFallbacks override is needed in benchmark/build.gradle.kts.
+        create("benchmark") {
+            initWith(getByName("release"))
+            isMinifyEnabled = false
+            isShrinkResources = false
+            signingConfig = signingConfigs.getByName("debug")
+        }
         debug {
             isMinifyEnabled = false
             applicationIdSuffix = ".debug"
