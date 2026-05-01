@@ -72,8 +72,8 @@ class SyncWorker @AssistedInject constructor(
      * When the sync has been running for [FOREGROUND_PROMOTE_DELAY_MS] (30 s) the worker
      * promotes itself to a foreground service so the transfer survives process death.
      *
-     * After each successful or partially-failed run the worker persists the timestamp and
-     * outcome to the database.
+     * After each completed run (Success, PartialFailure, or Terminal failure) the worker persists
+     * the timestamp and outcome to the database.
      *
      * Mapping of engine results to WorkManager results:
      * - `SyncEngine.Result.Success` → `Result.success()`
@@ -167,11 +167,11 @@ class SyncWorker @AssistedInject constructor(
 
     private fun buildForegroundInfo(pairId: Long, displayName: String): ForegroundInfo {
         val notification = buildProgressNotification(displayName)
-        // Clamp pairId into Int range for the notification ID. We mask the lower
-        // 16 bits so that the resulting Int is always positive and small enough to
-        // avoid wrapping. The NOTIFICATION_ID_BASE offset prevents accidental
-        // collisions with notification IDs used elsewhere in the app.
-        val notificationId = NOTIFICATION_ID_BASE + (pairId and 0x0000_FFFFL).toInt()
+        // Clamp pairId into Int range for the notification ID. We keep the lower
+        // 16 bits (0–65535) so that the resulting Int is always positive and small
+        // enough to avoid wrapping. The NOTIFICATION_ID_BASE offset prevents
+        // accidental collisions with notification IDs used elsewhere in the app.
+        val notificationId = NOTIFICATION_ID_BASE + (pairId and 0xFFFFL).toInt()
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             ForegroundInfo(notificationId, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
         } else {
