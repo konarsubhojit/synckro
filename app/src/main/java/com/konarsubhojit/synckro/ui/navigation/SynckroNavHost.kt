@@ -80,14 +80,23 @@ fun SynckroNavHost(activity: ComponentActivity) {
             PairEditorScreen(
                 pairId = pairId,
                 onBack = { nav.popBackStack() },
-                onPickFolder = {
+                onPickFolder = { initialUri ->
+                    // Store the current folder URI so PickLocalFolderScreen can pre-populate it.
+                    backStackEntry.savedStateHandle[PairEditorViewModel.KEY_PICK_FOLDER_INITIAL_URI] =
+                        initialUri
                     nav.navigate(Routes.PICK_FOLDER) { launchSingleTop = true }
                 },
                 onSaved = { nav.popBackStack() },
             )
         }
         composable(Routes.PICK_FOLDER) {
+            // Read the current folder URI stored by PairEditorScreen before navigating here,
+            // so the picker can show the already-selected folder.
+            val initialUri = nav.previousBackStackEntry
+                ?.savedStateHandle
+                ?.get<String?>(PairEditorViewModel.KEY_PICK_FOLDER_INITIAL_URI)
             PickLocalFolderScreen(
+                initialUri = initialUri,
                 onFolderPicked = { uriString ->
                     // Pass the chosen URI back to the PairEditorScreen via its
                     // SavedStateHandle so PairEditorViewModel can update its state.
