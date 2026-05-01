@@ -53,6 +53,11 @@ class PairEditorViewModel @Inject constructor(
         val direction: SyncDirection = SyncDirection.BIDIRECTIONAL,
         val wifiOnly: Boolean = true,
         val requiresCharging: Boolean = false,
+        val scheduleIntervalMinutes: Long = 60L,
+        /** Newline-separated glob patterns. */
+        val includeGlobsText: String = "",
+        /** Newline-separated glob patterns. */
+        val excludeGlobsText: String = "",
         val isSaving: Boolean = false,
         val saveError: String? = null,
     )
@@ -86,6 +91,9 @@ class PairEditorViewModel @Inject constructor(
                         direction = entity.direction,
                         wifiOnly = entity.wifiOnly,
                         requiresCharging = entity.requiresCharging,
+                        scheduleIntervalMinutes = entity.scheduleIntervalMinutes,
+                        includeGlobsText = entity.includeGlobs.joinToString("\n"),
+                        excludeGlobsText = entity.excludeGlobs.joinToString("\n"),
                     )
                 }
             } else {
@@ -102,6 +110,9 @@ class PairEditorViewModel @Inject constructor(
     fun onDirectionChange(value: SyncDirection) = _state.update { it.copy(direction = value) }
     fun onWifiOnlyChange(value: Boolean) = _state.update { it.copy(wifiOnly = value) }
     fun onRequiresChargingChange(value: Boolean) = _state.update { it.copy(requiresCharging = value) }
+    fun onScheduleIntervalChange(value: Long) = _state.update { it.copy(scheduleIntervalMinutes = value) }
+    fun onIncludeGlobsChange(value: String) = _state.update { it.copy(includeGlobsText = value) }
+    fun onExcludeGlobsChange(value: String) = _state.update { it.copy(excludeGlobsText = value) }
 
     /**
      * Validates and persists the current form state. Calls [onSaved] with the
@@ -126,12 +137,12 @@ class PairEditorViewModel @Inject constructor(
                     direction = s.direction,
                     wifiOnly = s.wifiOnly,
                     requiresCharging = s.requiresCharging,
+                    scheduleIntervalMinutes = s.scheduleIntervalMinutes,
+                    includeGlobs = s.includeGlobsText.split('\n').map { it.trim() }.filter { it.isNotBlank() },
+                    excludeGlobs = s.excludeGlobsText.split('\n').map { it.trim() }.filter { it.isNotBlank() },
                 )
                 val savedId = syncPairRepository.upsert(pair)
-                // Schedule periodic sync for this pair now that it is persisted.
-                // Using the saved id so the pair object has the correct primary key
-                // even when creating a new pair (pairId == 0 → savedId != 0).
-                syncScheduler.schedulePeriodic(pair.copy(id = savedId))
+                syncScheduler.schedulePeriodic(pair.copy(id = savedId), pair.scheduleIntervalMinutes)
                 savedId
             }.onSuccess { savedId ->
                 _state.update { it.copy(isSaving = false) }

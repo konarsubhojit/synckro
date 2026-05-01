@@ -4,15 +4,18 @@ import android.content.Context
 import androidx.room.Room
 import androidx.work.WorkManager
 import com.konarsubhojit.synckro.data.local.dao.AccountDao
+import com.konarsubhojit.synckro.data.local.dao.ConflictRecordDao
 import com.konarsubhojit.synckro.data.local.dao.FileIndexDao
 import com.konarsubhojit.synckro.data.local.dao.SyncPairDao
 import com.konarsubhojit.synckro.data.local.db.SynckroDatabase
+import com.konarsubhojit.synckro.data.repository.ConflictRepository
 import com.konarsubhojit.synckro.data.scanner.LocalFolderScannerImpl
 import com.konarsubhojit.synckro.data.worker.SyncScheduler
 import com.konarsubhojit.synckro.domain.auth.AuthManager
 import com.konarsubhojit.synckro.domain.model.CloudProviderType
 import com.konarsubhojit.synckro.domain.scan.LocalFolderScanner
 import com.konarsubhojit.synckro.domain.sync.SyncEngine
+import com.konarsubhojit.synckro.providers.fake.FakeCloudProvider
 import com.konarsubhojit.synckro.providers.gdrive.GoogleDriveAuthManager
 import com.konarsubhojit.synckro.providers.onedrive.OneDriveAuthManager
 import com.konarsubhojit.synckro.util.ContextStringProvider
@@ -42,7 +45,12 @@ object AppModule {
     @Provides @Singleton
     fun provideDatabase(@ApplicationContext ctx: Context): SynckroDatabase {
         val builder = Room.databaseBuilder(ctx, SynckroDatabase::class.java, SynckroDatabase.NAME)
-            .addMigrations(SynckroDatabase.MIGRATION_1_2, SynckroDatabase.MIGRATION_2_3, SynckroDatabase.MIGRATION_3_4)
+            .addMigrations(
+                SynckroDatabase.MIGRATION_1_2,
+                SynckroDatabase.MIGRATION_2_3,
+                SynckroDatabase.MIGRATION_3_4,
+                SynckroDatabase.MIGRATION_4_5,
+            )
         // Destructive fallback is only acceptable while the schema is still
         // pre-1.0. In release builds we refuse to drop user sync state and
         // require explicit migrations.
@@ -77,6 +85,12 @@ object AppModule {
     @Provides
     fun provideFileIndexDao(db: SynckroDatabase): FileIndexDao = db.fileIndexDao()
 
+    @Provides
+    fun provideConflictRecordDao(db: SynckroDatabase): ConflictRecordDao = db.conflictRecordDao()
+
+    @Provides @Singleton
+    fun provideFakeCloudProvider(): FakeCloudProvider = FakeCloudProvider()
+
     /**
      * Provides the application WorkManager instance.
      *
@@ -102,7 +116,10 @@ object AppModule {
      * @return A `SyncEngine` instance used to perform and manage synchronization operations.
      */
     @Provides @Singleton
-    fun provideSyncEngine(): SyncEngine = SyncEngine()
+    fun provideSyncEngine(
+        conflictRepository: ConflictRepository,
+        fakeProvider: FakeCloudProvider,
+    ): SyncEngine = SyncEngine(conflictRepository, fakeProvider)
 
     @Provides @IntoMap @CloudProviderKey(CloudProviderType.ONEDRIVE) @Singleton
     fun provideOneDriveAuthManager(impl: OneDriveAuthManager): AuthManager = impl

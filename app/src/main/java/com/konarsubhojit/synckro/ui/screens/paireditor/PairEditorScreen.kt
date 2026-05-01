@@ -207,6 +207,37 @@ fun PairEditorScreen(
                     )
                 }
 
+                // Schedule interval
+                OutlinedTextField(
+                    value = state.scheduleIntervalMinutes.toString(),
+                    onValueChange = { v ->
+                        v.toLongOrNull()?.let { viewModel.onScheduleIntervalChange(it) }
+                    },
+                    label = { Text(stringResource(R.string.pair_editor_schedule_interval)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+
+                // Include globs
+                OutlinedTextField(
+                    value = state.includeGlobsText,
+                    onValueChange = viewModel::onIncludeGlobsChange,
+                    label = { Text(stringResource(R.string.pair_editor_include_globs)) },
+                    placeholder = { Text(stringResource(R.string.pair_editor_globs_hint)) },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 2,
+                )
+
+                // Exclude globs
+                OutlinedTextField(
+                    value = state.excludeGlobsText,
+                    onValueChange = viewModel::onExcludeGlobsChange,
+                    label = { Text(stringResource(R.string.pair_editor_exclude_globs)) },
+                    placeholder = { Text(stringResource(R.string.pair_editor_globs_hint)) },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 2,
+                )
+
                 Spacer(Modifier.height(8.dp))
 
                 Button(

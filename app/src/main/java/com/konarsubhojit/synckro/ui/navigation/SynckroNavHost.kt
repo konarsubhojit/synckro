@@ -10,6 +10,7 @@ import androidx.navigation.navArgument
 import com.konarsubhojit.synckro.ui.screens.HomeScreen
 import com.konarsubhojit.synckro.ui.screens.OnboardingScreen
 import com.konarsubhojit.synckro.ui.screens.accounts.AccountsScreen
+import com.konarsubhojit.synckro.ui.screens.conflictinbox.ConflictInboxScreen
 import com.konarsubhojit.synckro.ui.screens.paireditor.PairEditorScreen
 import com.konarsubhojit.synckro.ui.screens.paireditor.PairEditorViewModel
 import com.konarsubhojit.synckro.ui.screens.pickfolder.PickLocalFolderScreen
@@ -18,6 +19,7 @@ object Routes {
     const val ONBOARDING = "onboarding"
     const val HOME = "home"
     const val ACCOUNTS = "accounts"
+    const val CONFLICT_INBOX = "conflict_inbox"
     /** Optional query parameter `pairId`; defaults to 0 (create mode). */
     const val PAIR_EDITOR = "pair_editor?pairId={pairId}"
     const val PICK_FOLDER = "pick_folder"
@@ -46,6 +48,9 @@ fun SynckroNavHost(activity: ComponentActivity) {
                 },
                 onOpenAccounts = {
                     nav.navigate(Routes.ACCOUNTS) { launchSingleTop = true }
+                },
+                onOpenConflictInbox = {
+                    nav.navigate(Routes.CONFLICT_INBOX) { launchSingleTop = true }
                 },
             )
         }
@@ -84,6 +89,11 @@ fun SynckroNavHost(activity: ComponentActivity) {
                         ?.set(PairEditorViewModel.KEY_LOCAL_TREE_URI, uriString)
                     nav.popBackStack()
                 },
+                onBack = { nav.popBackStack() },
+            )
+        }
+        composable(Routes.CONFLICT_INBOX) {
+            ConflictInboxScreen(
                 onBack = { nav.popBackStack() },
             )
         }

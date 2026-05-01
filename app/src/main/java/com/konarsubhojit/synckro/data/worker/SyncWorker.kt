@@ -110,6 +110,7 @@ class SyncWorker @AssistedInject constructor(
             excludeGlobs = entity.excludeGlobs.split('\n').filter { it.isNotBlank() },
             wifiOnly = entity.wifiOnly,
             requiresCharging = entity.requiresCharging,
+            scheduleIntervalMinutes = entity.scheduleIntervalMinutes,
         )
 
         return coroutineScope {

@@ -7,6 +7,7 @@ import androidx.room.Query
 import androidx.room.Transaction
 import androidx.room.Upsert
 import com.konarsubhojit.synckro.data.local.entity.AccountEntity
+import com.konarsubhojit.synckro.data.local.entity.ConflictRecordEntity
 import com.konarsubhojit.synckro.data.local.entity.FileIndexEntity
 import com.konarsubhojit.synckro.data.local.entity.SyncPairEntity
 import com.konarsubhojit.synckro.domain.model.CloudProviderType
@@ -271,4 +272,36 @@ interface FileIndexDao {
             deleteStaleForPair(pairId, seenPaths)
         }
     }
+}
+
+@Dao
+interface ConflictRecordDao {
+
+    /** Observes all unresolved (resolution IS NULL) conflict records across all pairs. */
+    @Query("SELECT * FROM conflict_record WHERE resolution IS NULL ORDER BY detectedAtMs DESC")
+    fun observeUnresolved(): Flow<List<ConflictRecordEntity>>
+
+    /** Observes all conflict records (resolved and unresolved) for a specific pair. */
+    @Query("SELECT * FROM conflict_record WHERE pairId = :pairId ORDER BY detectedAtMs DESC")
+    fun observeForPair(pairId: Long): Flow<List<ConflictRecordEntity>>
+
+    /** Returns all resolved records for a specific pair (resolution IS NOT NULL). */
+    @Query("SELECT * FROM conflict_record WHERE pairId = :pairId AND resolution IS NOT NULL")
+    suspend fun getResolvedForPair(pairId: Long): List<ConflictRecordEntity>
+
+    /** Inserts a new conflict record. Ignores duplicate (pairId, relativePath) by replacing. */
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insert(record: ConflictRecordEntity): Long
+
+    /** Sets the resolution for the conflict with the given id. */
+    @Query("UPDATE conflict_record SET resolution = :resolution WHERE id = :id")
+    suspend fun resolve(id: Long, resolution: String)
+
+    /** Deletes the conflict record with the given id (e.g. after the engine has applied its resolution). */
+    @Query("DELETE FROM conflict_record WHERE id = :id")
+    suspend fun delete(id: Long)
+
+    /** Deletes all resolved conflict records for a pair (called after the engine has applied them). */
+    @Query("DELETE FROM conflict_record WHERE pairId = :pairId AND resolution IS NOT NULL")
+    suspend fun deleteResolvedForPair(pairId: Long)
 }

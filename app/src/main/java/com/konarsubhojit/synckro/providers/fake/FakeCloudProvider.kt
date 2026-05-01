@@ -27,6 +27,44 @@ class FakeCloudProvider : CloudProvider {
     private val mutex = Mutex()
 
     /**
+     * Forced conflicts that will be drained on the next [drainForcedConflicts] call.
+     * Call [forceConflict] to inject a conflict for the sync engine to detect.
+     */
+    private val forcedConflicts = mutableListOf<Triple<String, Long, Long>>()
+
+    /**
+     * Schedules a synthetic conflict for the file at [relativePath]. On the next call to
+     * [drainForcedConflicts] this will be returned as a [com.konarsubhojit.synckro.domain.sync.SyncOp.Conflict].
+     *
+     * @param relativePath The relative path of the conflicting file.
+     * @param localLastModifiedMs The local file's last-modified timestamp (epoch ms).
+     * @param remoteLastModifiedMs The remote file's last-modified timestamp (epoch ms).
+     */
+    fun forceConflict(
+        relativePath: String,
+        localLastModifiedMs: Long,
+        remoteLastModifiedMs: Long,
+    ) {
+        forcedConflicts += Triple(relativePath, localLastModifiedMs, remoteLastModifiedMs)
+    }
+
+    /**
+     * Returns all pending forced conflicts and clears the internal list.
+     * Called by the sync engine during a fake sync run.
+     */
+    suspend fun drainForcedConflicts(): List<com.konarsubhojit.synckro.domain.sync.SyncOp.Conflict> =
+        mutex.withLock {
+            val result = forcedConflicts.map { (path, localMs, remoteMs) ->
+                com.konarsubhojit.synckro.domain.sync.SyncOp.Conflict(
+                    relativePath = path,
+                    localNewerThanRemote = localMs >= remoteMs,
+                )
+            }
+            forcedConflicts.clear()
+            result
+        }
+
+    /**
      * Indicates whether the provider is authenticated.
      *
      * @return `true` if the provider is authenticated; always `true` for this fake provider.

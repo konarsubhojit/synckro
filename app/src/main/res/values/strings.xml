@@ -54,6 +54,10 @@
     <string name="pair_editor_wifi_only">Sync on Wi-Fi only</string>
     <string name="pair_editor_requires_charging">Sync only while charging</string>
     <string name="pair_editor_save">Save</string>
+    <string name="pair_editor_schedule_interval">Sync interval (minutes)</string>
+    <string name="pair_editor_include_globs">Include patterns (one per line)</string>
+    <string name="pair_editor_exclude_globs">Exclude patterns (one per line)</string>
+    <string name="pair_editor_globs_hint">e.g. *.jpg or docs/**</string>
     <string name="pair_editor_error_name_required">Display name is required</string>
     <string name="pair_editor_error_save_failed">Save failed</string>
 
@@ -107,6 +111,16 @@
 
     <!-- Navigation -->
     <string name="nav_back">Back</string>
+
+    <!-- Conflict inbox -->
+    <string name="conflict_inbox_title">Conflict inbox</string>
+    <string name="conflict_inbox_empty">No conflicts — everything is in sync.</string>
+    <string name="conflict_inbox_keep_local">Keep local</string>
+    <string name="conflict_inbox_keep_remote">Keep remote</string>
+    <string name="conflict_inbox_keep_both">Keep both</string>
+    <string name="conflict_inbox_detected_at">Detected: %1$s</string>
+    <string name="conflict_inbox_timestamps">Local: %1$s · Remote: %2$s</string>
+    <string name="conflict_inbox_pending_resolution">Queued: %1$s (will apply on next sync)</string>
 
     <!-- Sync notification (shown when a transfer runs as a foreground service) -->
     <string name="sync_channel_name">Sync progress</string>

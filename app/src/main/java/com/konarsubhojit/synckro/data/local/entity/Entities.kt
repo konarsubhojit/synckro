@@ -2,6 +2,7 @@ package com.konarsubhojit.synckro.data.local.entity
 
 import androidx.room.Entity
 import androidx.room.ForeignKey
+import androidx.room.Index
 import androidx.room.PrimaryKey
 import com.konarsubhojit.synckro.domain.model.CloudProviderType
 import com.konarsubhojit.synckro.domain.model.ConflictPolicy
@@ -34,6 +35,31 @@ data class SyncPairEntity(
     val lastSyncAtMs: Long? = null,
     /** Human-readable outcome of the last sync run: "SUCCESS", "PARTIAL_FAILURE", or "FAILURE". */
     val lastSyncResult: String? = null,
+    /** Desired periodic sync interval in minutes (minimum 15, WorkManager floor). */
+    val scheduleIntervalMinutes: Long = 60,
+)
+
+@Entity(
+    tableName = "conflict_record",
+    foreignKeys = [
+        ForeignKey(
+            entity = SyncPairEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["pairId"],
+            onDelete = ForeignKey.CASCADE,
+        ),
+    ],
+    indices = [Index("pairId")],
+)
+data class ConflictRecordEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val pairId: Long,
+    val relativePath: String,
+    val localLastModifiedMs: Long,
+    val remoteLastModifiedMs: Long,
+    val detectedAtMs: Long,
+    /** Resolution chosen by the user: null = pending, "KEEP_LOCAL", "KEEP_REMOTE", "KEEP_BOTH". */
+    val resolution: String? = null,
 )
 
 @Entity(

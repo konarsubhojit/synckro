@@ -6,9 +6,11 @@ import androidx.room.TypeConverters
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.konarsubhojit.synckro.data.local.dao.AccountDao
+import com.konarsubhojit.synckro.data.local.dao.ConflictRecordDao
 import com.konarsubhojit.synckro.data.local.dao.FileIndexDao
 import com.konarsubhojit.synckro.data.local.dao.SyncPairDao
 import com.konarsubhojit.synckro.data.local.entity.AccountEntity
+import com.konarsubhojit.synckro.data.local.entity.ConflictRecordEntity
 import com.konarsubhojit.synckro.data.local.entity.FileIndexEntity
 import com.konarsubhojit.synckro.data.local.entity.SyncPairEntity
 import com.konarsubhojit.synckro.domain.model.CloudProviderType
@@ -62,8 +64,8 @@ class EnumConverters {
 }
 
 @Database(
-    entities = [AccountEntity::class, SyncPairEntity::class, FileIndexEntity::class],
-    version = 4,
+    entities = [AccountEntity::class, SyncPairEntity::class, FileIndexEntity::class, ConflictRecordEntity::class],
+    version = 5,
     exportSchema = true,
 )
 @TypeConverters(EnumConverters::class)
@@ -87,6 +89,8 @@ abstract class SynckroDatabase : RoomDatabase() {
  * @return The {@link FileIndexDao} used to access and modify file index data.
  */
 abstract fun fileIndexDao(): FileIndexDao
+
+    abstract fun conflictRecordDao(): ConflictRecordDao
 
     companion object {
         const val NAME = "synckro.db"
@@ -125,6 +129,33 @@ abstract fun fileIndexDao(): FileIndexDao
         val MIGRATION_3_4 = object : Migration(3, 4) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE `sync_pair` ADD COLUMN `lastSyncResult` TEXT")
+            }
+        }
+        /**
+         * Migrates the database from version 4 to 5:
+         * - Adds `scheduleIntervalMinutes` column to `sync_pair` (default 60 minutes).
+         * - Creates the `conflict_record` table for the conflict inbox.
+         */
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "ALTER TABLE `sync_pair` ADD COLUMN `scheduleIntervalMinutes` INTEGER NOT NULL DEFAULT 60"
+                )
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `conflict_record` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`pairId` INTEGER NOT NULL, " +
+                        "`relativePath` TEXT NOT NULL, " +
+                        "`localLastModifiedMs` INTEGER NOT NULL, " +
+                        "`remoteLastModifiedMs` INTEGER NOT NULL, " +
+                        "`detectedAtMs` INTEGER NOT NULL, " +
+                        "`resolution` TEXT, " +
+                        "FOREIGN KEY(`pairId`) REFERENCES `sync_pair`(`id`) ON DELETE CASCADE)"
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_conflict_record_pairId` " +
+                        "ON `conflict_record` (`pairId`)"
+                )
             }
         }
     }
