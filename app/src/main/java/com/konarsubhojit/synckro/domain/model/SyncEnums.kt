@@ -17,6 +17,8 @@ enum class ConflictPolicy {
 
 /** Cloud provider backing a [SyncPair]. */
 enum class CloudProviderType {
+    /** In-memory provider used for testing and offline development (no auth required). */
+    FAKE,
     ONEDRIVE,
     GOOGLE_DRIVE,
 }

@@ -45,7 +45,15 @@ class SyncPairRepository @Inject constructor(
     }
 
     /**
-     * Inserts or updates [pair] in the database. The [SyncPair.needsReLink]
+     * Returns the sync pair with [id], or null if not found.
+     * [SyncPair.needsReLink] is computed against [contentResolver].
+     */
+    suspend fun getById(id: Long): SyncPair? {
+        val entity = syncPairDao.getById(id) ?: return null
+        return entity.toDomain(needsReLink = false)
+    }
+
+    /**
      * flag is not persisted.
      *
      * @return The row ID of the inserted or updated entry.

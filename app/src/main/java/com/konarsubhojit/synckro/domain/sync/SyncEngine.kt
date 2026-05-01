@@ -1,5 +1,6 @@
 package com.konarsubhojit.synckro.domain.sync
 
+import com.konarsubhojit.synckro.domain.model.CloudProviderType
 import com.konarsubhojit.synckro.domain.model.SyncPair
 
 /**
@@ -49,6 +50,11 @@ class SyncEngine {
      * @return A [Result] describing the sync outcome (`Success`, `PartialFailure`, `Retriable`, or `Terminal`).
      */
     suspend fun runOnce(pair: SyncPair): Result {
+        if (pair.provider == CloudProviderType.FAKE) {
+            // FakeCloudProvider requires no auth and no real local filesystem access.
+            // Return an empty success so "Sync now" completes end-to-end without error.
+            return Result.Success(applied = 0, conflicts = 0)
+        }
         // TODO:
         //  1. Enumerate local files via SAF DocumentFile tree into List<FileSnapshot>.
         //  2. Fetch remote changes via CloudProvider.changesSince(token).
