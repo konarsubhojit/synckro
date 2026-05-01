@@ -563,19 +563,19 @@ class LocalFsEnumeratorTest {
     // -------------------------------------------------------------------------
 
     @Test
-    fun `re-enumerating 5000 unchanged files reuses all cached hashes`() = runTest {
+    fun `re-enumerating 5,000 unchanged files reuses all cached hashes`() = runTest {
         val pairId = insertPair()
 
-        // Build 5 000 files across a directory tree.
+        // Build 5,000 files across a directory tree.
         val files = (1..5_000).map { i ->
             Triple("dir${i % 50}/file_$i.dat", i.toLong(), i.toLong() * 1_000)
         }
         val (fakeTree, bytesMap) = buildFakeTree(files)
         val fs1 = FakeFsAccess(bytesMap)
 
-        // First enumeration: compute hashes for all 5 000 files.
+        // First enumeration: compute hashes for all 5,000 files.
         enumeratorWith(fakeTree, fs1).enumerate(pairId, treeUri)
-        assertEquals("all 5000 files hashed on first pass", 5_000, fs1.openCount)
+        assertEquals("all 5,000 files hashed on first pass", 5_000, fs1.openCount)
 
         // Second enumeration with the same tree: no file changed → zero hash recomputes.
         val fs2 = FakeFsAccess(bytesMap)
@@ -589,7 +589,7 @@ class LocalFsEnumeratorTest {
         assertTrue("no additions on unchanged re-scan", result2.added.isEmpty())
         assertTrue("no modifications on unchanged re-scan", result2.modified.isEmpty())
         assertTrue("no deletions on unchanged re-scan", result2.deleted.isEmpty())
-        assertEquals("snapshot still contains all 5000 files", 5_000, result2.snapshot.size)
+        assertEquals("snapshot still contains all 5,000 files", 5_000, result2.snapshot.size)
     }
 
     // -------------------------------------------------------------------------
