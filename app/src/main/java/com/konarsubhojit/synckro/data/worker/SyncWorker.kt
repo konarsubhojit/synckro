@@ -167,8 +167,10 @@ class SyncWorker @AssistedInject constructor(
 
     private fun buildForegroundInfo(pairId: Long, displayName: String): ForegroundInfo {
         val notification = buildProgressNotification(displayName)
-        // Clamp pairId into Int range for the notification ID; use a base offset
-        // so it doesn't collide with other app notifications.
+        // Clamp pairId into Int range for the notification ID. We mask the lower
+        // 16 bits so that the resulting Int is always positive and small enough to
+        // avoid wrapping. The NOTIFICATION_ID_BASE offset prevents accidental
+        // collisions with notification IDs used elsewhere in the app.
         val notificationId = NOTIFICATION_ID_BASE + (pairId and 0x0000_FFFFL).toInt()
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             ForegroundInfo(notificationId, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
@@ -192,7 +194,7 @@ class SyncWorker @AssistedInject constructor(
     companion object {
         const val KEY_PAIR_ID = "pair_id"
 
-        /** Notification channel ID for sync progress. Must match [SynckroApp.SYNC_CHANNEL_ID]. */
+        /** Notification channel ID for sync progress. Created by SynckroApp.createNotificationChannels(). */
         const val SYNC_CHANNEL_ID = "synckro_sync"
 
         /** Delay before promoting to a foreground service: 30 seconds. */
