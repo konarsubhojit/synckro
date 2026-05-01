@@ -9,6 +9,7 @@ import androidx.room.Upsert
 import com.konarsubhojit.synckro.data.local.entity.AccountEntity
 import com.konarsubhojit.synckro.data.local.entity.ConflictRecordEntity
 import com.konarsubhojit.synckro.data.local.entity.FileIndexEntity
+import com.konarsubhojit.synckro.data.local.entity.LocalIndexEntity
 import com.konarsubhojit.synckro.data.local.entity.SyncEventEntity
 import com.konarsubhojit.synckro.data.local.entity.SyncPairEntity
 import com.konarsubhojit.synckro.domain.model.CloudProviderType
@@ -194,6 +195,24 @@ interface SyncPairDao {
      */
     @Query("UPDATE sync_pair SET lastSyncAtMs = :timestampMs, lastSyncResult = :result WHERE id = :pairId")
     suspend fun updateLastSyncResult(pairId: Long, timestampMs: Long, result: String)
+
+    /**
+     * Persists the provider delta/page token for [pairId].
+     *
+     * @param pairId The primary key of the sync pair.
+     * @param token  The new delta token from the cloud provider, or null to clear it.
+     */
+    @Query("UPDATE sync_pair SET lastDeltaToken = :token WHERE id = :pairId")
+    suspend fun updateDeltaToken(pairId: Long, token: String?)
+
+    /**
+     * Records the epoch-millisecond timestamp of the last completed full local scan for [pairId].
+     *
+     * @param pairId      The primary key of the sync pair.
+     * @param timestampMs The epoch-millisecond time the scan completed, or null to clear it.
+     */
+    @Query("UPDATE sync_pair SET lastFullScanAtMs = :timestampMs WHERE id = :pairId")
+    suspend fun updateLastFullScanAtMs(pairId: Long, timestampMs: Long?)
 }
 
 @Dao
@@ -391,4 +410,52 @@ interface SyncEventDao {
         /** Maximum total events retained across all pairs. */
         const val MAX_EVENTS_GLOBAL = 2_000
     }
+}
+
+@Dao
+interface LocalIndexDao {
+
+    /**
+     * Returns all local-index entries for [pairId], ordered by [relativePath] ascending.
+     *
+     * @param pairId The sync pair whose local index entries should be returned.
+     * @return A list of [LocalIndexEntity] rows for the given pair.
+     */
+    @Query("SELECT * FROM local_index WHERE pairId = :pairId ORDER BY relativePath ASC")
+    suspend fun getForPair(pairId: Long): List<LocalIndexEntity>
+
+    /**
+     * Inserts or updates a single [LocalIndexEntity].  On conflict the existing row is
+     * replaced in its entirety.
+     *
+     * @param entry The entry to persist.
+     */
+    @Upsert
+    suspend fun upsert(entry: LocalIndexEntity)
+
+    /**
+     * Inserts or updates all entries in [entries].  On conflict each row is replaced.
+     *
+     * @param entries The entries to persist.
+     */
+    @Upsert
+    suspend fun upsertAll(entries: List<LocalIndexEntity>)
+
+    /**
+     * Deletes the local-index entry identified by [pairId] and [relativePath].
+     *
+     * @param pairId       The sync pair that owns the entry.
+     * @param relativePath The relative path of the file to remove.
+     */
+    @Query("DELETE FROM local_index WHERE pairId = :pairId AND relativePath = :relativePath")
+    suspend fun delete(pairId: Long, relativePath: String)
+
+    /**
+     * Deletes all local-index entries for [pairId].
+     * Call this before a full rescan so stale entries are not left behind.
+     *
+     * @param pairId The sync pair whose local index should be cleared.
+     */
+    @Query("DELETE FROM local_index WHERE pairId = :pairId")
+    suspend fun clearForPair(pairId: Long)
 }

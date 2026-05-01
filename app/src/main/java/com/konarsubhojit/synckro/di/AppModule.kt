@@ -6,6 +6,7 @@ import androidx.work.WorkManager
 import com.konarsubhojit.synckro.data.local.dao.AccountDao
 import com.konarsubhojit.synckro.data.local.dao.ConflictRecordDao
 import com.konarsubhojit.synckro.data.local.dao.FileIndexDao
+import com.konarsubhojit.synckro.data.local.dao.LocalIndexDao
 import com.konarsubhojit.synckro.data.local.dao.SyncEventDao
 import com.konarsubhojit.synckro.data.local.dao.SyncPairDao
 import com.konarsubhojit.synckro.data.local.db.SynckroDatabase
@@ -53,6 +54,7 @@ object AppModule {
                 SynckroDatabase.MIGRATION_3_4,
                 SynckroDatabase.MIGRATION_4_5,
                 SynckroDatabase.MIGRATION_5_6,
+                SynckroDatabase.MIGRATION_6_7,
             )
         // Destructive fallback is only acceptable while the schema is still
         // pre-1.0. In release builds we refuse to drop user sync state and
@@ -90,6 +92,14 @@ object AppModule {
 
     @Provides
     fun provideConflictRecordDao(db: SynckroDatabase): ConflictRecordDao = db.conflictRecordDao()
+
+    /**
+     * Provides the DAO used to access and modify local-index entries.
+     *
+     * @return The [LocalIndexDao] instance retrieved from the database.
+     */
+    @Provides
+    fun provideLocalIndexDao(db: SynckroDatabase): LocalIndexDao = db.localIndexDao()
 
     @Provides @Singleton
     fun provideFakeCloudProvider(): FakeCloudProvider = FakeCloudProvider()

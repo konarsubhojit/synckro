@@ -8,11 +8,13 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import com.konarsubhojit.synckro.data.local.dao.AccountDao
 import com.konarsubhojit.synckro.data.local.dao.ConflictRecordDao
 import com.konarsubhojit.synckro.data.local.dao.FileIndexDao
+import com.konarsubhojit.synckro.data.local.dao.LocalIndexDao
 import com.konarsubhojit.synckro.data.local.dao.SyncEventDao
 import com.konarsubhojit.synckro.data.local.dao.SyncPairDao
 import com.konarsubhojit.synckro.data.local.entity.AccountEntity
 import com.konarsubhojit.synckro.data.local.entity.ConflictRecordEntity
 import com.konarsubhojit.synckro.data.local.entity.FileIndexEntity
+import com.konarsubhojit.synckro.data.local.entity.LocalIndexEntity
 import com.konarsubhojit.synckro.data.local.entity.SyncEventEntity
 import com.konarsubhojit.synckro.data.local.entity.SyncPairEntity
 import com.konarsubhojit.synckro.domain.model.CloudProviderType
@@ -66,8 +68,8 @@ class EnumConverters {
 }
 
 @Database(
-    entities = [AccountEntity::class, SyncPairEntity::class, FileIndexEntity::class, SyncEventEntity::class, ConflictRecordEntity::class],
-    version = 6,
+    entities = [AccountEntity::class, SyncPairEntity::class, FileIndexEntity::class, SyncEventEntity::class, ConflictRecordEntity::class, LocalIndexEntity::class],
+    version = 7,
     exportSchema = true,
 )
 @TypeConverters(EnumConverters::class)
@@ -105,6 +107,13 @@ abstract fun fileIndexDao(): FileIndexDao
      * @return The [SyncEventDao] for the `sync_event` table.
      */
     abstract fun syncEventDao(): SyncEventDao
+
+    /**
+     * Returns the DAO used to access and modify local-index entries.
+     *
+     * @return The [LocalIndexDao] for the `local_index` table.
+     */
+    abstract fun localIndexDao(): LocalIndexDao
 
     companion object {
         const val NAME = "synckro.db"
@@ -192,6 +201,33 @@ abstract fun fileIndexDao(): FileIndexDao
                 db.execSQL(
                     "CREATE INDEX IF NOT EXISTS `index_conflict_record_pairId` " +
                         "ON `conflict_record` (`pairId`)"
+                )
+            }
+        }
+
+        /**
+         * Migrates the database from version 6 to 7:
+         * - Adds `lastFullScanAtMs` column to `sync_pair` (epoch-ms timestamp of the last full
+         *   local scan; NULL until the first scan completes).
+         * - Creates the `local_index` table for lightweight per-file local snapshots used by
+         *   the sync engine to compute diffs without re-hashing every file on every run.
+         */
+        val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "ALTER TABLE `sync_pair` ADD COLUMN `lastFullScanAtMs` INTEGER"
+                )
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `local_index` (" +
+                        "`pairId` INTEGER NOT NULL, " +
+                        "`relativePath` TEXT NOT NULL, " +
+                        "`sizeBytes` INTEGER NOT NULL, " +
+                        "`mtimeMs` INTEGER NOT NULL, " +
+                        "`contentHash` TEXT, " +
+                        "`remoteId` TEXT, " +
+                        "PRIMARY KEY(`pairId`, `relativePath`), " +
+                        "FOREIGN KEY(`pairId`) REFERENCES `sync_pair`(`id`) " +
+                        "ON UPDATE NO ACTION ON DELETE CASCADE)"
                 )
             }
         }
