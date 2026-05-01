@@ -1,6 +1,5 @@
 package com.konarsubhojit.synckro.ui.screens.paireditor
 
-import android.content.Context
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -10,8 +9,8 @@ import com.konarsubhojit.synckro.domain.model.CloudProviderType
 import com.konarsubhojit.synckro.domain.model.ConflictPolicy
 import com.konarsubhojit.synckro.domain.model.SyncDirection
 import com.konarsubhojit.synckro.domain.model.SyncPair
+import com.konarsubhojit.synckro.util.StringProvider
 import dagger.hilt.android.lifecycle.HiltViewModel
-import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -28,11 +27,15 @@ import timber.log.Timber
  * (pairId > 0) modes. The local folder URI result from [PickLocalFolderScreen] is
  * received through the navigation back-stack's [SavedStateHandle] by the key
  * [KEY_LOCAL_TREE_URI].
+ *
+ * [strings] is injected as a [StringProvider] rather than [android.content.Context]
+ * so the ViewModel stays decoupled from Android framework types and is straightforward
+ * to test without Robolectric.
  */
 @HiltViewModel
 class PairEditorViewModel @Inject constructor(
     private val savedStateHandle: SavedStateHandle,
-    @ApplicationContext private val context: Context,
+    private val strings: StringProvider,
     private val syncPairRepository: SyncPairRepository,
 ) : ViewModel() {
 
@@ -105,7 +108,7 @@ class PairEditorViewModel @Inject constructor(
     fun save(onSaved: (Long) -> Unit) {
         val s = _state.value
         if (s.displayName.isBlank()) {
-            _state.update { it.copy(saveError = context.getString(R.string.pair_editor_error_name_required)) }
+            _state.update { it.copy(saveError = strings.getString(R.string.pair_editor_error_name_required)) }
             return
         }
         _state.update { it.copy(isSaving = true, saveError = null) }
@@ -132,7 +135,7 @@ class PairEditorViewModel @Inject constructor(
                 _state.update {
                     it.copy(
                         isSaving = false,
-                        saveError = t.message ?: context.getString(R.string.pair_editor_error_save_failed),
+                        saveError = t.message ?: strings.getString(R.string.pair_editor_error_save_failed),
                     )
                 }
             }

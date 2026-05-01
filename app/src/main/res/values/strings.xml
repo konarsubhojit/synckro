@@ -57,6 +57,22 @@
     <string name="pair_editor_error_name_required">Display name is required</string>
     <string name="pair_editor_error_save_failed">Save failed</string>
 
+    <!-- Provider display names -->
+    <string name="provider_label_fake">Fake (in-memory)</string>
+    <string name="provider_label_onedrive">OneDrive</string>
+    <string name="provider_label_google_drive">Google Drive</string>
+
+    <!-- Conflict-policy display names -->
+    <string name="conflict_policy_newest_wins">Newest wins</string>
+    <string name="conflict_policy_prefer_local">Prefer local</string>
+    <string name="conflict_policy_prefer_remote">Prefer remote</string>
+    <string name="conflict_policy_keep_both">Keep both</string>
+
+    <!-- Sync-direction display names -->
+    <string name="direction_local_to_remote">Local → Remote</string>
+    <string name="direction_remote_to_local">Remote → Local</string>
+    <string name="direction_bidirectional">Bidirectional</string>
+
     <!-- Pick local folder (SAF tree-URI picker) -->
     <string name="pick_folder_title">Pick local folder</string>
     <string name="pick_folder_body">Select the folder on your device that you want to keep in sync. Both internal storage and SD card folders are supported.</string>

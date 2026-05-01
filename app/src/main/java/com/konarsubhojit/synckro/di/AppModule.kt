@@ -13,6 +13,8 @@ import com.konarsubhojit.synckro.domain.model.CloudProviderType
 import com.konarsubhojit.synckro.domain.sync.SyncEngine
 import com.konarsubhojit.synckro.providers.gdrive.GoogleDriveAuthManager
 import com.konarsubhojit.synckro.providers.onedrive.OneDriveAuthManager
+import com.konarsubhojit.synckro.util.ContextStringProvider
+import com.konarsubhojit.synckro.util.StringProvider
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -104,4 +106,7 @@ object AppModule {
 
     @Provides @IntoMap @CloudProviderKey(CloudProviderType.GOOGLE_DRIVE) @Singleton
     fun provideGoogleDriveAuthManager(impl: GoogleDriveAuthManager): AuthManager = impl
+
+    @Provides @Singleton
+    fun provideStringProvider(impl: ContextStringProvider): StringProvider = impl
 }

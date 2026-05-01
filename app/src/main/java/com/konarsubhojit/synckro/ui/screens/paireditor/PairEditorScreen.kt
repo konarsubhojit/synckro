@@ -370,21 +370,24 @@ private fun DirectionDropdown(
     }
 }
 
+@Composable
 private fun providerLabel(provider: CloudProviderType): String = when (provider) {
-    CloudProviderType.FAKE -> "Fake (in-memory)"
-    CloudProviderType.ONEDRIVE -> "OneDrive"
-    CloudProviderType.GOOGLE_DRIVE -> "Google Drive"
+    CloudProviderType.FAKE -> stringResource(R.string.provider_label_fake)
+    CloudProviderType.ONEDRIVE -> stringResource(R.string.provider_label_onedrive)
+    CloudProviderType.GOOGLE_DRIVE -> stringResource(R.string.provider_label_google_drive)
 }
 
+@Composable
 private fun conflictPolicyLabel(policy: ConflictPolicy): String = when (policy) {
-    ConflictPolicy.NEWEST_WINS -> "Newest wins"
-    ConflictPolicy.PREFER_LOCAL -> "Prefer local"
-    ConflictPolicy.PREFER_REMOTE -> "Prefer remote"
-    ConflictPolicy.KEEP_BOTH -> "Keep both"
+    ConflictPolicy.NEWEST_WINS -> stringResource(R.string.conflict_policy_newest_wins)
+    ConflictPolicy.PREFER_LOCAL -> stringResource(R.string.conflict_policy_prefer_local)
+    ConflictPolicy.PREFER_REMOTE -> stringResource(R.string.conflict_policy_prefer_remote)
+    ConflictPolicy.KEEP_BOTH -> stringResource(R.string.conflict_policy_keep_both)
 }
 
+@Composable
 private fun directionLabel(dir: SyncDirection): String = when (dir) {
-    SyncDirection.LOCAL_TO_REMOTE -> "Local → Remote"
-    SyncDirection.REMOTE_TO_LOCAL -> "Remote → Local"
-    SyncDirection.BIDIRECTIONAL -> "Bidirectional"
+    SyncDirection.LOCAL_TO_REMOTE -> stringResource(R.string.direction_local_to_remote)
+    SyncDirection.REMOTE_TO_LOCAL -> stringResource(R.string.direction_remote_to_local)
+    SyncDirection.BIDIRECTIONAL -> stringResource(R.string.direction_bidirectional)
 }

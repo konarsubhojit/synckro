@@ -1,14 +1,14 @@
 package com.konarsubhojit.synckro.ui.screens.paireditor
 
-import android.content.Context
 import androidx.lifecycle.SavedStateHandle
-import androidx.test.core.app.ApplicationProvider
 import com.konarsubhojit.synckro.data.repository.SyncPairRepository
 import com.konarsubhojit.synckro.domain.model.CloudProviderType
 import com.konarsubhojit.synckro.domain.model.ConflictPolicy
 import com.konarsubhojit.synckro.domain.model.SyncPair
+import com.konarsubhojit.synckro.util.StringProvider
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -24,24 +24,22 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
-import org.junit.runner.RunWith
-import org.robolectric.RobolectricTestRunner
-import org.robolectric.annotation.Config
 
 @OptIn(ExperimentalCoroutinesApi::class)
-@RunWith(RobolectricTestRunner::class)
-@Config(sdk = [34])
 class PairEditorViewModelTest {
 
     private val testDispatcher = StandardTestDispatcher()
     private lateinit var mockRepo: SyncPairRepository
-    private lateinit var context: Context
+    private lateinit var mockStrings: StringProvider
 
     @Before
     fun setUp() {
         Dispatchers.setMain(testDispatcher)
         mockRepo = mockk(relaxed = true)
-        context = ApplicationProvider.getApplicationContext()
+        mockStrings = mockk {
+            every { getString(any()) } returns "error"
+            every { getString(any(), *anyVararg()) } returns "error"
+        }
     }
 
     @After
@@ -51,7 +49,7 @@ class PairEditorViewModelTest {
 
     private fun createVm(pairId: Long = 0L): PairEditorViewModel = PairEditorViewModel(
         savedStateHandle = SavedStateHandle(mapOf("pairId" to pairId)),
-        context = context,
+        strings = mockStrings,
         syncPairRepository = mockRepo,
     )
 
@@ -132,7 +130,7 @@ class PairEditorViewModelTest {
         val savedStateHandle = SavedStateHandle(mapOf("pairId" to 0L))
         val vm = PairEditorViewModel(
             savedStateHandle = savedStateHandle,
-            context = context,
+            strings = mockStrings,
             syncPairRepository = mockRepo,
         )
 
