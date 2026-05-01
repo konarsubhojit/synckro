@@ -15,9 +15,12 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Inbox
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -51,6 +54,7 @@ fun HomeScreen(
     onAddSyncPair: () -> Unit,
     onEditSyncPair: (Long) -> Unit,
     onOpenAccounts: () -> Unit,
+    onOpenConflictInbox: () -> Unit,
     onOpenLogs: () -> Unit,
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
@@ -61,6 +65,20 @@ fun HomeScreen(
             TopAppBar(
                 title = { Text(stringResource(R.string.home_title)) },
                 actions = {
+                    IconButton(onClick = onOpenConflictInbox) {
+                        BadgedBox(
+                            badge = {
+                                if (state.pendingConflictCount > 0) {
+                                    Badge { Text(state.pendingConflictCount.toString()) }
+                                }
+                            },
+                        ) {
+                            Icon(
+                                Icons.Default.Inbox,
+                                contentDescription = stringResource(R.string.conflict_inbox_title),
+                            )
+                        }
+                    }
                     IconButton(onClick = onOpenLogs) {
                         Icon(
                             Icons.Default.History,

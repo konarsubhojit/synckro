@@ -118,6 +118,7 @@ private fun SyncPairEntity.toDomain(needsReLink: Boolean): SyncPair = SyncPair(
     excludeGlobs = excludeGlobs.split('\n').filter { it.isNotBlank() },
     wifiOnly = wifiOnly,
     requiresCharging = requiresCharging,
+    scheduleIntervalMinutes = scheduleIntervalMinutes,
     needsReLink = needsReLink,
     lastSyncAtMs = lastSyncAtMs,
     lastSyncResult = lastSyncResult,
@@ -135,4 +136,5 @@ private fun SyncPair.toEntity(): SyncPairEntity = SyncPairEntity(
     excludeGlobs = excludeGlobs.joinToString("\n"),
     wifiOnly = wifiOnly,
     requiresCharging = requiresCharging,
+    scheduleIntervalMinutes = scheduleIntervalMinutes,
 )

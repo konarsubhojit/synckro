@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import androidx.work.ExistingWorkPolicy
 import androidx.work.WorkManager
+import com.konarsubhojit.synckro.data.repository.ConflictRepository
 import com.konarsubhojit.synckro.data.repository.SyncPairRepository
 import com.konarsubhojit.synckro.domain.model.CloudProviderType
 import com.konarsubhojit.synckro.domain.model.ConflictPolicy
@@ -41,6 +42,7 @@ class HomeViewModelTest {
 
     private val testDispatcher = StandardTestDispatcher()
     private lateinit var mockRepo: SyncPairRepository
+    private lateinit var mockConflictRepo: ConflictRepository
     private lateinit var mockWorkManager: WorkManager
     private lateinit var context: Context
     private val pairsFlow = MutableStateFlow<List<SyncPair>>(emptyList())
@@ -49,9 +51,11 @@ class HomeViewModelTest {
     fun setUp() {
         Dispatchers.setMain(testDispatcher)
         mockRepo = mockk(relaxed = true)
+        mockConflictRepo = mockk(relaxed = true)
         mockWorkManager = mockk(relaxed = true)
         context = ApplicationProvider.getApplicationContext()
         every { mockRepo.observeAll(any()) } returns pairsFlow
+        every { mockConflictRepo.observeUnresolved() } returns MutableStateFlow(emptyList())
     }
 
     @After
@@ -62,6 +66,7 @@ class HomeViewModelTest {
     private fun createVm() = HomeViewModel(
         context = context,
         syncPairRepository = mockRepo,
+        conflictRepository = mockConflictRepo,
         workManager = mockWorkManager,
     )
 

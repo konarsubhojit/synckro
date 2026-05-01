@@ -113,6 +113,7 @@ class SyncWorker @AssistedInject constructor(
             excludeGlobs = entity.excludeGlobs.split('\n').filter { it.isNotBlank() },
             wifiOnly = entity.wifiOnly,
             requiresCharging = entity.requiresCharging,
+            scheduleIntervalMinutes = entity.scheduleIntervalMinutes,
         )
 
         syncEventRepository.log(pairId, SyncEventLevel.INFO, LOG_TAG, "Sync started for \"${pair.displayName}\" (attempt ${runAttemptCount + 1})")

@@ -7,6 +7,7 @@ import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.workDataOf
+import com.konarsubhojit.synckro.data.repository.ConflictRepository
 import com.konarsubhojit.synckro.data.repository.SyncPairRepository
 import com.konarsubhojit.synckro.data.worker.SyncWorker
 import com.konarsubhojit.synckro.domain.model.SyncPair
@@ -15,6 +16,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -28,18 +30,23 @@ import timber.log.Timber
 class HomeViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val syncPairRepository: SyncPairRepository,
+    private val conflictRepository: ConflictRepository,
     private val workManager: WorkManager,
 ) : ViewModel() {
 
     data class UiState(
         val pairs: List<SyncPair> = emptyList(),
         val isLoading: Boolean = true,
+        /** Number of pending (unresolved) conflicts across all pairs. */
+        val pendingConflictCount: Int = 0,
     )
 
-    val state: StateFlow<UiState> = syncPairRepository
-        .observeAll(context.contentResolver)
-        .map { UiState(pairs = it, isLoading = false) }
-        .stateIn(
+    val state: StateFlow<UiState> = combine(
+        syncPairRepository.observeAll(context.contentResolver),
+        conflictRepository.observeUnresolved(),
+    ) { pairs, conflicts ->
+        UiState(pairs = pairs, isLoading = false, pendingConflictCount = conflicts.size)
+    }.stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5_000),
             initialValue = UiState(),

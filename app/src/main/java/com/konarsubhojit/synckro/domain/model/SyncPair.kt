@@ -21,6 +21,8 @@ data class SyncPair(
     val excludeGlobs: List<String> = emptyList(),
     val wifiOnly: Boolean = true,
     val requiresCharging: Boolean = false,
+    /** Desired periodic sync interval in minutes (minimum 15, WorkManager floor). */
+    val scheduleIntervalMinutes: Long = 60,
     /**
      * True when the persisted SAF tree-URI permission for [localTreeUri] is no
      * longer held (e.g. the user revoked it or moved the SD card). Not stored
