@@ -69,7 +69,7 @@ class EnumConverters {
 
 @Database(
     entities = [AccountEntity::class, SyncPairEntity::class, FileIndexEntity::class, SyncEventEntity::class, ConflictRecordEntity::class, LocalIndexEntity::class],
-    version = 7,
+    version = 8,
     exportSchema = true,
 )
 @TypeConverters(EnumConverters::class)
@@ -229,6 +229,22 @@ abstract fun fileIndexDao(): FileIndexDao
                         "FOREIGN KEY(`pairId`) REFERENCES `sync_pair`(`id`) " +
                         "ON UPDATE NO ACTION ON DELETE CASCADE)"
                 )
+            }
+        }
+        /**
+         * Migrates the database from version 7 to 8:
+         * - Adds three nullable remote-metadata columns to `local_index`:
+         *   `remoteSizeBytes`, `remoteMtimeMs`, `remoteEtag`.
+         * These columns let [com.konarsubhojit.synckro.domain.sync.SyncDiffer] distinguish
+         * genuine remote changes from echoes of locally-initiated uploads in the provider's
+         * change log.  Existing rows receive NULL for all three columns; they will be
+         * populated by [com.konarsubhojit.synckro.domain.sync.SyncOpApplier] on the next sync.
+         */
+        val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `local_index` ADD COLUMN `remoteSizeBytes` INTEGER")
+                db.execSQL("ALTER TABLE `local_index` ADD COLUMN `remoteMtimeMs` INTEGER")
+                db.execSQL("ALTER TABLE `local_index` ADD COLUMN `remoteEtag` TEXT")
             }
         }
     }
