@@ -7,13 +7,11 @@ import okhttp3.mockwebserver.MockWebServer
 import okhttp3.mockwebserver.SocketPolicy
 import org.junit.After
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import java.io.ByteArrayInputStream
-import java.io.IOException
 
 /**
  * Integration tests for [OneDriveGraphClient] using [MockWebServer] as a recorded fixture.
@@ -349,7 +347,7 @@ class OneDriveGraphClientTest {
     @Test(expected = GraphApiException::class)
     fun `download throws GraphApiException on 404`() = runTest {
         server.enqueue(MockResponse().setResponseCode(404).setBody("""{"error": "itemNotFound"}"""))
-        client.download(token, "missing-file").close()
+        client.download(token, "missing-file")
     }
 
     // -------------------------------------------------------------------------

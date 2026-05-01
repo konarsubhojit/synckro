@@ -2,6 +2,7 @@ package com.konarsubhojit.synckro.providers.onedrive
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import java.time.Instant
 
 /** Microsoft Graph API DriveItem as returned by `/me/drive` endpoints. */
 @Serializable
@@ -81,3 +82,7 @@ internal data class GraphUploadStatus(
     val nextExpectedRanges: List<String> = emptyList(),
     val expirationDateTime: String? = null,
 )
+
+/** Parses an ISO-8601 UTC timestamp (e.g. "2024-03-15T10:30:00Z") to epoch millis, or null. */
+internal fun parseIso8601(dateTime: String): Long? =
+    runCatching { Instant.parse(dateTime).toEpochMilli() }.getOrNull()

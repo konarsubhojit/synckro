@@ -12,7 +12,6 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import timber.log.Timber
 import java.io.IOException
 import java.io.InputStream
-import java.time.Instant
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -182,7 +181,7 @@ class OneDriveGraphClient @Inject constructor(
             .build()
         val resp = executeWithRetry(req)
         // 204 No Content is the expected success response for DELETE.
-        if (resp.code != 204 && !resp.isSuccessful) {
+        if (!resp.isSuccessful) {
             val body = resp.body?.string() ?: ""
             resp.close()
             throw GraphApiException(resp.code, body)
@@ -276,10 +275,6 @@ class OneDriveGraphClient @Inject constructor(
         val text = response.body!!.use { it.string() }
         return json.decodeFromString(text)
     }
-
-    /** Converts an ISO-8601 string (e.g. "2024-03-15T10:30:00Z") to epoch millis, or null. */
-    internal fun parseIso8601(dateTime: String): Long? =
-        runCatching { Instant.parse(dateTime).toEpochMilli() }.getOrNull()
 
     // -------------------------------------------------------------------------
     // Upload helpers
@@ -426,7 +421,7 @@ class OneDriveGraphClient @Inject constructor(
                         if (serverNext != null && serverNext > end + 1) {
                             // Server already committed this chunk and possibly more; skip ahead.
                             val toSkip = serverNext - (end + 1)
-                            if (toSkip > 0) withContext(Dispatchers.IO) { stream.skip(toSkip) }
+                            if (toSkip > 0) withContext(Dispatchers.IO) { stream.skipFully(toSkip) }
                             offset = serverNext
                             chunkCommitted = true
                         }
@@ -463,5 +458,26 @@ class OneDriveGraphClient @Inject constructor(
             Timber.w(e, "Could not query upload status")
             null
         }
+    }
+}
+
+/**
+ * Reliably skips [n] bytes from [this] stream by looping until the requested number of bytes
+ * have been consumed. Falls back to read-and-discard when [InputStream.skip] returns fewer
+ * bytes than requested (which is permitted by the [InputStream] contract).
+ */
+private fun InputStream.skipFully(n: Long) {
+    var remaining = n
+    val discard = ByteArray(minOf(n, 8192L).toInt())
+    while (remaining > 0) {
+        val skipped = skip(remaining)
+        if (skipped > 0) {
+            remaining -= skipped
+            continue
+        }
+        // skip() returned 0 or negative — fall back to read-and-discard.
+        val read = read(discard, 0, minOf(remaining, discard.size.toLong()).toInt())
+        if (read < 0) break
+        remaining -= read
     }
 }

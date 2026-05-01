@@ -7,7 +7,6 @@ import com.konarsubhojit.synckro.domain.provider.CloudProviderException
 import com.konarsubhojit.synckro.domain.provider.RemoteChange
 import com.konarsubhojit.synckro.domain.provider.RemoteFile
 import timber.log.Timber
-import java.io.IOException
 import java.io.InputStream
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -207,9 +206,7 @@ internal fun GraphDriveItem.toRemoteFile(): RemoteFile = RemoteFile(
     parentId = parentReference?.id,
     isFolder = folder != null,
     size = size,
-    lastModifiedMs = lastModifiedDateTime?.let {
-        runCatching { java.time.Instant.parse(it).toEpochMilli() }.getOrNull()
-    },
+    lastModifiedMs = lastModifiedDateTime?.let { parseIso8601(it) },
     eTag = eTag?.trim('"'),
     mimeType = file?.mimeType,
 )
