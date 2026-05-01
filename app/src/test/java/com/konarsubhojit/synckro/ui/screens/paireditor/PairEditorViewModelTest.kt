@@ -57,6 +57,27 @@ class PairEditorViewModelTest {
         syncScheduler = mockSyncScheduler,
     )
 
+    /**
+     * Creates a [PairEditorViewModel] that already has a local folder URI set in the
+     * [SavedStateHandle], simulating what happens after the user picks a folder from
+     * [PickLocalFolderScreen]. The caller should still call `advanceUntilIdle()` inside
+     * a `runTest` block so the StateFlow emission is processed.
+     */
+    private fun createVmWithFolder(
+        folderUri: String = "content://com.android.externalstorage.documents/tree/primary%3ADownloads",
+        pairId: Long = 0L,
+    ): PairEditorViewModel = PairEditorViewModel(
+        savedStateHandle = SavedStateHandle(
+            mapOf(
+                "pairId" to pairId,
+                PairEditorViewModel.KEY_LOCAL_TREE_URI to folderUri,
+            ),
+        ),
+        strings = mockStrings,
+        syncPairRepository = mockRepo,
+        syncScheduler = mockSyncScheduler,
+    )
+
     // -------------------------------------------------------------------------
     // Initial state
     // -------------------------------------------------------------------------
@@ -126,44 +147,26 @@ class PairEditorViewModelTest {
     fun `save with valid state calls repository upsert`() = runTest {
         coEvery { mockRepo.upsert(any()) } returns 42L
 
-        val vm = createVm()
+        val vm = createVmWithFolder()
         vm.onDisplayNameChange("Test Pair")
-        val savedStateHandle = SavedStateHandle(mapOf("pairId" to 0L))
-        val vmWithFolder = PairEditorViewModel(
-            savedStateHandle = savedStateHandle,
-            strings = mockStrings,
-            syncPairRepository = mockRepo,
-            syncScheduler = mockSyncScheduler,
-        )
-        vmWithFolder.onDisplayNameChange("Test Pair")
-        savedStateHandle[PairEditorViewModel.KEY_LOCAL_TREE_URI] =
-            "content://com.android.externalstorage.documents/tree/primary%3ADownloads"
         advanceUntilIdle()
 
         var savedId: Long? = null
-        vmWithFolder.save { savedId = it }
+        vm.save { savedId = it }
         advanceUntilIdle()
 
         assertEquals(42L, savedId)
         coVerify { mockRepo.upsert(any()) }
-        assertNull(vmWithFolder.state.value.saveError)
-        assertFalse(vmWithFolder.state.value.isSaving)
+        assertNull(vm.state.value.saveError)
+        assertFalse(vm.state.value.isSaving)
     }
 
     @Test
     fun `save with valid state schedules periodic sync`() = runTest {
         coEvery { mockRepo.upsert(any()) } returns 42L
 
-        val savedStateHandle = SavedStateHandle(mapOf("pairId" to 0L))
-        val vm = PairEditorViewModel(
-            savedStateHandle = savedStateHandle,
-            strings = mockStrings,
-            syncPairRepository = mockRepo,
-            syncScheduler = mockSyncScheduler,
-        )
+        val vm = createVmWithFolder()
         vm.onDisplayNameChange("Test Pair")
-        savedStateHandle[PairEditorViewModel.KEY_LOCAL_TREE_URI] =
-            "content://com.android.externalstorage.documents/tree/primary%3ADownloads"
         advanceUntilIdle()
 
         vm.save {}
@@ -177,16 +180,8 @@ class PairEditorViewModelTest {
         coEvery { mockRepo.upsert(any()) } returns 42L
         every { mockSyncScheduler.schedulePeriodic(any(), any()) } throws RuntimeException("WorkManager unavailable")
 
-        val savedStateHandle = SavedStateHandle(mapOf("pairId" to 0L))
-        val vm = PairEditorViewModel(
-            savedStateHandle = savedStateHandle,
-            strings = mockStrings,
-            syncPairRepository = mockRepo,
-            syncScheduler = mockSyncScheduler,
-        )
+        val vm = createVmWithFolder()
         vm.onDisplayNameChange("Test Pair")
-        savedStateHandle[PairEditorViewModel.KEY_LOCAL_TREE_URI] =
-            "content://com.android.externalstorage.documents/tree/primary%3ADownloads"
         advanceUntilIdle()
 
         var savedId: Long? = null
