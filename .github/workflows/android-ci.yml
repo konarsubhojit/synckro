@@ -9,6 +9,10 @@ on:
       - '**/*.md'
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != format('refs/heads/{0}', github.event.repository.default_branch) }}
+
 permissions:
   contents: read
 
@@ -38,7 +42,8 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
-          cache-read-only: ${{ github.ref != 'refs/heads/master' }}
+          cache-read-only: ${{ github.ref != format('refs/heads/{0}', github.event.repository.default_branch) }}
+          gradle-home-cache-cleanup: true
 
       - name: Cache Android SDK
         uses: actions/cache@v4
@@ -59,10 +64,12 @@ jobs:
             build-tools;${{ env.ANDROID_BUILD_TOOLS_VERSION }}
 
       - name: Decode debug keystore
-        if: secrets.DEBUG_KEYSTORE_BASE64 != ''
         env:
           DEBUG_KEYSTORE_BASE64: ${{ secrets.DEBUG_KEYSTORE_BASE64 }}
-        run: echo "$DEBUG_KEYSTORE_BASE64" | base64 --decode > "${{ github.workspace }}/debug.keystore"
+        run: |
+          if [ -n "$DEBUG_KEYSTORE_BASE64" ]; then
+            echo "$DEBUG_KEYSTORE_BASE64" | base64 --decode > "${{ github.workspace }}/debug.keystore"
+          fi
 
       - name: Run unit tests, lint, and assemble debug APK
         env:
@@ -95,12 +102,17 @@ jobs:
     name: Instrumentation tests (API ${{ matrix.api-level }})
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    needs: build-debug-apk
     strategy:
       fail-fast: false
       matrix:
         api-level: [26, 34]
 
     steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      # Checkout must precede this composite action so the local action files are available.
       - name: Set up emulator environment
         uses: ./.github/actions/setup-emulator-env
         with:
@@ -114,6 +126,20 @@ jobs:
             ~/.android/avd/*
             ~/.android/adb*
           key: avd-api-${{ matrix.api-level }}-v1
+
+      - name: Create AVD and generate snapshot
+        if: steps.avd-cache.outputs.cache-hit != 'true'
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api-level }}
+          arch: x86_64
+          profile: pixel_3a
+          target: google_apis
+          avd-name: synckro-avd-api${{ matrix.api-level }}
+          force-avd-creation: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: false
+          script: echo "Generated AVD snapshot for caching."
 
       - name: Run instrumentation tests on API ${{ matrix.api-level }}
         uses: reactivecircus/android-emulator-runner@v2
@@ -160,8 +186,14 @@ jobs:
     name: Macrobenchmark (API 34)
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    needs: build-debug-apk
+    if: github.event_name != 'pull_request'
 
     steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      # Checkout must precede this composite action so the local action files are available.
       - name: Set up emulator environment
         uses: ./.github/actions/setup-emulator-env
         with:
@@ -169,11 +201,26 @@ jobs:
 
       - name: Cache AVD (macrobenchmark)
         uses: actions/cache@v4
+        id: avd-cache-benchmark
         with:
           path: |
             ~/.android/avd/*
             ~/.android/adb*
           key: avd-api-34-benchmark-v1
+
+      - name: Create AVD and generate snapshot
+        if: steps.avd-cache-benchmark.outputs.cache-hit != 'true'
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          profile: pixel_3a
+          target: google_apis
+          avd-name: synckro-avd-api34-benchmark
+          force-avd-creation: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: false
+          script: echo "Generated AVD snapshot for caching."
 
       - name: Run macrobenchmarks
         uses: reactivecircus/android-emulator-runner@v2
