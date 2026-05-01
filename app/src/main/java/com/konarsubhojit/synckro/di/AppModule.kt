@@ -23,6 +23,7 @@ import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import dagger.multibindings.IntoMap
+import okhttp3.OkHttpClient
 import javax.inject.Singleton
 
 @Module
@@ -111,6 +112,14 @@ object AppModule {
 
     @Provides @Singleton
     fun provideStringProvider(impl: ContextStringProvider): StringProvider = impl
+
+    /**
+     * Provides the shared [OkHttpClient] used by all network components (OneDrive Graph API, …).
+     *
+     * @return A singleton [OkHttpClient] with default settings.
+     */
+    @Provides @Singleton
+    fun provideOkHttpClient(): OkHttpClient = OkHttpClient()
 
     /**
      * Provides the [LocalFolderScanner] that walks SAF document trees and reconciles

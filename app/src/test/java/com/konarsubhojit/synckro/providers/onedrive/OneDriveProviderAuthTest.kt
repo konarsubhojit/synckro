@@ -38,7 +38,7 @@ class OneDriveProviderAuthTest {
     @Before
     fun setUp() {
         authManager = mockk()
-        provider = OneDriveProvider(authManager)
+        provider = OneDriveProvider(authManager, mockk(relaxed = true))
     }
 
     // -------------------------------------------------------------------------
