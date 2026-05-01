@@ -458,4 +458,45 @@ interface LocalIndexDao {
      */
     @Query("DELETE FROM local_index WHERE pairId = :pairId")
     suspend fun clearForPair(pairId: Long)
+
+    /**
+     * Deletes local-index entries for [pairId] whose [relativePath] is **not**
+     * present in [seenPaths].  Used internally by [reconcileForPair] to remove
+     * stale entries in a single batch.
+     *
+     * @param pairId    The sync pair whose stale entries should be removed.
+     * @param seenPaths Relative paths that are still present on the filesystem.
+     */
+    @Query(
+        "DELETE FROM local_index WHERE pairId = :pairId AND relativePath NOT IN (:seenPaths)",
+    )
+    suspend fun deleteStaleForPair(pairId: Long, seenPaths: List<String>)
+
+    /**
+     * Atomically upserts [toUpsert] and removes any `local_index` rows for
+     * [pairId] whose path is absent from [seenPaths].
+     *
+     * Running both operations inside a `@Transaction` ensures the index is
+     * never observed in a partially-updated state and that a failure rolls
+     * back all writes.
+     *
+     * @param pairId    The sync pair whose index is being reconciled.
+     * @param toUpsert  Entries to insert or update (new and modified files).
+     * @param seenPaths Full set of relative paths still present on disk.
+     */
+    @Transaction
+    suspend fun reconcileForPair(
+        pairId: Long,
+        toUpsert: List<LocalIndexEntity>,
+        seenPaths: List<String>,
+    ) {
+        if (toUpsert.isNotEmpty()) {
+            upsertAll(toUpsert)
+        }
+        if (seenPaths.isEmpty()) {
+            clearForPair(pairId)
+        } else {
+            deleteStaleForPair(pairId, seenPaths)
+        }
+    }
 }
