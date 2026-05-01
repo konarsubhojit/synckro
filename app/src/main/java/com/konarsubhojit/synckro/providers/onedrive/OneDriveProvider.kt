@@ -39,6 +39,9 @@ class OneDriveProvider @Inject constructor(
     /**
      * Cached access token from the last successful [ensureAuthenticated] call.
      * Cleared whenever a new token is acquired.
+     *
+     * Note: [ensureAuthenticated] should not be called concurrently from multiple
+     * threads; [CloudProvider] callers are expected to ensure sequential access.
      */
     @Volatile
     private var cachedAccessToken: String? = null

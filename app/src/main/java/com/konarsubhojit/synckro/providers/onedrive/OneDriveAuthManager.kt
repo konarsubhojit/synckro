@@ -78,8 +78,8 @@ class OneDriveAuthManager @Inject constructor(
         }
     }
 
-    /** Stores [email] as the account hint; clears it when [email] is null. */
-    internal fun persistAccountHint(email: String?) {
+    /** Stores [email] as the account hint, or clears it when [email] is null. */
+    internal fun setAccountHint(email: String?) {
         val prefs = encryptedPrefs ?: return
         if (email == null) {
             prefs.edit().remove(KEY_ACCOUNT_HINT).apply()
@@ -176,7 +176,7 @@ class OneDriveAuthManager @Inject constructor(
                             email = msalAccount.username,
                         )
 
-                        persistAccountHint(msalAccount.username)
+                        setAccountHint(msalAccount.username)
                         cont.resume(AuthResult.Success(account))
                     }
 
@@ -244,7 +244,7 @@ class OneDriveAuthManager @Inject constructor(
                 override fun onSignOut() {
                     if (!cont.isActive) return
                     Timber.i("OneDriveAuthManager.signOut: MSAL sign-out successful")
-                    persistAccountHint(null)
+                    setAccountHint(null)
                     cont.resume(AuthResult.Success(Unit))
                 }
 

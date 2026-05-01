@@ -9,6 +9,7 @@ import io.mockk.coVerify
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Before
@@ -165,7 +166,7 @@ class OneDriveProviderAuthTest {
 
         val result = provider.ensureAuthenticated()
 
-        assertTrue(!result)
+        assertFalse(result)
     }
 
     // -------------------------------------------------------------------------
