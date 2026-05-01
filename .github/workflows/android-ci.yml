@@ -136,7 +136,7 @@ jobs:
           profile: pixel_3a
           target: google_apis
           avd-name: synckro-avd-api${{ matrix.api-level }}
-          force-avd-creation: false
+          force-avd-creation: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: false
           script: echo "Generated AVD snapshot for caching."
@@ -217,7 +217,7 @@ jobs:
           profile: pixel_3a
           target: google_apis
           avd-name: synckro-avd-api34-benchmark
-          force-avd-creation: false
+          force-avd-creation: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: false
           script: echo "Generated AVD snapshot for caching."
