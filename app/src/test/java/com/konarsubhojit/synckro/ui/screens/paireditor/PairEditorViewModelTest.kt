@@ -199,17 +199,40 @@ class PairEditorViewModelTest {
     // -------------------------------------------------------------------------
 
     @Test
-    fun `folderUri from savedStateHandle updates localTreeUri`() = runTest {
-        val savedStateHandle = SavedStateHandle(mapOf("pairId" to 0L))
+    fun `onLocalFolderPicked updates localTreeUri`() = runTest {
+        val vm = createVm()
+        val uri = "content://com.android.externalstorage.documents/tree/primary%3ADownloads"
+
+        vm.onLocalFolderPicked(uri)
+        advanceUntilIdle()
+
+        assertEquals(uri, vm.state.value.localTreeUri)
+    }
+
+    @Test
+    fun `onLocalFolderPicked ignores blank input`() = runTest {
+        val vm = createVm()
+        vm.onLocalFolderPicked("")
+        advanceUntilIdle()
+
+        assertEquals("", vm.state.value.localTreeUri)
+    }
+
+    @Test
+    fun `restored localTreeUri from SavedStateHandle survives VM recreation`() = runTest {
+        val uri = "content://com.android.externalstorage.documents/tree/primary%3ADownloads"
+        val savedStateHandle = SavedStateHandle(
+            mapOf(
+                "pairId" to 0L,
+                PairEditorViewModel.KEY_LOCAL_TREE_URI to uri,
+            ),
+        )
         val vm = PairEditorViewModel(
             savedStateHandle = savedStateHandle,
             strings = mockStrings,
             syncPairRepository = mockRepo,
             syncScheduler = mockSyncScheduler,
         )
-
-        val uri = "content://com.android.externalstorage.documents/tree/primary%3ADownloads"
-        savedStateHandle[PairEditorViewModel.KEY_LOCAL_TREE_URI] = uri
         advanceUntilIdle()
 
         assertEquals(uri, vm.state.value.localTreeUri)
