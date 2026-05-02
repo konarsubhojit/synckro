@@ -461,6 +461,11 @@ class SyncEngineRealIntegrationTest {
     fun `runReal returns Retriable when RemoteEnumerator throws AuthenticationFailed`() = runTest {
         val pair = insertPair()
 
+        // AuthenticationFailed indicates a transient failure during token refresh
+        // (e.g., a network blip while contacting the token endpoint). CloudExceptionMapper
+        // maps this to Retriable so WorkManager can retry with backoff and succeed once
+        // the transient issue resolves — unlike AuthenticationRequired, which needs
+        // interactive user action and is therefore mapped to Terminal.
         val failingEnumerator = object : RemoteEnumerator {
             override suspend fun enumerate(deltaToken: String?): RemoteSnapshot {
                 throw CloudProviderException.AuthenticationFailed(

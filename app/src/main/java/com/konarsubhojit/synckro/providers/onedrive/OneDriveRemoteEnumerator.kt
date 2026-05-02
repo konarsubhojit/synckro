@@ -61,7 +61,9 @@ class OneDriveRemoteEnumerator @Inject constructor(
                 410 -> {
                     // Delta link has expired — fall back to a fresh baseline so the next
                     // sync starts from a clean slate without replaying history.
-                    Timber.w("OneDrive: delta link expired (410); falling back to baseline")
+                    // This is a normal operational scenario: delta links expire after ~30
+                    // days of inactivity per the Microsoft Graph API contract.
+                    Timber.w("OneDrive: delta link expired (410); deltaToken=%s; falling back to baseline", deltaToken)
                     val (baseItems, baseDeltaLink) = graphClient.changesSince(token, null)
                     return RemoteSnapshot(
                         changes = baseItems.mapNotNull { it.toRemoteChange() },

@@ -62,7 +62,9 @@ class GoogleDriveRemoteEnumerator @Inject constructor(
                 410 -> {
                     // Page token has expired — fall back to a fresh baseline so the next
                     // sync starts from a clean slate without replaying history.
-                    Timber.w("Google Drive: page token expired (410); falling back to baseline")
+                    // This is a normal operational scenario: tokens expire after ~7 days
+                    // of inactivity per the Google Drive API contract.
+                    Timber.w("Google Drive: changes page token expired (410); deltaToken=%s; falling back to baseline", deltaToken)
                     val (baseChanges, baseToken) = restClient.changesSince(token, null)
                     return RemoteSnapshot(
                         changes = baseChanges.mapNotNull { it.toRemoteChange() },
