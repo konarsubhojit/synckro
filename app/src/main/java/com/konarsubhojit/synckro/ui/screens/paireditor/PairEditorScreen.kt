@@ -292,6 +292,9 @@ private fun ProviderDropdown(
     modifier: Modifier = Modifier,
 ) {
     var expanded by remember { mutableStateOf(false) }
+    val selectableProviders = remember {
+        CloudProviderType.entries.filter { it != CloudProviderType.FAKE }
+    }
 
     ExposedDropdownMenuBox(
         expanded = expanded,
@@ -312,28 +315,13 @@ private fun ProviderDropdown(
             expanded = expanded,
             onDismissRequest = { expanded = false },
         ) {
-            CloudProviderType.entries.forEach { provider ->
-                val isSelectable = provider == CloudProviderType.FAKE
+            selectableProviders.forEach { provider ->
                 DropdownMenuItem(
-                    text = {
-                        Column {
-                            Text(providerLabel(provider))
-                            if (!isSelectable) {
-                                Text(
-                                    text = stringResource(R.string.pair_editor_coming_soon),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                        }
-                    },
+                    text = { Text(providerLabel(provider)) },
                     onClick = {
-                        if (isSelectable) {
-                            onSelect(provider)
-                            expanded = false
-                        }
+                        onSelect(provider)
+                        expanded = false
                     },
-                    enabled = isSelectable,
                     contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding,
                 )
             }
