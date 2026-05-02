@@ -33,7 +33,7 @@ class SyncBenchmark {
     @get:Rule
     val benchmarkRule = MacrobenchmarkRule()
 
-    private val targetPackage = "com.synckro"
+    private val targetAppPackage = "com.synckro"
 
     /**
      * Measures cold-startup time.
@@ -45,7 +45,7 @@ class SyncBenchmark {
      */
     @Test
     fun startupCold() = benchmarkRule.measureRepeated(
-        packageName = targetPackage,
+        packageName = targetAppPackage,
         metrics = listOf(StartupTimingMetric()),
         compilationMode = CompilationMode.None(),
         startupMode = StartupMode.COLD,
@@ -64,7 +64,7 @@ class SyncBenchmark {
      */
     @Test
     fun startupWarm() = benchmarkRule.measureRepeated(
-        packageName = targetPackage,
+        packageName = targetAppPackage,
         metrics = listOf(StartupTimingMetric()),
         compilationMode = CompilationMode.None(),
         startupMode = StartupMode.WARM,
@@ -85,7 +85,7 @@ class SyncBenchmark {
      */
     @Test
     fun firstSyncColdStart() = benchmarkRule.measureRepeated(
-        packageName = targetPackage,
+        packageName = targetAppPackage,
         metrics = listOf(StartupTimingMetric()),
         compilationMode = CompilationMode.None(),
         startupMode = StartupMode.COLD,
