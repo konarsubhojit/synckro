@@ -166,6 +166,94 @@ class MigrationTest {
     }
 
     // -------------------------------------------------------------------------
+    // MIGRATION_7_8 – local_index remote metadata columns
+    // -------------------------------------------------------------------------
+
+    @Test
+    fun `MIGRATION_7_8 adds remoteSizeBytes column to local_index`() {
+        SynckroDatabase.MIGRATION_6_7.migrate(db)
+        SynckroDatabase.MIGRATION_7_8.migrate(db)
+
+        assertTrue(
+            "remoteSizeBytes column must exist in local_index after migration",
+            "remoteSizeBytes" in columnNames(db, "local_index"),
+        )
+    }
+
+    @Test
+    fun `MIGRATION_7_8 adds remoteMtimeMs column to local_index`() {
+        SynckroDatabase.MIGRATION_6_7.migrate(db)
+        SynckroDatabase.MIGRATION_7_8.migrate(db)
+
+        assertTrue(
+            "remoteMtimeMs column must exist in local_index after migration",
+            "remoteMtimeMs" in columnNames(db, "local_index"),
+        )
+    }
+
+    @Test
+    fun `MIGRATION_7_8 adds remoteEtag column to local_index`() {
+        SynckroDatabase.MIGRATION_6_7.migrate(db)
+        SynckroDatabase.MIGRATION_7_8.migrate(db)
+
+        assertTrue(
+            "remoteEtag column must exist in local_index after migration",
+            "remoteEtag" in columnNames(db, "local_index"),
+        )
+    }
+
+    @Test
+    fun `MIGRATION_7_8 existing local_index row has null remote columns after migration`() {
+        insertSyncPair(db)
+        SynckroDatabase.MIGRATION_6_7.migrate(db)
+
+        val pairId = firstPairId(db)
+        db.execSQL(
+            "INSERT INTO local_index (pairId, relativePath, sizeBytes, mtimeMs) " +
+                "VALUES ($pairId, 'notes.txt', 512, 1000000)",
+        )
+
+        SynckroDatabase.MIGRATION_7_8.migrate(db)
+
+        val cursor = db.query(
+            "SELECT remoteSizeBytes, remoteMtimeMs, remoteEtag FROM local_index WHERE pairId = $pairId",
+            emptyArray<Any?>(),
+        )
+        cursor.use {
+            assertTrue(it.moveToFirst())
+            assertTrue("remoteSizeBytes should be NULL for pre-migration rows", it.isNull(0))
+            assertTrue("remoteMtimeMs should be NULL for pre-migration rows", it.isNull(1))
+            assertTrue("remoteEtag should be NULL for pre-migration rows", it.isNull(2))
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Full migration chain v1 → v8
+    // -------------------------------------------------------------------------
+
+    @Test
+    fun `all migrations from v1 to v8 run without error`() {
+        val v1Db = openAtV1(context)
+        try {
+            SynckroDatabase.MIGRATION_1_2.migrate(v1Db)
+            SynckroDatabase.MIGRATION_2_3.migrate(v1Db)
+            SynckroDatabase.MIGRATION_3_4.migrate(v1Db)
+            SynckroDatabase.MIGRATION_4_5.migrate(v1Db)
+            SynckroDatabase.MIGRATION_5_6.migrate(v1Db)
+            SynckroDatabase.MIGRATION_6_7.migrate(v1Db)
+            SynckroDatabase.MIGRATION_7_8.migrate(v1Db)
+
+            val cols = columnNames(v1Db, "local_index")
+            assertTrue("remoteSizeBytes must exist after full migration chain", "remoteSizeBytes" in cols)
+            assertTrue("remoteMtimeMs must exist after full migration chain", "remoteMtimeMs" in cols)
+            assertTrue("remoteEtag must exist after full migration chain", "remoteEtag" in cols)
+        } finally {
+            v1Db.close()
+            context.deleteDatabase("${TEST_DB}_v1")
+        }
+    }
+
+    // -------------------------------------------------------------------------
     // Full migration chain v1 → v7
     // -------------------------------------------------------------------------
 
