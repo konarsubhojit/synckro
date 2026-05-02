@@ -140,17 +140,17 @@ class OneDriveProvider
 
         override suspend fun list(folderId: String?): List<RemoteFile> =
             graphCall {
-                graphClient.list(requireToken(), folderId).map { it.toRemoteFile() }
+                graphClient.list(obtainAccessToken(), folderId).map { it.toRemoteFile() }
             }
 
         override suspend fun getMetadata(id: String): RemoteFile =
             graphCall {
-                graphClient.getMetadata(requireToken(), id).toRemoteFile()
+                graphClient.getMetadata(obtainAccessToken(), id).toRemoteFile()
             }
 
         override suspend fun download(id: String): InputStream =
             graphCall {
-                graphClient.download(requireToken(), id)
+                graphClient.download(obtainAccessToken(), id)
             }
 
         override suspend fun uploadNew(
@@ -162,7 +162,7 @@ class OneDriveProvider
         ): RemoteFile =
             graphCall {
                 graphClient
-                    .uploadNew(requireToken(), parentId, name, content, size, mimeType)
+                    .uploadNew(obtainAccessToken(), parentId, name, content, size, mimeType)
                     .toRemoteFile()
             }
 
@@ -173,7 +173,7 @@ class OneDriveProvider
             mimeType: String?,
         ): RemoteFile =
             graphCall {
-                graphClient.updateContent(requireToken(), id, content, size, mimeType).toRemoteFile()
+                graphClient.updateContent(obtainAccessToken(), id, content, size, mimeType).toRemoteFile()
             }
 
         override suspend fun createFolder(
@@ -181,12 +181,12 @@ class OneDriveProvider
             name: String,
         ): RemoteFile =
             graphCall {
-                graphClient.createFolder(requireToken(), parentId, name).toRemoteFile()
+                graphClient.createFolder(obtainAccessToken(), parentId, name).toRemoteFile()
             }
 
         override suspend fun delete(id: String): Unit =
             graphCall {
-                graphClient.delete(requireToken(), id)
+                graphClient.delete(obtainAccessToken(), id)
             }
 
         /**
@@ -202,7 +202,7 @@ class OneDriveProvider
          */
         override suspend fun changesSince(token: String?): ChangesPage =
             graphCall {
-                val (items, nextDeltaLink) = graphClient.changesSince(requireToken(), token)
+                val (items, nextDeltaLink) = graphClient.changesSince(obtainAccessToken(), token)
                 val changes =
                     items.mapNotNull { item ->
                         when {

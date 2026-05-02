@@ -133,17 +133,17 @@ class GoogleDriveProvider
 
         override suspend fun list(folderId: String?): List<RemoteFile> =
             driveCall {
-                restClient.list(requireToken(), folderId).map { it.toRemoteFile() }
+                restClient.list(obtainAccessToken(), folderId).map { it.toRemoteFile() }
             }
 
         override suspend fun getMetadata(id: String): RemoteFile =
             driveCall {
-                restClient.getMetadata(requireToken(), id).toRemoteFile()
+                restClient.getMetadata(obtainAccessToken(), id).toRemoteFile()
             }
 
         override suspend fun download(id: String): InputStream =
             driveCall {
-                restClient.download(requireToken(), id)
+                restClient.download(obtainAccessToken(), id)
             }
 
         override suspend fun uploadNew(
@@ -155,7 +155,7 @@ class GoogleDriveProvider
         ): RemoteFile =
             driveCall {
                 restClient
-                    .uploadNew(requireToken(), parentId, name, content, size, mimeType)
+                    .uploadNew(obtainAccessToken(), parentId, name, content, size, mimeType)
                     .toRemoteFile()
             }
 
@@ -166,7 +166,7 @@ class GoogleDriveProvider
             mimeType: String?,
         ): RemoteFile =
             driveCall {
-                restClient.updateContent(requireToken(), id, content, size, mimeType).toRemoteFile()
+                restClient.updateContent(obtainAccessToken(), id, content, size, mimeType).toRemoteFile()
             }
 
         override suspend fun createFolder(
@@ -174,12 +174,12 @@ class GoogleDriveProvider
             name: String,
         ): RemoteFile =
             driveCall {
-                restClient.createFolder(requireToken(), parentId, name).toRemoteFile()
+                restClient.createFolder(obtainAccessToken(), parentId, name).toRemoteFile()
             }
 
         override suspend fun delete(id: String): Unit =
             driveCall {
-                restClient.delete(requireToken(), id)
+                restClient.delete(obtainAccessToken(), id)
             }
 
         /**
@@ -193,7 +193,7 @@ class GoogleDriveProvider
          */
         override suspend fun changesSince(token: String?): ChangesPage =
             driveCall {
-                val (changes, nextToken) = restClient.changesSince(requireToken(), token)
+                val (changes, nextToken) = restClient.changesSince(obtainAccessToken(), token)
                 val remoteChanges =
                     changes.mapNotNull { change ->
                         when {

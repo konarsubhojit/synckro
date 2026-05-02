@@ -25,6 +25,7 @@ import org.junit.Test
  */
 class OneDriveProviderAuthTest {
     private lateinit var authManager: OneDriveAuthManager
+    private lateinit var graphClient: OneDriveGraphClient
     private lateinit var provider: OneDriveProvider
 
     private val fakeAccount =
@@ -38,7 +39,8 @@ class OneDriveProviderAuthTest {
     @Before
     fun setUp() {
         authManager = mockk()
-        provider = OneDriveProvider(authManager, mockk(relaxed = true))
+        graphClient = mockk(relaxed = true)
+        provider = OneDriveProvider(authManager, graphClient)
     }
 
     // -------------------------------------------------------------------------
@@ -175,6 +177,20 @@ class OneDriveProviderAuthTest {
             val result = provider.ensureAuthenticated()
 
             assertFalse(result)
+        }
+
+    @Test
+    fun `list silently authenticates when no token is cached`() =
+        runTest {
+            coEvery { authManager.currentAccounts() } returns listOf(fakeAccount)
+            coEvery { authManager.acquireAccessToken(fakeAccount) } returns AuthResult.Success("access-token-123")
+            coEvery { graphClient.list("access-token-123", null) } returns emptyList()
+
+            val result = provider.list(null)
+
+            assertTrue(result.isEmpty())
+            coVerify(exactly = 1) { authManager.acquireAccessToken(fakeAccount) }
+            coVerify(exactly = 1) { graphClient.list("access-token-123", null) }
         }
 
     // -------------------------------------------------------------------------
