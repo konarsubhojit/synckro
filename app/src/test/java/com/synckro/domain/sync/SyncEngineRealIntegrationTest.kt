@@ -206,7 +206,7 @@ class SyncEngineRealIntegrationTest {
             syncPairDao = syncPairDao,
             localIndexDao = localIndexDao,
             eventRepository = eventRepository,
-            localFileAccess = localFileAccess,
+            localFileAccess = { _ -> localFileAccess },
         )
 
     // -------------------------------------------------------------------------
@@ -368,7 +368,7 @@ class SyncEngineRealIntegrationTest {
                     syncPairDao = syncPairDao,
                     localIndexDao = localIndexDao,
                     eventRepository = eventRepository,
-                    localFileAccess = localFileAccess,
+                    localFileAccess = { _ -> localFileAccess },
                 )
 
             val result = engine.runOnce(pair)
@@ -399,7 +399,7 @@ class SyncEngineRealIntegrationTest {
                     syncPairDao = syncPairDao,
                     localIndexDao = localIndexDao,
                     eventRepository = eventRepository,
-                    localFileAccess = localFileAccess,
+                    localFileAccess = { _ -> localFileAccess },
                 )
 
             var caughtCancellation = false
@@ -498,7 +498,7 @@ class SyncEngineRealIntegrationTest {
                     syncPairDao = syncPairDao,
                     localIndexDao = localIndexDao,
                     eventRepository = eventRepository,
-                    localFileAccess = localFileAccess,
+                    localFileAccess = { _ -> localFileAccess },
                 )
 
             val result = engine.runOnce(pair)
@@ -530,7 +530,7 @@ class SyncEngineRealIntegrationTest {
                     syncPairDao = syncPairDao,
                     localIndexDao = localIndexDao,
                     eventRepository = eventRepository,
-                    localFileAccess = localFileAccess,
+                    localFileAccess = { _ -> localFileAccess },
                 )
 
             val result = engine.runOnce(pair)
@@ -564,7 +564,7 @@ class SyncEngineRealIntegrationTest {
                     syncPairDao = syncPairDao,
                     localIndexDao = localIndexDao,
                     eventRepository = eventRepository,
-                    localFileAccess = localFileAccess,
+                    localFileAccess = { _ -> localFileAccess },
                 )
 
             val result = engine.runOnce(pair)
@@ -681,7 +681,7 @@ class SyncEngineRealIntegrationTest {
                     syncPairDao = syncPairDao,
                     localIndexDao = localIndexDao,
                     eventRepository = eventRepository,
-                    localFileAccess = localFileAccess,
+                    localFileAccess = { _ -> localFileAccess },
                 )
 
             val result = engine.runOnce(pair)
@@ -757,7 +757,7 @@ class SyncEngineRealIntegrationTest {
                     syncPairDao = syncPairDao,
                     localIndexDao = localIndexDao,
                     eventRepository = eventRepository,
-                    localFileAccess = localFileAccess,
+                    localFileAccess = { _ -> localFileAccess },
                 )
 
             val result = engine.runOnce(pair)
