@@ -49,8 +49,9 @@
     <string name="pair_editor_pick_folder">Pick folder</string>
     <string name="pair_editor_provider">Cloud provider</string>
     <string name="pair_editor_coming_soon">Coming soon</string>
-    <string name="pair_editor_remote_path">Remote folder path / ID</string>
-    <string name="pair_editor_remote_path_hint">Leave empty to use root folder</string>
+    <string name="pair_editor_remote_folder">Cloud folder</string>
+    <string name="pair_editor_remote_folder_hint">Tap the folder icon to browse cloud folders</string>
+    <string name="pair_editor_pick_remote_folder">Browse cloud folders</string>
     <string name="pair_editor_conflict_policy">Conflict resolution</string>
     <string name="pair_editor_direction">Sync direction</string>
     <string name="pair_editor_wifi_only">Sync on Wi-Fi only</string>
@@ -88,6 +89,14 @@
     <string name="pick_folder_selected_label">Selected folder</string>
     <string name="pick_folder_confirm">Use this folder</string>
     <string name="pick_folder_needs_relink">Folder access was revoked. Tap to re-select the folder.</string>
+
+    <!-- Pick remote (cloud) folder browser -->
+    <string name="pick_remote_folder_title">Pick cloud folder</string>
+    <string name="pick_remote_folder_empty">No sub-folders found here.</string>
+    <string name="pick_remote_folder_confirm">Use &#8220;%1$s&#8221;</string>
+    <string name="pick_remote_folder_retry">Retry</string>
+    <string name="pick_remote_folder_navigate_into">Open folder</string>
+    <string name="pick_remote_folder_unknown_error">An unknown error occurred</string>
 
     <!-- Accounts – snackbar / status messages surfaced by AccountsViewModel -->
     <string name="accounts_unknown_provider_format">Unknown provider: %1$s</string>

@@ -11,6 +11,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.synckro.domain.model.CloudProviderType
 import com.synckro.ui.screens.HomeScreen
 import com.synckro.ui.screens.OnboardingScreen
 import com.synckro.ui.screens.accounts.AccountsScreen
@@ -19,6 +20,8 @@ import com.synckro.ui.screens.logs.LogsScreen
 import com.synckro.ui.screens.paireditor.PairEditorScreen
 import com.synckro.ui.screens.paireditor.PairEditorViewModel
 import com.synckro.ui.screens.pickfolder.PickLocalFolderScreen
+import com.synckro.ui.screens.pickfolder.PickRemoteFolderScreen
+import com.synckro.ui.screens.pickfolder.PickRemoteFolderViewModel
 
 object Routes {
     const val ONBOARDING = "onboarding"
@@ -30,10 +33,16 @@ object Routes {
     const val PAIR_EDITOR = "pair_editor?pairId={pairId}"
     const val PICK_FOLDER = "pick_folder"
 
+    /** Route template for the remote folder browser; requires a `provider` query parameter. */
+    const val PICK_REMOTE_FOLDER = "pick_remote_folder?${PickRemoteFolderViewModel.ARG_PROVIDER}={${PickRemoteFolderViewModel.ARG_PROVIDER}}"
+
     /** Optional query parameter `pairId`; defaults to 0 (show all pairs). */
     const val LOGS = "logs?pairId={pairId}"
 
     fun pairEditor(pairId: Long = 0L) = "pair_editor?pairId=$pairId"
+
+    fun pickRemoteFolder(provider: CloudProviderType) =
+        "pick_remote_folder?${PickRemoteFolderViewModel.ARG_PROVIDER}=${provider.name}"
 
     fun logs(pairId: Long = 0L) = "logs?pairId=$pairId"
 }
@@ -107,6 +116,22 @@ fun SynckroNavHost(activity: ComponentActivity) {
                 }
             }
 
+            // Observe the remote folder pick result in the same way.
+            val pickedRemoteFolderId by backStackEntry.savedStateHandle
+                .getStateFlow<String?>(PairEditorViewModel.KEY_REMOTE_FOLDER_ID, null)
+                .collectAsStateWithLifecycle()
+            LaunchedEffect(pickedRemoteFolderId) {
+                pickedRemoteFolderId?.let { id ->
+                    val name =
+                        backStackEntry.savedStateHandle
+                            .get<String?>(PairEditorViewModel.KEY_REMOTE_FOLDER_NAME)
+                            .orEmpty()
+                    editorViewModel.onRemoteFolderPicked(id, name)
+                    backStackEntry.savedStateHandle[PairEditorViewModel.KEY_REMOTE_FOLDER_ID] = null
+                    backStackEntry.savedStateHandle[PairEditorViewModel.KEY_REMOTE_FOLDER_NAME] = null
+                }
+            }
+
             PairEditorScreen(
                 pairId = pairId,
                 onBack = { nav.popBackStack() },
@@ -115,6 +140,9 @@ fun SynckroNavHost(activity: ComponentActivity) {
                     backStackEntry.savedStateHandle[PairEditorViewModel.KEY_PICK_FOLDER_INITIAL_URI] =
                         initialUri
                     nav.navigate(Routes.PICK_FOLDER) { launchSingleTop = true }
+                },
+                onPickRemoteFolder = { provider ->
+                    nav.navigate(Routes.pickRemoteFolder(provider)) { launchSingleTop = true }
                 },
                 onSaved = { nav.popBackStack() },
                 viewModel = editorViewModel,
@@ -142,6 +170,31 @@ fun SynckroNavHost(activity: ComponentActivity) {
         }
         composable(Routes.CONFLICT_INBOX) {
             ConflictInboxScreen(
+                onBack = { nav.popBackStack() },
+            )
+        }
+        composable(
+            route = Routes.PICK_REMOTE_FOLDER,
+            arguments =
+                listOf(
+                    navArgument(PickRemoteFolderViewModel.ARG_PROVIDER) {
+                        type = NavType.StringType
+                        defaultValue = CloudProviderType.GOOGLE_DRIVE.name
+                    },
+                ),
+        ) {
+            PickRemoteFolderScreen(
+                onFolderPicked = { id, name ->
+                    // Pass the chosen folder back to the PairEditorScreen via its
+                    // SavedStateHandle so PairEditorViewModel can update its state.
+                    nav.previousBackStackEntry
+                        ?.savedStateHandle
+                        ?.set(PairEditorViewModel.KEY_REMOTE_FOLDER_ID, id)
+                    nav.previousBackStackEntry
+                        ?.savedStateHandle
+                        ?.set(PairEditorViewModel.KEY_REMOTE_FOLDER_NAME, name)
+                    nav.popBackStack()
+                },
                 onBack = { nav.popBackStack() },
             )
         }

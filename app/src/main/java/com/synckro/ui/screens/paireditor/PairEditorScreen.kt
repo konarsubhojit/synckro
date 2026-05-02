@@ -56,9 +56,15 @@ import com.synckro.domain.model.SyncDirection
  * The local folder URI is received from [PickLocalFolderScreen] via the nav
  * back-stack's [SavedStateHandle] under key [PairEditorViewModel.KEY_LOCAL_TREE_URI].
  *
+ * The remote folder ID and name are received from [PickRemoteFolderScreen] via the
+ * nav back-stack's [SavedStateHandle] under keys [PairEditorViewModel.KEY_REMOTE_FOLDER_ID]
+ * and [PairEditorViewModel.KEY_REMOTE_FOLDER_NAME].
+ *
  * @param pairId Row ID of the pair to edit, or 0 to create a new one.
  * @param onBack Called when the user presses the back / up button.
  * @param onPickFolder Called when the user taps "Pick local folder".
+ * @param onPickRemoteFolder Called when the user taps the cloud folder browse button,
+ *   receiving the currently selected provider type.
  * @param onSaved Called with the saved pair ID after a successful save.
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -67,6 +73,7 @@ fun PairEditorScreen(
     pairId: Long = 0L,
     onBack: () -> Unit,
     onPickFolder: (String?) -> Unit,
+    onPickRemoteFolder: (CloudProviderType) -> Unit,
     onSaved: (Long) -> Unit,
     viewModel: PairEditorViewModel = hiltViewModel(),
 ) {
@@ -173,12 +180,24 @@ fun PairEditorScreen(
                 )
 
                 // Remote folder path
+                val remoteFolderDisplayName =
+                    remember(state.remoteFolderId, state.remoteFolderName) {
+                        state.remoteFolderName.ifEmpty { state.remoteFolderId }
+                    }
                 OutlinedTextField(
-                    value = state.remoteFolderId,
-                    onValueChange = viewModel::onRemoteFolderIdChange,
-                    label = { Text(stringResource(R.string.pair_editor_remote_path)) },
-                    placeholder = { Text(stringResource(R.string.pair_editor_remote_path_hint)) },
-                    singleLine = true,
+                    value = remoteFolderDisplayName,
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text(stringResource(R.string.pair_editor_remote_folder)) },
+                    placeholder = { Text(stringResource(R.string.pair_editor_remote_folder_hint)) },
+                    trailingIcon = {
+                        IconButton(onClick = { onPickRemoteFolder(state.provider) }) {
+                            Icon(
+                                Icons.Filled.FolderOpen,
+                                contentDescription = stringResource(R.string.pair_editor_pick_remote_folder),
+                            )
+                        }
+                    },
                     modifier = Modifier.fillMaxWidth(),
                 )
 
