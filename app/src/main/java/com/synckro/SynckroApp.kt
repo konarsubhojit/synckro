@@ -17,10 +17,11 @@ import javax.inject.Inject
  * Hilt-aware [androidx.work.WorkerFactory] so that workers can use DI.
  *
  * In debug builds we also plant [FileLoggingTree] (writing to
- * `Android/data/<applicationId>/files/logs/synckro-debug.log`) and register an
+ * `data/data/<applicationId>/files/logs/synckro-debug.log`) and register an
  * uncaught-exception handler that flushes the fatal stack trace to the same
- * file before the process dies. This makes bug reports reproducible without
- * needing a USB cable to grab Logcat.
+ * file before the process dies. The debug "Export debug log" button on the
+ * Accounts screen copies the log to the public Downloads folder so it can be
+ * read without a USB cable.
  */
 @HiltAndroidApp
 class SynckroApp :

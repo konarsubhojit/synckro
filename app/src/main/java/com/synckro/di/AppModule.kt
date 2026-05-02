@@ -10,13 +10,18 @@ import com.synckro.data.local.dao.LocalIndexDao
 import com.synckro.data.local.dao.SyncEventDao
 import com.synckro.data.local.dao.SyncPairDao
 import com.synckro.data.local.db.SynckroDatabase
+import com.synckro.data.local.fs.LocalFsEnumerator
 import com.synckro.data.repository.ConflictRepository
+import com.synckro.data.repository.SyncEventRepository
 import com.synckro.data.scanner.LocalFolderScannerImpl
 import com.synckro.data.worker.SyncScheduler
 import com.synckro.domain.auth.AuthManager
 import com.synckro.domain.model.CloudProviderType
 import com.synckro.domain.provider.CloudProvider
 import com.synckro.domain.scan.LocalFolderScanner
+import com.synckro.domain.sync.LocalFileAccess
+import com.synckro.domain.sync.LocalFileStat
+import com.synckro.domain.sync.RemoteEnumerator
 import com.synckro.domain.sync.SyncEngine
 import com.synckro.providers.fake.FakeCloudProvider
 import com.synckro.providers.gdrive.GoogleDriveAuthManager
@@ -30,7 +35,26 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import dagger.multibindings.IntoMap
 import okhttp3.OkHttpClient
+import java.io.InputStream
 import javax.inject.Singleton
+
+/**
+ * Placeholder [LocalFileAccess] that always reports that files do not exist.
+ *
+ * Used in [AppModule.provideSyncEngine] until a production SAF-backed
+ * implementation is wired.  Any [SyncOp] that requires actual file I/O
+ * (UploadNew / DownloadNew / …) will fail gracefully through
+ * [com.synckro.domain.sync.SyncOpApplier]'s per-op error
+ * handler rather than crashing the worker.
+ */
+private object NoOpLocalFileAccess : LocalFileAccess {
+    override fun openRead(relativePath: String): InputStream? = null
+    override fun write(relativePath: String, content: InputStream, mimeType: String?): LocalFileStat {
+        error("NoOpLocalFileAccess: write not implemented — wire a real LocalFileAccess implementation")
+    }
+    override fun delete(relativePath: String): Boolean = false
+    override fun stat(relativePath: String): LocalFileStat? = null
+}
 
 @Module
 @InstallIn(SingletonComponent::class)
@@ -58,6 +82,7 @@ object AppModule {
                     SynckroDatabase.MIGRATION_4_5,
                     SynckroDatabase.MIGRATION_5_6,
                     SynckroDatabase.MIGRATION_6_7,
+                    SynckroDatabase.MIGRATION_7_8,
                 )
         // Destructive fallback is only acceptable while the schema is still
         // pre-1.0. In release builds we refuse to drop user sync state and
@@ -137,13 +162,35 @@ object AppModule {
     /**
      * Provides the application's synchronization engine used to coordinate sync tasks.
      *
+     * Wires the full [runReal] pipeline: [LocalFsEnumerator], the multibound
+     * [RemoteEnumerator] map, [SyncPairDao], [LocalIndexDao], [SyncEventRepository],
+     * and a no-op [LocalFileAccess] placeholder (replaced by a SAF-backed implementation
+     * once local file I/O is fully wired in production).
+     *
      * @return A `SyncEngine` instance used to perform and manage synchronization operations.
      */
     @Provides @Singleton
     fun provideSyncEngine(
         conflictRepository: ConflictRepository,
         providers: Map<CloudProviderType, @JvmSuppressWildcards CloudProvider>,
-    ): SyncEngine = SyncEngine(conflictRepository, providers)
+        localFsEnumerator: LocalFsEnumerator,
+        remoteEnumerators: Map<CloudProviderType, @JvmSuppressWildcards RemoteEnumerator>,
+        syncPairDao: SyncPairDao,
+        localIndexDao: LocalIndexDao,
+        eventRepository: SyncEventRepository,
+    ): SyncEngine = SyncEngine(
+        conflictRepository = conflictRepository,
+        providers = providers,
+        localFsEnumerator = localFsEnumerator,
+        remoteEnumerators = remoteEnumerators,
+        syncPairDao = syncPairDao,
+        localIndexDao = localIndexDao,
+        eventRepository = eventRepository,
+        // LocalFileAccess has no production SAF implementation yet; real file
+        // transfer will fail gracefully through SyncOpApplier's per-op error
+        // handling until a production implementation is wired here.
+        localFileAccess = NoOpLocalFileAccess,
+    )
 
     @Provides @IntoMap
     @CloudProviderKey(CloudProviderType.ONEDRIVE)

@@ -297,6 +297,9 @@ class SyncOpApplier(
                 mtimeMs = stat.mtimeMs,
                 contentHash = null,
                 remoteId = remote.id,
+                remoteSizeBytes = remote.size,
+                remoteMtimeMs = remote.lastModifiedMs,
+                remoteEtag = remote.eTag,
             ),
         )
     }
@@ -323,6 +326,9 @@ class SyncOpApplier(
                 mtimeMs = stat.mtimeMs,
                 contentHash = null,
                 remoteId = remote.id,
+                remoteSizeBytes = remote.size,
+                remoteMtimeMs = remote.lastModifiedMs,
+                remoteEtag = remote.eTag,
             ),
         )
     }
@@ -360,6 +366,9 @@ class SyncOpApplier(
                 mtimeMs = stat.mtimeMs,
                 contentHash = null,
                 remoteId = remote.id,
+                remoteSizeBytes = remote.size,
+                remoteMtimeMs = remote.lastModifiedMs,
+                remoteEtag = remote.eTag,
             ),
         )
     }
@@ -386,6 +395,9 @@ class SyncOpApplier(
                 mtimeMs = stat.mtimeMs,
                 contentHash = null,
                 remoteId = remote.id,
+                remoteSizeBytes = remote.size,
+                remoteMtimeMs = remote.lastModifiedMs,
+                remoteEtag = remote.eTag,
             ),
         )
     }
@@ -447,10 +459,9 @@ class SyncOpApplier(
                         localFileAccess.stat(op.relativePath)
                             ?: error("Local file not found for conflict resolution: ${op.relativePath}")
                     var retried = false
-                    withRetry(onRetry = { _, _ -> retried = true }) {
-                        val stream =
-                            localFileAccess.openRead(op.relativePath)
-                                ?: error("Cannot read local file for conflict resolution: ${op.relativePath}")
+                    val updatedRemote = withRetry(onRetry = { _, _ -> retried = true }) {
+                        val stream = localFileAccess.openRead(op.relativePath)
+                            ?: error("Cannot read local file for conflict resolution: ${op.relativePath}")
                         provider.updateContent(
                             id = index.remoteId,
                             content = stream,
@@ -471,6 +482,9 @@ class SyncOpApplier(
                             sizeBytes = stat.sizeBytes,
                             mtimeMs = stat.mtimeMs,
                             contentHash = null,
+                            remoteSizeBytes = updatedRemote.size,
+                            remoteMtimeMs = updatedRemote.lastModifiedMs,
+                            remoteEtag = updatedRemote.eTag,
                         ),
                     )
                 } else if (remote == null) {
@@ -531,6 +545,9 @@ class SyncOpApplier(
                             mtimeMs = stat.mtimeMs,
                             contentHash = null,
                             remoteId = remote.id,
+                            remoteSizeBytes = remote.size,
+                            remoteMtimeMs = remote.lastModifiedMs,
+                            remoteEtag = remote.eTag,
                         ),
                     )
                 } else {

@@ -189,16 +189,21 @@ Add each secret listed in the table below.
 | `DEBUG_KEY_ALIAS`         | The key alias (e.g. `androiddebugkey`).                              |
 | `DEBUG_KEY_PASSWORD`      | The key password (e.g. `android`; may be the same as the store password). |
 
-> All seven secrets are independent — you can add them in any order.  Secrets
-> that are missing or empty cause the corresponding feature to silently degrade:
+> All seven secrets are independent — you can add them in any order.  The
+> effects of missing or empty secrets:
 > - Missing keystore secrets → CI falls back to AGP's auto-generated debug
 >   keystore (auth will fail for the reasons described at the top of this doc).
-> - Missing `MSAL_REDIRECT_URI` → the MSAL intent filter gets an empty host
->   and is effectively disabled; sign-in callbacks will not be routed back to
->   the app.
-> - Missing `GOOGLE_WEB_CLIENT_ID` / `MS_CLIENT_ID` → `BuildConfig` fields
->   are empty strings; the auth flow fails with a configuration error at
->   runtime.
+> - Missing `MSAL_REDIRECT_URI` **or** `MS_CLIENT_ID` (only one of the two set)
+>   → **`assembleDebug` fails at configuration time** with a message naming the
+>   missing variable and pointing at `docs/login-setup.md`.
+> - Both `MS_CLIENT_ID` **and** `MSAL_REDIRECT_URI` missing/empty → build
+>   succeeds with a `WARNING:` line; OneDrive sign-in shows "not configured in
+>   this build" at runtime with no MSAL stack trace spam.
+> - `MSAL_REDIRECT_URI` present but malformed (missing `msauth://` prefix, empty
+>   host, or empty path) → **`assembleDebug` fails at configuration time**.
+> - Missing `GOOGLE_WEB_CLIENT_ID` → `BuildConfig.GOOGLE_WEB_CLIENT_ID` is an
+>   empty string; `GoogleDriveAuthManager.signIn()` returns `NotConfigured`
+>   without touching the credential flow.
 
 ---
 

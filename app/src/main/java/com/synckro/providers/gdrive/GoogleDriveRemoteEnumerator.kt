@@ -7,6 +7,7 @@ import com.synckro.domain.sync.RemoteEnumerator
 import com.synckro.domain.sync.RemoteSnapshot
 import javax.inject.Inject
 import javax.inject.Singleton
+import timber.log.Timber
 
 /**
  * [RemoteEnumerator] for Google Drive, backed by
@@ -26,48 +27,58 @@ import javax.inject.Singleton
  * (the diff stage classifies ADD vs MODIFY against the local index).
  */
 @Singleton
-class GoogleDriveRemoteEnumerator
-    @Inject
-    constructor(
-        private val provider: GoogleDriveProvider,
-        private val restClient: GoogleDriveRestClient,
-    ) : RemoteEnumerator {
-        /**
-         * Acquires an access token via [provider] and delegates to
-         * [enumerateWithToken]. Authentication errors are surfaced as
-         * [CloudProviderException] subtypes.
-         */
-        override suspend fun enumerate(deltaToken: String?): RemoteSnapshot {
-            val token = provider.obtainAccessToken()
-            return enumerateWithToken(token, deltaToken)
-        }
+class GoogleDriveRemoteEnumerator @Inject constructor(
+    private val provider: GoogleDriveProvider,
+    private val restClient: GoogleDriveRestClient,
+) : RemoteEnumerator {
 
-        /**
-         * Test seam: enumerate using a directly-supplied bearer token. Tests can
-         * point [restClient] at a `MockWebServer` and exercise the full HTTP
-         * round-trip without going through Google Identity.
-         */
-        internal suspend fun enumerateWithToken(
-            token: String,
-            deltaToken: String?,
-        ): RemoteSnapshot {
-            val (changes, nextToken) =
-                try {
-                    restClient.changesSince(token, deltaToken)
-                } catch (e: DriveApiException) {
-                    if (e.statusCode == 401) {
-                        throw CloudProviderException.AuthenticationRequired(
-                            "Google Drive access token rejected (401). Please re-authenticate.",
-                            e,
-                        )
-                    }
-                    throw e
-                }
-
-            val mapped = changes.mapNotNull { it.toRemoteChange() }
-            return RemoteSnapshot(changes = mapped, newDeltaToken = nextToken)
-        }
+    /**
+     * Acquires an access token via [provider] and delegates to
+     * [enumerateWithToken]. Authentication errors are surfaced as
+     * [CloudProviderException] subtypes.
+     */
+    override suspend fun enumerate(deltaToken: String?): RemoteSnapshot {
+        val token = provider.obtainAccessToken()
+        return enumerateWithToken(token, deltaToken)
     }
+
+    /**
+     * Test seam: enumerate using a directly-supplied bearer token. Tests can
+     * point [restClient] at a `MockWebServer` and exercise the full HTTP
+     * round-trip without going through Google Identity.
+     */
+    internal suspend fun enumerateWithToken(
+        token: String,
+        deltaToken: String?,
+    ): RemoteSnapshot {
+        val (changes, nextToken) = try {
+            restClient.changesSince(token, deltaToken)
+        } catch (e: DriveApiException) {
+            when (e.statusCode) {
+                401 -> throw CloudProviderException.AuthenticationRequired(
+                    "Google Drive access token rejected (401). Please re-authenticate.",
+                    e,
+                )
+                410 -> {
+                    // Page token has expired — fall back to a fresh baseline so the next
+                    // sync starts from a clean slate without replaying history.
+                    // This is a normal operational scenario: tokens expire after ~7 days
+                    // of inactivity per the Google Drive API contract.
+                    Timber.w("Google Drive: changes page token expired (410); deltaToken=%s; falling back to baseline", deltaToken)
+                    val (baseChanges, baseToken) = restClient.changesSince(token, null)
+                    return RemoteSnapshot(
+                        changes = baseChanges.mapNotNull { it.toRemoteChange() },
+                        newDeltaToken = baseToken,
+                    )
+                }
+                else -> throw e
+            }
+        }
+
+        val mapped = changes.mapNotNull { it.toRemoteChange() }
+        return RemoteSnapshot(changes = mapped, newDeltaToken = nextToken)
+    }
+}
 
 /**
  * Maps a Drive v3 [DriveChange] entry to a [RemoteChange]. Returns `null` for

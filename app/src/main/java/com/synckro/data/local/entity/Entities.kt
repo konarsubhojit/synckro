@@ -102,6 +102,11 @@ data class FileIndexEntity(
  *
  * Rows are removed automatically (CASCADE) when the parent [SyncPairEntity] is
  * deleted.
+ *
+ * Remote metadata fields ([remoteSizeBytes], [remoteMtimeMs], [remoteEtag]) are
+ * populated after each successful sync operation by [com.synckro.domain.sync.SyncOpApplier].
+ * They allow [com.synckro.domain.sync.SyncDiffer] to distinguish a genuine
+ * remote change from an echo of a locally-initiated upload in the provider's change log.
  */
 @Entity(
     tableName = "local_index",
@@ -124,4 +129,10 @@ data class LocalIndexEntity(
     val contentHash: String? = null,
     /** Provider-specific remote item ID; null until the item has been synced at least once. */
     val remoteId: String? = null,
+    /** Remote file size in bytes, as reported by the provider on the last successful sync. */
+    val remoteSizeBytes: Long? = null,
+    /** Remote last-modified timestamp (epoch ms) from the last successful sync. */
+    val remoteMtimeMs: Long? = null,
+    /** Provider content fingerprint (ETag / md5Checksum) from the last successful sync. */
+    val remoteEtag: String? = null,
 )
