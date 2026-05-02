@@ -86,10 +86,10 @@ class PairEditorViewModelTest {
     // -------------------------------------------------------------------------
 
     @Test
-    fun `default state has FAKE provider and empty fields`() {
+    fun `default state has google drive provider and empty fields`() {
         val vm = createVm()
         val state = vm.state.value
-        assertEquals(CloudProviderType.FAKE, state.provider)
+        assertEquals(CloudProviderType.GOOGLE_DRIVE, state.provider)
         assertEquals("", state.displayName)
         assertEquals("", state.localTreeUri)
         assertFalse(state.isSaving)

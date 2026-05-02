@@ -48,7 +48,7 @@ class PairEditorViewModel
             val isLoading: Boolean = false,
             val displayName: String = "",
             val localTreeUri: String = "",
-            val provider: CloudProviderType = CloudProviderType.FAKE,
+            val provider: CloudProviderType = CloudProviderType.GOOGLE_DRIVE,
             val remoteFolderId: String = "",
             val conflictPolicy: ConflictPolicy = ConflictPolicy.NEWEST_WINS,
             val direction: SyncDirection = SyncDirection.BIDIRECTIONAL,
