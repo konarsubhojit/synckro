@@ -25,6 +25,7 @@ import org.junit.Test
  */
 class GoogleDriveProviderAuthTest {
     private lateinit var authManager: GoogleDriveAuthManager
+    private lateinit var restClient: GoogleDriveRestClient
     private lateinit var provider: GoogleDriveProvider
 
     private val fakeAccount =
@@ -38,7 +39,8 @@ class GoogleDriveProviderAuthTest {
     @Before
     fun setUp() {
         authManager = mockk()
-        provider = GoogleDriveProvider(authManager, mockk(relaxed = true))
+        restClient = mockk(relaxed = true)
+        provider = GoogleDriveProvider(authManager, restClient)
     }
 
     // -------------------------------------------------------------------------
@@ -160,6 +162,20 @@ class GoogleDriveProviderAuthTest {
             val result = provider.ensureAuthenticated()
 
             assertFalse(result)
+        }
+
+    @Test
+    fun `list silently authenticates when no token is cached`() =
+        runTest {
+            coEvery { authManager.currentAccounts() } returns listOf(fakeAccount)
+            coEvery { authManager.acquireAccessToken(fakeAccount) } returns AuthResult.Success("token-123")
+            coEvery { restClient.list("token-123", null) } returns emptyList()
+
+            val result = provider.list(null)
+
+            assertTrue(result.isEmpty())
+            coVerify(exactly = 1) { authManager.acquireAccessToken(fakeAccount) }
+            coVerify(exactly = 1) { restClient.list("token-123", null) }
         }
 
     // -------------------------------------------------------------------------
