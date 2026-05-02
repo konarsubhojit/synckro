@@ -7,6 +7,7 @@ import com.konarsubhojit.synckro.domain.sync.RemoteEnumerator
 import com.konarsubhojit.synckro.domain.sync.RemoteSnapshot
 import javax.inject.Inject
 import javax.inject.Singleton
+import timber.log.Timber
 
 /**
  * [RemoteEnumerator] for Google Drive, backed by
@@ -53,13 +54,25 @@ class GoogleDriveRemoteEnumerator @Inject constructor(
         val (changes, nextToken) = try {
             restClient.changesSince(token, deltaToken)
         } catch (e: DriveApiException) {
-            if (e.statusCode == 401) {
-                throw CloudProviderException.AuthenticationRequired(
+            when (e.statusCode) {
+                401 -> throw CloudProviderException.AuthenticationRequired(
                     "Google Drive access token rejected (401). Please re-authenticate.",
                     e,
                 )
+                410 -> {
+                    // Page token has expired — fall back to a fresh baseline so the next
+                    // sync starts from a clean slate without replaying history.
+                    // This is a normal operational scenario: tokens expire after ~7 days
+                    // of inactivity per the Google Drive API contract.
+                    Timber.w("Google Drive: changes page token expired (410); deltaToken=%s; falling back to baseline", deltaToken)
+                    val (baseChanges, baseToken) = restClient.changesSince(token, null)
+                    return RemoteSnapshot(
+                        changes = baseChanges.mapNotNull { it.toRemoteChange() },
+                        newDeltaToken = baseToken,
+                    )
+                }
+                else -> throw e
             }
-            throw e
         }
 
         val mapped = changes.mapNotNull { it.toRemoteChange() }

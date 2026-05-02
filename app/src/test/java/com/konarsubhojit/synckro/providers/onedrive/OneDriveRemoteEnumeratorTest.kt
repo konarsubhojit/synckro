@@ -170,4 +170,39 @@ class OneDriveRemoteEnumeratorTest {
         assertEquals("https://graph.example.com/delta-link-final", snapshot.newDeltaToken)
         assertEquals(2, server.requestCount)
     }
+
+    @Test
+    fun `enumerate falls back to baseline when delta link returns 410 Gone`() = runTest {
+        val expiredDeltaLink = server.url("/me/drive/root/delta?token=expired").toString()
+
+        // First request (with expired delta link) returns 410 Gone.
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(410)
+                .setBody("""{"error": {"code": "resyncRequired", "message": "Resync required."}}""")
+        )
+        // Baseline fallback: request with $deltaToken=latest returns a fresh deltaLink.
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(200)
+                .setBody(
+                    """
+                    {
+                      "value": [],
+                      "@odata.deltaLink": "https://graph.example.com/delta-link-fresh"
+                    }
+                    """.trimIndent()
+                )
+        )
+
+        val snapshot = enumerator.enumerateWithToken(token, deltaToken = expiredDeltaLink)
+
+        assertTrue("Fallback snapshot should have no changes", snapshot.changes.isEmpty())
+        assertEquals(
+            "Fallback should return fresh delta link",
+            "https://graph.example.com/delta-link-fresh",
+            snapshot.newDeltaToken,
+        )
+        assertEquals("Two requests should be made (expired + baseline)", 2, server.requestCount)
+    }
 }

@@ -19,6 +19,11 @@ import com.konarsubhojit.synckro.domain.model.CloudProviderType
 import com.konarsubhojit.synckro.domain.model.ConflictPolicy
 import com.konarsubhojit.synckro.domain.model.SyncDirection
 import com.konarsubhojit.synckro.domain.model.SyncPair
+import com.konarsubhojit.synckro.domain.provider.CloudProviderException
+import com.konarsubhojit.synckro.domain.sync.RemoteChange
+import com.konarsubhojit.synckro.domain.sync.RemoteChangeType
+import com.konarsubhojit.synckro.domain.sync.RemoteEnumerator
+import com.konarsubhojit.synckro.domain.sync.RemoteSnapshot
 import com.konarsubhojit.synckro.providers.fake.FakeCloudProvider
 import com.konarsubhojit.synckro.providers.fake.FakeRemoteEnumerator
 import java.io.ByteArrayInputStream
@@ -399,5 +404,337 @@ class SyncEngineRealIntegrationTest {
             "deltaToken must NOT be persisted after cancellation",
             entity!!.lastDeltaToken == null,
         )
+    }
+
+    // -------------------------------------------------------------------------
+    // Download from remote
+    // -------------------------------------------------------------------------
+
+    @Test
+    fun `runReal downloads new remote file on first sync`() = runTest {
+        // Seed a remote file via fakeProvider, then sync with a deltaToken > 0
+        // so the change appears in the enumerated delta.
+        val fileContent = "remote content".toByteArray()
+        fakeProvider.uploadNew(
+            parentId = "remote-root",
+            name = "remote.txt",
+            content = fileContent.inputStream(),
+            size = fileContent.size.toLong(),
+            mimeType = "text/plain",
+        )
+
+        val pair = insertPair()
+        val engine = buildEngine()
+
+        // Establish baseline (deltaToken = null → empty changes, newDeltaToken = "1")
+        val baselineResult = engine.runOnce(pair)
+        assertTrue("Baseline run should succeed", baselineResult is SyncEngine.Result.Success)
+        assertEquals(0, (baselineResult as SyncEngine.Result.Success).applied)
+
+        // Second run: upload another file so it appears in the delta
+        val deltaContent = "delta file".toByteArray()
+        fakeProvider.uploadNew(
+            parentId = "remote-root",
+            name = "delta.txt",
+            content = deltaContent.inputStream(),
+            size = deltaContent.size.toLong(),
+            mimeType = "text/plain",
+        )
+
+        val storedToken = syncPairDao.getById(pair.id)!!.lastDeltaToken!!
+        val pairWithToken = pair.copy(deltaToken = storedToken)
+        val deltaResult = engine.runOnce(pairWithToken)
+
+        assertTrue("Delta run should succeed", deltaResult is SyncEngine.Result.Success)
+        assertEquals(
+            "One new remote file should be downloaded",
+            1,
+            (deltaResult as SyncEngine.Result.Success).applied,
+        )
+    }
+
+    // -------------------------------------------------------------------------
+    // Retriable / Terminal outcomes from remote enumeration failures
+    // -------------------------------------------------------------------------
+
+    @Test
+    fun `runReal returns Retriable when RemoteEnumerator throws AuthenticationFailed`() = runTest {
+        val pair = insertPair()
+
+        // AuthenticationFailed indicates a transient failure during token refresh
+        // (e.g., a network blip while contacting the token endpoint). CloudExceptionMapper
+        // maps this to Retriable so WorkManager can retry with backoff and succeed once
+        // the transient issue resolves — unlike AuthenticationRequired, which needs
+        // interactive user action and is therefore mapped to Terminal.
+        val failingEnumerator = object : RemoteEnumerator {
+            override suspend fun enumerate(deltaToken: String?): RemoteSnapshot {
+                throw CloudProviderException.AuthenticationFailed(
+                    "Token refresh failed (transient network error)",
+                )
+            }
+        }
+
+        val engine = SyncEngine(
+            conflictRepository = conflictRepository,
+            providers = mapOf(CloudProviderType.ONEDRIVE to fakeProvider),
+            localFsEnumerator = localFsEnumerator,
+            remoteEnumerators = mapOf(CloudProviderType.ONEDRIVE to failingEnumerator),
+            syncPairDao = syncPairDao,
+            localIndexDao = localIndexDao,
+            eventRepository = eventRepository,
+            localFileAccess = localFileAccess,
+        )
+
+        val result = engine.runOnce(pair)
+
+        assertTrue(
+            "Expected Retriable when AuthenticationFailed, got: $result",
+            result is SyncEngine.Result.Retriable,
+        )
+    }
+
+    @Test
+    fun `runReal returns Terminal when RemoteEnumerator throws AuthenticationRequired`() = runTest {
+        val pair = insertPair()
+
+        val failingEnumerator = object : RemoteEnumerator {
+            override suspend fun enumerate(deltaToken: String?): RemoteSnapshot {
+                throw CloudProviderException.AuthenticationRequired(
+                    "Access token expired — interactive sign-in required",
+                )
+            }
+        }
+
+        val engine = SyncEngine(
+            conflictRepository = conflictRepository,
+            providers = mapOf(CloudProviderType.ONEDRIVE to fakeProvider),
+            localFsEnumerator = localFsEnumerator,
+            remoteEnumerators = mapOf(CloudProviderType.ONEDRIVE to failingEnumerator),
+            syncPairDao = syncPairDao,
+            localIndexDao = localIndexDao,
+            eventRepository = eventRepository,
+            localFileAccess = localFileAccess,
+        )
+
+        val result = engine.runOnce(pair)
+
+        assertTrue(
+            "Expected Terminal when AuthenticationRequired, got: $result",
+            result is SyncEngine.Result.Terminal,
+        )
+        assertTrue(
+            "Terminal result should have needsReauth = true",
+            (result as SyncEngine.Result.Terminal).needsReauth,
+        )
+    }
+
+    @Test
+    fun `runReal returns Terminal when RemoteEnumerator throws NotConfigured`() = runTest {
+        val pair = insertPair()
+
+        val failingEnumerator = object : RemoteEnumerator {
+            override suspend fun enumerate(deltaToken: String?): RemoteSnapshot {
+                throw CloudProviderException.NotConfigured("Client ID not configured")
+            }
+        }
+
+        val engine = SyncEngine(
+            conflictRepository = conflictRepository,
+            providers = mapOf(CloudProviderType.ONEDRIVE to fakeProvider),
+            localFsEnumerator = localFsEnumerator,
+            remoteEnumerators = mapOf(CloudProviderType.ONEDRIVE to failingEnumerator),
+            syncPairDao = syncPairDao,
+            localIndexDao = localIndexDao,
+            eventRepository = eventRepository,
+            localFileAccess = localFileAccess,
+        )
+
+        val result = engine.runOnce(pair)
+
+        assertTrue(
+            "Expected Terminal when NotConfigured, got: $result",
+            result is SyncEngine.Result.Terminal,
+        )
+        assertTrue(
+            "Terminal result should have needsReauth = true for NotConfigured",
+            (result as SyncEngine.Result.Terminal).needsReauth,
+        )
+    }
+
+    // -------------------------------------------------------------------------
+    // PartialFailure: some ops succeed, others fail with non-auth errors
+    // -------------------------------------------------------------------------
+
+    @Test
+    fun `runReal returns PartialFailure when one upload fails and another succeeds`() = runTest {
+        // "ok.txt" is present in both inMemoryChildren AND localFileAccess → upload succeeds.
+        // "fail.txt" is in inMemoryChildren but NOT in localFileAccess → stat() returns null
+        //   → applyUploadNew throws → caught as non-auth error → PartialFailure.
+        val okContent = "hello".toByteArray()
+        localFileAccess.put("ok.txt", okContent)
+        // "fail.txt" intentionally NOT added to localFileAccess
+
+        inMemoryChildren.set(
+            "root",
+            listOf(
+                RawDocChild(
+                    docId = "doc-ok",
+                    name = "ok.txt",
+                    mimeType = "text/plain",
+                    size = okContent.size.toLong(),
+                    lastModifiedMs = 5_000L,
+                ),
+                RawDocChild(
+                    docId = "doc-fail",
+                    name = "fail.txt",
+                    mimeType = "text/plain",
+                    size = 99L,
+                    lastModifiedMs = 5_000L,
+                ),
+            ),
+        )
+
+        val pair = insertPair()
+        val engine = buildEngine()
+
+        val result = engine.runOnce(pair)
+
+        assertTrue(
+            "Expected PartialFailure when one upload fails, got: $result",
+            result is SyncEngine.Result.PartialFailure,
+        )
+        val partial = result as SyncEngine.Result.PartialFailure
+        assertEquals("One file should have been applied", 1, partial.applied)
+        assertEquals("One file should have failed", 1, partial.errors.size)
+    }
+
+    // -------------------------------------------------------------------------
+    // Conflict policy: KEEP_BOTH
+    // -------------------------------------------------------------------------
+
+    @Test
+    fun `runReal with KEEP_BOTH policy records conflict for concurrent modifications`() = runTest {
+        // Arrange: a custom RemoteEnumerator that advertises "conflict.txt" as a remote change
+        // with different size/mtime from the local file, so SyncDiffer emits a Conflict op.
+        val conflictEnumerator = object : RemoteEnumerator {
+            override suspend fun enumerate(deltaToken: String?): RemoteSnapshot = RemoteSnapshot(
+                changes = listOf(
+                    RemoteChange(
+                        relativePath = "conflict.txt",
+                        type = RemoteChangeType.MODIFY,
+                        remoteId = "remote-conflict-id",
+                        sizeBytes = 999L,
+                        mtimeMs = 9_000L,
+                        etag = "etag-remote",
+                    ),
+                ),
+                newDeltaToken = "1",
+            )
+        }
+
+        // Local file exists with different mtime (simulates concurrent modification)
+        val localContent = "local version".toByteArray()
+        localFileAccess.put("conflict.txt", localContent)
+        inMemoryChildren.set(
+            "root",
+            listOf(
+                RawDocChild(
+                    docId = "doc-conflict",
+                    name = "conflict.txt",
+                    mimeType = "text/plain",
+                    size = localContent.size.toLong(),
+                    lastModifiedMs = 1_000L, // different from remote's 9_000L
+                ),
+            ),
+        )
+
+        val pair = insertPair(conflictPolicy = ConflictPolicy.KEEP_BOTH)
+        val engine = SyncEngine(
+            conflictRepository = conflictRepository,
+            providers = mapOf(CloudProviderType.ONEDRIVE to fakeProvider),
+            localFsEnumerator = localFsEnumerator,
+            remoteEnumerators = mapOf(CloudProviderType.ONEDRIVE to conflictEnumerator),
+            syncPairDao = syncPairDao,
+            localIndexDao = localIndexDao,
+            eventRepository = eventRepository,
+            localFileAccess = localFileAccess,
+        )
+
+        val result = engine.runOnce(pair)
+
+        assertTrue("Expected Success (with conflicts), got: $result", result is SyncEngine.Result.Success)
+        val success = result as SyncEngine.Result.Success
+        assertEquals("No ops should be applied for a KEEP_BOTH conflict", 0, success.applied)
+        assertEquals("One conflict should be recorded", 1, success.conflicts)
+    }
+
+    // -------------------------------------------------------------------------
+    // Conflict policy: NEWEST_WINS (remote wins)
+    // -------------------------------------------------------------------------
+
+    @Test
+    fun `runReal with NEWEST_WINS downloads remote file when remote is newer`() = runTest {
+        // Upload a file to fakeProvider so its ID is known and download will succeed.
+        val remoteContent = "remote version".toByteArray()
+        val uploadedFile = fakeProvider.uploadNew(
+            parentId = "remote-root",
+            name = "doc.txt",
+            content = remoteContent.inputStream(),
+            size = remoteContent.size.toLong(),
+            mimeType = "text/plain",
+        )
+
+        // Custom enumerator that uses the actual uploaded file's ID so
+        // SyncOpApplier.applyUpdateLocal can call provider.download(id).
+        val conflictEnumerator = object : RemoteEnumerator {
+            override suspend fun enumerate(deltaToken: String?): RemoteSnapshot = RemoteSnapshot(
+                changes = listOf(
+                    RemoteChange(
+                        relativePath = "doc.txt",
+                        type = RemoteChangeType.MODIFY,
+                        remoteId = uploadedFile.id, // real ID in fakeProvider
+                        sizeBytes = remoteContent.size.toLong(),
+                        mtimeMs = 9_000L, // remote is newer
+                        etag = uploadedFile.eTag,
+                    ),
+                ),
+                newDeltaToken = "1",
+            )
+        }
+
+        // Local file exists with an older mtime — remote should win.
+        val localContent = "local old version".toByteArray()
+        localFileAccess.put("doc.txt", localContent)
+        inMemoryChildren.set(
+            "root",
+            listOf(
+                RawDocChild(
+                    docId = "doc-local",
+                    name = "doc.txt",
+                    mimeType = "text/plain",
+                    size = localContent.size.toLong(),
+                    lastModifiedMs = 1_000L, // local is older than remote's 9_000L
+                ),
+            ),
+        )
+
+        val pair = insertPair(conflictPolicy = ConflictPolicy.NEWEST_WINS)
+        val engine = SyncEngine(
+            conflictRepository = conflictRepository,
+            providers = mapOf(CloudProviderType.ONEDRIVE to fakeProvider),
+            localFsEnumerator = localFsEnumerator,
+            remoteEnumerators = mapOf(CloudProviderType.ONEDRIVE to conflictEnumerator),
+            syncPairDao = syncPairDao,
+            localIndexDao = localIndexDao,
+            eventRepository = eventRepository,
+            localFileAccess = localFileAccess,
+        )
+
+        val result = engine.runOnce(pair)
+
+        assertTrue("Expected Success, got: $result", result is SyncEngine.Result.Success)
+        val success = result as SyncEngine.Result.Success
+        assertEquals("Remote-wins op should be applied (download)", 1, success.applied)
+        assertEquals(0, success.conflicts)
     }
 }

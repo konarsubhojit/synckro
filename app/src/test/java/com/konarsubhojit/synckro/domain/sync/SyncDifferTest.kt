@@ -456,4 +456,171 @@ class SyncDifferTest {
 
         assertEquals(listOf<SyncOp>(SyncOp.UploadNew(path)), ops)
     }
+
+    // -------------------------------------------------------------------------
+    // Rename detection
+    // -------------------------------------------------------------------------
+
+    @Test
+    fun `local rename via delete-old add-new with same hash emits delete-remote and upload-new`() {
+        // A file was renamed locally: "old.txt" → "new.txt" (same content hash).
+        // SyncDiffer handles each path independently, so a rename surfaces as two
+        // independent ops: DeleteRemote for the old path and UploadNew for the new path.
+        val ops = SyncDiffer.diff(
+            local = listOf(snap("new.txt", size = 10, mtime = 2_000, hash = "same-hash")),
+            remote = listOf(snap("old.txt", size = 10, mtime = 1_000, hash = "same-hash")),
+            lastIndex = listOf(idx("old.txt", size = 10, mtime = 1_000, hash = "same-hash")),
+            direction = SyncDirection.BIDIRECTIONAL,
+            conflictPolicy = ConflictPolicy.NEWEST_WINS,
+        )
+
+        assertEquals(
+            setOf<SyncOp>(
+                SyncOp.DeleteRemote("old.txt"),
+                SyncOp.UploadNew("new.txt"),
+            ),
+            ops.toSet(),
+        )
+    }
+
+    @Test
+    fun `remote rename via delete-old add-new emits delete-local and download-new`() {
+        // A file was renamed remotely: "old.txt" → "new.txt".
+        val ops = SyncDiffer.diff(
+            local = listOf(snap("old.txt", size = 10, mtime = 1_000)),
+            remote = listOf(snap("new.txt", size = 10, mtime = 2_000)),
+            lastIndex = listOf(idx("old.txt", size = 10, mtime = 1_000)),
+            direction = SyncDirection.BIDIRECTIONAL,
+            conflictPolicy = ConflictPolicy.NEWEST_WINS,
+        )
+
+        assertEquals(
+            setOf<SyncOp>(
+                SyncOp.DeleteLocal("old.txt"),
+                SyncOp.DownloadNew("new.txt"),
+            ),
+            ops.toSet(),
+        )
+    }
+
+    // -------------------------------------------------------------------------
+    // Case-only renames
+    // -------------------------------------------------------------------------
+
+    @Test
+    fun `case-only rename treats old and new paths as distinct files`() {
+        // On a case-sensitive filesystem, "File.txt" and "file.txt" are distinct paths.
+        // SyncDiffer must treat them as different entries regardless of hash.
+        val ops = SyncDiffer.diff(
+            local = listOf(snap("file.txt", hash = "abc")),
+            remote = listOf(snap("File.txt", hash = "abc")),
+            lastIndex = listOf(idx("File.txt", hash = "abc")),
+            direction = SyncDirection.BIDIRECTIONAL,
+            conflictPolicy = ConflictPolicy.NEWEST_WINS,
+        )
+
+        assertEquals(
+            setOf<SyncOp>(
+                SyncOp.UploadNew("file.txt"),
+                SyncOp.DeleteRemote("File.txt"),
+            ),
+            ops.toSet(),
+        )
+    }
+
+    @Test
+    fun `case-only remote rename emits delete-local and download-new`() {
+        val ops = SyncDiffer.diff(
+            local = listOf(snap("README.txt", hash = "xyz")),
+            remote = listOf(snap("readme.txt", hash = "xyz")),
+            lastIndex = listOf(idx("README.txt", hash = "xyz")),
+            direction = SyncDirection.BIDIRECTIONAL,
+            conflictPolicy = ConflictPolicy.NEWEST_WINS,
+        )
+
+        assertEquals(
+            setOf<SyncOp>(
+                SyncOp.DeleteLocal("README.txt"),
+                SyncOp.DownloadNew("readme.txt"),
+            ),
+            ops.toSet(),
+        )
+    }
+
+    // -------------------------------------------------------------------------
+    // Concurrent deletes on both sides
+    // -------------------------------------------------------------------------
+
+    @Test
+    fun `concurrent deletes on different files each generate independent ops`() {
+        // "deleted-from-local.txt": in lastIndex, missing from local, still on remote → DeleteRemote
+        // "deleted-from-remote.txt": in lastIndex, still on local, missing from remote → DeleteLocal
+        // "deleted-from-both.txt": in lastIndex, missing from both → no-op (already converged)
+        val ops = SyncDiffer.diff(
+            local = listOf(snap("deleted-from-remote.txt")),
+            remote = listOf(snap("deleted-from-local.txt")),
+            lastIndex = listOf(
+                idx("deleted-from-local.txt"),
+                idx("deleted-from-remote.txt"),
+                idx("deleted-from-both.txt"),
+            ),
+            direction = SyncDirection.BIDIRECTIONAL,
+            conflictPolicy = ConflictPolicy.NEWEST_WINS,
+        )
+
+        assertEquals(
+            setOf<SyncOp>(
+                SyncOp.DeleteRemote("deleted-from-local.txt"),
+                SyncOp.DeleteLocal("deleted-from-remote.txt"),
+            ),
+            ops.toSet(),
+        )
+    }
+
+    // -------------------------------------------------------------------------
+    // Large file size (> 2 GiB)
+    // -------------------------------------------------------------------------
+
+    @Test
+    fun `large file over 2 GiB size is handled as Long without overflow`() {
+        val bigSize = Int.MAX_VALUE.toLong() + 1L // 2 GiB + 1 byte
+        val ops = SyncDiffer.diff(
+            local = listOf(snap("large.bin", size = bigSize, mtime = 1_000)),
+            remote = emptyList(),
+            lastIndex = emptyList(),
+            direction = SyncDirection.BIDIRECTIONAL,
+            conflictPolicy = ConflictPolicy.NEWEST_WINS,
+        )
+
+        assertEquals(listOf<SyncOp>(SyncOp.UploadNew("large.bin")), ops)
+    }
+
+    @Test
+    fun `large file change detection works for sizes beyond 2 GiB`() {
+        val sizeA = Int.MAX_VALUE.toLong() + 1L   // 2 GiB + 1
+        val sizeB = Int.MAX_VALUE.toLong() + 100L // 2 GiB + 100
+        val ops = SyncDiffer.diff(
+            local = listOf(snap("large.bin", size = sizeB, mtime = 2_000)),
+            remote = listOf(snap("large.bin", size = sizeA, mtime = 1_000)),
+            lastIndex = listOf(idx("large.bin", size = sizeA, mtime = 1_000)),
+            direction = SyncDirection.BIDIRECTIONAL,
+            conflictPolicy = ConflictPolicy.NEWEST_WINS,
+        )
+
+        assertEquals(listOf<SyncOp>(SyncOp.UpdateRemote("large.bin")), ops)
+    }
+
+    @Test
+    fun `unicode and emoji paths are handled correctly`() {
+        val emojiPath = "📁 emoji folder/résumé 日本語.txt"
+        val ops = SyncDiffer.diff(
+            local = listOf(snap(emojiPath)),
+            remote = emptyList(),
+            lastIndex = emptyList(),
+            direction = SyncDirection.BIDIRECTIONAL,
+            conflictPolicy = ConflictPolicy.NEWEST_WINS,
+        )
+
+        assertEquals(listOf<SyncOp>(SyncOp.UploadNew(emojiPath)), ops)
+    }
 }
