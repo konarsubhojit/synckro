@@ -44,13 +44,29 @@ import kotlin.coroutines.resume
  * All failures are logged via Timber and reported through [AuthResult].
  */
 @Singleton
-class OneDriveAuthManager @Inject constructor(
+class OneDriveAuthManager private constructor(
     @ApplicationContext private val context: Context,
+    private val clientId: String,
+    private val redirectUri: String,
 ) : AuthManager {
+
+    /** Hilt-injected constructor (production path). */
+    @Inject
+    constructor(@ApplicationContext context: Context) :
+        this(context, BuildConfig.MS_CLIENT_ID, BuildConfig.MSAL_REDIRECT_URI)
+
     override val providerType: CloudProviderType = CloudProviderType.ONEDRIVE
     override val displayName: String = "OneDrive"
 
     private var msalApp: ISingleAccountPublicClientApplication? = null
+
+    /**
+     * Set to `true` after the first failed MSAL initialisation attempt so that
+     * subsequent calls (e.g. repeated [AccountsViewModel.refresh] ticks) return
+     * immediately without spawning another MSAL call and its accompanying
+     * stack-trace noise in the debug log.
+     */
+    private var msalInitFailed = false
 
     /**
      * Encrypted preferences used to persist the account hint (email / display
@@ -98,18 +114,32 @@ class OneDriveAuthManager @Inject constructor(
     )
 
     override suspend fun isConfigured(): Boolean =
-        BuildConfig.MS_CLIENT_ID.isNotBlank() && BuildConfig.MSAL_REDIRECT_URI.isNotBlank()
+        OneDriveAuthConfig.validate(clientId, redirectUri) == OneDriveAuthConfig.ValidationResult.Valid
 
     /**
-     * Lazily initializes the MSAL single-account application. Returns null and
-     * logs an error if configuration fails.
+     * Lazily initializes the MSAL single-account application. Returns `null` and
+     * logs a warning if the config is missing or invalid, or if the first
+     * initialisation attempt already failed (cached to avoid log spam on repeated
+     * [currentAccounts] / [acquireAccessToken] calls).
      */
     private suspend fun getOrCreateMsalApp(): ISingleAccountPublicClientApplication? {
         if (msalApp != null) return msalApp
+        if (msalInitFailed) return null
 
-        if (!isConfigured()) {
-            Timber.w("OneDriveAuthManager: MSAL not configured (missing MS_CLIENT_ID or MSAL_REDIRECT_URI)")
-            return null
+        when (val config = OneDriveAuthConfig.validate(clientId, redirectUri)) {
+            is OneDriveAuthConfig.ValidationResult.NotConfigured -> {
+                Timber.w(
+                    "OneDriveAuthManager: MS_CLIENT_ID and MSAL_REDIRECT_URI are both unset — " +
+                        "OneDrive sign-in is disabled in this build. See docs/login-setup.md.",
+                )
+                return null
+            }
+            is OneDriveAuthConfig.ValidationResult.Invalid -> {
+                Timber.w("OneDriveAuthManager: MSAL config invalid — ${config.reason}")
+                msalInitFailed = true
+                return null
+            }
+            is OneDriveAuthConfig.ValidationResult.Valid -> { /* proceed to MSAL init */ }
         }
 
         return suspendCancellableCoroutine { cont ->
@@ -126,12 +156,14 @@ class OneDriveAuthManager @Inject constructor(
 
                         override fun onError(exception: MsalException?) {
                             Timber.e(exception, "OneDriveAuthManager: Failed to create MSAL app")
+                            msalInitFailed = true
                             cont.resume(null)
                         }
                     },
                 )
             } catch (e: Exception) {
                 Timber.e(e, "OneDriveAuthManager: Exception creating MSAL app")
+                msalInitFailed = true
                 cont.resume(null)
             }
         }
@@ -397,5 +429,20 @@ class OneDriveAuthManager @Inject constructor(
     companion object {
         private const val PREFS_FILE = "onedrive_auth_prefs"
         internal const val KEY_ACCOUNT_HINT = "account_hint"
+
+        /**
+         * Creates an instance with explicit [clientId] and [redirectUri] values
+         * instead of reading from [com.konarsubhojit.synckro.BuildConfig]. Use this
+         * in unit tests (Robolectric) to control the config without relying on
+         * build-time values.
+         *
+         * Defaults both to `""` so [isConfigured] returns `false` unless the test
+         * explicitly supplies values.
+         */
+        internal fun forTest(
+            context: Context,
+            clientId: String = "",
+            redirectUri: String = "",
+        ) = OneDriveAuthManager(context, clientId, redirectUri)
     }
 }

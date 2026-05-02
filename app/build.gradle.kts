@@ -89,28 +89,70 @@ android {
                 "GOOGLE_WEB_CLIENT_ID",
                 "\"${secretOrEmpty("GOOGLE_WEB_CLIENT_ID")}\""
             )
-            buildConfigField(
-                "String",
-                "MS_CLIENT_ID",
-                "\"${secretOrEmpty("MS_CLIENT_ID")}\""
-            )
+            val msClientId = secretOrEmpty("MS_CLIENT_ID")
             val msalRedirect = secretOrEmpty("MSAL_REDIRECT_URI")
-            val msalHost = msalRedirect
-                .substringAfter("msauth://", "")
-                .substringBefore("/", "")
+
+            // Build-time guard: validate the MSAL config pair before it reaches the
+            // manifest or BuildConfig. The rules mirror OneDriveAuthConfig.validate()
+            // so that build failures and runtime warnings stay in sync.
+            val msClientIdEmpty = msClientId.isEmpty()
+            val msalRedirectEmpty = msalRedirect.isEmpty()
+            when {
+                msClientIdEmpty && msalRedirectEmpty -> {
+                    // Both unset — MSAL is intentionally disabled in this build.
+                    // Emit a visible warning so developers who forgot to add them notice.
+                    println(
+                        "WARNING: MS_CLIENT_ID and MSAL_REDIRECT_URI are both unset. " +
+                            "OneDrive sign-in will be disabled at runtime. " +
+                            "See docs/login-setup.md to enable it.",
+                    )
+                }
+                msClientIdEmpty -> {
+                    error(
+                        "MS_CLIENT_ID is not set but MSAL_REDIRECT_URI is. " +
+                            "Both must be provided together. See docs/login-setup.md.",
+                    )
+                }
+                msalRedirectEmpty -> {
+                    error(
+                        "MSAL_REDIRECT_URI is not set but MS_CLIENT_ID is. " +
+                            "Both must be provided together. See docs/login-setup.md.",
+                    )
+                }
+                else -> {
+                    // Both are set — validate the redirect URI format.
+                    check(msalRedirect.startsWith("msauth://")) {
+                        "MSAL_REDIRECT_URI must start with 'msauth://'. " +
+                            "Got: '$msalRedirect'. See docs/login-setup.md."
+                    }
+                    val msalHost = msalRedirect
+                        .substringAfter("msauth://")
+                        .substringBefore("/")
+                    check(msalHost.isNotEmpty()) {
+                        "MSAL_REDIRECT_URI has no host component. " +
+                            "Expected 'msauth://<applicationId>/<hash>'. See docs/login-setup.md."
+                    }
+                    val msalPathPart = msalRedirect.substringAfter("$msalHost/", "")
+                    check(msalPathPart.isNotEmpty()) {
+                        "MSAL_REDIRECT_URI has no path component after the host. " +
+                            "Expected 'msauth://<applicationId>/<hash>'. See docs/login-setup.md."
+                    }
+                    check(msalHost == "com.konarsubhojit.synckro.debug") {
+                        "MSAL_REDIRECT_URI host '$msalHost' must equal " +
+                            "'com.konarsubhojit.synckro.debug' (debug applicationId). " +
+                            "See docs/login-setup.md."
+                    }
+                }
+            }
+
+            val msalHost = if (!msalRedirectEmpty) {
+                msalRedirect.substringAfter("msauth://", "").substringBefore("/", "")
+            } else ""
             val msalPath = if (msalRedirect.isNotEmpty() && msalHost.isNotEmpty())
                 "/" + msalRedirect.substringAfter("$msalHost/", "")
             else "/"
 
-            // Sanity: if a redirect URI is provided, its host MUST match the debug
-            // applicationId. A mismatch silently breaks MSAL at runtime.
-            if (msalHost.isNotEmpty()) {
-                check(msalHost == "com.konarsubhojit.synckro.debug") {
-                    "MSAL_REDIRECT_URI host '$msalHost' must equal " +
-                        "'com.konarsubhojit.synckro.debug' (debug applicationId)."
-                }
-            }
-
+            buildConfigField("String", "MS_CLIENT_ID", "\"$msClientId\"")
             buildConfigField(
                 "String",
                 "MSAL_REDIRECT_URI",
