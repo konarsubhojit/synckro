@@ -1,10 +1,11 @@
 plugins {
     alias(libs.plugins.android.test)
     alias(libs.plugins.kotlin.android)
+    alias(libs.plugins.ktlint)
 }
 
 android {
-    namespace = "com.konarsubhojit.synckro.benchmark"
+    namespace = "com.synckro.benchmark"
     compileSdk = 34
 
     defaultConfig {

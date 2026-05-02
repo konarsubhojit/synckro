@@ -14,14 +14,15 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.ksp)
     alias(libs.plugins.hilt)
+    alias(libs.plugins.ktlint)
 }
 
 android {
-    namespace = "com.konarsubhojit.synckro"
+    namespace = "com.synckro"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.konarsubhojit.synckro"
+        applicationId = "com.synckro"
         minSdk = 26
         targetSdk = 34
         versionCode = 1
@@ -105,9 +106,9 @@ android {
             // Sanity: if a redirect URI is provided, its host MUST match the debug
             // applicationId. A mismatch silently breaks MSAL at runtime.
             if (msalHost.isNotEmpty()) {
-                check(msalHost == "com.konarsubhojit.synckro.debug") {
+                check(msalHost == "com.synckro.debug") {
                     "MSAL_REDIRECT_URI host '$msalHost' must equal " +
-                        "'com.konarsubhojit.synckro.debug' (debug applicationId)."
+                        "'com.synckro.debug' (debug applicationId)."
                 }
             }
 
