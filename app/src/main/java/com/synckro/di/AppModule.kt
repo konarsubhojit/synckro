@@ -1,5 +1,6 @@
 package com.synckro.di
 
+import android.content.ContentResolver
 import android.content.Context
 import androidx.room.Room
 import androidx.work.WorkManager
@@ -11,6 +12,7 @@ import com.synckro.data.local.dao.SyncEventDao
 import com.synckro.data.local.dao.SyncPairDao
 import com.synckro.data.local.db.SynckroDatabase
 import com.synckro.data.local.fs.LocalFsEnumerator
+import com.synckro.data.local.fs.SafLocalFileAccess
 import com.synckro.data.repository.ConflictRepository
 import com.synckro.data.repository.SyncEventRepository
 import com.synckro.data.scanner.LocalFolderScannerImpl
@@ -20,7 +22,6 @@ import com.synckro.domain.model.CloudProviderType
 import com.synckro.domain.provider.CloudProvider
 import com.synckro.domain.scan.LocalFolderScanner
 import com.synckro.domain.sync.LocalFileAccess
-import com.synckro.domain.sync.LocalFileStat
 import com.synckro.domain.sync.RemoteEnumerator
 import com.synckro.domain.sync.SyncEngine
 import com.synckro.providers.fake.FakeCloudProvider
@@ -35,29 +36,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import dagger.multibindings.IntoMap
 import okhttp3.OkHttpClient
-import java.io.InputStream
 import javax.inject.Singleton
-
-/**
- * Placeholder [LocalFileAccess] that always reports that files do not exist.
- *
- * Used in [AppModule.provideSyncEngine] until a production SAF-backed
- * implementation is wired.  Any [SyncOp] that requires actual file I/O
- * (UploadNew / DownloadNew / …) will fail gracefully through
- * [com.synckro.domain.sync.SyncOpApplier]'s per-op error
- * handler rather than crashing the worker.
- */
-private object NoOpLocalFileAccess : LocalFileAccess {
-    override fun openRead(relativePath: String): InputStream? = null
-
-    override fun write(relativePath: String, content: InputStream, mimeType: String?): LocalFileStat {
-        error("NoOpLocalFileAccess: write not implemented — wire a real LocalFileAccess implementation")
-    }
-
-    override fun delete(relativePath: String): Boolean = false
-
-    override fun stat(relativePath: String): LocalFileStat? = null
-}
 
 @Module
 @InstallIn(SingletonComponent::class)
@@ -167,13 +146,14 @@ object AppModule {
      *
      * Wires the full [runReal] pipeline: [LocalFsEnumerator], the multibound
      * [RemoteEnumerator] map, [SyncPairDao], [LocalIndexDao], [SyncEventRepository],
-     * and a no-op [LocalFileAccess] placeholder (replaced by a SAF-backed implementation
-     * once local file I/O is fully wired in production).
+     * and a [SafLocalFileAccess] factory that creates a file-access instance scoped
+     * to each sync pair's SAF tree URI at the start of every sync run.
      *
      * @return A `SyncEngine` instance used to perform and manage synchronization operations.
      */
     @Provides @Singleton
     fun provideSyncEngine(
+        @ApplicationContext ctx: Context,
         conflictRepository: ConflictRepository,
         providers: Map<CloudProviderType, @JvmSuppressWildcards CloudProvider>,
         localFsEnumerator: LocalFsEnumerator,
@@ -181,8 +161,9 @@ object AppModule {
         syncPairDao: SyncPairDao,
         localIndexDao: LocalIndexDao,
         eventRepository: SyncEventRepository,
-    ): SyncEngine =
-        SyncEngine(
+    ): SyncEngine {
+        val resolver: ContentResolver = ctx.contentResolver
+        return SyncEngine(
             conflictRepository = conflictRepository,
             providers = providers,
             localFsEnumerator = localFsEnumerator,
@@ -190,11 +171,9 @@ object AppModule {
             syncPairDao = syncPairDao,
             localIndexDao = localIndexDao,
             eventRepository = eventRepository,
-            // LocalFileAccess has no production SAF implementation yet; real file
-            // transfer will fail gracefully through SyncOpApplier's per-op error
-            // handling until a production implementation is wired here.
-            localFileAccess = NoOpLocalFileAccess,
+            localFileAccess = { treeUri -> SafLocalFileAccess(resolver, treeUri) },
         )
+    }
 
     @Provides @IntoMap
     @CloudProviderKey(CloudProviderType.ONEDRIVE)

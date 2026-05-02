@@ -40,8 +40,10 @@ import timber.log.Timber
  *   Required for [runReal].
  * @param eventRepository Repository for emitting structured log events during [runReal].
  *   Required for [runReal].
- * @param localFileAccess Local I/O abstraction passed to [SyncOpApplier].
- *   Required for [runReal]; swap with an in-memory fake for tests.
+ * @param localFileAccess Factory that creates a [LocalFileAccess] scoped to a specific
+ *   SAF tree URI. Called once per sync run with the pair's tree URI, so each run gets
+ *   a file-access instance bound to the correct local folder.
+ *   Required for [runReal]; swap with an in-memory fake for tests (e.g. `{ _ -> fake }`).
  */
 class SyncEngine(
     private val conflictRepository: ConflictRepository,
@@ -51,7 +53,7 @@ class SyncEngine(
     private val syncPairDao: SyncPairDao? = null,
     private val localIndexDao: LocalIndexDao? = null,
     private val eventRepository: SyncEventRepository? = null,
-    private val localFileAccess: LocalFileAccess? = null,
+    private val localFileAccess: ((Uri) -> LocalFileAccess)? = null,
 ) {
     /**
      * Outcome of a single [runOnce]. [Success] and [PartialFailure] both mean
@@ -157,12 +159,12 @@ class SyncEngine(
         val evtRepo =
             eventRepository
                 ?: return Result.Terminal("SyncEngine: SyncEventRepository not configured")
-        val fileAccess =
+        val fileAccessFactory =
             localFileAccess
                 ?: return Result.Terminal("SyncEngine: LocalFileAccess not configured")
 
         return try {
-            runRealImpl(pair, provider, fsEnumerator, remoteEnumerator, pairDao, indexDao, evtRepo, fileAccess)
+            runRealImpl(pair, provider, fsEnumerator, remoteEnumerator, pairDao, indexDao, evtRepo, fileAccessFactory)
         } catch (c: CancellationException) {
             // Cooperative cancellation: do NOT write partial state; just rethrow.
             throw c
@@ -179,7 +181,7 @@ class SyncEngine(
         pairDao: SyncPairDao,
         indexDao: LocalIndexDao,
         evtRepo: SyncEventRepository,
-        fileAccess: LocalFileAccess,
+        fileAccessFactory: (Uri) -> LocalFileAccess,
     ): Result {
         // -----------------------------------------------------------------
         // Step 0 – Snapshot the index BEFORE local enumeration.
@@ -206,6 +208,7 @@ class SyncEngine(
         // Step 1 – Enumerate local files (full scan, updates local_index).
         // -----------------------------------------------------------------
         val treeUri = Uri.parse(pair.localTreeUri)
+        val fileAccess = fileAccessFactory(treeUri)
         val localEnum =
             fsEnumerator.enumerate(
                 pairId = pair.id,
