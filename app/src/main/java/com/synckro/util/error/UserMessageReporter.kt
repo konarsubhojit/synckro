@@ -37,49 +37,60 @@ data class UserMessage(
  * or (usually) both.
  */
 @Singleton
-class UserMessageReporter @Inject constructor() {
+class UserMessageReporter
+    @Inject
+    constructor() {
+        // Extra buffer so rapid bursts during e.g. an OAuth error flurry don't
+        // get dropped before the UI collector has a chance to subscribe.
+        private val _messages =
+            MutableSharedFlow<UserMessage>(
+                replay = 0,
+                extraBufferCapacity = 16,
+                onBufferOverflow = BufferOverflow.DROP_OLDEST,
+            )
 
-    // Extra buffer so rapid bursts during e.g. an OAuth error flurry don't
-    // get dropped before the UI collector has a chance to subscribe.
-    private val _messages = MutableSharedFlow<UserMessage>(
-        replay = 0,
-        extraBufferCapacity = 16,
-        onBufferOverflow = BufferOverflow.DROP_OLDEST,
-    )
+        /** Stream of messages consumed by the UI. */
+        val messages: SharedFlow<UserMessage> = _messages.asSharedFlow()
 
-    /** Stream of messages consumed by the UI. */
-    val messages: SharedFlow<UserMessage> = _messages.asSharedFlow()
-
-    /**
-     * Publishes [message] to the UI and mirrors it into Timber so it also
-     * lands in the on-disk log. Errors include [cause] in the log entry when
-     * provided.
-     */
-    fun report(message: UserMessage, cause: Throwable? = null) {
-        when (message.severity) {
-            UserMessage.Severity.INFO -> Timber.i(UX_LOG_FORMAT, message.text)
-            UserMessage.Severity.WARNING -> Timber.w(cause, UX_LOG_FORMAT, message.text)
-            UserMessage.Severity.ERROR -> Timber.e(cause, UX_LOG_FORMAT, message.text)
+        /**
+         * Publishes [message] to the UI and mirrors it into Timber so it also
+         * lands in the on-disk log. Errors include [cause] in the log entry when
+         * provided.
+         */
+        fun report(
+            message: UserMessage,
+            cause: Throwable? = null,
+        ) {
+            when (message.severity) {
+                UserMessage.Severity.INFO -> Timber.i(UX_LOG_FORMAT, message.text)
+                UserMessage.Severity.WARNING -> Timber.w(cause, UX_LOG_FORMAT, message.text)
+                UserMessage.Severity.ERROR -> Timber.e(cause, UX_LOG_FORMAT, message.text)
+            }
+            _messages.tryEmit(message)
         }
-        _messages.tryEmit(message)
-    }
 
-    /** Convenience for the common "something failed" path. */
-    fun reportError(text: String, cause: Throwable? = null, actionLabel: String? = null, onAction: (() -> Unit)? = null) {
-        report(UserMessage(text, UserMessage.Severity.ERROR, actionLabel, onAction), cause)
-    }
+        /** Convenience for the common "something failed" path. */
+        fun reportError(
+            text: String,
+            cause: Throwable? = null,
+            actionLabel: String? = null,
+            onAction: (() -> Unit)? = null,
+        ) {
+            report(UserMessage(text, UserMessage.Severity.ERROR, actionLabel, onAction), cause)
+        }
 
-    private companion object {
-        /** Shared Timber format for user-facing messages mirrored to the log file. */
-        private const val UX_LOG_FORMAT = "UX: %s"
+        private companion object {
+            /** Shared Timber format for user-facing messages mirrored to the log file. */
+            private const val UX_LOG_FORMAT = "UX: %s"
+        }
     }
-}
 
 /**
  * Composition-local handle to the app-wide [UserMessageReporter]. Installed
  * in `MainActivity`. Defaults to throwing so a missing provider is caught at
  * the first call site rather than silently dropping messages.
  */
-val LocalUserMessageReporter = compositionLocalOf<UserMessageReporter> {
-    error("UserMessageReporter not provided. Did you forget CompositionLocalProvider?")
-}
+val LocalUserMessageReporter =
+    compositionLocalOf<UserMessageReporter> {
+        error("UserMessageReporter not provided. Did you forget CompositionLocalProvider?")
+    }

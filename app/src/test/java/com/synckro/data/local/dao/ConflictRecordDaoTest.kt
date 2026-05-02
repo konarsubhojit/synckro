@@ -29,7 +29,6 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class ConflictRecordDaoTest {
-
     private lateinit var db: SynckroDatabase
     private lateinit var pairDao: SyncPairDao
     private lateinit var conflictDao: ConflictRecordDao
@@ -37,9 +36,11 @@ class ConflictRecordDaoTest {
     @Before
     fun setUp() {
         val context = ApplicationProvider.getApplicationContext<Context>()
-        db = Room.inMemoryDatabaseBuilder(context, SynckroDatabase::class.java)
-            .allowMainThreadQueries()
-            .build()
+        db =
+            Room
+                .inMemoryDatabaseBuilder(context, SynckroDatabase::class.java)
+                .allowMainThreadQueries()
+                .build()
         pairDao = db.syncPairDao()
         conflictDao = db.conflictRecordDao()
     }
@@ -53,117 +54,127 @@ class ConflictRecordDaoTest {
     // Helpers
     // -------------------------------------------------------------------------
 
-    private suspend fun insertPair(): Long = pairDao.insert(
-        SyncPairEntity(
-            displayName = "Test Pair",
-            localTreeUri = "content://example/tree/root",
-            provider = CloudProviderType.FAKE,
-            remoteFolderId = "root",
-            direction = SyncDirection.BIDIRECTIONAL,
-            conflictPolicy = ConflictPolicy.KEEP_BOTH,
-            includeGlobs = "",
-            excludeGlobs = "",
-            wifiOnly = true,
-            requiresCharging = false,
+    private suspend fun insertPair(): Long =
+        pairDao.insert(
+            SyncPairEntity(
+                displayName = "Test Pair",
+                localTreeUri = "content://example/tree/root",
+                provider = CloudProviderType.FAKE,
+                remoteFolderId = "root",
+                direction = SyncDirection.BIDIRECTIONAL,
+                conflictPolicy = ConflictPolicy.KEEP_BOTH,
+                includeGlobs = "",
+                excludeGlobs = "",
+                wifiOnly = true,
+                requiresCharging = false,
+            ),
         )
-    )
 
-    private fun buildConflict(pairId: Long, path: String = "docs/file.txt") =
-        ConflictRecordEntity(
-            pairId = pairId,
-            relativePath = path,
-            localLastModifiedMs = 2_000L,
-            remoteLastModifiedMs = 1_000L,
-            detectedAtMs = 3_000L,
-        )
+    private fun buildConflict(
+        pairId: Long,
+        path: String = "docs/file.txt",
+    ) = ConflictRecordEntity(
+        pairId = pairId,
+        relativePath = path,
+        localLastModifiedMs = 2_000L,
+        remoteLastModifiedMs = 1_000L,
+        detectedAtMs = 3_000L,
+    )
 
     // -------------------------------------------------------------------------
     // Tests
     // -------------------------------------------------------------------------
 
     @Test
-    fun `insert and observeUnresolved returns conflict`() = runTest {
-        val pairId = insertPair()
-        conflictDao.insert(buildConflict(pairId))
+    fun `insert and observeUnresolved returns conflict`() =
+        runTest {
+            val pairId = insertPair()
+            conflictDao.insert(buildConflict(pairId))
 
-        val unresolved = conflictDao.observeUnresolved().first()
+            val unresolved = conflictDao.observeUnresolved().first()
 
-        assertEquals(1, unresolved.size)
-        assertEquals("docs/file.txt", unresolved.first().relativePath)
-        assertNull(unresolved.first().resolution)
-    }
-
-    @Test
-    fun `resolve sets resolution and conflict no longer appears in unresolved`() = runTest {
-        val pairId = insertPair()
-        val id = conflictDao.insert(buildConflict(pairId))
-
-        conflictDao.resolve(id, ConflictRecord.RESOLUTION_KEEP_LOCAL)
-
-        val unresolved = conflictDao.observeUnresolved().first()
-        assertTrue(unresolved.isEmpty())
-    }
+            assertEquals(1, unresolved.size)
+            assertEquals("docs/file.txt", unresolved.first().relativePath)
+            assertNull(unresolved.first().resolution)
+        }
 
     @Test
-    fun `getResolvedForPair returns resolved records only`() = runTest {
-        val pairId = insertPair()
-        val id1 = conflictDao.insert(buildConflict(pairId, "a.txt"))
-        val id2 = conflictDao.insert(buildConflict(pairId, "b.txt"))
+    fun `resolve sets resolution and conflict no longer appears in unresolved`() =
+        runTest {
+            val pairId = insertPair()
+            val id = conflictDao.insert(buildConflict(pairId))
 
-        conflictDao.resolve(id1, ConflictRecord.RESOLUTION_KEEP_REMOTE)
+            conflictDao.resolve(id, ConflictRecord.RESOLUTION_KEEP_LOCAL)
 
-        val resolved = conflictDao.getResolvedForPair(pairId)
-        assertEquals(1, resolved.size)
-        assertEquals("a.txt", resolved.first().relativePath)
-        assertEquals(ConflictRecord.RESOLUTION_KEEP_REMOTE, resolved.first().resolution)
-    }
+            val unresolved = conflictDao.observeUnresolved().first()
+            assertTrue(unresolved.isEmpty())
+        }
 
     @Test
-    fun `delete removes the record`() = runTest {
-        val pairId = insertPair()
-        val id = conflictDao.insert(buildConflict(pairId))
+    fun `getResolvedForPair returns resolved records only`() =
+        runTest {
+            val pairId = insertPair()
+            val id1 = conflictDao.insert(buildConflict(pairId, "a.txt"))
+            val id2 = conflictDao.insert(buildConflict(pairId, "b.txt"))
 
-        conflictDao.delete(id)
+            conflictDao.resolve(id1, ConflictRecord.RESOLUTION_KEEP_REMOTE)
 
-        val unresolved = conflictDao.observeUnresolved().first()
-        assertTrue(unresolved.isEmpty())
-    }
-
-    @Test
-    fun `deleteResolvedForPair only removes resolved records`() = runTest {
-        val pairId = insertPair()
-        val id1 = conflictDao.insert(buildConflict(pairId, "resolved.txt"))
-        conflictDao.insert(buildConflict(pairId, "pending.txt"))
-        conflictDao.resolve(id1, ConflictRecord.RESOLUTION_KEEP_BOTH)
-
-        conflictDao.deleteResolvedForPair(pairId)
-
-        val all = conflictDao.observeForPair(pairId).first()
-        assertEquals(1, all.size)
-        assertEquals("pending.txt", all.first().relativePath)
-    }
+            val resolved = conflictDao.getResolvedForPair(pairId)
+            assertEquals(1, resolved.size)
+            assertEquals("a.txt", resolved.first().relativePath)
+            assertEquals(ConflictRecord.RESOLUTION_KEEP_REMOTE, resolved.first().resolution)
+        }
 
     @Test
-    fun `cascade delete removes conflict records when pair is deleted`() = runTest {
-        val pairId = insertPair()
-        conflictDao.insert(buildConflict(pairId))
+    fun `delete removes the record`() =
+        runTest {
+            val pairId = insertPair()
+            val id = conflictDao.insert(buildConflict(pairId))
 
-        pairDao.delete(pairId)
+            conflictDao.delete(id)
 
-        val unresolved = conflictDao.observeUnresolved().first()
-        assertTrue(unresolved.isEmpty())
-    }
+            val unresolved = conflictDao.observeUnresolved().first()
+            assertTrue(unresolved.isEmpty())
+        }
 
     @Test
-    fun `observeForPair returns records ordered by detectedAtMs descending`() = runTest {
-        val pairId = insertPair()
-        conflictDao.insert(buildConflict(pairId, "older.txt").copy(detectedAtMs = 1_000L))
-        conflictDao.insert(buildConflict(pairId, "newer.txt").copy(detectedAtMs = 5_000L))
+    fun `deleteResolvedForPair only removes resolved records`() =
+        runTest {
+            val pairId = insertPair()
+            val id1 = conflictDao.insert(buildConflict(pairId, "resolved.txt"))
+            conflictDao.insert(buildConflict(pairId, "pending.txt"))
+            conflictDao.resolve(id1, ConflictRecord.RESOLUTION_KEEP_BOTH)
 
-        val records = conflictDao.observeForPair(pairId).first()
+            conflictDao.deleteResolvedForPair(pairId)
 
-        assertEquals(2, records.size)
-        assertEquals("newer.txt", records[0].relativePath)
-        assertEquals("older.txt", records[1].relativePath)
-    }
+            val all = conflictDao.observeForPair(pairId).first()
+            assertEquals(1, all.size)
+            assertEquals("pending.txt", all.first().relativePath)
+        }
+
+    @Test
+    fun `cascade delete removes conflict records when pair is deleted`() =
+        runTest {
+            val pairId = insertPair()
+            conflictDao.insert(buildConflict(pairId))
+
+            pairDao.delete(pairId)
+
+            val unresolved = conflictDao.observeUnresolved().first()
+            assertTrue(unresolved.isEmpty())
+        }
+
+    @Test
+    fun `observeForPair returns records ordered by detectedAtMs descending`() =
+        runTest {
+            val pairId = insertPair()
+            conflictDao.insert(buildConflict(pairId, "older.txt").copy(detectedAtMs = 1_000L))
+            conflictDao.insert(buildConflict(pairId, "newer.txt").copy(detectedAtMs = 5_000L))
+
+            val records = conflictDao.observeForPair(pairId).first()
+
+            assertEquals(2, records.size)
+            assertEquals("newer.txt", records[0].relativePath)
+            assertEquals("older.txt", records[1].relativePath)
+        }
 }

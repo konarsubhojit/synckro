@@ -13,7 +13,9 @@ sealed interface ScanProgress {
      *
      * @param filesScanned Running count of files discovered so far (directories excluded).
      */
-    data class Scanning(val filesScanned: Int) : ScanProgress
+    data class Scanning(
+        val filesScanned: Int,
+    ) : ScanProgress
 
     /**
      * Terminal success event.  The Room index has been fully reconciled with the
@@ -23,7 +25,11 @@ sealed interface ScanProgress {
      * @param updated Files whose size or last-modified timestamp changed.
      * @param deleted Files removed from the index because they no longer exist on disk.
      */
-    data class Done(val added: Int, val updated: Int, val deleted: Int) : ScanProgress
+    data class Done(
+        val added: Int,
+        val updated: Int,
+        val deleted: Int,
+    ) : ScanProgress
 
     /**
      * Terminal failure event.  The scan aborted before completing; the index
@@ -31,5 +37,7 @@ sealed interface ScanProgress {
      *
      * @param reason Human-readable description of the error.
      */
-    data class Failed(val reason: String) : ScanProgress
+    data class Failed(
+        val reason: String,
+    ) : ScanProgress
 }

@@ -20,13 +20,18 @@ import javax.inject.Singleton
 @Module
 @InstallIn(SingletonComponent::class)
 object CloudProviderModule {
-
-    @Provides @IntoMap @CloudProviderKey(CloudProviderType.FAKE) @Singleton
+    @Provides @IntoMap
+    @CloudProviderKey(CloudProviderType.FAKE)
+    @Singleton
     fun provideFakeCloudProvider(impl: FakeCloudProvider): CloudProvider = impl
 
-    @Provides @IntoMap @CloudProviderKey(CloudProviderType.GOOGLE_DRIVE) @Singleton
+    @Provides @IntoMap
+    @CloudProviderKey(CloudProviderType.GOOGLE_DRIVE)
+    @Singleton
     fun provideGoogleDriveProvider(impl: GoogleDriveProvider): CloudProvider = impl
 
-    @Provides @IntoMap @CloudProviderKey(CloudProviderType.ONEDRIVE) @Singleton
+    @Provides @IntoMap
+    @CloudProviderKey(CloudProviderType.ONEDRIVE)
+    @Singleton
     fun provideOneDriveProvider(impl: OneDriveProvider): CloudProvider = impl
 }

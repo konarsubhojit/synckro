@@ -8,6 +8,12 @@ import androidx.annotation.StringRes
  * makes ViewModels easier to test without Robolectric when only string resolution is needed.
  */
 interface StringProvider {
-    fun getString(@StringRes id: Int): String
-    fun getString(@StringRes id: Int, vararg args: Any): String
+    fun getString(
+        @StringRes id: Int,
+    ): String
+
+    fun getString(
+        @StringRes id: Int,
+        vararg args: Any,
+    ): String
 }

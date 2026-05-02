@@ -3,6 +3,7 @@ package com.synckro.ui.screens.home
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import androidx.work.ExistingWorkPolicy
+import androidx.work.OneTimeWorkRequest
 import androidx.work.WorkManager
 import com.synckro.data.repository.ConflictRepository
 import com.synckro.data.repository.SyncPairRepository
@@ -10,16 +11,15 @@ import com.synckro.domain.model.CloudProviderType
 import com.synckro.domain.model.ConflictPolicy
 import com.synckro.domain.model.SyncDirection
 import com.synckro.domain.model.SyncPair
-import androidx.work.OneTimeWorkRequest
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
@@ -39,7 +39,6 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class HomeViewModelTest {
-
     private val testDispatcher = StandardTestDispatcher()
     private lateinit var mockRepo: SyncPairRepository
     private lateinit var mockConflictRepo: ConflictRepository
@@ -63,14 +62,18 @@ class HomeViewModelTest {
         Dispatchers.resetMain()
     }
 
-    private fun createVm() = HomeViewModel(
-        context = context,
-        syncPairRepository = mockRepo,
-        conflictRepository = mockConflictRepo,
-        workManager = mockWorkManager,
-    )
+    private fun createVm() =
+        HomeViewModel(
+            context = context,
+            syncPairRepository = mockRepo,
+            conflictRepository = mockConflictRepo,
+            workManager = mockWorkManager,
+        )
 
-    private fun pair(id: Long, name: String = "Pair $id") = SyncPair(
+    private fun pair(
+        id: Long,
+        name: String = "Pair $id",
+    ) = SyncPair(
         id = id,
         displayName = name,
         localTreeUri = "content://test/$id",
@@ -91,51 +94,54 @@ class HomeViewModelTest {
     }
 
     @Test
-    fun `state reflects pairs emitted by repository`() = runTest {
-        val vm = createVm()
-        val pairs = listOf(pair(1L), pair(2L))
+    fun `state reflects pairs emitted by repository`() =
+        runTest {
+            val vm = createVm()
+            val pairs = listOf(pair(1L), pair(2L))
 
-        // Subscribe to activate the WhileSubscribed upstream collection.
-        val collectJob = launch { vm.state.collect {} }
-        pairsFlow.value = pairs
-        advanceUntilIdle()
+            // Subscribe to activate the WhileSubscribed upstream collection.
+            val collectJob = launch { vm.state.collect {} }
+            pairsFlow.value = pairs
+            advanceUntilIdle()
 
-        val state = vm.state.value
-        assertFalse(state.isLoading)
-        assertEquals(2, state.pairs.size)
-        assertEquals(1L, state.pairs[0].id)
-        assertEquals(2L, state.pairs[1].id)
-        collectJob.cancel()
-    }
+            val state = vm.state.value
+            assertFalse(state.isLoading)
+            assertEquals(2, state.pairs.size)
+            assertEquals(1L, state.pairs[0].id)
+            assertEquals(2L, state.pairs[1].id)
+            collectJob.cancel()
+        }
 
     @Test
-    fun `empty list is reflected after pairs are cleared`() = runTest {
-        pairsFlow.value = listOf(pair(1L))
-        val vm = createVm()
+    fun `empty list is reflected after pairs are cleared`() =
+        runTest {
+            pairsFlow.value = listOf(pair(1L))
+            val vm = createVm()
 
-        val collectJob = launch { vm.state.collect {} }
-        advanceUntilIdle()
-        assertEquals(1, vm.state.value.pairs.size)
+            val collectJob = launch { vm.state.collect {} }
+            advanceUntilIdle()
+            assertEquals(1, vm.state.value.pairs.size)
 
-        pairsFlow.value = emptyList()
-        advanceUntilIdle()
-        assertEquals(0, vm.state.value.pairs.size)
+            pairsFlow.value = emptyList()
+            advanceUntilIdle()
+            assertEquals(0, vm.state.value.pairs.size)
 
-        collectJob.cancel()
-    }
+            collectJob.cancel()
+        }
 
     // -------------------------------------------------------------------------
     // Delete
     // -------------------------------------------------------------------------
 
     @Test
-    fun `delete calls repository delete with correct id`() = runTest {
-        val vm = createVm()
-        vm.delete(42L)
-        advanceUntilIdle()
+    fun `delete calls repository delete with correct id`() =
+        runTest {
+            val vm = createVm()
+            vm.delete(42L)
+            advanceUntilIdle()
 
-        coVerify { mockRepo.delete(42L) }
-    }
+            coVerify { mockRepo.delete(42L) }
+        }
 
     // -------------------------------------------------------------------------
     // Sync now

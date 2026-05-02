@@ -1,13 +1,13 @@
 package com.synckro.domain.sync
 
 import com.synckro.domain.provider.CloudProviderException
-import java.io.IOException
 import kotlinx.coroutines.CancellationException
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Test
+import java.io.IOException
 
 /**
  * Unit tests for [CloudExceptionMapper] covering each documented failure mode
@@ -24,7 +24,6 @@ import org.junit.Test
  * an infinite retry storm on a permanent auth failure.
  */
 class CloudExceptionMapperTest {
-
     @Test
     fun `AuthenticationRequired maps to Terminal with needsReauth=true (token expired)`() {
         val ex = CloudProviderException.AuthenticationRequired("Token expired; sign in again")
@@ -58,10 +57,11 @@ class CloudExceptionMapperTest {
         // MsalUiRequiredException is mapped by OneDriveAuthManager to
         // AuthResult.NeedsInteractiveSignIn, which OneDriveProvider rethrows as
         // AuthenticationRequired. Verify the final mapping ends in Terminal+reauth.
-        val ex = CloudProviderException.AuthenticationRequired(
-            "Interactive sign-in required",
-            cause = IllegalStateException("MsalUiRequiredException"),
-        )
+        val ex =
+            CloudProviderException.AuthenticationRequired(
+                "Interactive sign-in required",
+                cause = IllegalStateException("MsalUiRequiredException"),
+            )
         val mapped = CloudExceptionMapper.toResult(ex)
         assertTrue(mapped is SyncEngine.Result.Terminal)
         assertTrue((mapped as SyncEngine.Result.Terminal).needsReauth)
@@ -69,9 +69,10 @@ class CloudExceptionMapperTest {
 
     @Test
     fun `NotConfigured maps to Terminal with needsReauth=true`() {
-        val ex = CloudProviderException.NotConfigured(
-            "OneDrive is not configured. Set MS_CLIENT_ID and MSAL_REDIRECT_URI."
-        )
+        val ex =
+            CloudProviderException.NotConfigured(
+                "OneDrive is not configured. Set MS_CLIENT_ID and MSAL_REDIRECT_URI.",
+            )
 
         val result = CloudExceptionMapper.toResult(ex) as SyncEngine.Result.Terminal
 
@@ -83,10 +84,11 @@ class CloudExceptionMapperTest {
 
     @Test
     fun `AuthenticationFailed maps to Retriable (transient network during refresh)`() {
-        val ex = CloudProviderException.AuthenticationFailed(
-            "Network error during token refresh",
-            cause = IOException("connection reset"),
-        )
+        val ex =
+            CloudProviderException.AuthenticationFailed(
+                "Network error during token refresh",
+                cause = IOException("connection reset"),
+            )
 
         val result = CloudExceptionMapper.toResult(ex)
 
@@ -96,10 +98,11 @@ class CloudExceptionMapperTest {
 
     @Test
     fun `RateLimited maps to Retriable (Retry-After honoured)`() {
-        val ex = CloudProviderException.RateLimited(
-            retryAfterMs = 60_000L,
-            message = "Too many requests",
-        )
+        val ex =
+            CloudProviderException.RateLimited(
+                retryAfterMs = 60_000L,
+                message = "Too many requests",
+            )
 
         val result = CloudExceptionMapper.toResult(ex)
 

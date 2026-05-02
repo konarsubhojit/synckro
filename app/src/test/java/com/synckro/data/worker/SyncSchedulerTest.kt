@@ -29,7 +29,6 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class SyncSchedulerTest {
-
     private lateinit var context: Context
     private lateinit var workManager: WorkManager
     private lateinit var scheduler: SyncScheduler
@@ -37,9 +36,11 @@ class SyncSchedulerTest {
     @Before
     fun setUp() {
         context = ApplicationProvider.getApplicationContext()
-        val config = Configuration.Builder()
-            .setMinimumLoggingLevel(android.util.Log.DEBUG)
-            .build()
+        val config =
+            Configuration
+                .Builder()
+                .setMinimumLoggingLevel(android.util.Log.DEBUG)
+                .build()
         WorkManagerTestInitHelper.initializeTestWorkManager(context, config)
         workManager = WorkManager.getInstance(context)
         scheduler = SyncScheduler(workManager)
@@ -75,9 +76,10 @@ class SyncSchedulerTest {
         val p = pair(id = 5L)
         scheduler.schedulePeriodic(p)
 
-        val infos = workManager
-            .getWorkInfosForUniqueWork(SyncWorker.uniqueName(5L))
-            .get()
+        val infos =
+            workManager
+                .getWorkInfosForUniqueWork(SyncWorker.uniqueName(5L))
+                .get()
         assertFalse("Expected at least one work info", infos.isEmpty())
     }
 
@@ -86,10 +88,11 @@ class SyncSchedulerTest {
         val p = pair(id = 2L)
         scheduler.schedulePeriodic(p)
 
-        val info = workManager
-            .getWorkInfosForUniqueWork(SyncWorker.uniqueName(2L))
-            .get()
-            .first()
+        val info =
+            workManager
+                .getWorkInfosForUniqueWork(SyncWorker.uniqueName(2L))
+                .get()
+                .first()
         assertEquals(WorkInfo.State.ENQUEUED, info.state)
     }
 
@@ -102,10 +105,11 @@ class SyncSchedulerTest {
         val p = pair(wifiOnly = true)
         scheduler.schedulePeriodic(p)
 
-        val info = workManager
-            .getWorkInfosForUniqueWork(SyncWorker.uniqueName(p.id))
-            .get()
-            .first()
+        val info =
+            workManager
+                .getWorkInfosForUniqueWork(SyncWorker.uniqueName(p.id))
+                .get()
+                .first()
         // WorkInfo carries the constraints; UNMETERED == Wi-Fi only
         assertTrue(
             "Expected UNMETERED (Wi-Fi only) constraint",
@@ -118,10 +122,11 @@ class SyncSchedulerTest {
         val p = pair(wifiOnly = false)
         scheduler.schedulePeriodic(p)
 
-        val info = workManager
-            .getWorkInfosForUniqueWork(SyncWorker.uniqueName(p.id))
-            .get()
-            .first()
+        val info =
+            workManager
+                .getWorkInfosForUniqueWork(SyncWorker.uniqueName(p.id))
+                .get()
+                .first()
         assertEquals(NetworkType.CONNECTED, info.constraints.requiredNetworkType)
     }
 
@@ -130,10 +135,11 @@ class SyncSchedulerTest {
         val p = pair(requiresCharging = true)
         scheduler.schedulePeriodic(p)
 
-        val info = workManager
-            .getWorkInfosForUniqueWork(SyncWorker.uniqueName(p.id))
-            .get()
-            .first()
+        val info =
+            workManager
+                .getWorkInfosForUniqueWork(SyncWorker.uniqueName(p.id))
+                .get()
+                .first()
         assertTrue("Expected requiresCharging constraint", info.constraints.requiresCharging())
     }
 
@@ -142,10 +148,11 @@ class SyncSchedulerTest {
         val p = pair()
         scheduler.schedulePeriodic(p)
 
-        val info = workManager
-            .getWorkInfosForUniqueWork(SyncWorker.uniqueName(p.id))
-            .get()
-            .first()
+        val info =
+            workManager
+                .getWorkInfosForUniqueWork(SyncWorker.uniqueName(p.id))
+                .get()
+                .first()
         assertTrue(
             "battery-not-low must always be set for Doze resilience on API 31+",
             info.constraints.requiresBatteryNotLow(),
@@ -157,10 +164,11 @@ class SyncSchedulerTest {
         val p = pair()
         scheduler.schedulePeriodic(p)
 
-        val info = workManager
-            .getWorkInfosForUniqueWork(SyncWorker.uniqueName(p.id))
-            .get()
-            .first()
+        val info =
+            workManager
+                .getWorkInfosForUniqueWork(SyncWorker.uniqueName(p.id))
+                .get()
+                .first()
         assertTrue(
             "storage-not-low must always be set",
             info.constraints.requiresStorageNotLow(),
@@ -177,10 +185,11 @@ class SyncSchedulerTest {
         // Requesting 5 minutes should be silently clamped to 15 minutes.
         scheduler.schedulePeriodic(p, intervalMinutes = 5L)
 
-        val info = workManager
-            .getWorkInfosForUniqueWork(SyncWorker.uniqueName(p.id))
-            .get()
-            .first()
+        val info =
+            workManager
+                .getWorkInfosForUniqueWork(SyncWorker.uniqueName(p.id))
+                .get()
+                .first()
         // The work is still enqueued (clamped, not rejected).
         assertNotNull(info)
     }
@@ -195,9 +204,10 @@ class SyncSchedulerTest {
         scheduler.schedulePeriodic(p)
         scheduler.cancel(p.id)
 
-        val infos = workManager
-            .getWorkInfosForUniqueWork(SyncWorker.uniqueName(p.id))
-            .get()
+        val infos =
+            workManager
+                .getWorkInfosForUniqueWork(SyncWorker.uniqueName(p.id))
+                .get()
         assertTrue(
             "After cancel the work should be CANCELLED or absent",
             infos.isEmpty() || infos.all { it.state == WorkInfo.State.CANCELLED },

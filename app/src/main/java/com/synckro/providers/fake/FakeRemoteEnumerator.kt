@@ -18,29 +18,34 @@ import javax.inject.Singleton
  * non-null `removedId` become [RemoteChangeType.DELETE].
  */
 @Singleton
-class FakeRemoteEnumerator @Inject constructor(
-    private val provider: FakeCloudProvider,
-) : RemoteEnumerator {
-    override suspend fun enumerate(deltaToken: String?): RemoteSnapshot {
-        val page = provider.changesSince(deltaToken)
-        val mapped = page.changes.mapNotNull { c ->
-            when {
-                c.removedId != null -> RemoteChange(
-                    relativePath = c.removedId,
-                    type = RemoteChangeType.DELETE,
-                    remoteId = c.removedId,
-                )
-                c.file != null -> RemoteChange(
-                    relativePath = c.file.name,
-                    type = RemoteChangeType.MODIFY,
-                    remoteId = c.file.id,
-                    sizeBytes = c.file.size,
-                    mtimeMs = c.file.lastModifiedMs,
-                    etag = c.file.eTag,
-                )
-                else -> null
-            }
+class FakeRemoteEnumerator
+    @Inject
+    constructor(
+        private val provider: FakeCloudProvider,
+    ) : RemoteEnumerator {
+        override suspend fun enumerate(deltaToken: String?): RemoteSnapshot {
+            val page = provider.changesSince(deltaToken)
+            val mapped =
+                page.changes.mapNotNull { c ->
+                    when {
+                        c.removedId != null ->
+                            RemoteChange(
+                                relativePath = c.removedId,
+                                type = RemoteChangeType.DELETE,
+                                remoteId = c.removedId,
+                            )
+                        c.file != null ->
+                            RemoteChange(
+                                relativePath = c.file.name,
+                                type = RemoteChangeType.MODIFY,
+                                remoteId = c.file.id,
+                                sizeBytes = c.file.size,
+                                mtimeMs = c.file.lastModifiedMs,
+                                etag = c.file.eTag,
+                            )
+                        else -> null
+                    }
+                }
+            return RemoteSnapshot(changes = mapped, newDeltaToken = page.nextToken)
         }
-        return RemoteSnapshot(changes = mapped, newDeltaToken = page.nextToken)
     }
-}

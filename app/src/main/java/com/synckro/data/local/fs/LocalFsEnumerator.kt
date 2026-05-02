@@ -6,8 +6,8 @@ import android.net.Uri
 import android.provider.DocumentsContract
 import com.synckro.data.local.dao.LocalIndexDao
 import com.synckro.data.local.entity.LocalIndexEntity
-import com.synckro.data.scanner.DocumentChildrenQuery
 import com.synckro.data.scanner.DefaultDocumentChildrenQuery
+import com.synckro.data.scanner.DocumentChildrenQuery
 import com.synckro.data.scanner.RawDocChild
 import dagger.hilt.android.qualifiers.ApplicationContext
 import timber.log.Timber
@@ -33,12 +33,20 @@ internal fun interface FsAccess {
      * @return An [InputStream] for the file content, or `null` if the file
      *         cannot be opened (e.g. permission revoked or I/O error).
      */
-    fun openInputStream(treeUri: Uri, docId: String): InputStream?
+    fun openInputStream(
+        treeUri: Uri,
+        docId: String,
+    ): InputStream?
 }
 
 /** Production [FsAccess] backed by [ContentResolver]. */
-internal class DefaultFsAccess(private val resolver: ContentResolver) : FsAccess {
-    override fun openInputStream(treeUri: Uri, docId: String): InputStream? {
+internal class DefaultFsAccess(
+    private val resolver: ContentResolver,
+) : FsAccess {
+    override fun openInputStream(
+        treeUri: Uri,
+        docId: String,
+    ): InputStream? {
         val docUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, docId)
         return try {
             resolver.openInputStream(docUri)
@@ -78,7 +86,6 @@ class LocalFsEnumerator internal constructor(
     private val childrenQuery: DocumentChildrenQuery,
     private val fsAccess: FsAccess,
 ) {
-
     /** Hilt-injected production constructor. */
     @Inject
     constructor(
@@ -114,14 +121,15 @@ class LocalFsEnumerator internal constructor(
             localIndexDao.getForPair(pairId).associateBy { it.relativePath }
 
         // Pre-compile ignore-glob patterns for efficiency.
-        val compiledGlobs = ignoreGlobs.mapNotNull { pattern ->
-            try {
-                globToRegex(pattern)
-            } catch (_: Exception) {
-                Timber.w("LocalFsEnumerator: invalid ignore glob '%s', skipping", pattern)
-                null
+        val compiledGlobs =
+            ignoreGlobs.mapNotNull { pattern ->
+                try {
+                    globToRegex(pattern)
+                } catch (_: Exception) {
+                    Timber.w("LocalFsEnumerator: invalid ignore glob '%s', skipping", pattern)
+                    null
+                }
             }
-        }
 
         val snapshot = mutableListOf<LocalFileEntry>()
 
@@ -133,16 +141,17 @@ class LocalFsEnumerator internal constructor(
 
         while (queue.isNotEmpty()) {
             val (parentDocId, prefix) = queue.removeFirst()
-            val children: List<RawDocChild> = try {
-                childrenQuery(resolver, treeUri, parentDocId)
-            } catch (e: Exception) {
-                Timber.w(
-                    e,
-                    "LocalFsEnumerator: failed to list children of docId='%s'",
-                    parentDocId,
-                )
-                continue
-            }
+            val children: List<RawDocChild> =
+                try {
+                    childrenQuery(resolver, treeUri, parentDocId)
+                } catch (e: Exception) {
+                    Timber.w(
+                        e,
+                        "LocalFsEnumerator: failed to list children of docId='%s'",
+                        parentDocId,
+                    )
+                    continue
+                }
 
             for (child in children) {
                 val relativePath =
@@ -167,21 +176,23 @@ class LocalFsEnumerator internal constructor(
 
                 // 3. Determine content hash (lazy: reuse cache when size+mtime unchanged).
                 val cachedEntry = cached[relativePath]
-                val contentHash = resolveHash(
-                    treeUri = treeUri,
-                    docId = child.docId,
-                    relativePath = relativePath,
-                    newSize = child.size,
-                    newMtime = child.lastModifiedMs,
-                    cached = cachedEntry,
-                )
+                val contentHash =
+                    resolveHash(
+                        treeUri = treeUri,
+                        docId = child.docId,
+                        relativePath = relativePath,
+                        newSize = child.size,
+                        newMtime = child.lastModifiedMs,
+                        cached = cachedEntry,
+                    )
 
-                snapshot += LocalFileEntry(
-                    relativePath = relativePath,
-                    sizeBytes = child.size,
-                    mtimeMs = child.lastModifiedMs,
-                    contentHash = contentHash,
-                )
+                snapshot +=
+                    LocalFileEntry(
+                        relativePath = relativePath,
+                        sizeBytes = child.size,
+                        mtimeMs = child.lastModifiedMs,
+                        contentHash = contentHash,
+                    )
             }
         }
 
@@ -201,18 +212,19 @@ class LocalFsEnumerator internal constructor(
         val deleted = cached.keys.filter { it !in snapshotPaths }.toSet()
 
         // 5. Atomically persist: upsert changed entries, delete stale ones.
-        val toUpsert = snapshot
-            .filter { it.relativePath in added || it.relativePath in modified }
-            .map { entry ->
-                LocalIndexEntity(
-                    pairId = pairId,
-                    relativePath = entry.relativePath,
-                    sizeBytes = entry.sizeBytes,
-                    mtimeMs = entry.mtimeMs,
-                    contentHash = entry.contentHash,
-                    remoteId = cached[entry.relativePath]?.remoteId,
-                )
-            }
+        val toUpsert =
+            snapshot
+                .filter { it.relativePath in added || it.relativePath in modified }
+                .map { entry ->
+                    LocalIndexEntity(
+                        pairId = pairId,
+                        relativePath = entry.relativePath,
+                        sizeBytes = entry.sizeBytes,
+                        mtimeMs = entry.mtimeMs,
+                        contentHash = entry.contentHash,
+                        remoteId = cached[entry.relativePath]?.remoteId,
+                    )
+                }
         localIndexDao.reconcileForPair(pairId, toUpsert, snapshotPaths.toList())
 
         return EnumerationResult(
@@ -258,7 +270,6 @@ class LocalFsEnumerator internal constructor(
     }
 
     companion object {
-
         /**
          * Computes the SHA-256 digest of [stream] and returns it as a lowercase hex string.
          * The caller is responsible for closing the stream; this function does not close it.

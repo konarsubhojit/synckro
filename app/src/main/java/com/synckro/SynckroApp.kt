@@ -9,8 +9,8 @@ import androidx.work.Configuration
 import com.synckro.data.worker.SyncWorker
 import com.synckro.util.logging.FileLoggingTree
 import dagger.hilt.android.HiltAndroidApp
-import javax.inject.Inject
 import timber.log.Timber
+import javax.inject.Inject
 
 /**
  * Application entry point. Initialises Hilt, Timber and WorkManager with a
@@ -23,8 +23,9 @@ import timber.log.Timber
  * needing a USB cable to grab Logcat.
  */
 @HiltAndroidApp
-class SynckroApp : Application(), Configuration.Provider {
-
+class SynckroApp :
+    Application(),
+    Configuration.Provider {
     @Inject lateinit var workerFactory: HiltWorkerFactory
 
     override fun onCreate() {
@@ -35,8 +36,12 @@ class SynckroApp : Application(), Configuration.Provider {
             val fileTree = FileLoggingTree(this)
             Timber.plant(fileTree)
             installUncaughtExceptionHandler(fileTree)
-            Timber.i("Synckro %s (%s) started. Debug log: %s",
-                BuildConfig.VERSION_NAME, BuildConfig.APPLICATION_ID, fileTree.currentLogPath)
+            Timber.i(
+                "Synckro %s (%s) started. Debug log: %s",
+                BuildConfig.VERSION_NAME,
+                BuildConfig.APPLICATION_ID,
+                fileTree.currentLogPath,
+            )
         }
     }
 
@@ -47,14 +52,15 @@ class SynckroApp : Application(), Configuration.Provider {
     private fun createNotificationChannels() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val nm = getSystemService(NotificationManager::class.java)
-            val channel = NotificationChannel(
-                SyncWorker.SYNC_CHANNEL_ID,
-                getString(R.string.sync_channel_name),
-                NotificationManager.IMPORTANCE_LOW,
-            ).apply {
-                description = getString(R.string.sync_channel_description)
-                setShowBadge(false)
-            }
+            val channel =
+                NotificationChannel(
+                    SyncWorker.SYNC_CHANNEL_ID,
+                    getString(R.string.sync_channel_name),
+                    NotificationManager.IMPORTANCE_LOW,
+                ).apply {
+                    description = getString(R.string.sync_channel_description)
+                    setShowBadge(false)
+                }
             nm.createNotificationChannel(channel)
         }
     }
@@ -82,8 +88,10 @@ class SynckroApp : Application(), Configuration.Provider {
     }
 
     override val workManagerConfiguration: Configuration
-        get() = Configuration.Builder()
-            .setWorkerFactory(workerFactory)
-            .setMinimumLoggingLevel(if (BuildConfig.DEBUG) android.util.Log.DEBUG else android.util.Log.INFO)
-            .build()
+        get() =
+            Configuration
+                .Builder()
+                .setWorkerFactory(workerFactory)
+                .setMinimumLoggingLevel(if (BuildConfig.DEBUG) android.util.Log.DEBUG else android.util.Log.INFO)
+                .build()
 }

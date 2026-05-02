@@ -35,7 +35,6 @@ import javax.inject.Singleton
 @Module
 @InstallIn(SingletonComponent::class)
 object AppModule {
-
     /**
      * Provides the application's Room-backed SynckroDatabase instance.
      *
@@ -46,16 +45,20 @@ object AppModule {
      * @return The constructed SynckroDatabase.
      */
     @Provides @Singleton
-    fun provideDatabase(@ApplicationContext ctx: Context): SynckroDatabase {
-        val builder = Room.databaseBuilder(ctx, SynckroDatabase::class.java, SynckroDatabase.NAME)
-            .addMigrations(
-                SynckroDatabase.MIGRATION_1_2,
-                SynckroDatabase.MIGRATION_2_3,
-                SynckroDatabase.MIGRATION_3_4,
-                SynckroDatabase.MIGRATION_4_5,
-                SynckroDatabase.MIGRATION_5_6,
-                SynckroDatabase.MIGRATION_6_7,
-            )
+    fun provideDatabase(
+        @ApplicationContext ctx: Context,
+    ): SynckroDatabase {
+        val builder =
+            Room
+                .databaseBuilder(ctx, SynckroDatabase::class.java, SynckroDatabase.NAME)
+                .addMigrations(
+                    SynckroDatabase.MIGRATION_1_2,
+                    SynckroDatabase.MIGRATION_2_3,
+                    SynckroDatabase.MIGRATION_3_4,
+                    SynckroDatabase.MIGRATION_4_5,
+                    SynckroDatabase.MIGRATION_5_6,
+                    SynckroDatabase.MIGRATION_6_7,
+                )
         // Destructive fallback is only acceptable while the schema is still
         // pre-1.0. In release builds we refuse to drop user sync state and
         // require explicit migrations.
@@ -119,8 +122,9 @@ object AppModule {
      * @return The WorkManager instance for the provided application context.
      */
     @Provides @Singleton
-    fun provideWorkManager(@ApplicationContext ctx: Context): WorkManager =
-        WorkManager.getInstance(ctx)
+    fun provideWorkManager(
+        @ApplicationContext ctx: Context,
+    ): WorkManager = WorkManager.getInstance(ctx)
 
     /**
      * Provides a SyncScheduler that orchestrates synchronization tasks using the supplied WorkManager.
@@ -128,8 +132,7 @@ object AppModule {
      * @return The created SyncScheduler instance.
      */
     @Provides @Singleton
-    fun provideSyncScheduler(workManager: WorkManager): SyncScheduler =
-        SyncScheduler(workManager)
+    fun provideSyncScheduler(workManager: WorkManager): SyncScheduler = SyncScheduler(workManager)
 
     /**
      * Provides the application's synchronization engine used to coordinate sync tasks.
@@ -142,10 +145,14 @@ object AppModule {
         providers: Map<CloudProviderType, @JvmSuppressWildcards CloudProvider>,
     ): SyncEngine = SyncEngine(conflictRepository, providers)
 
-    @Provides @IntoMap @CloudProviderKey(CloudProviderType.ONEDRIVE) @Singleton
+    @Provides @IntoMap
+    @CloudProviderKey(CloudProviderType.ONEDRIVE)
+    @Singleton
     fun provideOneDriveAuthManager(impl: OneDriveAuthManager): AuthManager = impl
 
-    @Provides @IntoMap @CloudProviderKey(CloudProviderType.GOOGLE_DRIVE) @Singleton
+    @Provides @IntoMap
+    @CloudProviderKey(CloudProviderType.GOOGLE_DRIVE)
+    @Singleton
     fun provideGoogleDriveAuthManager(impl: GoogleDriveAuthManager): AuthManager = impl
 
     @Provides @Singleton

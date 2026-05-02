@@ -17,7 +17,6 @@ import kotlinx.coroutines.flow.Flow
  * - Run IO work off the main thread.
  */
 interface LocalFolderScanner {
-
     companion object {
         /** Number of files scanned between consecutive [ScanProgress.Scanning] emissions. */
         const val PROGRESS_INTERVAL = 50
@@ -33,5 +32,8 @@ interface LocalFolderScanner {
      *                table before collecting.
      * @param treeUri A persisted SAF tree URI obtained from `ACTION_OPEN_DOCUMENT_TREE`.
      */
-    fun scan(pairId: Long, treeUri: Uri): Flow<ScanProgress>
+    fun scan(
+        pairId: Long,
+        treeUri: Uri,
+    ): Flow<ScanProgress>
 }

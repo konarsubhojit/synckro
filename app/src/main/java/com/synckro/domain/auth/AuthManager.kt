@@ -8,7 +8,9 @@ package com.synckro.domain.auth
  */
 sealed interface AuthResult<out T> {
     /** Authentication succeeded. [value] carries the relevant payload (e.g. the account or access token). */
-    data class Success<T>(val value: T) : AuthResult<T>
+    data class Success<T>(
+        val value: T,
+    ) : AuthResult<T>
 
     /** The user explicitly cancelled (e.g. closed the OAuth browser tab). Not an error. */
     data object Cancelled : AuthResult<Nothing>
@@ -21,10 +23,15 @@ sealed interface AuthResult<out T> {
     data object NeedsInteractiveSignIn : AuthResult<Nothing>
 
     /** Authentication failed for a reason the user can't resolve by retrying silently. */
-    data class Error(val message: String, val cause: Throwable? = null) : AuthResult<Nothing>
+    data class Error(
+        val message: String,
+        val cause: Throwable? = null,
+    ) : AuthResult<Nothing>
 
     /** The provider is not configured (e.g. missing client id). Tell the user to configure it. */
-    data class NotConfigured(val message: String) : AuthResult<Nothing>
+    data class NotConfigured(
+        val message: String,
+    ) : AuthResult<Nothing>
 }
 
 /**
@@ -38,7 +45,6 @@ sealed interface AuthResult<out T> {
  * platform implementation downcasts to access the underlying Activity.
  */
 interface AuthManager {
-
     /** Stable key identifying this manager (matches [Account.provider]). */
     val providerType: com.synckro.domain.model.CloudProviderType
 

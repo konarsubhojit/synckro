@@ -10,7 +10,6 @@ sealed class CloudProviderException(
     message: String,
     cause: Throwable? = null,
 ) : Exception(message, cause) {
-
     /**
      * The provider has no valid token and interactive sign-in is required.
      * Callers (e.g. [com.synckro.data.worker.SyncWorker])

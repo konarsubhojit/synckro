@@ -10,57 +10,59 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalContext
 
-private val LightColors = lightColorScheme(
-    primary = BrandPrimary,
-    onPrimary = BrandOnPrimary,
-    primaryContainer = BrandPrimaryContainer,
-    onPrimaryContainer = BrandOnPrimaryContainer,
-    secondary = BrandSecondary,
-    onSecondary = BrandOnSecondary,
-    secondaryContainer = BrandSecondaryContainer,
-    onSecondaryContainer = BrandOnSecondaryContainer,
-    tertiary = BrandTertiary,
-    onTertiary = BrandOnTertiary,
-    tertiaryContainer = BrandTertiaryContainer,
-    onTertiaryContainer = BrandOnTertiaryContainer,
-    error = BrandError,
-    onError = BrandOnError,
-    errorContainer = BrandErrorContainer,
-    onErrorContainer = BrandOnErrorContainer,
-    background = LightBackground,
-    onBackground = LightOnBackground,
-    surface = LightSurface,
-    onSurface = LightOnSurface,
-    surfaceVariant = LightSurfaceVariant,
-    onSurfaceVariant = LightOnSurfaceVariant,
-    outline = LightOutline,
-)
+private val LightColors =
+    lightColorScheme(
+        primary = BrandPrimary,
+        onPrimary = BrandOnPrimary,
+        primaryContainer = BrandPrimaryContainer,
+        onPrimaryContainer = BrandOnPrimaryContainer,
+        secondary = BrandSecondary,
+        onSecondary = BrandOnSecondary,
+        secondaryContainer = BrandSecondaryContainer,
+        onSecondaryContainer = BrandOnSecondaryContainer,
+        tertiary = BrandTertiary,
+        onTertiary = BrandOnTertiary,
+        tertiaryContainer = BrandTertiaryContainer,
+        onTertiaryContainer = BrandOnTertiaryContainer,
+        error = BrandError,
+        onError = BrandOnError,
+        errorContainer = BrandErrorContainer,
+        onErrorContainer = BrandOnErrorContainer,
+        background = LightBackground,
+        onBackground = LightOnBackground,
+        surface = LightSurface,
+        onSurface = LightOnSurface,
+        surfaceVariant = LightSurfaceVariant,
+        onSurfaceVariant = LightOnSurfaceVariant,
+        outline = LightOutline,
+    )
 
-private val DarkColors = darkColorScheme(
-    primary = DarkPrimary,
-    onPrimary = DarkOnPrimary,
-    primaryContainer = DarkPrimaryContainer,
-    onPrimaryContainer = DarkOnPrimaryContainer,
-    secondary = DarkSecondary,
-    onSecondary = DarkOnSecondary,
-    secondaryContainer = DarkSecondaryContainer,
-    onSecondaryContainer = DarkOnSecondaryContainer,
-    tertiary = DarkTertiary,
-    onTertiary = DarkOnTertiary,
-    tertiaryContainer = DarkTertiaryContainer,
-    onTertiaryContainer = DarkOnTertiaryContainer,
-    error = DarkErrorColor,
-    onError = DarkOnErrorColor,
-    errorContainer = DarkErrorContainer,
-    onErrorContainer = DarkOnErrorContainer,
-    background = DarkBackground,
-    onBackground = DarkOnBackground,
-    surface = DarkSurface,
-    onSurface = DarkOnSurface,
-    surfaceVariant = DarkSurfaceVariant,
-    onSurfaceVariant = DarkOnSurfaceVariant,
-    outline = DarkOutline,
-)
+private val DarkColors =
+    darkColorScheme(
+        primary = DarkPrimary,
+        onPrimary = DarkOnPrimary,
+        primaryContainer = DarkPrimaryContainer,
+        onPrimaryContainer = DarkOnPrimaryContainer,
+        secondary = DarkSecondary,
+        onSecondary = DarkOnSecondary,
+        secondaryContainer = DarkSecondaryContainer,
+        onSecondaryContainer = DarkOnSecondaryContainer,
+        tertiary = DarkTertiary,
+        onTertiary = DarkOnTertiary,
+        tertiaryContainer = DarkTertiaryContainer,
+        onTertiaryContainer = DarkOnTertiaryContainer,
+        error = DarkErrorColor,
+        onError = DarkOnErrorColor,
+        errorContainer = DarkErrorContainer,
+        onErrorContainer = DarkOnErrorContainer,
+        background = DarkBackground,
+        onBackground = DarkOnBackground,
+        surface = DarkSurface,
+        onSurface = DarkOnSurface,
+        surfaceVariant = DarkSurfaceVariant,
+        onSurfaceVariant = DarkOnSurfaceVariant,
+        outline = DarkOutline,
+    )
 
 /**
  * Applies the app's Material 3 color scheme.
@@ -79,13 +81,14 @@ fun SynckroTheme(
     dynamicColor: Boolean = false,
     content: @Composable () -> Unit,
 ) {
-    val colorScheme = when {
-        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-            val ctx = LocalContext.current
-            if (darkTheme) dynamicDarkColorScheme(ctx) else dynamicLightColorScheme(ctx)
+    val colorScheme =
+        when {
+            dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
+                val ctx = LocalContext.current
+                if (darkTheme) dynamicDarkColorScheme(ctx) else dynamicLightColorScheme(ctx)
+            }
+            darkTheme -> DarkColors
+            else -> LightColors
         }
-        darkTheme -> DarkColors
-        else -> LightColors
-    }
     MaterialTheme(colorScheme = colorScheme, content = content)
 }

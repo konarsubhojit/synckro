@@ -22,187 +22,202 @@ import javax.inject.Singleton
  * chunked resumable uploads, delta-based change enumeration, and 429/5xx retries.
  */
 @Singleton
-class OneDriveProvider @Inject constructor(
-    private val authManager: OneDriveAuthManager,
-    private val graphClient: OneDriveGraphClient,
-) : CloudProvider {
-    override val displayName: String = "OneDrive"
+class OneDriveProvider
+    @Inject
+    constructor(
+        private val authManager: OneDriveAuthManager,
+        private val graphClient: OneDriveGraphClient,
+    ) : CloudProvider {
+        override val displayName: String = "OneDrive"
 
-    /**
-     * Cached access token from the last successful [ensureAuthenticated] call.
-     * Cleared whenever a new token is acquired.
-     *
-     * Note: [ensureAuthenticated] should not be called concurrently from multiple
-     * threads; [CloudProvider] callers are expected to ensure sequential access.
-     */
-    @Volatile
-    private var cachedAccessToken: String? = null
+        /**
+         * Cached access token from the last successful [ensureAuthenticated] call.
+         * Cleared whenever a new token is acquired.
+         *
+         * Note: [ensureAuthenticated] should not be called concurrently from multiple
+         * threads; [CloudProvider] callers are expected to ensure sequential access.
+         */
+        @Volatile
+        private var cachedAccessToken: String? = null
 
-    /**
-     * Returns the cached access token or throws [CloudProviderException.AuthenticationRequired]
-     * if [ensureAuthenticated] has not been called successfully yet.
-     */
-    private fun requireToken(): String =
-        cachedAccessToken
-            ?: throw CloudProviderException.AuthenticationRequired(
-                "No cached access token. Call ensureAuthenticated() first."
-            )
-
-    /**
-     * Ensures a valid bearer token is cached and returns it. Used by
-     * [com.synckro.domain.sync.RemoteEnumerator] implementations
-     * that need to make Graph calls outside the [CloudProvider] surface.
-     *
-     * Follows the same concurrency contract as [ensureAuthenticated]: callers
-     * must ensure sequential access (the cached-token field is `@Volatile`,
-     * but this method does not serialize concurrent invocations itself).
-     */
-    internal suspend fun obtainAccessToken(): String {
-        if (cachedAccessToken == null) ensureAuthenticated()
-        return requireToken()
-    }
-
-    /**
-     * Executes [block] and maps a [GraphApiException] with status 401 to
-     * [CloudProviderException.AuthenticationRequired], clearing the cached token
-     * so the next call to [ensureAuthenticated] will force a fresh acquisition.
-     */
-    private suspend fun <T> graphCall(block: suspend () -> T): T {
-        return try {
-            block()
-        } catch (e: GraphApiException) {
-            if (e.statusCode == 401) {
-                cachedAccessToken = null
-                throw CloudProviderException.AuthenticationRequired(
-                    "OneDrive access token rejected by Graph API (401). Please re-authenticate."
+        /**
+         * Returns the cached access token or throws [CloudProviderException.AuthenticationRequired]
+         * if [ensureAuthenticated] has not been called successfully yet.
+         */
+        private fun requireToken(): String =
+            cachedAccessToken
+                ?: throw CloudProviderException.AuthenticationRequired(
+                    "No cached access token. Call ensureAuthenticated() first.",
                 )
-            }
-            throw e
+
+        /**
+         * Ensures a valid bearer token is cached and returns it. Used by
+         * [com.synckro.domain.sync.RemoteEnumerator] implementations
+         * that need to make Graph calls outside the [CloudProvider] surface.
+         *
+         * Follows the same concurrency contract as [ensureAuthenticated]: callers
+         * must ensure sequential access (the cached-token field is `@Volatile`,
+         * but this method does not serialize concurrent invocations itself).
+         */
+        internal suspend fun obtainAccessToken(): String {
+            if (cachedAccessToken == null) ensureAuthenticated()
+            return requireToken()
         }
-    }
 
-    /**
-     * Ensures a valid access token is available.
-     *
-     * 1. Reads the currently cached MSAL account.
-     * 2. Attempts silent token acquisition via [OneDriveAuthManager.acquireAccessToken].
-     * 3. Caches the resulting token for use by subsequent Graph API calls.
-     *
-     * @return `true` if a token was acquired successfully.
-     * @throws CloudProviderException.NotConfigured if MSAL client ID / redirect URI are missing.
-     * @throws CloudProviderException.AuthenticationRequired if no account is signed in or the
-     *   cached refresh token has expired and interactive sign-in is needed.
-     * @throws CloudProviderException.AuthenticationFailed for unexpected MSAL errors.
-     */
-    override suspend fun ensureAuthenticated(): Boolean {
-        val accounts = authManager.currentAccounts()
-        val account = accounts.firstOrNull()
-            ?: run {
-                val hint = authManager.getAccountHint()
-                val hintMsg = if (hint != null) " (last seen: $hint)" else ""
-                Timber.w("OneDriveProvider.ensureAuthenticated: no signed-in account$hintMsg")
-                throw CloudProviderException.AuthenticationRequired(
-                    "No OneDrive account is signed in$hintMsg. Please sign in from the Accounts screen."
-                )
+        /**
+         * Executes [block] and maps a [GraphApiException] with status 401 to
+         * [CloudProviderException.AuthenticationRequired], clearing the cached token
+         * so the next call to [ensureAuthenticated] will force a fresh acquisition.
+         */
+        private suspend fun <T> graphCall(block: suspend () -> T): T =
+            try {
+                block()
+            } catch (e: GraphApiException) {
+                if (e.statusCode == 401) {
+                    cachedAccessToken = null
+                    throw CloudProviderException.AuthenticationRequired(
+                        "OneDrive access token rejected by Graph API (401). Please re-authenticate.",
+                    )
+                }
+                throw e
             }
 
-        Timber.d("OneDriveProvider.ensureAuthenticated: acquiring token for ${account.id}")
+        /**
+         * Ensures a valid access token is available.
+         *
+         * 1. Reads the currently cached MSAL account.
+         * 2. Attempts silent token acquisition via [OneDriveAuthManager.acquireAccessToken].
+         * 3. Caches the resulting token for use by subsequent Graph API calls.
+         *
+         * @return `true` if a token was acquired successfully.
+         * @throws CloudProviderException.NotConfigured if MSAL client ID / redirect URI are missing.
+         * @throws CloudProviderException.AuthenticationRequired if no account is signed in or the
+         *   cached refresh token has expired and interactive sign-in is needed.
+         * @throws CloudProviderException.AuthenticationFailed for unexpected MSAL errors.
+         */
+        override suspend fun ensureAuthenticated(): Boolean {
+            val accounts = authManager.currentAccounts()
+            val account =
+                accounts.firstOrNull()
+                    ?: run {
+                        val hint = authManager.getAccountHint()
+                        val hintMsg = if (hint != null) " (last seen: $hint)" else ""
+                        Timber.w("OneDriveProvider.ensureAuthenticated: no signed-in account$hintMsg")
+                        throw CloudProviderException.AuthenticationRequired(
+                            "No OneDrive account is signed in$hintMsg. Please sign in from the Accounts screen.",
+                        )
+                    }
 
-        return when (val result = authManager.acquireAccessToken(account)) {
-            is AuthResult.Success -> {
-                cachedAccessToken = result.value
-                Timber.d("OneDriveProvider.ensureAuthenticated: token acquired")
-                true
-            }
-            is AuthResult.NeedsInteractiveSignIn -> {
-                Timber.w("OneDriveProvider.ensureAuthenticated: interactive sign-in required")
-                throw CloudProviderException.AuthenticationRequired(
-                    "OneDrive access token expired. Please sign in again from the Accounts screen."
-                )
-            }
-            is AuthResult.NotConfigured -> {
-                Timber.e("OneDriveProvider.ensureAuthenticated: not configured — ${result.message}")
-                throw CloudProviderException.NotConfigured(result.message)
-            }
-            is AuthResult.Error -> {
-                Timber.e(result.cause, "OneDriveProvider.ensureAuthenticated: auth error — ${result.message}")
-                throw CloudProviderException.AuthenticationFailed(result.message, result.cause)
-            }
-            is AuthResult.Cancelled -> {
-                // Silent flow does not prompt the user so Cancelled should never happen here.
-                Timber.w("OneDriveProvider.ensureAuthenticated: unexpected Cancelled result")
-                false
-            }
-        }
-    }
+            Timber.d("OneDriveProvider.ensureAuthenticated: acquiring token for ${account.id}")
 
-    override suspend fun list(folderId: String?): List<RemoteFile> = graphCall {
-        graphClient.list(requireToken(), folderId).map { it.toRemoteFile() }
-    }
-
-    override suspend fun getMetadata(id: String): RemoteFile = graphCall {
-        graphClient.getMetadata(requireToken(), id).toRemoteFile()
-    }
-
-    override suspend fun download(id: String): InputStream = graphCall {
-        graphClient.download(requireToken(), id)
-    }
-
-    override suspend fun uploadNew(
-        parentId: String,
-        name: String,
-        content: InputStream,
-        size: Long,
-        mimeType: String?,
-    ): RemoteFile = graphCall {
-        graphClient.uploadNew(requireToken(), parentId, name, content, size, mimeType)
-            .toRemoteFile()
-    }
-
-    override suspend fun updateContent(
-        id: String,
-        content: InputStream,
-        size: Long,
-        mimeType: String?,
-    ): RemoteFile = graphCall {
-        graphClient.updateContent(requireToken(), id, content, size, mimeType).toRemoteFile()
-    }
-
-    override suspend fun createFolder(parentId: String, name: String): RemoteFile = graphCall {
-        graphClient.createFolder(requireToken(), parentId, name).toRemoteFile()
-    }
-
-    override suspend fun delete(id: String): Unit = graphCall {
-        graphClient.delete(requireToken(), id)
-    }
-
-    /**
-     * Retrieves incremental changes since [token].
-     *
-     * Pass `null` on the first call to establish a baseline (returns empty changes with an
-     * initial delta token). On subsequent calls pass the token returned by this method.
-     *
-     * @param token Delta token returned by a previous call, or `null` to initialise.
-     * @return A [ChangesPage] containing the changes since [token] and the next token.
-     * @throws IOException on network failures.
-     * @throws CloudProviderException on authentication errors.
-     */
-    override suspend fun changesSince(token: String?): ChangesPage = graphCall {
-        val (items, nextDeltaLink) = graphClient.changesSince(requireToken(), token)
-        val changes = items.mapNotNull { item ->
-            when {
-                item.deleted != null -> RemoteChange(file = null, removedId = item.id)
-                item.id.isNotEmpty() -> RemoteChange(file = item.toRemoteFile(), removedId = null)
-                else -> null
+            return when (val result = authManager.acquireAccessToken(account)) {
+                is AuthResult.Success -> {
+                    cachedAccessToken = result.value
+                    Timber.d("OneDriveProvider.ensureAuthenticated: token acquired")
+                    true
+                }
+                is AuthResult.NeedsInteractiveSignIn -> {
+                    Timber.w("OneDriveProvider.ensureAuthenticated: interactive sign-in required")
+                    throw CloudProviderException.AuthenticationRequired(
+                        "OneDrive access token expired. Please sign in again from the Accounts screen.",
+                    )
+                }
+                is AuthResult.NotConfigured -> {
+                    Timber.e("OneDriveProvider.ensureAuthenticated: not configured — ${result.message}")
+                    throw CloudProviderException.NotConfigured(result.message)
+                }
+                is AuthResult.Error -> {
+                    Timber.e(result.cause, "OneDriveProvider.ensureAuthenticated: auth error — ${result.message}")
+                    throw CloudProviderException.AuthenticationFailed(result.message, result.cause)
+                }
+                is AuthResult.Cancelled -> {
+                    // Silent flow does not prompt the user so Cancelled should never happen here.
+                    Timber.w("OneDriveProvider.ensureAuthenticated: unexpected Cancelled result")
+                    false
+                }
             }
         }
-        ChangesPage(
-            changes = changes,
-            nextToken = nextDeltaLink,
-            hasMore = false,
-        )
+
+        override suspend fun list(folderId: String?): List<RemoteFile> =
+            graphCall {
+                graphClient.list(requireToken(), folderId).map { it.toRemoteFile() }
+            }
+
+        override suspend fun getMetadata(id: String): RemoteFile =
+            graphCall {
+                graphClient.getMetadata(requireToken(), id).toRemoteFile()
+            }
+
+        override suspend fun download(id: String): InputStream =
+            graphCall {
+                graphClient.download(requireToken(), id)
+            }
+
+        override suspend fun uploadNew(
+            parentId: String,
+            name: String,
+            content: InputStream,
+            size: Long,
+            mimeType: String?,
+        ): RemoteFile =
+            graphCall {
+                graphClient
+                    .uploadNew(requireToken(), parentId, name, content, size, mimeType)
+                    .toRemoteFile()
+            }
+
+        override suspend fun updateContent(
+            id: String,
+            content: InputStream,
+            size: Long,
+            mimeType: String?,
+        ): RemoteFile =
+            graphCall {
+                graphClient.updateContent(requireToken(), id, content, size, mimeType).toRemoteFile()
+            }
+
+        override suspend fun createFolder(
+            parentId: String,
+            name: String,
+        ): RemoteFile =
+            graphCall {
+                graphClient.createFolder(requireToken(), parentId, name).toRemoteFile()
+            }
+
+        override suspend fun delete(id: String): Unit =
+            graphCall {
+                graphClient.delete(requireToken(), id)
+            }
+
+        /**
+         * Retrieves incremental changes since [token].
+         *
+         * Pass `null` on the first call to establish a baseline (returns empty changes with an
+         * initial delta token). On subsequent calls pass the token returned by this method.
+         *
+         * @param token Delta token returned by a previous call, or `null` to initialise.
+         * @return A [ChangesPage] containing the changes since [token] and the next token.
+         * @throws IOException on network failures.
+         * @throws CloudProviderException on authentication errors.
+         */
+        override suspend fun changesSince(token: String?): ChangesPage =
+            graphCall {
+                val (items, nextDeltaLink) = graphClient.changesSince(requireToken(), token)
+                val changes =
+                    items.mapNotNull { item ->
+                        when {
+                            item.deleted != null -> RemoteChange(file = null, removedId = item.id)
+                            item.id.isNotEmpty() -> RemoteChange(file = item.toRemoteFile(), removedId = null)
+                            else -> null
+                        }
+                    }
+                ChangesPage(
+                    changes = changes,
+                    nextToken = nextDeltaLink,
+                    hasMore = false,
+                )
+            }
     }
-}
 
 // ---------------------------------------------------------------------------
 // Extension: map GraphDriveItem → RemoteFile
@@ -214,13 +229,14 @@ class OneDriveProvider @Inject constructor(
  * - The `eTag` from Graph is wrapped in double-quotes; they are stripped here.
  * - `lastModifiedDateTime` is parsed from ISO-8601 (UTC) to epoch millis.
  */
-internal fun GraphDriveItem.toRemoteFile(): RemoteFile = RemoteFile(
-    id = id,
-    name = name,
-    parentId = parentReference?.id,
-    isFolder = folder != null,
-    size = size,
-    lastModifiedMs = lastModifiedDateTime?.let { parseIso8601(it) },
-    eTag = eTag?.trim('"'),
-    mimeType = file?.mimeType,
-)
+internal fun GraphDriveItem.toRemoteFile(): RemoteFile =
+    RemoteFile(
+        id = id,
+        name = name,
+        parentId = parentReference?.id,
+        isFolder = folder != null,
+        size = size,
+        lastModifiedMs = lastModifiedDateTime?.let { parseIso8601(it) },
+        eTag = eTag?.trim('"'),
+        mimeType = file?.mimeType,
+    )

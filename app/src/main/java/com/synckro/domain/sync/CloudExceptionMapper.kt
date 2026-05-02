@@ -25,7 +25,6 @@ import kotlinx.coroutines.CancellationException
  * "Re-authenticate" CTA for the affected provider.
  */
 object CloudExceptionMapper {
-
     /**
      * Convert [t] into a [SyncEngine.Result]. Pure / synchronous; safe to call from any thread.
      *
@@ -54,9 +53,10 @@ object CloudExceptionMapper {
                 )
             else ->
                 SyncEngine.Result.Retriable(
-                    reason = t.message
-                        ?: t.javaClass.simpleName.takeIf { it.isNotBlank() }
-                        ?: "Unknown error",
+                    reason =
+                        t.message
+                            ?: t.javaClass.simpleName.takeIf { it.isNotBlank() }
+                            ?: "Unknown error",
                 )
         }
     }

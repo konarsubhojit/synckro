@@ -23,12 +23,11 @@ import com.synckro.util.error.LocalUserMessageReporter
 import com.synckro.util.error.UserMessage
 import com.synckro.util.error.UserMessageReporter
 import dagger.hilt.android.AndroidEntryPoint
-import javax.inject.Inject
 import kotlinx.coroutines.flow.collectLatest
+import javax.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
-
     @Inject lateinit var userMessages: UserMessageReporter
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -44,15 +43,17 @@ class MainActivity : ComponentActivity() {
                 // one always wins.
                 LaunchedEffect(snackbarHostState) {
                     userMessages.messages.collectLatest { message ->
-                        val result = snackbarHostState.showSnackbar(
-                            message = message.text,
-                            actionLabel = message.actionLabel,
-                            withDismissAction = message.actionLabel == null,
-                            duration = when (message.severity) {
-                                UserMessage.Severity.ERROR -> SnackbarDuration.Long
-                                else -> SnackbarDuration.Short
-                            },
-                        )
+                        val result =
+                            snackbarHostState.showSnackbar(
+                                message = message.text,
+                                actionLabel = message.actionLabel,
+                                withDismissAction = message.actionLabel == null,
+                                duration =
+                                    when (message.severity) {
+                                        UserMessage.Severity.ERROR -> SnackbarDuration.Long
+                                        else -> SnackbarDuration.Short
+                                    },
+                            )
                         if (result == SnackbarResult.ActionPerformed) {
                             message.onAction?.invoke()
                         }
@@ -71,9 +72,10 @@ class MainActivity : ComponentActivity() {
                         },
                     ) { padding ->
                         Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(padding),
+                            modifier =
+                                Modifier
+                                    .fillMaxSize()
+                                    .padding(padding),
                         ) {
                             SynckroNavHost(activity = this@MainActivity)
                         }

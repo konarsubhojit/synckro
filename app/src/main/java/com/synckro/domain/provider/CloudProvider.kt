@@ -30,6 +30,7 @@ data class RemoteChange(
             "Exactly one of file or removedId must be set on a RemoteChange"
         }
     }
+
     val isDeletion: Boolean get() = removedId != null
 }
 
@@ -48,41 +49,40 @@ data class ChangesPage(
  * their own IO on an appropriate dispatcher.
  */
 interface CloudProvider {
-
     /** Human-readable identifier, e.g. "OneDrive" or "Google Drive". */
     val displayName: String
 
     /**
- * Ensure the provider has a valid access token.
- *
- * @return `true` if authentication (or token refresh) succeeded, `false` otherwise.
- */
+     * Ensure the provider has a valid access token.
+     *
+     * @return `true` if authentication (or token refresh) succeeded, `false` otherwise.
+     */
     suspend fun ensureAuthenticated(): Boolean
 
     /**
- * Lists direct children of the given folder or the root when `folderId` is `null`.
- *
- * @param folderId The parent folder's id, or `null` to list root entries.
- * @return A list of `RemoteFile` objects representing the direct children of the specified folder.
- */
+     * Lists direct children of the given folder or the root when `folderId` is `null`.
+     *
+     * @param folderId The parent folder's id, or `null` to list root entries.
+     * @return A list of `RemoteFile` objects representing the direct children of the specified folder.
+     */
     suspend fun list(folderId: String?): List<RemoteFile>
 
     /**
- * Fetches metadata for the remote item identified by the given id.
- *
- * @param id The provider-specific identifier of the remote item.
- * @return The item's metadata as a `RemoteFile`.
- */
+     * Fetches metadata for the remote item identified by the given id.
+     *
+     * @param id The provider-specific identifier of the remote item.
+     * @return The item's metadata as a `RemoteFile`.
+     */
     suspend fun getMetadata(id: String): RemoteFile
 
     /**
- * Open a read stream for the contents of the remote item identified by `id`.
- *
- * The caller is responsible for closing the returned stream.
- *
- * @param id The remote item's identifier.
- * @return An `InputStream` providing the item's contents; the caller must close it. 
- */
+     * Open a read stream for the contents of the remote item identified by `id`.
+     *
+     * The caller is responsible for closing the returned stream.
+     *
+     * @param id The remote item's identifier.
+     * @return An `InputStream` providing the item's contents; the caller must close it.
+     */
     suspend fun download(id: String): InputStream
 
     /**
@@ -122,28 +122,31 @@ interface CloudProvider {
     ): RemoteFile
 
     /**
- * Creates a folder named [name] under the specified [parentId].
- *
- * @param parentId ID of the parent folder under which to create the new folder.
- * @param name The name of the folder to create.
- * @return The created folder as a [RemoteFile].
- */
-    suspend fun createFolder(parentId: String, name: String): RemoteFile
+     * Creates a folder named [name] under the specified [parentId].
+     *
+     * @param parentId ID of the parent folder under which to create the new folder.
+     * @param name The name of the folder to create.
+     * @return The created folder as a [RemoteFile].
+     */
+    suspend fun createFolder(
+        parentId: String,
+        name: String,
+    ): RemoteFile
 
     /**
- * Delete the remote item with the given identifier.
- *
- * @param id The provider-specific identifier of the remote item to delete.
- */
+     * Delete the remote item with the given identifier.
+     *
+     * @param id The provider-specific identifier of the remote item to delete.
+     */
     suspend fun delete(id: String)
 
     /**
- * Requests incremental change events from the provider since the given token.
- *
- * Pass `null` on the first call to obtain an initial token without retrieving past changes.
- *
- * @param token Paging token returned by a previous call, or `null` to obtain an initial token.
- * @return A ChangesPage containing the list of changes, a token for the next page, and a flag indicating whether more pages exist.
- */
+     * Requests incremental change events from the provider since the given token.
+     *
+     * Pass `null` on the first call to obtain an initial token without retrieving past changes.
+     *
+     * @param token Paging token returned by a previous call, or `null` to obtain an initial token.
+     * @return A ChangesPage containing the list of changes, a token for the next page, and a flag indicating whether more pages exist.
+     */
     suspend fun changesSince(token: String?): ChangesPage
 }

@@ -62,20 +62,21 @@ fun PickLocalFolderScreen(
     val context = LocalContext.current
     var pickedUri by rememberSaveable { mutableStateOf(initialUri) }
 
-    val launcher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocumentTree(),
-    ) { uri: Uri? ->
-        if (uri != null) {
-            // Persist read+write access so the permission survives app restarts
-            // and device reboots.  Both flags are required; omitting WRITE would
-            // allow only listing files.
-            context.contentResolver.takePersistableUriPermission(
-                uri,
-                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
-            )
-            pickedUri = uri.toString()
+    val launcher =
+        rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.OpenDocumentTree(),
+        ) { uri: Uri? ->
+            if (uri != null) {
+                // Persist read+write access so the permission survives app restarts
+                // and device reboots.  Both flags are required; omitting WRITE would
+                // allow only listing files.
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+                )
+                pickedUri = uri.toString()
+            }
         }
-    }
 
     Scaffold(
         topBar = {
@@ -93,10 +94,11 @@ fun PickLocalFolderScreen(
         },
     ) { padding ->
         Column(
-            modifier = Modifier
-                .padding(padding)
-                .fillMaxSize()
-                .padding(24.dp),
+            modifier =
+                Modifier
+                    .padding(padding)
+                    .fillMaxSize()
+                    .padding(24.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Text(
@@ -136,22 +138,25 @@ fun PickLocalFolderScreen(
 private fun SelectedFolderCard(uriString: String) {
     val context = LocalContext.current
     // Attempt to resolve a human-readable display name from the URI.
-    val displayName = runCatching {
-        val uri = Uri.parse(uriString)
-        DocumentFile.fromTreeUri(context, uri)?.name ?: uriString
-    }.getOrDefault(uriString)
+    val displayName =
+        runCatching {
+            val uri = Uri.parse(uriString)
+            DocumentFile.fromTreeUri(context, uri)?.name ?: uriString
+        }.getOrDefault(uriString)
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.secondaryContainer,
-            contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-        ),
+        colors =
+            CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+            ),
     ) {
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             Text(

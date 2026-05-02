@@ -47,10 +47,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.synckro.R
 import com.synckro.domain.model.SyncEvent
 import com.synckro.domain.model.SyncEventLevel
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -84,8 +84,9 @@ fun LogsScreen(
                 actions = {
                     IconButton(onClick = {
                         val text = buildLogText()
-                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE)
-                            as ClipboardManager
+                        val clipboard =
+                            context.getSystemService(Context.CLIPBOARD_SERVICE)
+                                as ClipboardManager
                         clipboard.setPrimaryClip(
                             ClipData.newPlainText(context.getString(R.string.logs_title), text),
                         )
@@ -100,14 +101,15 @@ fun LogsScreen(
                     }
                     IconButton(onClick = {
                         val text = buildLogText()
-                        val intent = Intent(Intent.ACTION_SEND).apply {
-                            type = "text/plain"
-                            putExtra(Intent.EXTRA_TEXT, text)
-                            putExtra(
-                                Intent.EXTRA_SUBJECT,
-                                context.getString(R.string.logs_share_subject),
-                            )
-                        }
+                        val intent =
+                            Intent(Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(Intent.EXTRA_TEXT, text)
+                                putExtra(
+                                    Intent.EXTRA_SUBJECT,
+                                    context.getString(R.string.logs_share_subject),
+                                )
+                            }
                         context.startActivity(
                             Intent.createChooser(intent, context.getString(R.string.logs_share_chooser)),
                         )
@@ -125,10 +127,11 @@ fun LogsScreen(
     ) { padding ->
         if (!state.isLoading && state.events.isEmpty()) {
             Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding)
-                    .padding(24.dp),
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .padding(padding)
+                        .padding(24.dp),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
@@ -138,9 +141,10 @@ fun LogsScreen(
             }
         } else {
             LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding),
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .padding(padding),
                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
                 verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
@@ -153,12 +157,16 @@ fun LogsScreen(
 }
 
 @Composable
-private fun LogEntryRow(event: SyncEvent, dateFormat: SimpleDateFormat) {
-    val levelColor = when (event.level) {
-        SyncEventLevel.INFO  -> MaterialTheme.colorScheme.onSurface
-        SyncEventLevel.WARN  -> Color(0xFFF59E0B) // Amber-500
-        SyncEventLevel.ERROR -> MaterialTheme.colorScheme.error
-    }
+private fun LogEntryRow(
+    event: SyncEvent,
+    dateFormat: SimpleDateFormat,
+) {
+    val levelColor =
+        when (event.level) {
+            SyncEventLevel.INFO -> MaterialTheme.colorScheme.onSurface
+            SyncEventLevel.WARN -> Color(0xFFF59E0B) // Amber-500
+            SyncEventLevel.ERROR -> MaterialTheme.colorScheme.error
+        }
     Surface(
         modifier = Modifier.fillMaxWidth(),
         color = MaterialTheme.colorScheme.surface,

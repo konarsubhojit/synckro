@@ -26,14 +26,20 @@ internal data class GraphParentReference(
 )
 
 @Serializable
-internal data class GraphFileInfo(val mimeType: String? = null)
+internal data class GraphFileInfo(
+    val mimeType: String? = null,
+)
 
 @Serializable
-internal data class GraphFolderInfo(val childCount: Int? = null)
+internal data class GraphFolderInfo(
+    val childCount: Int? = null,
+)
 
 /** Present on a DriveItem when it has been deleted in a delta response. */
 @Serializable
-internal data class GraphDeletedInfo(val state: String? = null)
+internal data class GraphDeletedInfo(
+    val state: String? = null,
+)
 
 /** Paged collection of DriveItems (e.g. from `/children`). */
 @Serializable
@@ -84,5 +90,4 @@ internal data class GraphUploadStatus(
 )
 
 /** Parses an ISO-8601 UTC timestamp (e.g. "2024-03-15T10:30:00Z") to epoch millis, or null. */
-internal fun parseIso8601(dateTime: String): Long? =
-    runCatching { Instant.parse(dateTime).toEpochMilli() }.getOrNull()
+internal fun parseIso8601(dateTime: String): Long? = runCatching { Instant.parse(dateTime).toEpochMilli() }.getOrNull()

@@ -21,13 +21,18 @@ import javax.inject.Singleton
 @Module
 @InstallIn(SingletonComponent::class)
 object RemoteEnumeratorModule {
-
-    @Provides @IntoMap @CloudProviderKey(CloudProviderType.FAKE) @Singleton
+    @Provides @IntoMap
+    @CloudProviderKey(CloudProviderType.FAKE)
+    @Singleton
     fun provideFakeRemoteEnumerator(impl: FakeRemoteEnumerator): RemoteEnumerator = impl
 
-    @Provides @IntoMap @CloudProviderKey(CloudProviderType.GOOGLE_DRIVE) @Singleton
+    @Provides @IntoMap
+    @CloudProviderKey(CloudProviderType.GOOGLE_DRIVE)
+    @Singleton
     fun provideGoogleDriveRemoteEnumerator(impl: GoogleDriveRemoteEnumerator): RemoteEnumerator = impl
 
-    @Provides @IntoMap @CloudProviderKey(CloudProviderType.ONEDRIVE) @Singleton
+    @Provides @IntoMap
+    @CloudProviderKey(CloudProviderType.ONEDRIVE)
+    @Singleton
     fun provideOneDriveRemoteEnumerator(impl: OneDriveRemoteEnumerator): RemoteEnumerator = impl
 }

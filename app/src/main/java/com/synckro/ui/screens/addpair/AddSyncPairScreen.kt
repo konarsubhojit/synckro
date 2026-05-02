@@ -53,10 +53,11 @@ fun AddSyncPairScreen(
         },
     ) { padding ->
         Column(
-            modifier = Modifier
-                .padding(padding)
-                .fillMaxSize()
-                .padding(24.dp),
+            modifier =
+                Modifier
+                    .padding(padding)
+                    .fillMaxSize()
+                    .padding(24.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text(

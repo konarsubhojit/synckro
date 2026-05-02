@@ -5,4 +5,6 @@ package com.synckro.domain.provider
  * implemented yet. Distinct from `kotlin.NotImplementedError` (an [Error])
  * because callers MAY catch it and treat it as a terminal sync result.
  */
-class NotYetImplementedException(message: String) : UnsupportedOperationException(message)
+class NotYetImplementedException(
+    message: String,
+) : UnsupportedOperationException(message)

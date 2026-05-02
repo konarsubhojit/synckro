@@ -11,10 +11,10 @@ import com.synckro.domain.model.SyncPair
 import com.synckro.domain.provider.CloudProvider
 import com.synckro.domain.provider.CloudProviderException
 import com.synckro.domain.provider.RemoteFile
-import java.io.InputStream
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.io.InputStream
 
 /**
  * Abstraction over local file I/O for [SyncOpApplier].
@@ -23,7 +23,6 @@ import kotlinx.coroutines.withContext
  * without a live SAF ContentProvider.
  */
 interface LocalFileAccess {
-
     /**
      * Opens a read stream for the local file at [relativePath].
      *
@@ -43,7 +42,11 @@ interface LocalFileAccess {
      * @return [LocalFileStat] describing the written file.
      * @throws Exception if the write fails.
      */
-    fun write(relativePath: String, content: InputStream, mimeType: String?): LocalFileStat
+    fun write(
+        relativePath: String,
+        content: InputStream,
+        mimeType: String?,
+    ): LocalFileStat
 
     /**
      * Deletes the local file at [relativePath].
@@ -111,7 +114,6 @@ class SyncOpApplier(
     private val localFileAccess: LocalFileAccess,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) {
-
     /**
      * Outcome of a single [apply] call.
      *
@@ -148,119 +150,142 @@ class SyncOpApplier(
         pair: SyncPair,
         remoteFilesByPath: Map<String, RemoteFile>,
         localIndexByPath: Map<String, LocalIndexEntity>,
-    ): ApplyResult = withContext(ioDispatcher) {
-        var applied = 0
-        var conflicts = 0
-        val errors = mutableListOf<String>()
+    ): ApplyResult =
+        withContext(ioDispatcher) {
+            var applied = 0
+            var conflicts = 0
+            val errors = mutableListOf<String>()
 
-        for (op in ops) {
-            try {
-                when (op) {
-                    is SyncOp.UploadNew -> {
-                        applyUploadNew(op, pair)
-                        applied++
-                        eventRepository.log(
-                            pair.id, SyncEventLevel.INFO, TAG,
-                            "Uploaded new file: ${op.relativePath}",
-                        )
-                    }
+            for (op in ops) {
+                try {
+                    when (op) {
+                        is SyncOp.UploadNew -> {
+                            applyUploadNew(op, pair)
+                            applied++
+                            eventRepository.log(
+                                pair.id,
+                                SyncEventLevel.INFO,
+                                TAG,
+                                "Uploaded new file: ${op.relativePath}",
+                            )
+                        }
 
-                    is SyncOp.DownloadNew -> {
-                        val remote = remoteFilesByPath[op.relativePath]
-                            ?: error("Remote file not in snapshot for DownloadNew: ${op.relativePath}")
-                        applyDownloadNew(op, pair, remote)
-                        applied++
-                        eventRepository.log(
-                            pair.id, SyncEventLevel.INFO, TAG,
-                            "Downloaded new file: ${op.relativePath}",
-                        )
-                    }
+                        is SyncOp.DownloadNew -> {
+                            val remote =
+                                remoteFilesByPath[op.relativePath]
+                                    ?: error("Remote file not in snapshot for DownloadNew: ${op.relativePath}")
+                            applyDownloadNew(op, pair, remote)
+                            applied++
+                            eventRepository.log(
+                                pair.id,
+                                SyncEventLevel.INFO,
+                                TAG,
+                                "Downloaded new file: ${op.relativePath}",
+                            )
+                        }
 
-                    is SyncOp.UpdateRemote -> {
-                        val index = localIndexByPath[op.relativePath]
-                            ?: error("No index entry for UpdateRemote: ${op.relativePath}")
-                        applyUpdateRemote(op, pair, index)
-                        applied++
-                        eventRepository.log(
-                            pair.id, SyncEventLevel.INFO, TAG,
-                            "Updated remote file: ${op.relativePath}",
-                        )
-                    }
+                        is SyncOp.UpdateRemote -> {
+                            val index =
+                                localIndexByPath[op.relativePath]
+                                    ?: error("No index entry for UpdateRemote: ${op.relativePath}")
+                            applyUpdateRemote(op, pair, index)
+                            applied++
+                            eventRepository.log(
+                                pair.id,
+                                SyncEventLevel.INFO,
+                                TAG,
+                                "Updated remote file: ${op.relativePath}",
+                            )
+                        }
 
-                    is SyncOp.UpdateLocal -> {
-                        val remote = remoteFilesByPath[op.relativePath]
-                            ?: error("Remote file not in snapshot for UpdateLocal: ${op.relativePath}")
-                        applyUpdateLocal(op, pair, remote)
-                        applied++
-                        eventRepository.log(
-                            pair.id, SyncEventLevel.INFO, TAG,
-                            "Updated local file: ${op.relativePath}",
-                        )
-                    }
+                        is SyncOp.UpdateLocal -> {
+                            val remote =
+                                remoteFilesByPath[op.relativePath]
+                                    ?: error("Remote file not in snapshot for UpdateLocal: ${op.relativePath}")
+                            applyUpdateLocal(op, pair, remote)
+                            applied++
+                            eventRepository.log(
+                                pair.id,
+                                SyncEventLevel.INFO,
+                                TAG,
+                                "Updated local file: ${op.relativePath}",
+                            )
+                        }
 
-                    is SyncOp.DeleteRemote -> {
-                        val index = localIndexByPath[op.relativePath]
-                            ?: error("No index entry for DeleteRemote: ${op.relativePath}")
-                        applyDeleteRemote(op, pair, index)
-                        applied++
-                        eventRepository.log(
-                            pair.id, SyncEventLevel.INFO, TAG,
-                            "Deleted remote file: ${op.relativePath}",
-                        )
-                    }
+                        is SyncOp.DeleteRemote -> {
+                            val index =
+                                localIndexByPath[op.relativePath]
+                                    ?: error("No index entry for DeleteRemote: ${op.relativePath}")
+                            applyDeleteRemote(op, pair, index)
+                            applied++
+                            eventRepository.log(
+                                pair.id,
+                                SyncEventLevel.INFO,
+                                TAG,
+                                "Deleted remote file: ${op.relativePath}",
+                            )
+                        }
 
-                    is SyncOp.DeleteLocal -> {
-                        applyDeleteLocal(op, pair)
-                        applied++
-                        eventRepository.log(
-                            pair.id, SyncEventLevel.INFO, TAG,
-                            "Deleted local file: ${op.relativePath}",
-                        )
-                    }
+                        is SyncOp.DeleteLocal -> {
+                            applyDeleteLocal(op, pair)
+                            applied++
+                            eventRepository.log(
+                                pair.id,
+                                SyncEventLevel.INFO,
+                                TAG,
+                                "Deleted local file: ${op.relativePath}",
+                            )
+                        }
 
-                    is SyncOp.Conflict -> {
-                        applyConflict(op, pair, remoteFilesByPath, localIndexByPath)
-                        conflicts++
+                        is SyncOp.Conflict -> {
+                            applyConflict(op, pair, remoteFilesByPath, localIndexByPath)
+                            conflicts++
+                        }
                     }
+                } catch (e: CloudProviderException.AuthenticationRequired) {
+                    throw e
+                } catch (e: CloudProviderException.AuthenticationFailed) {
+                    throw e
+                } catch (e: CloudProviderException.NotConfigured) {
+                    throw e
+                } catch (e: Throwable) {
+                    val msg = "Failed ${opLabel(op)}: ${e.message}"
+                    errors += msg
+                    eventRepository.log(pair.id, SyncEventLevel.ERROR, TAG, msg)
                 }
-            } catch (e: CloudProviderException.AuthenticationRequired) {
-                throw e
-            } catch (e: CloudProviderException.AuthenticationFailed) {
-                throw e
-            } catch (e: CloudProviderException.NotConfigured) {
-                throw e
-            } catch (e: Throwable) {
-                val msg = "Failed ${opLabel(op)}: ${e.message}"
-                errors += msg
-                eventRepository.log(pair.id, SyncEventLevel.ERROR, TAG, msg)
             }
-        }
 
-        ApplyResult(applied = applied, conflicts = conflicts, errors = errors)
-    }
+            ApplyResult(applied = applied, conflicts = conflicts, errors = errors)
+        }
 
     // -------------------------------------------------------------------------
     // Individual op handlers
     // -------------------------------------------------------------------------
 
-    private suspend fun applyUploadNew(op: SyncOp.UploadNew, pair: SyncPair) {
-        val stat = localFileAccess.stat(op.relativePath)
-            ?: error("Local file not found for UploadNew: ${op.relativePath}")
+    private suspend fun applyUploadNew(
+        op: SyncOp.UploadNew,
+        pair: SyncPair,
+    ) {
+        val stat =
+            localFileAccess.stat(op.relativePath)
+                ?: error("Local file not found for UploadNew: ${op.relativePath}")
         var retried = false
-        val remote = withRetry(onRetry = { _, _ -> retried = true }) {
-            val stream = localFileAccess.openRead(op.relativePath)
-                ?: error("Cannot read local file for UploadNew: ${op.relativePath}")
-            // Use only the leaf filename; nested folder creation is out of scope
-            // for this applier — callers are responsible for pre-creating remote
-            // parent directories when needed.
-            provider.uploadNew(
-                parentId = pair.remoteFolderId,
-                name = op.relativePath.substringAfterLast('/'),
-                content = stream,
-                size = stat.sizeBytes,
-                mimeType = stat.mimeType,
-            )
-        }
+        val remote =
+            withRetry(onRetry = { _, _ -> retried = true }) {
+                val stream =
+                    localFileAccess.openRead(op.relativePath)
+                        ?: error("Cannot read local file for UploadNew: ${op.relativePath}")
+                // Use only the leaf filename; nested folder creation is out of scope
+                // for this applier — callers are responsible for pre-creating remote
+                // parent directories when needed.
+                provider.uploadNew(
+                    parentId = pair.remoteFolderId,
+                    name = op.relativePath.substringAfterLast('/'),
+                    content = stream,
+                    size = stat.sizeBytes,
+                    mimeType = stat.mimeType,
+                )
+            }
         if (retried) {
             eventRepository.log(pair.id, SyncEventLevel.WARN, TAG, "Retried upload: ${op.relativePath}")
         }
@@ -276,12 +301,17 @@ class SyncOpApplier(
         )
     }
 
-    private suspend fun applyDownloadNew(op: SyncOp.DownloadNew, pair: SyncPair, remote: RemoteFile) {
+    private suspend fun applyDownloadNew(
+        op: SyncOp.DownloadNew,
+        pair: SyncPair,
+        remote: RemoteFile,
+    ) {
         var retried = false
-        val stat = withRetry(onRetry = { _, _ -> retried = true }) {
-            val stream = provider.download(remote.id)
-            localFileAccess.write(op.relativePath, stream, remote.mimeType)
-        }
+        val stat =
+            withRetry(onRetry = { _, _ -> retried = true }) {
+                val stream = provider.download(remote.id)
+                localFileAccess.write(op.relativePath, stream, remote.mimeType)
+            }
         if (retried) {
             eventRepository.log(pair.id, SyncEventLevel.WARN, TAG, "Retried download: ${op.relativePath}")
         }
@@ -302,21 +332,25 @@ class SyncOpApplier(
         pair: SyncPair,
         index: LocalIndexEntity,
     ) {
-        val stat = localFileAccess.stat(op.relativePath)
-            ?: error("Local file not found for UpdateRemote: ${op.relativePath}")
-        val remoteId = index.remoteId
-            ?: error("No remote ID in index for UpdateRemote: ${op.relativePath}")
+        val stat =
+            localFileAccess.stat(op.relativePath)
+                ?: error("Local file not found for UpdateRemote: ${op.relativePath}")
+        val remoteId =
+            index.remoteId
+                ?: error("No remote ID in index for UpdateRemote: ${op.relativePath}")
         var retried = false
-        val remote = withRetry(onRetry = { _, _ -> retried = true }) {
-            val stream = localFileAccess.openRead(op.relativePath)
-                ?: error("Cannot read local file for UpdateRemote: ${op.relativePath}")
-            provider.updateContent(
-                id = remoteId,
-                content = stream,
-                size = stat.sizeBytes,
-                mimeType = stat.mimeType,
-            )
-        }
+        val remote =
+            withRetry(onRetry = { _, _ -> retried = true }) {
+                val stream =
+                    localFileAccess.openRead(op.relativePath)
+                        ?: error("Cannot read local file for UpdateRemote: ${op.relativePath}")
+                provider.updateContent(
+                    id = remoteId,
+                    content = stream,
+                    size = stat.sizeBytes,
+                    mimeType = stat.mimeType,
+                )
+            }
         if (retried) {
             eventRepository.log(pair.id, SyncEventLevel.WARN, TAG, "Retried update-remote: ${op.relativePath}")
         }
@@ -336,10 +370,11 @@ class SyncOpApplier(
         remote: RemoteFile,
     ) {
         var retried = false
-        val stat = withRetry(onRetry = { _, _ -> retried = true }) {
-            val stream = provider.download(remote.id)
-            localFileAccess.write(op.relativePath, stream, remote.mimeType)
-        }
+        val stat =
+            withRetry(onRetry = { _, _ -> retried = true }) {
+                val stream = provider.download(remote.id)
+                localFileAccess.write(op.relativePath, stream, remote.mimeType)
+            }
         if (retried) {
             eventRepository.log(pair.id, SyncEventLevel.WARN, TAG, "Retried update-local: ${op.relativePath}")
         }
@@ -360,8 +395,9 @@ class SyncOpApplier(
         pair: SyncPair,
         index: LocalIndexEntity,
     ) {
-        val remoteId = index.remoteId
-            ?: error("No remote ID in index for DeleteRemote: ${op.relativePath}")
+        val remoteId =
+            index.remoteId
+                ?: error("No remote ID in index for DeleteRemote: ${op.relativePath}")
         var retried = false
         withRetry(onRetry = { _, _ -> retried = true }) {
             provider.delete(remoteId)
@@ -372,7 +408,10 @@ class SyncOpApplier(
         localIndexDao.delete(pair.id, op.relativePath)
     }
 
-    private suspend fun applyDeleteLocal(op: SyncOp.DeleteLocal, pair: SyncPair) {
+    private suspend fun applyDeleteLocal(
+        op: SyncOp.DeleteLocal,
+        pair: SyncPair,
+    ) {
         localFileAccess.delete(op.relativePath)
         localIndexDao.delete(pair.id, op.relativePath)
     }
@@ -404,12 +443,14 @@ class SyncOpApplier(
                 val index = localIndexByPath[op.relativePath]
                 val remote = remoteFilesByPath[op.relativePath]
                 if (remote != null && index?.remoteId != null) {
-                    val stat = localFileAccess.stat(op.relativePath)
-                        ?: error("Local file not found for conflict resolution: ${op.relativePath}")
+                    val stat =
+                        localFileAccess.stat(op.relativePath)
+                            ?: error("Local file not found for conflict resolution: ${op.relativePath}")
                     var retried = false
                     withRetry(onRetry = { _, _ -> retried = true }) {
-                        val stream = localFileAccess.openRead(op.relativePath)
-                            ?: error("Cannot read local file for conflict resolution: ${op.relativePath}")
+                        val stream =
+                            localFileAccess.openRead(op.relativePath)
+                                ?: error("Cannot read local file for conflict resolution: ${op.relativePath}")
                         provider.updateContent(
                             id = index.remoteId,
                             content = stream,
@@ -419,7 +460,9 @@ class SyncOpApplier(
                     }
                     if (retried) {
                         eventRepository.log(
-                            pair.id, SyncEventLevel.WARN, TAG,
+                            pair.id,
+                            SyncEventLevel.WARN,
+                            TAG,
                             "Retried conflict-local-wins: ${op.relativePath}",
                         )
                     }
@@ -435,7 +478,9 @@ class SyncOpApplier(
                     applyUploadNew(SyncOp.UploadNew(op.relativePath), pair)
                 }
                 eventRepository.log(
-                    pair.id, SyncEventLevel.INFO, TAG,
+                    pair.id,
+                    SyncEventLevel.INFO,
+                    TAG,
                     "Conflict resolved (local wins): ${op.relativePath}",
                 )
             }
@@ -465,13 +510,16 @@ class SyncOpApplier(
                 val remote = remoteFilesByPath[op.relativePath]
                 if (remote != null) {
                     var retried = false
-                    val stat = withRetry(onRetry = { _, _ -> retried = true }) {
-                        val stream = provider.download(remote.id)
-                        localFileAccess.write(op.relativePath, stream, remote.mimeType)
-                    }
+                    val stat =
+                        withRetry(onRetry = { _, _ -> retried = true }) {
+                            val stream = provider.download(remote.id)
+                            localFileAccess.write(op.relativePath, stream, remote.mimeType)
+                        }
                     if (retried) {
                         eventRepository.log(
-                            pair.id, SyncEventLevel.WARN, TAG,
+                            pair.id,
+                            SyncEventLevel.WARN,
+                            TAG,
                             "Retried conflict-remote-wins: ${op.relativePath}",
                         )
                     }
@@ -490,7 +538,9 @@ class SyncOpApplier(
                     applyDeleteLocal(SyncOp.DeleteLocal(op.relativePath), pair)
                 }
                 eventRepository.log(
-                    pair.id, SyncEventLevel.INFO, TAG,
+                    pair.id,
+                    SyncEventLevel.INFO,
+                    TAG,
                     "Conflict resolved (remote wins): ${op.relativePath}",
                 )
             }
@@ -501,15 +551,16 @@ class SyncOpApplier(
     // Helpers
     // -------------------------------------------------------------------------
 
-    private fun opLabel(op: SyncOp): String = when (op) {
-        is SyncOp.UploadNew -> "UploadNew(${op.relativePath})"
-        is SyncOp.DownloadNew -> "DownloadNew(${op.relativePath})"
-        is SyncOp.UpdateRemote -> "UpdateRemote(${op.relativePath})"
-        is SyncOp.UpdateLocal -> "UpdateLocal(${op.relativePath})"
-        is SyncOp.DeleteRemote -> "DeleteRemote(${op.relativePath})"
-        is SyncOp.DeleteLocal -> "DeleteLocal(${op.relativePath})"
-        is SyncOp.Conflict -> "Conflict(${op.relativePath})"
-    }
+    private fun opLabel(op: SyncOp): String =
+        when (op) {
+            is SyncOp.UploadNew -> "UploadNew(${op.relativePath})"
+            is SyncOp.DownloadNew -> "DownloadNew(${op.relativePath})"
+            is SyncOp.UpdateRemote -> "UpdateRemote(${op.relativePath})"
+            is SyncOp.UpdateLocal -> "UpdateLocal(${op.relativePath})"
+            is SyncOp.DeleteRemote -> "DeleteRemote(${op.relativePath})"
+            is SyncOp.DeleteLocal -> "DeleteLocal(${op.relativePath})"
+            is SyncOp.Conflict -> "Conflict(${op.relativePath})"
+        }
 
     private companion object {
         const val TAG = "SyncOpApplier"

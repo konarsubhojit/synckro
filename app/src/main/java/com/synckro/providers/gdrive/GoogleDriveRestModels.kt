@@ -109,5 +109,4 @@ internal data class DriveTrashRequest(
 // ---------------------------------------------------------------------------
 
 /** Parses an ISO-8601 UTC timestamp (e.g. "2024-03-15T10:30:00Z") to epoch millis, or null. */
-internal fun parseIso8601(dateTime: String): Long? =
-    runCatching { Instant.parse(dateTime).toEpochMilli() }.getOrNull()
+internal fun parseIso8601(dateTime: String): Long? = runCatching { Instant.parse(dateTime).toEpochMilli() }.getOrNull()

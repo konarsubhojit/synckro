@@ -18,7 +18,6 @@ import com.synckro.domain.model.SyncDirection
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -40,7 +39,6 @@ import java.io.InputStream
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class LocalFsEnumeratorTest {
-
     private lateinit var db: SynckroDatabase
     private lateinit var syncPairDao: SyncPairDao
     private lateinit var localIndexDao: LocalIndexDao
@@ -50,9 +48,11 @@ class LocalFsEnumeratorTest {
     @Before
     fun setUp() {
         val context = ApplicationProvider.getApplicationContext<Context>()
-        db = Room.inMemoryDatabaseBuilder(context, SynckroDatabase::class.java)
-            .allowMainThreadQueries()
-            .build()
+        db =
+            Room
+                .inMemoryDatabaseBuilder(context, SynckroDatabase::class.java)
+                .allowMainThreadQueries()
+                .build()
         syncPairDao = db.syncPairDao()
         localIndexDao = db.localIndexDao()
     }
@@ -66,20 +66,21 @@ class LocalFsEnumeratorTest {
     // Helpers
     // -------------------------------------------------------------------------
 
-    private suspend fun insertPair(): Long = syncPairDao.insert(
-        SyncPairEntity(
-            displayName = "Test Pair",
-            localTreeUri = treeUri.toString(),
-            provider = CloudProviderType.ONEDRIVE,
-            remoteFolderId = "remote-root",
-            direction = SyncDirection.BIDIRECTIONAL,
-            conflictPolicy = ConflictPolicy.NEWEST_WINS,
-            includeGlobs = "",
-            excludeGlobs = "",
-            wifiOnly = false,
-            requiresCharging = false,
+    private suspend fun insertPair(): Long =
+        syncPairDao.insert(
+            SyncPairEntity(
+                displayName = "Test Pair",
+                localTreeUri = treeUri.toString(),
+                provider = CloudProviderType.ONEDRIVE,
+                remoteFolderId = "remote-root",
+                direction = SyncDirection.BIDIRECTIONAL,
+                conflictPolicy = ConflictPolicy.NEWEST_WINS,
+                includeGlobs = "",
+                excludeGlobs = "",
+                wifiOnly = false,
+                requiresCharging = false,
+            ),
         )
-    )
 
     /**
      * Counting [FsAccess] fake.  Each call to [openInputStream] increments [openCount]
@@ -90,7 +91,10 @@ class LocalFsEnumeratorTest {
     ) : FsAccess {
         var openCount = 0
 
-        override fun openInputStream(treeUri: Uri, docId: String): InputStream? {
+        override fun openInputStream(
+            treeUri: Uri,
+            docId: String,
+        ): InputStream? {
             openCount++
             return files[docId]?.inputStream()
         }
@@ -112,7 +116,10 @@ class LocalFsEnumeratorTest {
     )
 
     /** Builds a [RawDocChild] representing a directory. */
-    private fun dir(name: String, docId: String = name) = RawDocChild(
+    private fun dir(
+        name: String,
+        docId: String = name,
+    ) = RawDocChild(
         docId = docId,
         name = name,
         size = 0L,
@@ -131,9 +138,10 @@ class LocalFsEnumeratorTest {
         fsAccess: FsAccess = FakeFsAccess(),
     ): LocalFsEnumerator {
         val context = ApplicationProvider.getApplicationContext<Context>()
-        val fakeQuery = DocumentChildrenQuery { _, _, parentDocId ->
-            fakeTree[parentDocId] ?: emptyList()
-        }
+        val fakeQuery =
+            DocumentChildrenQuery { _, _, parentDocId ->
+                fakeTree[parentDocId] ?: emptyList()
+            }
         return LocalFsEnumerator(
             resolver = context.contentResolver,
             localIndexDao = localIndexDao,
@@ -163,21 +171,24 @@ class LocalFsEnumeratorTest {
                 val dirName = parts[i]
                 if (!tree.containsKey(dirDocId)) {
                     tree[dirDocId] = mutableListOf()
-                    tree.getOrPut(parentKey) { mutableListOf() }
+                    tree
+                        .getOrPut(parentKey) { mutableListOf() }
                         .add(dir(name = dirName, docId = dirDocId))
                 }
                 parentKey = dirDocId
             }
             val leafName = parts.last()
             val leafDocId = path // use full path as docId for uniqueness
-            tree.getOrPut(parentKey) { mutableListOf() }
+            tree
+                .getOrPut(parentKey) { mutableListOf() }
                 .add(file(name = leafName, docId = leafDocId, size = size, lastModifiedMs = mtime))
         }
 
         // Build bytes map: keyed by full path (which we use as docId above).
-        val bytesMap = files.associate { (path, _, _) ->
-            path to (fileBytes[path] ?: path.toByteArray())
-        }
+        val bytesMap =
+            files.associate { (path, _, _) ->
+                path to (fileBytes[path] ?: path.toByteArray())
+            }
         return tree to bytesMap
     }
 
@@ -186,411 +197,458 @@ class LocalFsEnumeratorTest {
     // -------------------------------------------------------------------------
 
     @Test
-    fun `fresh scan of three root-level files adds all to local_index`() = runTest {
-        val pairId = insertPair()
+    fun `fresh scan of three root-level files adds all to local_index`() =
+        runTest {
+            val pairId = insertPair()
 
-        val fs = FakeFsAccess(
-            mapOf(
-                "alpha.txt" to "hello".toByteArray(),
-                "beta.txt" to "world".toByteArray(),
-                "gamma.txt" to "!".toByteArray(),
-            )
-        )
-        val fakeTree = mapOf(
-            "root" to listOf(
-                file("alpha.txt", size = 5, lastModifiedMs = 1_000),
-                file("beta.txt", size = 5, lastModifiedMs = 2_000),
-                file("gamma.txt", size = 1, lastModifiedMs = 3_000),
-            )
-        )
-        val result = enumeratorWith(fakeTree, fs).enumerate(pairId, treeUri)
+            val fs =
+                FakeFsAccess(
+                    mapOf(
+                        "alpha.txt" to "hello".toByteArray(),
+                        "beta.txt" to "world".toByteArray(),
+                        "gamma.txt" to "!".toByteArray(),
+                    ),
+                )
+            val fakeTree =
+                mapOf(
+                    "root" to
+                        listOf(
+                            file("alpha.txt", size = 5, lastModifiedMs = 1_000),
+                            file("beta.txt", size = 5, lastModifiedMs = 2_000),
+                            file("gamma.txt", size = 1, lastModifiedMs = 3_000),
+                        ),
+                )
+            val result = enumeratorWith(fakeTree, fs).enumerate(pairId, treeUri)
 
-        assertEquals(3, result.snapshot.size)
-        assertEquals(setOf("alpha.txt", "beta.txt", "gamma.txt"), result.added)
-        assertTrue(result.modified.isEmpty())
-        assertTrue(result.deleted.isEmpty())
+            assertEquals(3, result.snapshot.size)
+            assertEquals(setOf("alpha.txt", "beta.txt", "gamma.txt"), result.added)
+            assertTrue(result.modified.isEmpty())
+            assertTrue(result.deleted.isEmpty())
 
-        val indexed = localIndexDao.getForPair(pairId)
-        assertEquals(3, indexed.size)
-        assertTrue(indexed.any { it.relativePath == "alpha.txt" && it.sizeBytes == 5L })
-    }
+            val indexed = localIndexDao.getForPair(pairId)
+            assertEquals(3, indexed.size)
+            assertTrue(indexed.any { it.relativePath == "alpha.txt" && it.sizeBytes == 5L })
+        }
 
     @Test
-    fun `empty tree produces empty result`() = runTest {
-        val pairId = insertPair()
-        val result = enumeratorWith(mapOf("root" to emptyList())).enumerate(pairId, treeUri)
+    fun `empty tree produces empty result`() =
+        runTest {
+            val pairId = insertPair()
+            val result = enumeratorWith(mapOf("root" to emptyList())).enumerate(pairId, treeUri)
 
-        assertTrue(result.snapshot.isEmpty())
-        assertTrue(result.added.isEmpty())
-        assertTrue(result.modified.isEmpty())
-        assertTrue(result.deleted.isEmpty())
-        assertTrue(localIndexDao.getForPair(pairId).isEmpty())
-    }
+            assertTrue(result.snapshot.isEmpty())
+            assertTrue(result.added.isEmpty())
+            assertTrue(result.modified.isEmpty())
+            assertTrue(result.deleted.isEmpty())
+            assertTrue(localIndexDao.getForPair(pairId).isEmpty())
+        }
 
     // -------------------------------------------------------------------------
     // Lazy SHA-256 hash strategy
     // -------------------------------------------------------------------------
 
     @Test
-    fun `new file gets SHA-256 hash computed`() = runTest {
-        val pairId = insertPair()
-        val content = "test content".toByteArray()
-        val expectedHash = LocalFsEnumerator.sha256Hex(content.inputStream())
+    fun `new file gets SHA-256 hash computed`() =
+        runTest {
+            val pairId = insertPair()
+            val content = "test content".toByteArray()
+            val expectedHash = LocalFsEnumerator.sha256Hex(content.inputStream())
 
-        val fs = FakeFsAccess(mapOf("new.txt" to content))
-        val result = enumeratorWith(mapOf("root" to listOf(file("new.txt", size = content.size.toLong()))), fs)
-            .enumerate(pairId, treeUri)
+            val fs = FakeFsAccess(mapOf("new.txt" to content))
+            val result =
+                enumeratorWith(mapOf("root" to listOf(file("new.txt", size = content.size.toLong()))), fs)
+                    .enumerate(pairId, treeUri)
 
-        val entry = result.snapshot.single()
-        assertEquals(expectedHash, entry.contentHash)
-        assertEquals(1, fs.openCount)
-    }
+            val entry = result.snapshot.single()
+            assertEquals(expectedHash, entry.contentHash)
+            assertEquals(1, fs.openCount)
+        }
 
     @Test
-    fun `unchanged file reuses cached hash without re-reading`() = runTest {
-        val pairId = insertPair()
+    fun `unchanged file reuses cached hash without re-reading`() =
+        runTest {
+            val pairId = insertPair()
 
-        // Seed local_index with a pre-existing hash.
-        localIndexDao.upsert(
-            LocalIndexEntity(
-                pairId = pairId,
-                relativePath = "readme.md",
-                sizeBytes = 512L,
-                mtimeMs = 9_000L,
-                contentHash = "cachedHash",
+            // Seed local_index with a pre-existing hash.
+            localIndexDao.upsert(
+                LocalIndexEntity(
+                    pairId = pairId,
+                    relativePath = "readme.md",
+                    sizeBytes = 512L,
+                    mtimeMs = 9_000L,
+                    contentHash = "cachedHash",
+                ),
             )
-        )
 
-        val fs = FakeFsAccess(mapOf("readme.md" to "data".toByteArray()))
-        val result = enumeratorWith(
-            mapOf("root" to listOf(file("readme.md", size = 512, lastModifiedMs = 9_000))),
-            fs,
-        ).enumerate(pairId, treeUri)
+            val fs = FakeFsAccess(mapOf("readme.md" to "data".toByteArray()))
+            val result =
+                enumeratorWith(
+                    mapOf("root" to listOf(file("readme.md", size = 512, lastModifiedMs = 9_000))),
+                    fs,
+                ).enumerate(pairId, treeUri)
 
-        // Hash must be the cached one, and the file must NOT be opened.
-        assertEquals("cachedHash", result.snapshot.single().contentHash)
-        assertEquals("file should not be re-read when size+mtime unchanged", 0, fs.openCount)
-        assertTrue("unchanged file should not appear in modified", result.modified.isEmpty())
-    }
-
-    @Test
-    fun `size change triggers hash recompute`() = runTest {
-        val pairId = insertPair()
-
-        localIndexDao.upsert(
-            LocalIndexEntity(pairId, "doc.pdf", sizeBytes = 1_000L, mtimeMs = 1_000L, contentHash = "oldhash")
-        )
-
-        val newContent = "new content".toByteArray()
-        val expectedHash = LocalFsEnumerator.sha256Hex(newContent.inputStream())
-        val fs = FakeFsAccess(mapOf("doc.pdf" to newContent))
-
-        val result = enumeratorWith(
-            mapOf("root" to listOf(file("doc.pdf", size = newContent.size.toLong(), lastModifiedMs = 1_000))),
-            fs,
-        ).enumerate(pairId, treeUri)
-
-        assertEquals("new hash expected", expectedHash, result.snapshot.single().contentHash)
-        assertEquals(1, fs.openCount)
-        assertTrue("doc.pdf must be in modified", "doc.pdf" in result.modified)
-    }
+            // Hash must be the cached one, and the file must NOT be opened.
+            assertEquals("cachedHash", result.snapshot.single().contentHash)
+            assertEquals("file should not be re-read when size+mtime unchanged", 0, fs.openCount)
+            assertTrue("unchanged file should not appear in modified", result.modified.isEmpty())
+        }
 
     @Test
-    fun `mtime change triggers hash recompute`() = runTest {
-        val pairId = insertPair()
+    fun `size change triggers hash recompute`() =
+        runTest {
+            val pairId = insertPair()
 
-        localIndexDao.upsert(
-            LocalIndexEntity(pairId, "log.txt", sizeBytes = 100L, mtimeMs = 1_000L, contentHash = "oldhash")
-        )
+            localIndexDao.upsert(
+                LocalIndexEntity(pairId, "doc.pdf", sizeBytes = 1_000L, mtimeMs = 1_000L, contentHash = "oldhash"),
+            )
 
-        val fs = FakeFsAccess(mapOf("log.txt" to "data".toByteArray()))
-        val result = enumeratorWith(
-            mapOf("root" to listOf(file("log.txt", size = 100, lastModifiedMs = 2_000))),
-            fs,
-        ).enumerate(pairId, treeUri)
+            val newContent = "new content".toByteArray()
+            val expectedHash = LocalFsEnumerator.sha256Hex(newContent.inputStream())
+            val fs = FakeFsAccess(mapOf("doc.pdf" to newContent))
 
-        assertEquals(1, fs.openCount)
-        assertTrue("log.txt must be in modified", "log.txt" in result.modified)
-    }
+            val result =
+                enumeratorWith(
+                    mapOf("root" to listOf(file("doc.pdf", size = newContent.size.toLong(), lastModifiedMs = 1_000))),
+                    fs,
+                ).enumerate(pairId, treeUri)
+
+            assertEquals("new hash expected", expectedHash, result.snapshot.single().contentHash)
+            assertEquals(1, fs.openCount)
+            assertTrue("doc.pdf must be in modified", "doc.pdf" in result.modified)
+        }
 
     @Test
-    fun `inaccessible file has null hash but is still in snapshot`() = runTest {
-        val pairId = insertPair()
+    fun `mtime change triggers hash recompute`() =
+        runTest {
+            val pairId = insertPair()
 
-        // FsAccess returns null → file cannot be opened.
-        val fs = FakeFsAccess(emptyMap()) // no entry for "locked.bin"
-        val result = enumeratorWith(
-            mapOf("root" to listOf(file("locked.bin", size = 100))),
-            fs,
-        ).enumerate(pairId, treeUri)
+            localIndexDao.upsert(
+                LocalIndexEntity(pairId, "log.txt", sizeBytes = 100L, mtimeMs = 1_000L, contentHash = "oldhash"),
+            )
 
-        val entry = result.snapshot.single()
-        assertEquals("locked.bin", entry.relativePath)
-        assertNull("unreadable file should have null hash", entry.contentHash)
-        assertEquals("locked.bin should still be in added", setOf("locked.bin"), result.added)
-    }
+            val fs = FakeFsAccess(mapOf("log.txt" to "data".toByteArray()))
+            val result =
+                enumeratorWith(
+                    mapOf("root" to listOf(file("log.txt", size = 100, lastModifiedMs = 2_000))),
+                    fs,
+                ).enumerate(pairId, treeUri)
+
+            assertEquals(1, fs.openCount)
+            assertTrue("log.txt must be in modified", "log.txt" in result.modified)
+        }
+
+    @Test
+    fun `inaccessible file has null hash but is still in snapshot`() =
+        runTest {
+            val pairId = insertPair()
+
+            // FsAccess returns null → file cannot be opened.
+            val fs = FakeFsAccess(emptyMap()) // no entry for "locked.bin"
+            val result =
+                enumeratorWith(
+                    mapOf("root" to listOf(file("locked.bin", size = 100))),
+                    fs,
+                ).enumerate(pairId, treeUri)
+
+            val entry = result.snapshot.single()
+            assertEquals("locked.bin", entry.relativePath)
+            assertNull("unreadable file should have null hash", entry.contentHash)
+            assertEquals("locked.bin should still be in added", setOf("locked.bin"), result.added)
+        }
 
     // -------------------------------------------------------------------------
     // Deleted files
     // -------------------------------------------------------------------------
 
     @Test
-    fun `removed file is deleted from local_index`() = runTest {
-        val pairId = insertPair()
+    fun `removed file is deleted from local_index`() =
+        runTest {
+            val pairId = insertPair()
 
-        localIndexDao.upsertAll(
-            listOf(
-                LocalIndexEntity(pairId, "keep.txt", 10L, 100L),
-                LocalIndexEntity(pairId, "remove.txt", 20L, 200L),
+            localIndexDao.upsertAll(
+                listOf(
+                    LocalIndexEntity(pairId, "keep.txt", 10L, 100L),
+                    LocalIndexEntity(pairId, "remove.txt", 20L, 200L),
+                ),
             )
-        )
 
-        val fs = FakeFsAccess(mapOf("keep.txt" to "a".toByteArray()))
-        val result = enumeratorWith(
-            mapOf("root" to listOf(file("keep.txt", size = 10, lastModifiedMs = 100))),
-            fs,
-        ).enumerate(pairId, treeUri)
+            val fs = FakeFsAccess(mapOf("keep.txt" to "a".toByteArray()))
+            val result =
+                enumeratorWith(
+                    mapOf("root" to listOf(file("keep.txt", size = 10, lastModifiedMs = 100))),
+                    fs,
+                ).enumerate(pairId, treeUri)
 
-        assertEquals(setOf("remove.txt"), result.deleted)
-        assertEquals(1, localIndexDao.getForPair(pairId).size)
-        assertEquals("keep.txt", localIndexDao.getForPair(pairId).single().relativePath)
-    }
+            assertEquals(setOf("remove.txt"), result.deleted)
+            assertEquals(1, localIndexDao.getForPair(pairId).size)
+            assertEquals("keep.txt", localIndexDao.getForPair(pairId).single().relativePath)
+        }
 
     // -------------------------------------------------------------------------
     // Hidden files
     // -------------------------------------------------------------------------
 
     @Test
-    fun `hidden files are skipped`() = runTest {
-        val pairId = insertPair()
+    fun `hidden files are skipped`() =
+        runTest {
+            val pairId = insertPair()
 
-        val fakeTree = mapOf(
-            "root" to listOf(
-                file(".hidden", size = 50),
-                file(".DS_Store", size = 10),
-                file("visible.txt", size = 100),
-            )
-        )
-        val result = enumeratorWith(fakeTree).enumerate(pairId, treeUri)
+            val fakeTree =
+                mapOf(
+                    "root" to
+                        listOf(
+                            file(".hidden", size = 50),
+                            file(".DS_Store", size = 10),
+                            file("visible.txt", size = 100),
+                        ),
+                )
+            val result = enumeratorWith(fakeTree).enumerate(pairId, treeUri)
 
-        assertEquals(1, result.snapshot.size)
-        assertEquals("visible.txt", result.snapshot.single().relativePath)
-    }
+            assertEquals(1, result.snapshot.size)
+            assertEquals("visible.txt", result.snapshot.single().relativePath)
+        }
 
     @Test
-    fun `hidden files inside subdirectory are skipped`() = runTest {
-        val pairId = insertPair()
+    fun `hidden files inside subdirectory are skipped`() =
+        runTest {
+            val pairId = insertPair()
 
-        val fakeTree = mapOf(
-            "root" to listOf(dir("subdir")),
-            "subdir" to listOf(
-                file(".gitignore", size = 20),
-                file("main.kt", size = 300),
-            )
-        )
-        val result = enumeratorWith(fakeTree).enumerate(pairId, treeUri)
+            val fakeTree =
+                mapOf(
+                    "root" to listOf(dir("subdir")),
+                    "subdir" to
+                        listOf(
+                            file(".gitignore", size = 20),
+                            file("main.kt", size = 300),
+                        ),
+                )
+            val result = enumeratorWith(fakeTree).enumerate(pairId, treeUri)
 
-        assertEquals(1, result.snapshot.size)
-        assertEquals("subdir/main.kt", result.snapshot.single().relativePath)
-    }
+            assertEquals(1, result.snapshot.size)
+            assertEquals("subdir/main.kt", result.snapshot.single().relativePath)
+        }
 
     // -------------------------------------------------------------------------
     // Ignore globs
     // -------------------------------------------------------------------------
 
     @Test
-    fun `ignore glob filters matching files`() = runTest {
-        val pairId = insertPair()
+    fun `ignore glob filters matching files`() =
+        runTest {
+            val pairId = insertPair()
 
-        val fakeTree = mapOf(
-            "root" to listOf(
-                file("build.gradle", size = 100),
-                file("main.kt", size = 200),
-                file("test.class", size = 300),
-            )
-        )
-        val result = enumeratorWith(fakeTree)
-            .enumerate(pairId, treeUri, ignoreGlobs = listOf("*.class"))
+            val fakeTree =
+                mapOf(
+                    "root" to
+                        listOf(
+                            file("build.gradle", size = 100),
+                            file("main.kt", size = 200),
+                            file("test.class", size = 300),
+                        ),
+                )
+            val result =
+                enumeratorWith(fakeTree)
+                    .enumerate(pairId, treeUri, ignoreGlobs = listOf("*.class"))
 
-        assertEquals(2, result.snapshot.size)
-        assertTrue(result.snapshot.none { it.relativePath == "test.class" })
-    }
-
-    @Test
-    fun `double-star glob matches across directories`() = runTest {
-        val pairId = insertPair()
-
-        val fakeTree = mapOf(
-            "root" to listOf(dir("build"), file("main.kt")),
-            "build" to listOf(file("output.class"), file("output.jar")),
-        )
-        val result = enumeratorWith(fakeTree)
-            .enumerate(pairId, treeUri, ignoreGlobs = listOf("build/**"))
-
-        assertEquals(1, result.snapshot.size)
-        assertEquals("main.kt", result.snapshot.single().relativePath)
-    }
+            assertEquals(2, result.snapshot.size)
+            assertTrue(result.snapshot.none { it.relativePath == "test.class" })
+        }
 
     @Test
-    fun `brace alternation glob matches either alternative`() = runTest {
-        val pairId = insertPair()
+    fun `double-star glob matches across directories`() =
+        runTest {
+            val pairId = insertPair()
 
-        val fakeTree = mapOf(
-            "root" to listOf(
-                file("photo.jpg", size = 100),
-                file("photo.png", size = 200),
-                file("document.pdf", size = 300),
-            )
-        )
-        val result = enumeratorWith(fakeTree)
-            .enumerate(pairId, treeUri, ignoreGlobs = listOf("*.{jpg,png}"))
+            val fakeTree =
+                mapOf(
+                    "root" to listOf(dir("build"), file("main.kt")),
+                    "build" to listOf(file("output.class"), file("output.jar")),
+                )
+            val result =
+                enumeratorWith(fakeTree)
+                    .enumerate(pairId, treeUri, ignoreGlobs = listOf("build/**"))
 
-        assertEquals(1, result.snapshot.size)
-        assertEquals("document.pdf", result.snapshot.single().relativePath)
-    }
+            assertEquals(1, result.snapshot.size)
+            assertEquals("main.kt", result.snapshot.single().relativePath)
+        }
 
     @Test
-    fun `ignored file previously in local_index appears in deleted set`() = runTest {
-        val pairId = insertPair()
+    fun `brace alternation glob matches either alternative`() =
+        runTest {
+            val pairId = insertPair()
 
-        // Seed an entry that will now be filtered by an ignore glob.
-        localIndexDao.upsert(
-            LocalIndexEntity(pairId, "secret.log", sizeBytes = 50L, mtimeMs = 100L)
-        )
+            val fakeTree =
+                mapOf(
+                    "root" to
+                        listOf(
+                            file("photo.jpg", size = 100),
+                            file("photo.png", size = 200),
+                            file("document.pdf", size = 300),
+                        ),
+                )
+            val result =
+                enumeratorWith(fakeTree)
+                    .enumerate(pairId, treeUri, ignoreGlobs = listOf("*.{jpg,png}"))
 
-        val fakeTree = mapOf(
-            "root" to listOf(
-                file("secret.log", size = 50, lastModifiedMs = 100),
-                file("app.kt", size = 200, lastModifiedMs = 200),
+            assertEquals(1, result.snapshot.size)
+            assertEquals("document.pdf", result.snapshot.single().relativePath)
+        }
+
+    @Test
+    fun `ignored file previously in local_index appears in deleted set`() =
+        runTest {
+            val pairId = insertPair()
+
+            // Seed an entry that will now be filtered by an ignore glob.
+            localIndexDao.upsert(
+                LocalIndexEntity(pairId, "secret.log", sizeBytes = 50L, mtimeMs = 100L),
             )
-        )
-        val result = enumeratorWith(fakeTree)
-            .enumerate(pairId, treeUri, ignoreGlobs = listOf("*.log"))
 
-        assertTrue("secret.log must be deleted from index", "secret.log" in result.deleted)
-        assertEquals(1, result.snapshot.size)
-        assertEquals(0, localIndexDao.getForPair(pairId).count { it.relativePath == "secret.log" })
-    }
+            val fakeTree =
+                mapOf(
+                    "root" to
+                        listOf(
+                            file("secret.log", size = 50, lastModifiedMs = 100),
+                            file("app.kt", size = 200, lastModifiedMs = 200),
+                        ),
+                )
+            val result =
+                enumeratorWith(fakeTree)
+                    .enumerate(pairId, treeUri, ignoreGlobs = listOf("*.log"))
+
+            assertTrue("secret.log must be deleted from index", "secret.log" in result.deleted)
+            assertEquals(1, result.snapshot.size)
+            assertEquals(0, localIndexDao.getForPair(pairId).count { it.relativePath == "secret.log" })
+        }
 
     // -------------------------------------------------------------------------
     // Nested directories
     // -------------------------------------------------------------------------
 
     @Test
-    fun `nested directories are walked recursively`() = runTest {
-        val pairId = insertPair()
+    fun `nested directories are walked recursively`() =
+        runTest {
+            val pairId = insertPair()
 
-        val (fakeTree, bytesMap) = buildFakeTree(
-            listOf(
-                Triple("a.txt", 10L, 100L),
-                Triple("sub/b.txt", 20L, 200L),
-                Triple("sub/nested/c.txt", 30L, 300L),
-            )
-        )
-        val result = enumeratorWith(fakeTree, FakeFsAccess(bytesMap)).enumerate(pairId, treeUri)
+            val (fakeTree, bytesMap) =
+                buildFakeTree(
+                    listOf(
+                        Triple("a.txt", 10L, 100L),
+                        Triple("sub/b.txt", 20L, 200L),
+                        Triple("sub/nested/c.txt", 30L, 300L),
+                    ),
+                )
+            val result = enumeratorWith(fakeTree, FakeFsAccess(bytesMap)).enumerate(pairId, treeUri)
 
-        assertEquals(3, result.snapshot.size)
-        val paths = result.snapshot.map { it.relativePath }.toSet()
-        assertEquals(setOf("a.txt", "sub/b.txt", "sub/nested/c.txt"), paths)
-    }
+            assertEquals(3, result.snapshot.size)
+            val paths = result.snapshot.map { it.relativePath }.toSet()
+            assertEquals(setOf("a.txt", "sub/b.txt", "sub/nested/c.txt"), paths)
+        }
 
     @Test
-    fun `empty directory produces no entries`() = runTest {
-        val pairId = insertPair()
+    fun `empty directory produces no entries`() =
+        runTest {
+            val pairId = insertPair()
 
-        val fakeTree = mapOf(
-            "root" to listOf(dir("emptyDir"), file("root.txt")),
-            "emptyDir" to emptyList<RawDocChild>(),
-        )
-        val result = enumeratorWith(fakeTree).enumerate(pairId, treeUri)
+            val fakeTree =
+                mapOf(
+                    "root" to listOf(dir("emptyDir"), file("root.txt")),
+                    "emptyDir" to emptyList<RawDocChild>(),
+                )
+            val result = enumeratorWith(fakeTree).enumerate(pairId, treeUri)
 
-        assertEquals(1, result.snapshot.size)
-        assertEquals("root.txt", result.snapshot.single().relativePath)
-    }
+            assertEquals(1, result.snapshot.size)
+            assertEquals("root.txt", result.snapshot.single().relativePath)
+        }
 
     // -------------------------------------------------------------------------
     // Unicode filenames
     // -------------------------------------------------------------------------
 
     @Test
-    fun `unicode filenames are handled correctly`() = runTest {
-        val pairId = insertPair()
+    fun `unicode filenames are handled correctly`() =
+        runTest {
+            val pairId = insertPair()
 
-        val unicodeNames = listOf("日本語.txt", "émoji 🎉.png", "Ñoño résumé.docx", "中文文件.pdf")
-        val fakeTree = mapOf(
-            "root" to unicodeNames.map { file(it, size = 100) }
-        )
-        val result = enumeratorWith(fakeTree).enumerate(pairId, treeUri)
+            val unicodeNames = listOf("日本語.txt", "émoji 🎉.png", "Ñoño résumé.docx", "中文文件.pdf")
+            val fakeTree =
+                mapOf(
+                    "root" to unicodeNames.map { file(it, size = 100) },
+                )
+            val result = enumeratorWith(fakeTree).enumerate(pairId, treeUri)
 
-        assertEquals(unicodeNames.size, result.snapshot.size)
-        val snapshotPaths = result.snapshot.map { it.relativePath }.toSet()
-        assertTrue(unicodeNames.all { it in snapshotPaths })
-    }
+            assertEquals(unicodeNames.size, result.snapshot.size)
+            val snapshotPaths = result.snapshot.map { it.relativePath }.toSet()
+            assertTrue(unicodeNames.all { it in snapshotPaths })
+        }
 
     // -------------------------------------------------------------------------
     // Remote columns preservation
     // -------------------------------------------------------------------------
 
     @Test
-    fun `remoteId is preserved for unchanged files after re-enumeration`() = runTest {
-        val pairId = insertPair()
+    fun `remoteId is preserved for unchanged files after re-enumeration`() =
+        runTest {
+            val pairId = insertPair()
 
-        localIndexDao.upsert(
-            LocalIndexEntity(
-                pairId = pairId,
-                relativePath = "synced.txt",
-                sizeBytes = 50L,
-                mtimeMs = 999L,
-                contentHash = "knownhash",
-                remoteId = "remote-abc",
+            localIndexDao.upsert(
+                LocalIndexEntity(
+                    pairId = pairId,
+                    relativePath = "synced.txt",
+                    sizeBytes = 50L,
+                    mtimeMs = 999L,
+                    contentHash = "knownhash",
+                    remoteId = "remote-abc",
+                ),
             )
-        )
 
-        val fs = FakeFsAccess(mapOf("synced.txt" to "data".toByteArray()))
-        enumeratorWith(
-            mapOf("root" to listOf(file("synced.txt", size = 50, lastModifiedMs = 999))),
-            fs,
-        ).enumerate(pairId, treeUri)
+            val fs = FakeFsAccess(mapOf("synced.txt" to "data".toByteArray()))
+            enumeratorWith(
+                mapOf("root" to listOf(file("synced.txt", size = 50, lastModifiedMs = 999))),
+                fs,
+            ).enumerate(pairId, treeUri)
 
-        val stored = localIndexDao.getForPair(pairId).single()
-        assertEquals("remote-abc", stored.remoteId)
-        assertEquals("knownhash", stored.contentHash)
-        assertEquals("file not re-read when unchanged", 0, fs.openCount)
-    }
+            val stored = localIndexDao.getForPair(pairId).single()
+            assertEquals("remote-abc", stored.remoteId)
+            assertEquals("knownhash", stored.contentHash)
+            assertEquals("file not re-read when unchanged", 0, fs.openCount)
+        }
 
     // -------------------------------------------------------------------------
     // Performance: 5 000-file hash reuse
     // -------------------------------------------------------------------------
 
     @Test
-    fun `re-enumerating 5,000 unchanged files reuses all cached hashes`() = runTest {
-        val pairId = insertPair()
+    fun `re-enumerating 5,000 unchanged files reuses all cached hashes`() =
+        runTest {
+            val pairId = insertPair()
 
-        // Build 5,000 files across a directory tree.
-        val files = (1..5_000).map { i ->
-            Triple("dir${i % 50}/file_$i.dat", i.toLong(), i.toLong() * 1_000)
+            // Build 5,000 files across a directory tree.
+            val files =
+                (1..5_000).map { i ->
+                    Triple("dir${i % 50}/file_$i.dat", i.toLong(), i.toLong() * 1_000)
+                }
+            val (fakeTree, bytesMap) = buildFakeTree(files)
+            val fs1 = FakeFsAccess(bytesMap)
+
+            // First enumeration: compute hashes for all 5,000 files.
+            enumeratorWith(fakeTree, fs1).enumerate(pairId, treeUri)
+            assertEquals("all 5,000 files hashed on first pass", 5_000, fs1.openCount)
+
+            // Second enumeration with the same tree: no file changed → zero hash recomputes.
+            val fs2 = FakeFsAccess(bytesMap)
+            val result2 = enumeratorWith(fakeTree, fs2).enumerate(pairId, treeUri)
+
+            assertEquals(
+                "no hash re-computations expected when size+mtime unchanged",
+                0,
+                fs2.openCount,
+            )
+            assertTrue("no additions on unchanged re-scan", result2.added.isEmpty())
+            assertTrue("no modifications on unchanged re-scan", result2.modified.isEmpty())
+            assertTrue("no deletions on unchanged re-scan", result2.deleted.isEmpty())
+            assertEquals("snapshot still contains all 5,000 files", 5_000, result2.snapshot.size)
         }
-        val (fakeTree, bytesMap) = buildFakeTree(files)
-        val fs1 = FakeFsAccess(bytesMap)
-
-        // First enumeration: compute hashes for all 5,000 files.
-        enumeratorWith(fakeTree, fs1).enumerate(pairId, treeUri)
-        assertEquals("all 5,000 files hashed on first pass", 5_000, fs1.openCount)
-
-        // Second enumeration with the same tree: no file changed → zero hash recomputes.
-        val fs2 = FakeFsAccess(bytesMap)
-        val result2 = enumeratorWith(fakeTree, fs2).enumerate(pairId, treeUri)
-
-        assertEquals(
-            "no hash re-computations expected when size+mtime unchanged",
-            0,
-            fs2.openCount,
-        )
-        assertTrue("no additions on unchanged re-scan", result2.added.isEmpty())
-        assertTrue("no modifications on unchanged re-scan", result2.modified.isEmpty())
-        assertTrue("no deletions on unchanged re-scan", result2.deleted.isEmpty())
-        assertEquals("snapshot still contains all 5,000 files", 5_000, result2.snapshot.size)
-    }
 
     // -------------------------------------------------------------------------
     // glob helpers

@@ -74,7 +74,7 @@ interface AccountDao {
             "ON CONFLICT(id) DO UPDATE SET " +
             "providerType = excluded.providerType, " +
             "displayName = excluded.displayName, " +
-            "email = excluded.email"
+            "email = excluded.email",
     )
     suspend fun upsertPreservingCreatedAt(
         id: String,
@@ -194,7 +194,11 @@ interface SyncPairDao {
      * @param result      A short outcome string: "SUCCESS", "PARTIAL_FAILURE", or "FAILURE".
      */
     @Query("UPDATE sync_pair SET lastSyncAtMs = :timestampMs, lastSyncResult = :result WHERE id = :pairId")
-    suspend fun updateLastSyncResult(pairId: Long, timestampMs: Long, result: String)
+    suspend fun updateLastSyncResult(
+        pairId: Long,
+        timestampMs: Long,
+        result: String,
+    )
 
     /**
      * Persists the provider delta/page token for [pairId].
@@ -203,7 +207,10 @@ interface SyncPairDao {
      * @param token  The new delta token from the cloud provider, or null to clear it.
      */
     @Query("UPDATE sync_pair SET lastDeltaToken = :token WHERE id = :pairId")
-    suspend fun updateDeltaToken(pairId: Long, token: String?)
+    suspend fun updateDeltaToken(
+        pairId: Long,
+        token: String?,
+    )
 
     /**
      * Records the epoch-millisecond timestamp of the last completed full local scan for [pairId].
@@ -212,7 +219,10 @@ interface SyncPairDao {
      * @param timestampMs The epoch-millisecond time the scan completed, or null to clear it.
      */
     @Query("UPDATE sync_pair SET lastFullScanAtMs = :timestampMs WHERE id = :pairId")
-    suspend fun updateLastFullScanAtMs(pairId: Long, timestampMs: Long?)
+    suspend fun updateLastFullScanAtMs(
+        pairId: Long,
+        timestampMs: Long?,
+    )
 
     /**
      * Observes which providers currently have at least one sync pair stuck in a
@@ -269,7 +279,10 @@ interface FileIndexDao {
      * @param path The relative path of the file to delete.
      */
     @Query("DELETE FROM file_index WHERE pairId = :pairId AND relativePath = :path")
-    suspend fun delete(pairId: Long, path: String)
+    suspend fun delete(
+        pairId: Long,
+        path: String,
+    )
 
     /**
      * Deletes all file index entries associated with the given sync pair.
@@ -289,7 +302,10 @@ interface FileIndexDao {
      * @param seenPaths Paths that were found during the latest scan and must be kept.
      */
     @Query("DELETE FROM file_index WHERE pairId = :pairId AND relativePath NOT IN (:seenPaths)")
-    suspend fun deleteStaleForPair(pairId: Long, seenPaths: List<String>)
+    suspend fun deleteStaleForPair(
+        pairId: Long,
+        seenPaths: List<String>,
+    )
 
     /**
      * Atomically reconciles the Room index for [pairId] after a scan:
@@ -324,7 +340,6 @@ interface FileIndexDao {
 
 @Dao
 interface ConflictRecordDao {
-
     /** Observes all unresolved (resolution IS NULL) conflict records across all pairs. */
     @Query("SELECT * FROM conflict_record WHERE resolution IS NULL ORDER BY detectedAtMs DESC")
     fun observeUnresolved(): Flow<List<ConflictRecordEntity>>
@@ -347,7 +362,10 @@ interface ConflictRecordDao {
 
     /** Sets the resolution for the conflict with the given id. */
     @Query("UPDATE conflict_record SET resolution = :resolution WHERE id = :id")
-    suspend fun resolve(id: Long, resolution: String)
+    suspend fun resolve(
+        id: Long,
+        resolution: String,
+    )
 
     /** Deletes the conflict record with the given id (e.g. after the engine has applied its resolution). */
     @Query("DELETE FROM conflict_record WHERE id = :id")
@@ -360,7 +378,6 @@ interface ConflictRecordDao {
 
 @Dao
 interface SyncEventDao {
-
     /**
      * Inserts a single [SyncEventEntity] into the database.
      *
@@ -389,7 +406,10 @@ interface SyncEventDao {
     @Query(
         "SELECT * FROM sync_event WHERE pairId = :pairId ORDER BY timestampMs DESC LIMIT :limit",
     )
-    fun observeForPair(pairId: Long, limit: Int = MAX_EVENTS_PER_PAIR): Flow<List<SyncEventEntity>>
+    fun observeForPair(
+        pairId: Long,
+        limit: Int = MAX_EVENTS_PER_PAIR,
+    ): Flow<List<SyncEventEntity>>
 
     /**
      * Deletes the oldest global rows beyond [maxRows], keeping the most-recent ones.
@@ -415,7 +435,10 @@ interface SyncEventDao {
             "(SELECT id FROM sync_event WHERE pairId = :pairId " +
             "ORDER BY timestampMs DESC LIMIT :maxRows)",
     )
-    suspend fun pruneForPair(pairId: Long, maxRows: Int = MAX_EVENTS_PER_PAIR)
+    suspend fun pruneForPair(
+        pairId: Long,
+        maxRows: Int = MAX_EVENTS_PER_PAIR,
+    )
 
     /**
      * Inserts a log entry and immediately prunes the table to stay within the
@@ -435,6 +458,7 @@ interface SyncEventDao {
     companion object {
         /** Maximum events retained per sync-pair (oldest are discarded first). */
         const val MAX_EVENTS_PER_PAIR = 500
+
         /** Maximum total events retained across all pairs. */
         const val MAX_EVENTS_GLOBAL = 2_000
     }
@@ -442,7 +466,6 @@ interface SyncEventDao {
 
 @Dao
 interface LocalIndexDao {
-
     /**
      * Returns all local-index entries for [pairId], ordered by [relativePath] ascending.
      *
@@ -476,7 +499,10 @@ interface LocalIndexDao {
      * @param relativePath The relative path of the file to remove.
      */
     @Query("DELETE FROM local_index WHERE pairId = :pairId AND relativePath = :relativePath")
-    suspend fun delete(pairId: Long, relativePath: String)
+    suspend fun delete(
+        pairId: Long,
+        relativePath: String,
+    )
 
     /**
      * Deletes all local-index entries for [pairId].
@@ -498,7 +524,10 @@ interface LocalIndexDao {
     @Query(
         "DELETE FROM local_index WHERE pairId = :pairId AND relativePath NOT IN (:seenPaths)",
     )
-    suspend fun deleteStaleForPair(pairId: Long, seenPaths: List<String>)
+    suspend fun deleteStaleForPair(
+        pairId: Long,
+        seenPaths: List<String>,
+    )
 
     /**
      * Atomically upserts [toUpsert] and removes any `local_index` rows for

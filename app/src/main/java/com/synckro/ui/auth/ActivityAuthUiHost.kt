@@ -10,4 +10,6 @@ import com.synckro.domain.auth.AuthUiHost
  * sees [AuthUiHost]; this class keeps the `android.app.Activity` reference
  * on the platform side so the domain module stays Android-free.
  */
-class ActivityAuthUiHost(val activity: ComponentActivity) : AuthUiHost
+class ActivityAuthUiHost(
+    val activity: ComponentActivity,
+) : AuthUiHost

@@ -1,9 +1,9 @@
 package com.synckro.domain.sync
 
 import com.synckro.domain.provider.CloudProviderException
+import kotlinx.coroutines.delay
 import kotlin.math.min
 import kotlin.random.Random
-import kotlinx.coroutines.delay
 
 /**
  * Wraps a suspending [block] with an exponential-backoff retry policy suitable
@@ -57,12 +57,13 @@ suspend fun <T> withRetry(
             lastException = e
             if (attempt == maxAttempts) break
 
-            val baseDelay = when (e) {
-                is CloudProviderException.RateLimited ->
-                    // Honour Retry-After, but don't let it fall below our backoff floor.
-                    maxOf(e.retryAfterMs, delayMs)
-                else -> delayMs
-            }
+            val baseDelay =
+                when (e) {
+                    is CloudProviderException.RateLimited ->
+                        // Honour Retry-After, but don't let it fall below our backoff floor.
+                        maxOf(e.retryAfterMs, delayMs)
+                    else -> delayMs
+                }
 
             val jitter = (baseDelay * jitterFraction * (Random.nextDouble() * 2 - 1)).toLong()
             val actualDelay = (baseDelay + jitter).coerceAtLeast(0L)

@@ -25,13 +25,16 @@ object Routes {
     const val HOME = "home"
     const val ACCOUNTS = "accounts"
     const val CONFLICT_INBOX = "conflict_inbox"
+
     /** Optional query parameter `pairId`; defaults to 0 (create mode). */
     const val PAIR_EDITOR = "pair_editor?pairId={pairId}"
     const val PICK_FOLDER = "pick_folder"
+
     /** Optional query parameter `pairId`; defaults to 0 (show all pairs). */
     const val LOGS = "logs?pairId={pairId}"
 
     fun pairEditor(pairId: Long = 0L) = "pair_editor?pairId=$pairId"
+
     fun logs(pairId: Long = 0L) = "logs?pairId=$pairId"
 }
 
@@ -73,12 +76,13 @@ fun SynckroNavHost(activity: ComponentActivity) {
         }
         composable(
             route = Routes.PAIR_EDITOR,
-            arguments = listOf(
-                navArgument("pairId") {
-                    type = NavType.LongType
-                    defaultValue = 0L
-                },
-            ),
+            arguments =
+                listOf(
+                    navArgument("pairId") {
+                        type = NavType.LongType
+                        defaultValue = 0L
+                    },
+                ),
         ) { backStackEntry ->
             val pairId = backStackEntry.arguments?.getLong("pairId") ?: 0L
             // Obtain the editor's ViewModel here (scoped to this back-stack entry) so we
@@ -119,9 +123,10 @@ fun SynckroNavHost(activity: ComponentActivity) {
         composable(Routes.PICK_FOLDER) {
             // Read the current folder URI stored by PairEditorScreen before navigating here,
             // so the picker can show the already-selected folder.
-            val initialUri = nav.previousBackStackEntry
-                ?.savedStateHandle
-                ?.get<String?>(PairEditorViewModel.KEY_PICK_FOLDER_INITIAL_URI)
+            val initialUri =
+                nav.previousBackStackEntry
+                    ?.savedStateHandle
+                    ?.get<String?>(PairEditorViewModel.KEY_PICK_FOLDER_INITIAL_URI)
             PickLocalFolderScreen(
                 initialUri = initialUri,
                 onFolderPicked = { uriString ->
@@ -142,12 +147,13 @@ fun SynckroNavHost(activity: ComponentActivity) {
         }
         composable(
             route = Routes.LOGS,
-            arguments = listOf(
-                navArgument("pairId") {
-                    type = NavType.LongType
-                    defaultValue = 0L
-                },
-            ),
+            arguments =
+                listOf(
+                    navArgument("pairId") {
+                        type = NavType.LongType
+                        defaultValue = 0L
+                    },
+                ),
         ) {
             LogsScreen(onBack = { nav.popBackStack() })
         }

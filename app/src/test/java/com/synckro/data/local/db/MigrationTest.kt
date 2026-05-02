@@ -28,7 +28,6 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class MigrationTest {
-
     private val context: Context get() = ApplicationProvider.getApplicationContext()
 
     /** The database under test (opened in [setUp], closed in [tearDown]). */
@@ -69,10 +68,11 @@ class MigrationTest {
 
         SynckroDatabase.MIGRATION_6_7.migrate(db)
 
-        val cursor: Cursor = db.query(
-            "SELECT lastFullScanAtMs FROM sync_pair WHERE displayName = 'Migration Test'",
-            emptyArray<Any?>(),
-        )
+        val cursor: Cursor =
+            db.query(
+                "SELECT lastFullScanAtMs FROM sync_pair WHERE displayName = 'Migration Test'",
+                emptyArray<Any?>(),
+            )
         cursor.use {
             assertTrue(it.moveToFirst())
             assertTrue(
@@ -126,10 +126,11 @@ class MigrationTest {
                 "VALUES ($pairId, 'file.txt', 200, 99999)",
         )
 
-        val cursor: Cursor = db.query(
-            "SELECT sizeBytes FROM local_index WHERE pairId = $pairId",
-            emptyArray<Any?>(),
-        )
+        val cursor: Cursor =
+            db.query(
+                "SELECT sizeBytes FROM local_index WHERE pairId = $pairId",
+                emptyArray<Any?>(),
+            )
         cursor.use {
             it.moveToFirst()
             assertEquals("sizeBytes should be updated to 200", 200L, it.getLong(0))
@@ -151,10 +152,11 @@ class MigrationTest {
 
         db.execSQL("DELETE FROM sync_pair WHERE id = $pairId")
 
-        val cursor: Cursor = db.query(
-            "SELECT COUNT(*) FROM local_index WHERE pairId = $pairId",
-            emptyArray<Any?>(),
-        )
+        val cursor: Cursor =
+            db.query(
+                "SELECT COUNT(*) FROM local_index WHERE pairId = $pairId",
+                emptyArray<Any?>(),
+            )
         cursor.use {
             it.moveToFirst()
             assertEquals(
@@ -208,7 +210,10 @@ class MigrationTest {
     // -------------------------------------------------------------------------
 
     /** Returns the set of column names for [table] using PRAGMA table_info. */
-    private fun columnNames(db: SupportSQLiteDatabase, table: String): Set<String> {
+    private fun columnNames(
+        db: SupportSQLiteDatabase,
+        table: String,
+    ): Set<String> {
         val result = mutableSetOf<String>()
         val cursor: Cursor = db.query("PRAGMA table_info(`$table`)", emptyArray<Any?>())
         cursor.use {
@@ -223,10 +228,11 @@ class MigrationTest {
     /** Returns the set of non-system table names in the database. */
     private fun tableNames(db: SupportSQLiteDatabase): Set<String> {
         val result = mutableSetOf<String>()
-        val cursor: Cursor = db.query(
-            "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'",
-            emptyArray<Any?>(),
-        )
+        val cursor: Cursor =
+            db.query(
+                "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'",
+                emptyArray<Any?>(),
+            )
         cursor.use {
             while (it.moveToNext()) {
                 result.add(it.getString(0))
@@ -268,46 +274,46 @@ class MigrationTest {
          * applied manually in tests.
          */
         fun openAtV6(context: Context): SupportSQLiteDatabase =
-            FrameworkSQLiteOpenHelperFactory().create(
-                SupportSQLiteOpenHelper.Configuration.builder(context)
-                    .name(TEST_DB)
-                    .callback(
-                        object : SupportSQLiteOpenHelper.Callback(6) {
-                            override fun onCreate(db: SupportSQLiteDatabase) =
-                                createV6Schema(db)
+            FrameworkSQLiteOpenHelperFactory()
+                .create(
+                    SupportSQLiteOpenHelper.Configuration
+                        .builder(context)
+                        .name(TEST_DB)
+                        .callback(
+                            object : SupportSQLiteOpenHelper.Callback(6) {
+                                override fun onCreate(db: SupportSQLiteDatabase) = createV6Schema(db)
 
-                            override fun onUpgrade(
-                                db: SupportSQLiteDatabase,
-                                oldVersion: Int,
-                                newVersion: Int,
-                            ) = Unit
-                        },
-                    )
-                    .build(),
-            ).writableDatabase
+                                override fun onUpgrade(
+                                    db: SupportSQLiteDatabase,
+                                    oldVersion: Int,
+                                    newVersion: Int,
+                                ) = Unit
+                            },
+                        ).build(),
+                ).writableDatabase
 
         /**
          * Opens a [SupportSQLiteDatabase] whose schema matches the v1 export in
          * `app/schemas/.../1.json`.
          */
         private fun openAtV1(context: Context): SupportSQLiteDatabase =
-            FrameworkSQLiteOpenHelperFactory().create(
-                SupportSQLiteOpenHelper.Configuration.builder(context)
-                    .name("${TEST_DB}_v1")
-                    .callback(
-                        object : SupportSQLiteOpenHelper.Callback(1) {
-                            override fun onCreate(db: SupportSQLiteDatabase) =
-                                createV1Schema(db)
+            FrameworkSQLiteOpenHelperFactory()
+                .create(
+                    SupportSQLiteOpenHelper.Configuration
+                        .builder(context)
+                        .name("${TEST_DB}_v1")
+                        .callback(
+                            object : SupportSQLiteOpenHelper.Callback(1) {
+                                override fun onCreate(db: SupportSQLiteDatabase) = createV1Schema(db)
 
-                            override fun onUpgrade(
-                                db: SupportSQLiteDatabase,
-                                oldVersion: Int,
-                                newVersion: Int,
-                            ) = Unit
-                        },
-                    )
-                    .build(),
-            ).writableDatabase
+                                override fun onUpgrade(
+                                    db: SupportSQLiteDatabase,
+                                    oldVersion: Int,
+                                    newVersion: Int,
+                                ) = Unit
+                            },
+                        ).build(),
+                ).writableDatabase
 
         // -----------------------------------------------------------------
         // Schema creation SQL (derived from exported JSON schema files)

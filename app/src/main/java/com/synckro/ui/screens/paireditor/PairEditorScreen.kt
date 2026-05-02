@@ -85,8 +85,11 @@ fun PairEditorScreen(
             TopAppBar(
                 title = {
                     Text(
-                        if (pairId == 0L) stringResource(R.string.pair_editor_title_create)
-                        else stringResource(R.string.pair_editor_title_edit),
+                        if (pairId == 0L) {
+                            stringResource(R.string.pair_editor_title_create)
+                        } else {
+                            stringResource(R.string.pair_editor_title_edit)
+                        },
                     )
                 },
                 navigationIcon = {
@@ -103,9 +106,10 @@ fun PairEditorScreen(
     ) { padding ->
         if (state.isLoading) {
             Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding),
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .padding(padding),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center,
             ) {
@@ -113,11 +117,12 @@ fun PairEditorScreen(
             }
         } else {
             Column(
-                modifier = Modifier
-                    .padding(padding)
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
-                    .padding(16.dp),
+                modifier =
+                    Modifier
+                        .padding(padding)
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
+                        .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 // Display name
@@ -130,16 +135,17 @@ fun PairEditorScreen(
                 )
 
                 // Local folder picker
-                val localFolderDisplayName = remember(state.localTreeUri) {
-                    if (state.localTreeUri.isEmpty()) {
-                        ""
-                    } else {
-                        runCatching {
-                            val uri = android.net.Uri.parse(state.localTreeUri)
-                            DocumentFile.fromTreeUri(context, uri)?.name ?: state.localTreeUri
-                        }.getOrDefault(state.localTreeUri)
+                val localFolderDisplayName =
+                    remember(state.localTreeUri) {
+                        if (state.localTreeUri.isEmpty()) {
+                            ""
+                        } else {
+                            runCatching {
+                                val uri = android.net.Uri.parse(state.localTreeUri)
+                                DocumentFile.fromTreeUri(context, uri)?.name ?: state.localTreeUri
+                            }.getOrDefault(state.localTreeUri)
+                        }
                     }
-                }
                 OutlinedTextField(
                     value = localFolderDisplayName,
                     onValueChange = {},
@@ -304,9 +310,10 @@ private fun ProviderDropdown(
             readOnly = true,
             label = { Text(stringResource(R.string.pair_editor_provider)) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
-            modifier = Modifier
-                .menuAnchor(MenuAnchorType.PrimaryNotEditable)
-                .fillMaxWidth(),
+            modifier =
+                Modifier
+                    .menuAnchor(MenuAnchorType.PrimaryNotEditable)
+                    .fillMaxWidth(),
         )
         ExposedDropdownMenu(
             expanded = expanded,
@@ -361,9 +368,10 @@ private fun ConflictPolicyDropdown(
             readOnly = true,
             label = { Text(stringResource(R.string.pair_editor_conflict_policy)) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
-            modifier = Modifier
-                .menuAnchor(MenuAnchorType.PrimaryNotEditable)
-                .fillMaxWidth(),
+            modifier =
+                Modifier
+                    .menuAnchor(MenuAnchorType.PrimaryNotEditable)
+                    .fillMaxWidth(),
         )
         ExposedDropdownMenu(
             expanded = expanded,
@@ -403,9 +411,10 @@ private fun DirectionDropdown(
             readOnly = true,
             label = { Text(stringResource(R.string.pair_editor_direction)) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
-            modifier = Modifier
-                .menuAnchor(MenuAnchorType.PrimaryNotEditable)
-                .fillMaxWidth(),
+            modifier =
+                Modifier
+                    .menuAnchor(MenuAnchorType.PrimaryNotEditable)
+                    .fillMaxWidth(),
         )
         ExposedDropdownMenu(
             expanded = expanded,
@@ -426,23 +435,26 @@ private fun DirectionDropdown(
 }
 
 @Composable
-private fun providerLabel(provider: CloudProviderType): String = when (provider) {
-    CloudProviderType.FAKE -> stringResource(R.string.provider_label_fake)
-    CloudProviderType.ONEDRIVE -> stringResource(R.string.provider_label_onedrive)
-    CloudProviderType.GOOGLE_DRIVE -> stringResource(R.string.provider_label_google_drive)
-}
+private fun providerLabel(provider: CloudProviderType): String =
+    when (provider) {
+        CloudProviderType.FAKE -> stringResource(R.string.provider_label_fake)
+        CloudProviderType.ONEDRIVE -> stringResource(R.string.provider_label_onedrive)
+        CloudProviderType.GOOGLE_DRIVE -> stringResource(R.string.provider_label_google_drive)
+    }
 
 @Composable
-private fun conflictPolicyLabel(policy: ConflictPolicy): String = when (policy) {
-    ConflictPolicy.NEWEST_WINS -> stringResource(R.string.conflict_policy_newest_wins)
-    ConflictPolicy.PREFER_LOCAL -> stringResource(R.string.conflict_policy_prefer_local)
-    ConflictPolicy.PREFER_REMOTE -> stringResource(R.string.conflict_policy_prefer_remote)
-    ConflictPolicy.KEEP_BOTH -> stringResource(R.string.conflict_policy_keep_both)
-}
+private fun conflictPolicyLabel(policy: ConflictPolicy): String =
+    when (policy) {
+        ConflictPolicy.NEWEST_WINS -> stringResource(R.string.conflict_policy_newest_wins)
+        ConflictPolicy.PREFER_LOCAL -> stringResource(R.string.conflict_policy_prefer_local)
+        ConflictPolicy.PREFER_REMOTE -> stringResource(R.string.conflict_policy_prefer_remote)
+        ConflictPolicy.KEEP_BOTH -> stringResource(R.string.conflict_policy_keep_both)
+    }
 
 @Composable
-private fun directionLabel(dir: SyncDirection): String = when (dir) {
-    SyncDirection.LOCAL_TO_REMOTE -> stringResource(R.string.direction_local_to_remote)
-    SyncDirection.REMOTE_TO_LOCAL -> stringResource(R.string.direction_remote_to_local)
-    SyncDirection.BIDIRECTIONAL -> stringResource(R.string.direction_bidirectional)
-}
+private fun directionLabel(dir: SyncDirection): String =
+    when (dir) {
+        SyncDirection.LOCAL_TO_REMOTE -> stringResource(R.string.direction_local_to_remote)
+        SyncDirection.REMOTE_TO_LOCAL -> stringResource(R.string.direction_remote_to_local)
+        SyncDirection.BIDIRECTIONAL -> stringResource(R.string.direction_bidirectional)
+    }

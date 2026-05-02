@@ -2,6 +2,7 @@ package com.synckro.util.logging
 
 import android.content.Context
 import android.util.Log
+import timber.log.Timber
 import java.io.File
 import java.io.PrintWriter
 import java.io.StringWriter
@@ -10,7 +11,6 @@ import java.util.Date
 import java.util.Locale
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
-import timber.log.Timber
 
 /**
  * [Timber.Tree] that appends log records to a file under the app's external
@@ -31,19 +31,21 @@ class FileLoggingTree(
     private val maxFileBytes: Long = DEFAULT_MAX_FILE_BYTES,
     private val maxBackups: Int = DEFAULT_MAX_BACKUPS,
 ) : Timber.Tree() {
-
-    private val logDir: File = File(
-        context.getExternalFilesDir(null) ?: context.filesDir,
-        "logs",
-    ).apply { mkdirs() }
+    private val logDir: File =
+        File(
+            context.getExternalFilesDir(null) ?: context.filesDir,
+            "logs",
+        ).apply { mkdirs() }
 
     private val logFile: File = File(logDir, "synckro-debug.log")
-    private val executor = Executors.newSingleThreadExecutor { r ->
-        Thread(r, "synckro-file-logger").apply { isDaemon = true }
-    }
-    private val dateFormat = ThreadLocal.withInitial {
-        SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US)
-    }
+    private val executor =
+        Executors.newSingleThreadExecutor { r ->
+            Thread(r, "synckro-file-logger").apply { isDaemon = true }
+        }
+    private val dateFormat =
+        ThreadLocal.withInitial {
+            SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US)
+        }
 
     /**
      * Absolute path to the current log file. Exposed so a debug "About"
@@ -54,7 +56,12 @@ class FileLoggingTree(
     /**
      * Writes a log entry asynchronously. Non-blocking for callers.
      */
-    override fun log(priority: Int, tag: String?, message: String, t: Throwable?) {
+    override fun log(
+        priority: Int,
+        tag: String?,
+        message: String,
+        t: Throwable?,
+    ) {
         val timestamp = dateFormat.get()!!.format(Date())
         val level = priorityLabel(priority)
         val head = "$timestamp $level/${tag ?: "Synckro"}: $message"
@@ -109,8 +116,7 @@ class FileLoggingTree(
         }
     }
 
-    private fun backupFile(index: Int): File =
-        if (index <= 0) logFile else File(logDir, "synckro-debug.log.$index")
+    private fun backupFile(index: Int): File = if (index <= 0) logFile else File(logDir, "synckro-debug.log.$index")
 
     /**
      * Best-effort flush: block briefly for any queued writes to complete.
@@ -123,15 +129,16 @@ class FileLoggingTree(
         runCatching { latch.await(timeoutMs, TimeUnit.MILLISECONDS) }
     }
 
-    private fun priorityLabel(priority: Int): String = when (priority) {
-        Log.VERBOSE -> "V"
-        Log.DEBUG -> "D"
-        Log.INFO -> "I"
-        Log.WARN -> "W"
-        Log.ERROR -> "E"
-        Log.ASSERT -> "A"
-        else -> "?"
-    }
+    private fun priorityLabel(priority: Int): String =
+        when (priority) {
+            Log.VERBOSE -> "V"
+            Log.DEBUG -> "D"
+            Log.INFO -> "I"
+            Log.WARN -> "W"
+            Log.ERROR -> "E"
+            Log.ASSERT -> "A"
+            else -> "?"
+        }
 
     private fun stackTraceOf(t: Throwable): String {
         val sw = StringWriter()

@@ -66,7 +66,6 @@ class GoogleDriveAuthManager private constructor(
     private val prefsOverride: SharedPreferences?,
     private val webClientId: String,
 ) : AuthManager {
-
     companion object {
         private const val DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file"
         private const val PREFS_NAME = "gdrive_account"
@@ -92,7 +91,9 @@ class GoogleDriveAuthManager private constructor(
 
     /** Hilt-injected constructor (production path). */
     @Inject
-    constructor(@ApplicationContext context: Context) :
+    constructor(
+        @ApplicationContext context: Context,
+    ) :
         this(context, prefsOverride = null, webClientId = BuildConfig.GOOGLE_WEB_CLIENT_ID)
 
     override val providerType: CloudProviderType = CloudProviderType.GOOGLE_DRIVE
@@ -104,9 +105,11 @@ class GoogleDriveAuthManager private constructor(
      * Reusable [AuthorizationRequest] for the Drive scope. Created once so both
      * [signIn] and [acquireAccessToken] share the same request object.
      */
-    private val driveAuthRequest: AuthorizationRequest = AuthorizationRequest.builder()
-        .setRequestedScopes(listOf(Scope(DRIVE_SCOPE)))
-        .build()
+    private val driveAuthRequest: AuthorizationRequest =
+        AuthorizationRequest
+            .builder()
+            .setRequestedScopes(listOf(Scope(DRIVE_SCOPE)))
+            .build()
 
     /**
      * Lazily-created [EncryptedSharedPreferences] for persisting account metadata
@@ -121,9 +124,11 @@ class GoogleDriveAuthManager private constructor(
     // in security-crypto 1.1.0 but no stable non-deprecated replacement exists for the 5-arg
     // static factory yet. The functionality is identical; suppress to keep clean builds.
     private fun createEncryptedPrefs(): SharedPreferences {
-        val masterKey = MasterKey.Builder(context)
-            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-            .build()
+        val masterKey =
+            MasterKey
+                .Builder(context)
+                .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+                .build()
         return EncryptedSharedPreferences.create(
             context,
             PREFS_NAME,
@@ -140,57 +145,67 @@ class GoogleDriveAuthManager private constructor(
             return AuthResult.NotConfigured(context.getString(R.string.gdrive_not_configured))
         }
 
-        val activity = (host as? ActivityAuthUiHost)?.activity
-            ?: run {
-                Timber.e("GoogleDriveAuthManager.signIn: host is not ActivityAuthUiHost")
-                return AuthResult.Error(context.getString(R.string.accounts_host_unavailable))
-            }
+        val activity =
+            (host as? ActivityAuthUiHost)?.activity
+                ?: run {
+                    Timber.e("GoogleDriveAuthManager.signIn: host is not ActivityAuthUiHost")
+                    return AuthResult.Error(context.getString(R.string.accounts_host_unavailable))
+                }
 
         // Step 1: Obtain Google ID token via Credential Manager.
-        val googleIdOption = GetGoogleIdOption.Builder()
-            .setFilterByAuthorizedAccounts(false)
-            .setServerClientId(webClientId)
-            .setAutoSelectEnabled(false)
-            .build()
+        val googleIdOption =
+            GetGoogleIdOption
+                .Builder()
+                .setFilterByAuthorizedAccounts(false)
+                .setServerClientId(webClientId)
+                .setAutoSelectEnabled(false)
+                .build()
 
-        val idTokenCredential: GoogleIdTokenCredential = try {
-            val response = credentialManager.getCredential(
-                context = activity,
-                request = GetCredentialRequest.Builder()
-                    .addCredentialOption(googleIdOption)
-                    .build(),
-            )
-            GoogleIdTokenCredential.createFrom(response.credential.data)
-        } catch (e: GetCredentialCancellationException) {
-            Timber.i("GoogleDriveAuthManager.signIn: user cancelled credential picker")
-            return AuthResult.Cancelled
-        } catch (e: NoCredentialException) {
-            Timber.w(e, "GoogleDriveAuthManager.signIn: no credential available")
-            return AuthResult.Error(context.getString(R.string.gdrive_no_credential), e)
-        } catch (e: GetCredentialException) {
-            Timber.e(e, "GoogleDriveAuthManager.signIn: credential exception")
-            return AuthResult.Error(e.message ?: context.getString(R.string.gdrive_signin_failed), e)
-        } catch (e: GoogleIdTokenParsingException) {
-            Timber.e(e, "GoogleDriveAuthManager.signIn: failed to parse Google ID token")
-            return AuthResult.Error(e.message ?: context.getString(R.string.gdrive_signin_failed), e)
-        }
+        val idTokenCredential: GoogleIdTokenCredential =
+            try {
+                val response =
+                    credentialManager.getCredential(
+                        context = activity,
+                        request =
+                            GetCredentialRequest
+                                .Builder()
+                                .addCredentialOption(googleIdOption)
+                                .build(),
+                    )
+                GoogleIdTokenCredential.createFrom(response.credential.data)
+            } catch (e: GetCredentialCancellationException) {
+                Timber.i("GoogleDriveAuthManager.signIn: user cancelled credential picker")
+                return AuthResult.Cancelled
+            } catch (e: NoCredentialException) {
+                Timber.w(e, "GoogleDriveAuthManager.signIn: no credential available")
+                return AuthResult.Error(context.getString(R.string.gdrive_no_credential), e)
+            } catch (e: GetCredentialException) {
+                Timber.e(e, "GoogleDriveAuthManager.signIn: credential exception")
+                return AuthResult.Error(e.message ?: context.getString(R.string.gdrive_signin_failed), e)
+            } catch (e: GoogleIdTokenParsingException) {
+                Timber.e(e, "GoogleDriveAuthManager.signIn: failed to parse Google ID token")
+                return AuthResult.Error(e.message ?: context.getString(R.string.gdrive_signin_failed), e)
+            }
 
         // Step 2: Request Drive authorization (shows consent screen if needed).
-        val authorizationResult = Identity.getAuthorizationClient(activity)
-            .authorize(driveAuthRequest)
-            .awaitTask()
-            .getOrElse { e ->
-                Timber.e(e, "GoogleDriveAuthManager.signIn: authorization failed")
-                return AuthResult.Error(
-                    e.message ?: context.getString(R.string.gdrive_signin_failed),
-                    e,
-                )
-            }
+        val authorizationResult =
+            Identity
+                .getAuthorizationClient(activity)
+                .authorize(driveAuthRequest)
+                .awaitTask()
+                .getOrElse { e ->
+                    Timber.e(e, "GoogleDriveAuthManager.signIn: authorization failed")
+                    return AuthResult.Error(
+                        e.message ?: context.getString(R.string.gdrive_signin_failed),
+                        e,
+                    )
+                }
 
         if (authorizationResult.hasResolution()) {
             // A consent screen must be shown. Launch the pending intent and wait.
-            val pendingIntent = authorizationResult.pendingIntent
-                ?: return AuthResult.Error(context.getString(R.string.gdrive_signin_failed))
+            val pendingIntent =
+                authorizationResult.pendingIntent
+                    ?: return AuthResult.Error(context.getString(R.string.gdrive_signin_failed))
 
             val granted = awaitConsentResult(activity, pendingIntent)
             if (!granted) {
@@ -199,12 +214,13 @@ class GoogleDriveAuthManager private constructor(
             }
         }
 
-        val account = Account(
-            id = idTokenCredential.id,
-            provider = CloudProviderType.GOOGLE_DRIVE,
-            displayName = idTokenCredential.displayName ?: idTokenCredential.id,
-            email = idTokenCredential.id,
-        )
+        val account =
+            Account(
+                id = idTokenCredential.id,
+                provider = CloudProviderType.GOOGLE_DRIVE,
+                displayName = idTokenCredential.displayName ?: idTokenCredential.id,
+                email = idTokenCredential.id,
+            )
         storeAccount(account)
         Timber.i("GoogleDriveAuthManager.signIn: success for ${account.email}")
         return AuthResult.Success(account)
@@ -243,13 +259,15 @@ class GoogleDriveAuthManager private constructor(
 
         Timber.d("GoogleDriveAuthManager.acquireAccessToken: silent acquisition for ${account.id}")
 
-        val authorizationResult = Identity.getAuthorizationClient(context)
-            .authorize(driveAuthRequest)
-            .awaitTask()
-            .getOrElse { e ->
-                Timber.e(e, "GoogleDriveAuthManager.acquireAccessToken: authorization error")
-                return AuthResult.Error(e.message ?: "Token acquisition failed", e)
-            }
+        val authorizationResult =
+            Identity
+                .getAuthorizationClient(context)
+                .authorize(driveAuthRequest)
+                .awaitTask()
+                .getOrElse { e ->
+                    Timber.e(e, "GoogleDriveAuthManager.acquireAccessToken: authorization error")
+                    return AuthResult.Error(e.message ?: "Token acquisition failed", e)
+                }
 
         if (authorizationResult.hasResolution()) {
             Timber.w("GoogleDriveAuthManager.acquireAccessToken: re-authorization required")
@@ -269,7 +287,8 @@ class GoogleDriveAuthManager private constructor(
     // ---- Private helpers ----
 
     private fun storeAccount(account: Account) {
-        accountPrefs.edit()
+        accountPrefs
+            .edit()
             .putString(KEY_ACCOUNT_ID, account.id)
             .putString(KEY_DISPLAY_NAME, account.displayName)
             .putString(KEY_EMAIL, account.email)
@@ -303,19 +322,21 @@ class GoogleDriveAuthManager private constructor(
     private suspend fun awaitConsentResult(
         activity: ComponentActivity,
         pendingIntent: PendingIntent,
-    ): Boolean = withContext(Dispatchers.Main) {
-        suspendCancellableCoroutine { cont ->
-            val key = "gdrive_consent_${java.util.UUID.randomUUID()}"
-            var launcher: ActivityResultLauncher<IntentSenderRequest>? = null
-            launcher = activity.activityResultRegistry.register(
-                key,
-                ActivityResultContracts.StartIntentSenderForResult(),
-            ) { result ->
-                launcher?.unregister()
-                if (cont.isActive) cont.resume(result.resultCode == Activity.RESULT_OK)
+    ): Boolean =
+        withContext(Dispatchers.Main) {
+            suspendCancellableCoroutine { cont ->
+                val key = "gdrive_consent_${java.util.UUID.randomUUID()}"
+                var launcher: ActivityResultLauncher<IntentSenderRequest>? = null
+                launcher =
+                    activity.activityResultRegistry.register(
+                        key,
+                        ActivityResultContracts.StartIntentSenderForResult(),
+                    ) { result ->
+                        launcher?.unregister()
+                        if (cont.isActive) cont.resume(result.resultCode == Activity.RESULT_OK)
+                    }
+                cont.invokeOnCancellation { launcher?.unregister() }
+                launcher.launch(IntentSenderRequest.Builder(pendingIntent.intentSender).build())
             }
-            cont.invokeOnCancellation { launcher?.unregister() }
-            launcher.launch(IntentSenderRequest.Builder(pendingIntent.intentSender).build())
         }
-    }
 }

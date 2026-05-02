@@ -70,11 +70,12 @@ fun AccountsScreen(
         },
     ) { padding ->
         Column(
-            modifier = Modifier
-                .padding(padding)
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(16.dp),
+            modifier =
+                Modifier
+                    .padding(padding)
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text(
@@ -104,15 +105,17 @@ private fun AccountProviderCard(
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant,
-            contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-        ),
+        colors =
+            CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            ),
     ) {
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Text(
@@ -145,10 +148,11 @@ private fun AccountProviderCard(
             } else {
                 row.accounts.forEach { account ->
                     Text(
-                        text = stringResource(
-                            R.string.accounts_signed_in_format,
-                            account.email ?: account.displayName,
-                        ),
+                        text =
+                            stringResource(
+                                R.string.accounts_signed_in_format,
+                                account.email ?: account.displayName,
+                            ),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurface,
                     )
@@ -174,11 +178,12 @@ private fun AccountProviderCard(
                 } else {
                     // Re-authenticate when a pair for this provider is stuck in
                     // NEEDS_REAUTH; otherwise the normal "Connect %provider" CTA.
-                    val label = if (row.needsReauth) {
-                        stringResource(R.string.accounts_reauth_button, row.providerDisplayName)
-                    } else {
-                        stringResource(R.string.accounts_connect_format, row.providerDisplayName)
-                    }
+                    val label =
+                        if (row.needsReauth) {
+                            stringResource(R.string.accounts_reauth_button, row.providerDisplayName)
+                        } else {
+                            stringResource(R.string.accounts_connect_format, row.providerDisplayName)
+                        }
                     Text(label)
                 }
             }

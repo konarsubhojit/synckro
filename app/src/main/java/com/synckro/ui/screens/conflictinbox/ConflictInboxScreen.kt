@@ -74,9 +74,10 @@ fun ConflictInboxScreen(
         when {
             state.isLoading -> {
                 Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(padding),
+                    modifier =
+                        Modifier
+                            .fillMaxSize()
+                            .padding(padding),
                     contentAlignment = Alignment.Center,
                 ) {
                     CircularProgressIndicator()
@@ -84,9 +85,10 @@ fun ConflictInboxScreen(
             }
             state.conflicts.isEmpty() -> {
                 Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(padding),
+                    modifier =
+                        Modifier
+                            .fillMaxSize()
+                            .padding(padding),
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
@@ -98,10 +100,11 @@ fun ConflictInboxScreen(
             }
             else -> {
                 LazyColumn(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(padding)
-                        .padding(horizontal = 16.dp),
+                    modifier =
+                        Modifier
+                            .fillMaxSize()
+                            .padding(padding)
+                            .padding(horizontal = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     item { Spacer(Modifier.height(4.dp)) }
@@ -141,28 +144,31 @@ private fun ConflictCard(
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
-                text = stringResource(
-                    R.string.conflict_inbox_detected_at,
-                    fmt.format(Date(conflict.detectedAtMs)),
-                ),
+                text =
+                    stringResource(
+                        R.string.conflict_inbox_detected_at,
+                        fmt.format(Date(conflict.detectedAtMs)),
+                    ),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Text(
-                text = stringResource(
-                    R.string.conflict_inbox_timestamps,
-                    fmt.format(Date(conflict.localLastModifiedMs)),
-                    fmt.format(Date(conflict.remoteLastModifiedMs)),
-                ),
+                text =
+                    stringResource(
+                        R.string.conflict_inbox_timestamps,
+                        fmt.format(Date(conflict.localLastModifiedMs)),
+                        fmt.format(Date(conflict.remoteLastModifiedMs)),
+                    ),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             if (conflict.resolution != null) {
                 Text(
-                    text = stringResource(
-                        R.string.conflict_inbox_pending_resolution,
-                        resolutionLabel(conflict.resolution),
-                    ),
+                    text =
+                        stringResource(
+                            R.string.conflict_inbox_pending_resolution,
+                            resolutionLabel(conflict.resolution),
+                        ),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.primary,
                 )
@@ -210,9 +216,10 @@ private fun ConflictCard(
 }
 
 @Composable
-private fun resolutionLabel(resolution: String): String = when (resolution) {
-    ConflictRecord.RESOLUTION_KEEP_LOCAL -> stringResource(R.string.conflict_inbox_keep_local)
-    ConflictRecord.RESOLUTION_KEEP_REMOTE -> stringResource(R.string.conflict_inbox_keep_remote)
-    ConflictRecord.RESOLUTION_KEEP_BOTH -> stringResource(R.string.conflict_inbox_keep_both)
-    else -> resolution
-}
+private fun resolutionLabel(resolution: String): String =
+    when (resolution) {
+        ConflictRecord.RESOLUTION_KEEP_LOCAL -> stringResource(R.string.conflict_inbox_keep_local)
+        ConflictRecord.RESOLUTION_KEEP_REMOTE -> stringResource(R.string.conflict_inbox_keep_remote)
+        ConflictRecord.RESOLUTION_KEEP_BOTH -> stringResource(R.string.conflict_inbox_keep_both)
+        else -> resolution
+    }

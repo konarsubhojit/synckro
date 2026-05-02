@@ -22,12 +22,29 @@ data class FileSnapshot(
 sealed interface SyncOp {
     val relativePath: String
 
-    data class UploadNew(override val relativePath: String) : SyncOp
-    data class DownloadNew(override val relativePath: String) : SyncOp
-    data class UpdateRemote(override val relativePath: String) : SyncOp
-    data class UpdateLocal(override val relativePath: String) : SyncOp
-    data class DeleteRemote(override val relativePath: String) : SyncOp
-    data class DeleteLocal(override val relativePath: String) : SyncOp
+    data class UploadNew(
+        override val relativePath: String,
+    ) : SyncOp
+
+    data class DownloadNew(
+        override val relativePath: String,
+    ) : SyncOp
+
+    data class UpdateRemote(
+        override val relativePath: String,
+    ) : SyncOp
+
+    data class UpdateLocal(
+        override val relativePath: String,
+    ) : SyncOp
+
+    data class DeleteRemote(
+        override val relativePath: String,
+    ) : SyncOp
+
+    data class DeleteLocal(
+        override val relativePath: String,
+    ) : SyncOp
 
     /**
      * Both sides changed since the last sync. The sync engine will further
@@ -45,7 +62,6 @@ sealed interface SyncOp {
  * covered by unit tests.
  */
 object SyncDiffer {
-
     /**
      * Compute the ordered list of reconciliation operations needed to bring local and remote file sets
      * into agreement with each other and the provided baseline index, respecting the sync direction and
@@ -68,11 +84,12 @@ object SyncDiffer {
         val remoteByPath = remote.associateBy { it.relativePath }
         val indexByPath = lastIndex.associateBy { it.relativePath }
 
-        val allPaths = buildSet {
-            addAll(localByPath.keys)
-            addAll(remoteByPath.keys)
-            addAll(indexByPath.keys)
-        }
+        val allPaths =
+            buildSet {
+                addAll(localByPath.keys)
+                addAll(remoteByPath.keys)
+                addAll(indexByPath.keys)
+            }
 
         val ops = mutableListOf<SyncOp>()
 
@@ -110,17 +127,19 @@ object SyncDiffer {
             // Deletions
             if (localDeleted && remoteDeleted) continue // converged
             if (localDeleted && !remoteChanged) {
-                ops += when (direction) {
-                    SyncDirection.REMOTE_TO_LOCAL -> SyncOp.DownloadNew(path)
-                    else -> SyncOp.DeleteRemote(path)
-                }
+                ops +=
+                    when (direction) {
+                        SyncDirection.REMOTE_TO_LOCAL -> SyncOp.DownloadNew(path)
+                        else -> SyncOp.DeleteRemote(path)
+                    }
                 continue
             }
             if (remoteDeleted && !localChanged) {
-                ops += when (direction) {
-                    SyncDirection.LOCAL_TO_REMOTE -> SyncOp.UploadNew(path)
-                    else -> SyncOp.DeleteLocal(path)
-                }
+                ops +=
+                    when (direction) {
+                        SyncDirection.LOCAL_TO_REMOTE -> SyncOp.UploadNew(path)
+                        else -> SyncOp.DeleteLocal(path)
+                    }
                 continue
             }
 
@@ -144,22 +163,24 @@ object SyncDiffer {
 
             // Local changed, remote deleted (or vice versa) → conflict too
             if (localChanged && remoteDeleted) {
-                val op = resolveModifyDeleteConflict(
-                    path = path,
-                    changedSide = ChangedSide.LOCAL,
-                    policy = conflictPolicy,
-                    direction = direction,
-                )
+                val op =
+                    resolveModifyDeleteConflict(
+                        path = path,
+                        changedSide = ChangedSide.LOCAL,
+                        policy = conflictPolicy,
+                        direction = direction,
+                    )
                 if (op != null) ops += op
                 continue
             }
             if (remoteChanged && localDeleted) {
-                val op = resolveModifyDeleteConflict(
-                    path = path,
-                    changedSide = ChangedSide.REMOTE,
-                    policy = conflictPolicy,
-                    direction = direction,
-                )
+                val op =
+                    resolveModifyDeleteConflict(
+                        path = path,
+                        changedSide = ChangedSide.REMOTE,
+                        policy = conflictPolicy,
+                        direction = direction,
+                    )
                 if (op != null) ops += op
                 continue
             }
@@ -178,7 +199,10 @@ object SyncDiffer {
      * @param idx The last-known index entry for the same path.
      * @return `true` if the local snapshot differs from the index's local metadata, `false` otherwise.
      */
-    private fun changed(snap: FileSnapshot, idx: FileIndexEntry): Boolean {
+    private fun changed(
+        snap: FileSnapshot,
+        idx: FileIndexEntry,
+    ): Boolean {
         if (snap.hash != null && idx.localHash != null) return snap.hash != idx.localHash
         return snap.size != idx.localSize || snap.lastModifiedMs != idx.localLastModifiedMs
     }
@@ -191,7 +215,10 @@ object SyncDiffer {
      *
      * @return `true` if the snapshots represent the same content, `false` otherwise.
      */
-    private fun snapshotsEquivalent(a: FileSnapshot, b: FileSnapshot): Boolean {
+    private fun snapshotsEquivalent(
+        a: FileSnapshot,
+        b: FileSnapshot,
+    ): Boolean {
         if (a.hash != null && b.hash != null) return a.hash == b.hash
         return a.size == b.size && a.lastModifiedMs == b.lastModifiedMs
     }
@@ -203,7 +230,10 @@ object SyncDiffer {
      * @param idx The FileIndexEntry whose remote metadata columns are used for comparison.
      * @return `true` if the index lacks remote size or mtime, or if `snap.size` or `snap.lastModifiedMs` differ from the index's remote values; `false` otherwise.
      */
-    private fun changedRemote(snap: FileSnapshot, idx: FileIndexEntry): Boolean {
+    private fun changedRemote(
+        snap: FileSnapshot,
+        idx: FileIndexEntry,
+    ): Boolean {
         // For the remote side we compare against the remote columns of the index.
         val idxSize = idx.remoteSize ?: return true
         val idxMtime = idx.remoteLastModifiedMs ?: return true
@@ -226,8 +256,8 @@ object SyncDiffer {
         remote: FileSnapshot,
         policy: ConflictPolicy,
         direction: SyncDirection,
-    ): SyncOp? {
-        return when (policy) {
+    ): SyncOp? =
+        when (policy) {
             ConflictPolicy.PREFER_LOCAL ->
                 if (direction != SyncDirection.REMOTE_TO_LOCAL) SyncOp.UpdateRemote(path) else null
             ConflictPolicy.PREFER_REMOTE ->
@@ -243,7 +273,6 @@ object SyncDiffer {
             ConflictPolicy.KEEP_BOTH ->
                 SyncOp.Conflict(path, localNewerThanRemote = local.lastModifiedMs >= remote.lastModifiedMs)
         }
-    }
 
     private enum class ChangedSide { LOCAL, REMOTE }
 
@@ -252,8 +281,8 @@ object SyncDiffer {
         changedSide: ChangedSide,
         policy: ConflictPolicy,
         direction: SyncDirection,
-    ): SyncOp? {
-        return when (policy) {
+    ): SyncOp? =
+        when (policy) {
             ConflictPolicy.KEEP_BOTH ->
                 SyncOp.Conflict(path, localNewerThanRemote = changedSide == ChangedSide.LOCAL)
             ConflictPolicy.PREFER_LOCAL ->
@@ -275,5 +304,4 @@ object SyncDiffer {
                     if (direction != SyncDirection.LOCAL_TO_REMOTE) SyncOp.DownloadNew(path) else null
                 }
         }
-    }
 }

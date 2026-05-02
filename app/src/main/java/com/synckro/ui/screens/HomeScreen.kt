@@ -102,10 +102,11 @@ fun HomeScreen(
     ) { padding ->
         if (!state.isLoading && state.pairs.isEmpty()) {
             Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding)
-                    .padding(24.dp),
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .padding(padding)
+                        .padding(24.dp),
                 contentAlignment = Alignment.Center,
             ) {
                 Column(
@@ -127,10 +128,11 @@ fun HomeScreen(
             }
         } else {
             LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding)
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .padding(padding)
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 items(state.pairs, key = { it.id }) { pair ->
@@ -180,15 +182,17 @@ private fun SyncPairRow(
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant,
-            contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-        ),
+        colors =
+            CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            ),
     ) {
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             Row(

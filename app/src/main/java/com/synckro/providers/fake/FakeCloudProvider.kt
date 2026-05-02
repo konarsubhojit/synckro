@@ -4,12 +4,12 @@ import com.synckro.domain.provider.ChangesPage
 import com.synckro.domain.provider.CloudProvider
 import com.synckro.domain.provider.RemoteChange
 import com.synckro.domain.provider.RemoteFile
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.io.ByteArrayInputStream
 import java.io.InputStream
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 
 /**
  * In-memory [CloudProvider] for use in unit tests and developer preview builds.
@@ -17,10 +17,12 @@ import kotlinx.coroutines.sync.withLock
  * log for [changesSince].
  */
 class FakeCloudProvider : CloudProvider {
-
     override val displayName: String = "Fake"
 
-    private data class Record(val meta: RemoteFile, val bytes: ByteArray)
+    private data class Record(
+        val meta: RemoteFile,
+        val bytes: ByteArray,
+    )
 
     private val store = ConcurrentHashMap<String, Record>()
     private val changeLog = mutableListOf<RemoteChange>()
@@ -83,8 +85,7 @@ class FakeCloudProvider : CloudProvider {
      * @param folderId The parent folder ID to filter by; pass `null` to list items with no parent.
      * @return A list of `RemoteFile` metadata entries whose `parentId` equals `folderId`.
      */
-    override suspend fun list(folderId: String?): List<RemoteFile> =
-        store.values.map { it.meta }.filter { it.parentId == folderId }
+    override suspend fun list(folderId: String?): List<RemoteFile> = store.values.map { it.meta }.filter { it.parentId == folderId }
 
     /**
      * Retrieve the metadata for a remote file or folder by its id.
@@ -93,8 +94,7 @@ class FakeCloudProvider : CloudProvider {
      * @return The corresponding RemoteFile metadata.
      * @throws IllegalStateException if no record exists for the given id.
      */
-    override suspend fun getMetadata(id: String): RemoteFile =
-        store[id]?.meta ?: error("Not found: $id")
+    override suspend fun getMetadata(id: String): RemoteFile = store[id]?.meta ?: error("Not found: $id")
 
     /**
      * Provides an InputStream for the bytes of the file identified by the given id.
@@ -130,22 +130,24 @@ class FakeCloudProvider : CloudProvider {
         content: InputStream,
         size: Long,
         mimeType: String?,
-    ): RemoteFile = mutex.withLock {
-        val bytes = content.use { it.readBytes() }
-        val meta = RemoteFile(
-            id = UUID.randomUUID().toString(),
-            name = name,
-            parentId = parentId,
-            isFolder = false,
-            size = bytes.size.toLong(),
-            lastModifiedMs = System.currentTimeMillis(),
-            eTag = UUID.randomUUID().toString(),
-            mimeType = mimeType,
-        )
-        store[meta.id] = Record(meta, bytes)
-        changeLog += RemoteChange(file = meta, removedId = null)
-        meta
-    }
+    ): RemoteFile =
+        mutex.withLock {
+            val bytes = content.use { it.readBytes() }
+            val meta =
+                RemoteFile(
+                    id = UUID.randomUUID().toString(),
+                    name = name,
+                    parentId = parentId,
+                    isFolder = false,
+                    size = bytes.size.toLong(),
+                    lastModifiedMs = System.currentTimeMillis(),
+                    eTag = UUID.randomUUID().toString(),
+                    mimeType = mimeType,
+                )
+            store[meta.id] = Record(meta, bytes)
+            changeLog += RemoteChange(file = meta, removedId = null)
+            meta
+        }
 
     /**
      * Replaces the content of an existing remote file and returns its updated metadata.
@@ -167,20 +169,22 @@ class FakeCloudProvider : CloudProvider {
         content: InputStream,
         size: Long,
         mimeType: String?,
-    ): RemoteFile = mutex.withLock {
-        val existing = store[id] ?: error("Not found: $id")
-        require(!existing.meta.isFolder) { "Cannot update content of a folder: $id" }
-        val bytes = content.use { it.readBytes() }
-        val meta = existing.meta.copy(
-            size = bytes.size.toLong(),
-            lastModifiedMs = System.currentTimeMillis(),
-            eTag = UUID.randomUUID().toString(),
-            mimeType = mimeType ?: existing.meta.mimeType,
-        )
-        store[id] = Record(meta, bytes)
-        changeLog += RemoteChange(file = meta, removedId = null)
-        meta
-    }
+    ): RemoteFile =
+        mutex.withLock {
+            val existing = store[id] ?: error("Not found: $id")
+            require(!existing.meta.isFolder) { "Cannot update content of a folder: $id" }
+            val bytes = content.use { it.readBytes() }
+            val meta =
+                existing.meta.copy(
+                    size = bytes.size.toLong(),
+                    lastModifiedMs = System.currentTimeMillis(),
+                    eTag = UUID.randomUUID().toString(),
+                    mimeType = mimeType ?: existing.meta.mimeType,
+                )
+            store[id] = Record(meta, bytes)
+            changeLog += RemoteChange(file = meta, removedId = null)
+            meta
+        }
 
     /**
      * Creates a new folder with the given name under the specified parent and records it in the fake provider.
@@ -192,21 +196,26 @@ class FakeCloudProvider : CloudProvider {
      * @param name The new folder's name.
      * @return The metadata for the created folder.
      */
-    override suspend fun createFolder(parentId: String, name: String): RemoteFile = mutex.withLock {
-        val meta = RemoteFile(
-            id = UUID.randomUUID().toString(),
-            name = name,
-            parentId = parentId,
-            isFolder = true,
-            size = null,
-            lastModifiedMs = System.currentTimeMillis(),
-            eTag = null,
-            mimeType = null,
-        )
-        store[meta.id] = Record(meta, ByteArray(0))
-        changeLog += RemoteChange(file = meta, removedId = null)
-        meta
-    }
+    override suspend fun createFolder(
+        parentId: String,
+        name: String,
+    ): RemoteFile =
+        mutex.withLock {
+            val meta =
+                RemoteFile(
+                    id = UUID.randomUUID().toString(),
+                    name = name,
+                    parentId = parentId,
+                    isFolder = true,
+                    size = null,
+                    lastModifiedMs = System.currentTimeMillis(),
+                    eTag = null,
+                    mimeType = null,
+                )
+            store[meta.id] = Record(meta, ByteArray(0))
+            changeLog += RemoteChange(file = meta, removedId = null)
+            meta
+        }
 
     /**
      * Delete the stored record with the given id and record the removal in the change log.
@@ -216,11 +225,12 @@ class FakeCloudProvider : CloudProvider {
      *
      * @param id The identifier of the file or folder to delete.
      */
-    override suspend fun delete(id: String) = mutex.withLock {
-        if (store.remove(id) != null) {
-            changeLog += RemoteChange(file = null, removedId = id)
+    override suspend fun delete(id: String) =
+        mutex.withLock {
+            if (store.remove(id) != null) {
+                changeLog += RemoteChange(file = null, removedId = id)
+            }
         }
-    }
 
     /**
      * Produces a page of recorded changes starting from the provided change token.
@@ -237,24 +247,25 @@ class FakeCloudProvider : CloudProvider {
      * @throws IllegalArgumentException If `token` is non-null but not a valid integer, or if the parsed index is
      *         outside the range `0..changeLog.size`.
      */
-    override suspend fun changesSince(token: String?): ChangesPage = mutex.withLock {
-        // Contract: a null token establishes the initial delta state without
-        // replaying history — matches OneDrive `/delta` and Drive
-        // `changes.getStartPageToken` first-call behaviour.
-        if (token == null) {
-            return@withLock ChangesPage(
-                changes = emptyList(),
+    override suspend fun changesSince(token: String?): ChangesPage =
+        mutex.withLock {
+            // Contract: a null token establishes the initial delta state without
+            // replaying history — matches OneDrive `/delta` and Drive
+            // `changes.getStartPageToken` first-call behaviour.
+            if (token == null) {
+                return@withLock ChangesPage(
+                    changes = emptyList(),
+                    nextToken = changeLog.size.toString(),
+                    hasMore = false,
+                )
+            }
+            val start = requireNotNull(token.toIntOrNull()) { "Malformed change token: $token" }
+            require(start in 0..changeLog.size) { "Change token out of range: $start" }
+            val slice = changeLog.subList(start, changeLog.size).toList()
+            ChangesPage(
+                changes = slice,
                 nextToken = changeLog.size.toString(),
                 hasMore = false,
             )
         }
-        val start = requireNotNull(token.toIntOrNull()) { "Malformed change token: $token" }
-        require(start in 0..changeLog.size) { "Change token out of range: $start" }
-        val slice = changeLog.subList(start, changeLog.size).toList()
-        ChangesPage(
-            changes = slice,
-            nextToken = changeLog.size.toString(),
-            hasMore = false,
-        )
-    }
 }

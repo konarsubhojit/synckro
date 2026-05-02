@@ -2,14 +2,14 @@ package com.synckro.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-/**
+/*
  * Synckro brand palette. Values are chosen so that text drawn with the matching
  * `onX` color always meets WCAG AA contrast against its container in both
  * light and dark schemes. Keep these in sync with [LightColors] / [DarkColors]
  * in `Theme.kt` and the launcher background in `res/values/colors.xml`.
+ *
+ * Brand (indigo-ish blue inspired by the launcher background #0F172A).
  */
-
-// Brand (indigo-ish blue inspired by the launcher background #0F172A).
 internal val BrandPrimary = Color(0xFF3B5BDB)
 internal val BrandOnPrimary = Color(0xFFFFFFFF)
 internal val BrandPrimaryContainer = Color(0xFFDCE4FF)

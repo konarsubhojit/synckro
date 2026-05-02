@@ -60,13 +60,14 @@ internal fun interface DocumentChildrenQuery {
 
 /** Production implementation that queries the SAF content provider. */
 internal object DefaultDocumentChildrenQuery : DocumentChildrenQuery {
-    private val PROJECTION = arrayOf(
-        DocumentsContract.Document.COLUMN_DOCUMENT_ID,
-        DocumentsContract.Document.COLUMN_DISPLAY_NAME,
-        DocumentsContract.Document.COLUMN_SIZE,
-        DocumentsContract.Document.COLUMN_LAST_MODIFIED,
-        DocumentsContract.Document.COLUMN_MIME_TYPE,
-    )
+    private val PROJECTION =
+        arrayOf(
+            DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+            DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+            DocumentsContract.Document.COLUMN_SIZE,
+            DocumentsContract.Document.COLUMN_LAST_MODIFIED,
+            DocumentsContract.Document.COLUMN_MIME_TYPE,
+        )
 
     override fun invoke(
         resolver: ContentResolver,
@@ -82,13 +83,14 @@ internal object DefaultDocumentChildrenQuery : DocumentChildrenQuery {
             val idxMtime = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_LAST_MODIFIED)
             val idxMime = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_MIME_TYPE)
             while (cursor.moveToNext()) {
-                result += RawDocChild(
-                    docId = cursor.getString(idxId) ?: continue,
-                    name = cursor.getString(idxName) ?: "",
-                    size = if (cursor.isNull(idxSize)) 0L else cursor.getLong(idxSize),
-                    lastModifiedMs = if (cursor.isNull(idxMtime)) 0L else cursor.getLong(idxMtime),
-                    mimeType = cursor.getString(idxMime),
-                )
+                result +=
+                    RawDocChild(
+                        docId = cursor.getString(idxId) ?: continue,
+                        name = cursor.getString(idxName) ?: "",
+                        size = if (cursor.isNull(idxSize)) 0L else cursor.getLong(idxSize),
+                        lastModifiedMs = if (cursor.isNull(idxMtime)) 0L else cursor.getLong(idxMtime),
+                        mimeType = cursor.getString(idxMime),
+                    )
             }
         }
         return result
@@ -123,7 +125,6 @@ class LocalFolderScannerImpl internal constructor(
     private val fileIndexDao: FileIndexDao,
     internal val childrenQuery: DocumentChildrenQuery,
 ) : LocalFolderScanner {
-
     /** Hilt-injected primary constructor; uses the production DocumentsContract query. */
     @Inject
     constructor(
@@ -131,87 +132,98 @@ class LocalFolderScannerImpl internal constructor(
         fileIndexDao: FileIndexDao,
     ) : this(context, fileIndexDao, DefaultDocumentChildrenQuery)
 
-    override fun scan(pairId: Long, treeUri: Uri): Flow<ScanProgress> = flow {
-        // 1. Snapshot the existing index for this pair so we can compute the diff.
-        val existing: Map<String, FileIndexEntity> =
-            fileIndexDao.getForPair(pairId).associateBy { it.relativePath }
+    override fun scan(
+        pairId: Long,
+        treeUri: Uri,
+    ): Flow<ScanProgress> =
+        flow {
+            // 1. Snapshot the existing index for this pair so we can compute the diff.
+            val existing: Map<String, FileIndexEntity> =
+                fileIndexDao.getForPair(pairId).associateBy { it.relativePath }
 
-        val scannedEntries = mutableListOf<FileIndexEntity>()
+            val scannedEntries = mutableListOf<FileIndexEntity>()
 
-        try {
-            val rootDocId = DocumentsContract.getTreeDocumentId(treeUri)
+            try {
+                val rootDocId = DocumentsContract.getTreeDocumentId(treeUri)
 
-            // 2. BFS tree walk — iterative to avoid stack overflow on deep trees.
-            //    Queue entries: (documentId, relativePathPrefix)
-            val queue = ArrayDeque<Pair<String, String>>()
-            queue.add(rootDocId to "")
+                // 2. BFS tree walk — iterative to avoid stack overflow on deep trees.
+                //    Queue entries: (documentId, relativePathPrefix)
+                val queue = ArrayDeque<Pair<String, String>>()
+                queue.add(rootDocId to "")
 
-            var scannedCount = 0
+                var scannedCount = 0
 
-            while (queue.isNotEmpty()) {
-                val (parentDocId, prefix) = queue.removeFirst()
-                val children = childrenQuery(context.contentResolver, treeUri, parentDocId)
+                while (queue.isNotEmpty()) {
+                    val (parentDocId, prefix) = queue.removeFirst()
+                    val children = childrenQuery(context.contentResolver, treeUri, parentDocId)
 
-                for (child in children) {
-                    val relativePath =
-                        if (prefix.isEmpty()) child.name else "$prefix/${child.name}"
+                    for (child in children) {
+                        val relativePath =
+                            if (prefix.isEmpty()) child.name else "$prefix/${child.name}"
 
-                    if (child.mimeType == DocumentsContract.Document.MIME_TYPE_DIR) {
-                        // Recurse into sub-directory.
-                        queue.add(child.docId to relativePath)
-                    } else {
-                        // Preserve existing hash when size+mtime are unchanged (lazy SHA-256).
-                        val existingEntry = existing[relativePath]
-                        val preservedHash = if (
-                            existingEntry != null &&
-                            existingEntry.localSize == child.size &&
-                            existingEntry.localLastModifiedMs == child.lastModifiedMs
-                        ) existingEntry.localHash else null
+                        if (child.mimeType == DocumentsContract.Document.MIME_TYPE_DIR) {
+                            // Recurse into sub-directory.
+                            queue.add(child.docId to relativePath)
+                        } else {
+                            // Preserve existing hash when size+mtime are unchanged (lazy SHA-256).
+                            val existingEntry = existing[relativePath]
+                            val preservedHash =
+                                if (
+                                    existingEntry != null &&
+                                    existingEntry.localSize == child.size &&
+                                    existingEntry.localLastModifiedMs == child.lastModifiedMs
+                                ) {
+                                    existingEntry.localHash
+                                } else {
+                                    null
+                                }
 
-                        scannedEntries += FileIndexEntity(
-                            pairId = pairId,
-                            relativePath = relativePath,
-                            localSize = child.size,
-                            localLastModifiedMs = child.lastModifiedMs,
-                            localHash = preservedHash,
-                            // Preserve remote columns so we don't lose sync state.
-                            remoteId = existingEntry?.remoteId,
-                            remoteETag = existingEntry?.remoteETag,
-                            remoteSize = existingEntry?.remoteSize,
-                            remoteLastModifiedMs = existingEntry?.remoteLastModifiedMs,
-                            mimeType = child.mimeType,
-                        )
+                            scannedEntries +=
+                                FileIndexEntity(
+                                    pairId = pairId,
+                                    relativePath = relativePath,
+                                    localSize = child.size,
+                                    localLastModifiedMs = child.lastModifiedMs,
+                                    localHash = preservedHash,
+                                    // Preserve remote columns so we don't lose sync state.
+                                    remoteId = existingEntry?.remoteId,
+                                    remoteETag = existingEntry?.remoteETag,
+                                    remoteSize = existingEntry?.remoteSize,
+                                    remoteLastModifiedMs = existingEntry?.remoteLastModifiedMs,
+                                    mimeType = child.mimeType,
+                                )
 
-                        scannedCount++
-                        if (scannedCount % PROGRESS_INTERVAL == 0) {
-                            emit(ScanProgress.Scanning(scannedCount))
+                            scannedCount++
+                            if (scannedCount % PROGRESS_INTERVAL == 0) {
+                                emit(ScanProgress.Scanning(scannedCount))
+                            }
                         }
                     }
                 }
+            } catch (e: Exception) {
+                Timber.e(e, "LocalFolderScanner: scan failed for pairId=%d uri=%s", pairId, treeUri)
+                emit(ScanProgress.Failed(e.message ?: "Scan failed"))
+                return@flow
             }
-        } catch (e: Exception) {
-            Timber.e(e, "LocalFolderScanner: scan failed for pairId=%d uri=%s", pairId, treeUri)
-            emit(ScanProgress.Failed(e.message ?: "Scan failed"))
-            return@flow
-        }
 
-        // 3. Compute diff and apply to Room atomically.
-        val seenPaths = scannedEntries.mapTo(ArrayList(scannedEntries.size)) { it.relativePath }
+            // 3. Compute diff and apply to Room atomically.
+            val seenPaths = scannedEntries.mapTo(ArrayList(scannedEntries.size)) { it.relativePath }
 
-        // Only upsert entries that are new or whose local metadata changed.
-        val toUpsert = scannedEntries.filter { scanned ->
-            val old = existing[scanned.relativePath]
-            old == null ||
-                old.localSize != scanned.localSize ||
-                old.localLastModifiedMs != scanned.localLastModifiedMs
-        }
+            // Only upsert entries that are new or whose local metadata changed.
+            val toUpsert =
+                scannedEntries.filter { scanned ->
+                    val old = existing[scanned.relativePath]
+                    old == null ||
+                        old.localSize != scanned.localSize ||
+                        old.localLastModifiedMs != scanned.localLastModifiedMs
+                }
 
-        // Single transactional reconcile: upsert changed entries and batch-delete stale ones.
-        fileIndexDao.reconcileForPair(pairId, toUpsert, seenPaths)
+            // Single transactional reconcile: upsert changed entries and batch-delete stale ones.
+            fileIndexDao.reconcileForPair(pairId, toUpsert, seenPaths)
 
-        val added = toUpsert.count { it.relativePath !in existing }
-        val updated = toUpsert.size - added
-        val deleted = existing.keys.count { it !in seenPaths }
-        emit(ScanProgress.Done(added = added, updated = updated, deleted = deleted))
-    }.flowOn(Dispatchers.IO)
+            val added = toUpsert.count { it.relativePath !in existing }
+            val updated = toUpsert.size - added
+            val deleted = existing.keys.count { it !in seenPaths }
+            emit(ScanProgress.Done(added = added, updated = updated, deleted = deleted))
+        }.flowOn(Dispatchers.IO)
 }

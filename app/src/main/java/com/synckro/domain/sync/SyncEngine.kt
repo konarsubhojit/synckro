@@ -27,7 +27,6 @@ class SyncEngine(
     private val conflictRepository: ConflictRepository,
     private val providers: Map<CloudProviderType, @JvmSuppressWildcards CloudProvider>,
 ) {
-
     /**
      * Outcome of a single [runOnce]. [Success] and [PartialFailure] both mean
      * WorkManager should treat the run as complete; [Retriable] should be
@@ -38,16 +37,24 @@ class SyncEngine(
         val applied: Int
         val conflicts: Int
 
-        data class Success(override val applied: Int, override val conflicts: Int) : Result
+        data class Success(
+            override val applied: Int,
+            override val conflicts: Int,
+        ) : Result
+
         data class PartialFailure(
             override val applied: Int,
             override val conflicts: Int,
             val errors: List<String>,
         ) : Result
-        data class Retriable(val reason: String) : Result {
+
+        data class Retriable(
+            val reason: String,
+        ) : Result {
             override val applied: Int = 0
             override val conflicts: Int = 0
         }
+
         /**
          * Permanent failure for this pair; periodic work should stop until the
          * user takes action.
@@ -81,8 +88,9 @@ class SyncEngine(
      * @return A [Result] describing the sync outcome (`Success`, `PartialFailure`, `Retriable`, or `Terminal`).
      */
     suspend fun runOnce(pair: SyncPair): Result {
-        val provider = providers[pair.provider]
-            ?: return Result.Terminal("Unsupported provider: ${pair.provider}")
+        val provider =
+            providers[pair.provider]
+                ?: return Result.Terminal("Unsupported provider: ${pair.provider}")
         if (pair.provider == CloudProviderType.FAKE) {
             return runFake(pair, provider as FakeCloudProvider)
         }
@@ -103,14 +111,18 @@ class SyncEngine(
      * 2. Drain forced conflicts from the given [fakeProvider] parameter.
      * 3. For each new conflict, write a [ConflictRecord] if the pair policy is [ConflictPolicy.KEEP_BOTH].
      */
-    private suspend fun runFake(pair: SyncPair, fakeProvider: FakeCloudProvider): Result {
+    private suspend fun runFake(
+        pair: SyncPair,
+        fakeProvider: FakeCloudProvider,
+    ): Result {
         var applied = 0
         val errors = mutableListOf<String>()
 
         // Step 1 – apply pending resolutions
-        val resolved = runCatching { conflictRepository.getResolvedForPair(pair.id) }
-            .onFailure { Timber.w(it, "SyncEngine: could not read resolved conflicts for pair %d", pair.id) }
-            .getOrDefault(emptyList())
+        val resolved =
+            runCatching { conflictRepository.getResolvedForPair(pair.id) }
+                .onFailure { Timber.w(it, "SyncEngine: could not read resolved conflicts for pair %d", pair.id) }
+                .getOrDefault(emptyList())
 
         for (conflict in resolved) {
             try {
@@ -124,9 +136,10 @@ class SyncEngine(
         }
 
         // Step 2 – detect new conflicts
-        val newConflicts = runCatching { fakeProvider.drainForcedConflicts() }
-            .onFailure { Timber.w(it, "SyncEngine: could not drain forced conflicts") }
-            .getOrDefault(emptyList())
+        val newConflicts =
+            runCatching { fakeProvider.drainForcedConflicts() }
+                .onFailure { Timber.w(it, "SyncEngine: could not drain forced conflicts") }
+                .getOrDefault(emptyList())
 
         val now = System.currentTimeMillis()
         var conflictCount = 0
@@ -141,7 +154,7 @@ class SyncEngine(
                             localLastModifiedMs = op.localLastModifiedMs,
                             remoteLastModifiedMs = op.remoteLastModifiedMs,
                             detectedAtMs = now,
-                        )
+                        ),
                     )
                 }.onFailure { Timber.w(it, "SyncEngine: could not persist conflict for %s", op.relativePath) }
                 conflictCount++
