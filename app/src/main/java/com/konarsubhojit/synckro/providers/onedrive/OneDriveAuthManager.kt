@@ -61,7 +61,7 @@ class OneDriveAuthManager private constructor(
     private var msalApp: ISingleAccountPublicClientApplication? = null
 
     /**
-     * Set to `true` after the first failed MSAL initialisation attempt so that
+     * Set to `true` after the first failed MSAL initialization attempt so that
      * subsequent calls (e.g. repeated [AccountsViewModel.refresh] ticks) return
      * immediately without spawning another MSAL call and its accompanying
      * stack-trace noise in the debug log.
@@ -119,7 +119,7 @@ class OneDriveAuthManager private constructor(
     /**
      * Lazily initializes the MSAL single-account application. Returns `null` and
      * logs a warning if the config is missing or invalid, or if the first
-     * initialisation attempt already failed (cached to avoid log spam on repeated
+     * initialization attempt already failed (cached to avoid log spam on repeated
      * [currentAccounts] / [acquireAccessToken] calls).
      */
     private suspend fun getOrCreateMsalApp(): ISingleAccountPublicClientApplication? {

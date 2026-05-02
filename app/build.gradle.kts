@@ -125,30 +125,28 @@ android {
                         "MSAL_REDIRECT_URI must start with 'msauth://'. " +
                             "Got: '$msalRedirect'. See docs/login-setup.md."
                     }
-                    val msalHost = msalRedirect
-                        .substringAfter("msauth://")
-                        .substringBefore("/")
-                    check(msalHost.isNotEmpty()) {
+                    val host = msalRedirect.substringAfter("msauth://").substringBefore("/")
+                    check(host.isNotEmpty()) {
                         "MSAL_REDIRECT_URI has no host component. " +
                             "Expected 'msauth://<applicationId>/<hash>'. See docs/login-setup.md."
                     }
-                    val msalPathPart = msalRedirect.substringAfter("$msalHost/", "")
-                    check(msalPathPart.isNotEmpty()) {
+                    check(msalRedirect.substringAfter("$host/", "").isNotEmpty()) {
                         "MSAL_REDIRECT_URI has no path component after the host. " +
                             "Expected 'msauth://<applicationId>/<hash>'. See docs/login-setup.md."
                     }
-                    check(msalHost == "com.konarsubhojit.synckro.debug") {
-                        "MSAL_REDIRECT_URI host '$msalHost' must equal " +
+                    check(host == "com.konarsubhojit.synckro.debug") {
+                        "MSAL_REDIRECT_URI host '$host' must equal " +
                             "'com.konarsubhojit.synckro.debug' (debug applicationId). " +
                             "See docs/login-setup.md."
                     }
                 }
             }
 
-            val msalHost = if (!msalRedirectEmpty) {
-                msalRedirect.substringAfter("msauth://", "").substringBefore("/", "")
-            } else ""
-            val msalPath = if (msalRedirect.isNotEmpty() && msalHost.isNotEmpty())
+            // Extract host/path for manifest placeholders (empty when both secrets are unset).
+            val msalHost = msalRedirect
+                .substringAfter("msauth://", "")
+                .substringBefore("/", "")
+            val msalPath = if (msalHost.isNotEmpty())
                 "/" + msalRedirect.substringAfter("$msalHost/", "")
             else "/"
 
