@@ -58,7 +58,11 @@ class SyncPairRepository
         }
 
         /**
-         * flag is not persisted.
+         * Inserts a new sync pair or updates an existing one.
+         * [SyncPair.needsReLink] is derived at read time from URI permission state,
+         * so that flag is not persisted.
+         *
+         * @param pair The sync pair to insert or update.
          *
          * @return The row ID of the inserted or updated entry.
          */
