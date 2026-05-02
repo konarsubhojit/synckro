@@ -148,12 +148,16 @@ android {
             }
 
             // Extract host/path for manifest placeholders (empty when both secrets are unset).
-            val msalHost = msalRedirect
-                .substringAfter("msauth://", "")
-                .substringBefore("/", "")
-            val msalPath = if (msalHost.isNotEmpty())
-                "/" + msalRedirect.substringAfter("$msalHost/", "")
-            else "/"
+            val msalHost =
+                msalRedirect
+                    .substringAfter("msauth://", "")
+                    .substringBefore("/", "")
+            val msalPath =
+                if (msalHost.isNotEmpty()) {
+                    "/" + msalRedirect.substringAfter("$msalHost/", "")
+                } else {
+                    "/"
+                }
 
             buildConfigField("String", "MS_CLIENT_ID", "\"$msClientId\"")
             buildConfigField(

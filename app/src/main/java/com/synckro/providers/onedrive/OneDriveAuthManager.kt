@@ -3,14 +3,6 @@ package com.synckro.providers.onedrive
 import android.content.Context
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
-import com.synckro.BuildConfig
-import com.synckro.R
-import com.synckro.domain.auth.Account
-import com.synckro.domain.auth.AuthManager
-import com.synckro.domain.auth.AuthResult
-import com.synckro.domain.auth.AuthUiHost
-import com.synckro.domain.model.CloudProviderType
-import com.synckro.ui.auth.ActivityAuthUiHost
 import com.microsoft.identity.client.AcquireTokenSilentParameters
 import com.microsoft.identity.client.AuthenticationCallback
 import com.microsoft.identity.client.IAccount
@@ -24,6 +16,14 @@ import com.microsoft.identity.client.exception.MsalClientException
 import com.microsoft.identity.client.exception.MsalException
 import com.microsoft.identity.client.exception.MsalServiceException
 import com.microsoft.identity.client.exception.MsalUiRequiredException
+import com.synckro.BuildConfig
+import com.synckro.R
+import com.synckro.domain.auth.Account
+import com.synckro.domain.auth.AuthManager
+import com.synckro.domain.auth.AuthResult
+import com.synckro.domain.auth.AuthUiHost
+import com.synckro.domain.model.CloudProviderType
+import com.synckro.ui.auth.ActivityAuthUiHost
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.suspendCancellableCoroutine
 import timber.log.Timber
@@ -49,10 +49,11 @@ class OneDriveAuthManager private constructor(
     private val clientId: String,
     private val redirectUri: String,
 ) : AuthManager {
-
     /** Hilt-injected constructor (production path). */
     @Inject
-    constructor(@ApplicationContext context: Context) :
+    constructor(
+        @ApplicationContext context: Context,
+    ) :
         this(context, BuildConfig.MS_CLIENT_ID, BuildConfig.MSAL_REDIRECT_URI)
 
     override val providerType: CloudProviderType = CloudProviderType.ONEDRIVE
@@ -78,9 +79,10 @@ class OneDriveAuthManager private constructor(
      */
     private val encryptedPrefs by lazy {
         try {
-            val masterKey = MasterKey.Builder(context)
-                .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-                .build()
+            val masterKey =
+                MasterKey.Builder(context)
+                    .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+                    .build()
             EncryptedSharedPreferences.create(
                 context,
                 PREFS_FILE,
@@ -107,11 +109,12 @@ class OneDriveAuthManager private constructor(
     /** Returns the persisted account hint, or null if none is stored. */
     fun getAccountHint(): String? = encryptedPrefs?.getString(KEY_ACCOUNT_HINT, null)
 
-    private val scopes = listOf(
-        "Files.ReadWrite",
-        "offline_access",
-        "User.Read",
-    )
+    private val scopes =
+        listOf(
+            "Files.ReadWrite",
+            "offline_access",
+            "User.Read",
+        )
 
     override suspend fun isConfigured(): Boolean =
         OneDriveAuthConfig.validate(clientId, redirectUri) == OneDriveAuthConfig.ValidationResult.Valid
@@ -180,79 +183,85 @@ class OneDriveAuthManager private constructor(
             return AuthResult.Error(context.getString(R.string.accounts_host_unavailable))
         }
 
-        val app = getOrCreateMsalApp()
-            ?: return AuthResult.Error(context.getString(R.string.onedrive_init_failed))
+        val app =
+            getOrCreateMsalApp()
+                ?: return AuthResult.Error(context.getString(R.string.onedrive_init_failed))
 
         Timber.d("OneDriveAuthManager.signIn: launching interactive sign-in")
 
         return suspendCancellableCoroutine { cont ->
-            val params = SignInParameters.builder()
-                .withActivity(activity)
-                .withScopes(scopes)
-                .withCallback(object : AuthenticationCallback {
-                    override fun onSuccess(authenticationResult: IAuthenticationResult?) {
-                        if (!cont.isActive) return
-                        if (authenticationResult == null) {
-                            Timber.e("OneDriveAuthManager.signIn: success but null result")
-                            cont.resume(AuthResult.Error(context.getString(R.string.onedrive_signin_null_result)))
-                            return
-                        }
-
-                        val msalAccount = authenticationResult.account
-                        Timber.i("OneDriveAuthManager.signIn: success for ${msalAccount.username}")
-
-                        val account = Account(
-                            id = msalAccount.id,
-                            provider = CloudProviderType.ONEDRIVE,
-                            displayName = msalAccount.username ?: msalAccount.id,
-                            email = msalAccount.username,
-                        )
-
-                        setAccountHint(msalAccount.username)
-                        cont.resume(AuthResult.Success(account))
-                    }
-
-                    override fun onError(exception: MsalException?) {
-                        if (!cont.isActive) return
-                        Timber.e(exception, "OneDriveAuthManager.signIn: error")
-                        val result = when (exception) {
-                            is MsalClientException -> {
-                                if (exception.errorCode == "user_cancelled") {
-                                    AuthResult.Cancelled
-                                } else {
-                                    AuthResult.Error(
-                                        exception.message ?: "MSAL client error: ${exception.errorCode}",
-                                        exception
-                                    )
+            val params =
+                SignInParameters.builder()
+                    .withActivity(activity)
+                    .withScopes(scopes)
+                    .withCallback(
+                        object : AuthenticationCallback {
+                            override fun onSuccess(authenticationResult: IAuthenticationResult?) {
+                                if (!cont.isActive) return
+                                if (authenticationResult == null) {
+                                    Timber.e("OneDriveAuthManager.signIn: success but null result")
+                                    cont.resume(AuthResult.Error(context.getString(R.string.onedrive_signin_null_result)))
+                                    return
                                 }
-                            }
-                            is MsalUiRequiredException -> {
-                                // Should not happen during interactive sign-in, but handle it
-                                AuthResult.NeedsInteractiveSignIn
-                            }
-                            is MsalServiceException -> {
-                                AuthResult.Error(
-                                    "MSAL service error: ${exception.errorCode} - ${exception.message}",
-                                    exception
-                                )
-                            }
-                            else -> {
-                                AuthResult.Error(
-                                    exception?.message ?: "Unknown MSAL error",
-                                    exception
-                                )
-                            }
-                        }
-                        cont.resume(result)
-                    }
 
-                    override fun onCancel() {
-                        if (!cont.isActive) return
-                        Timber.i("OneDriveAuthManager.signIn: user cancelled")
-                        cont.resume(AuthResult.Cancelled)
-                    }
-                })
-                .build()
+                                val msalAccount = authenticationResult.account
+                                Timber.i("OneDriveAuthManager.signIn: success for ${msalAccount.username}")
+
+                                val account =
+                                    Account(
+                                        id = msalAccount.id,
+                                        provider = CloudProviderType.ONEDRIVE,
+                                        displayName = msalAccount.username ?: msalAccount.id,
+                                        email = msalAccount.username,
+                                    )
+
+                                setAccountHint(msalAccount.username)
+                                cont.resume(AuthResult.Success(account))
+                            }
+
+                            override fun onError(exception: MsalException?) {
+                                if (!cont.isActive) return
+                                Timber.e(exception, "OneDriveAuthManager.signIn: error")
+                                val result =
+                                    when (exception) {
+                                        is MsalClientException -> {
+                                            if (exception.errorCode == "user_cancelled") {
+                                                AuthResult.Cancelled
+                                            } else {
+                                                AuthResult.Error(
+                                                    exception.message ?: "MSAL client error: ${exception.errorCode}",
+                                                    exception,
+                                                )
+                                            }
+                                        }
+                                        is MsalUiRequiredException -> {
+                                            // Should not happen during interactive sign-in, but handle it
+                                            AuthResult.NeedsInteractiveSignIn
+                                        }
+                                        is MsalServiceException -> {
+                                            AuthResult.Error(
+                                                "MSAL service error: ${exception.errorCode} - ${exception.message}",
+                                                exception,
+                                            )
+                                        }
+                                        else -> {
+                                            AuthResult.Error(
+                                                exception?.message ?: "Unknown MSAL error",
+                                                exception,
+                                            )
+                                        }
+                                    }
+                                cont.resume(result)
+                            }
+
+                            override fun onCancel() {
+                                if (!cont.isActive) return
+                                Timber.i("OneDriveAuthManager.signIn: user cancelled")
+                                cont.resume(AuthResult.Cancelled)
+                            }
+                        },
+                    )
+                    .build()
 
             app.signIn(params)
         }
@@ -272,20 +281,22 @@ class OneDriveAuthManager private constructor(
         }
 
         return suspendCancellableCoroutine { cont ->
-            app.signOut(object : ISingleAccountPublicClientApplication.SignOutCallback {
-                override fun onSignOut() {
-                    if (!cont.isActive) return
-                    Timber.i("OneDriveAuthManager.signOut: MSAL sign-out successful")
-                    setAccountHint(null)
-                    cont.resume(AuthResult.Success(Unit))
-                }
+            app.signOut(
+                object : ISingleAccountPublicClientApplication.SignOutCallback {
+                    override fun onSignOut() {
+                        if (!cont.isActive) return
+                        Timber.i("OneDriveAuthManager.signOut: MSAL sign-out successful")
+                        setAccountHint(null)
+                        cont.resume(AuthResult.Success(Unit))
+                    }
 
-                override fun onError(exception: MsalException) {
-                    if (!cont.isActive) return
-                    Timber.e(exception, "OneDriveAuthManager.signOut: MSAL error")
-                    cont.resume(AuthResult.Error(exception.message ?: "Sign-out failed", exception))
-                }
-            })
+                    override fun onError(exception: MsalException) {
+                        if (!cont.isActive) return
+                        Timber.e(exception, "OneDriveAuthManager.signOut: MSAL error")
+                        cont.resume(AuthResult.Error(exception.message ?: "Sign-out failed", exception))
+                    }
+                },
+            )
         }
     }
 
@@ -295,37 +306,40 @@ class OneDriveAuthManager private constructor(
         Timber.d("OneDriveAuthManager.currentAccounts: checking MSAL cache")
 
         return suspendCancellableCoroutine { cont ->
-            app.getCurrentAccountAsync(object : ISingleAccountPublicClientApplication.CurrentAccountCallback {
-                override fun onAccountLoaded(activeAccount: IAccount?) {
-                    if (!cont.isActive) return
-                    if (activeAccount == null) {
-                        Timber.d("OneDriveAuthManager.currentAccounts: no MSAL account")
-                        cont.resume(emptyList())
-                        return
+            app.getCurrentAccountAsync(
+                object : ISingleAccountPublicClientApplication.CurrentAccountCallback {
+                    override fun onAccountLoaded(activeAccount: IAccount?) {
+                        if (!cont.isActive) return
+                        if (activeAccount == null) {
+                            Timber.d("OneDriveAuthManager.currentAccounts: no MSAL account")
+                            cont.resume(emptyList())
+                            return
+                        }
+
+                        Timber.d("OneDriveAuthManager.currentAccounts: found ${activeAccount.username}")
+                        val account =
+                            Account(
+                                id = activeAccount.id,
+                                provider = CloudProviderType.ONEDRIVE,
+                                displayName = activeAccount.username ?: activeAccount.id,
+                                email = activeAccount.username,
+                            )
+                        cont.resume(listOf(account))
                     }
 
-                    Timber.d("OneDriveAuthManager.currentAccounts: found ${activeAccount.username}")
-                    val account = Account(
-                        id = activeAccount.id,
-                        provider = CloudProviderType.ONEDRIVE,
-                        displayName = activeAccount.username ?: activeAccount.id,
-                        email = activeAccount.username,
-                    )
-                    cont.resume(listOf(account))
-                }
+                    override fun onAccountChanged(priorAccount: IAccount?, currentAccount: IAccount?) {
+                        // onAccountChanged can fire alongside onAccountLoaded; log it but do not
+                        // resume — this is a one-shot call and onAccountLoaded covers the result.
+                        Timber.d("OneDriveAuthManager.currentAccounts: account changed (ignored for one-shot call)")
+                    }
 
-                override fun onAccountChanged(priorAccount: IAccount?, currentAccount: IAccount?) {
-                    // onAccountChanged can fire alongside onAccountLoaded; log it but do not
-                    // resume — this is a one-shot call and onAccountLoaded covers the result.
-                    Timber.d("OneDriveAuthManager.currentAccounts: account changed (ignored for one-shot call)")
-                }
-
-                override fun onError(exception: MsalException) {
-                    if (!cont.isActive) return
-                    Timber.e(exception, "OneDriveAuthManager.currentAccounts: error")
-                    cont.resume(emptyList())
-                }
-            })
+                    override fun onError(exception: MsalException) {
+                        if (!cont.isActive) return
+                        Timber.e(exception, "OneDriveAuthManager.currentAccounts: error")
+                        cont.resume(emptyList())
+                    }
+                },
+            )
         }
     }
 
@@ -334,49 +348,52 @@ class OneDriveAuthManager private constructor(
             return AuthResult.NotConfigured(context.getString(R.string.onedrive_not_configured))
         }
 
-        val app = getOrCreateMsalApp()
-            ?: return AuthResult.Error(context.getString(R.string.onedrive_init_failed))
+        val app =
+            getOrCreateMsalApp()
+                ?: return AuthResult.Error(context.getString(R.string.onedrive_init_failed))
 
         Timber.d("OneDriveAuthManager.acquireAccessToken: attempting silent acquisition for ${account.id}")
 
         return suspendCancellableCoroutine { cont ->
-            app.getCurrentAccountAsync(object : ISingleAccountPublicClientApplication.CurrentAccountCallback {
-                override fun onAccountLoaded(activeAccount: IAccount?) {
-                    if (!cont.isActive) return
-                    if (activeAccount == null) {
-                        Timber.w("OneDriveAuthManager.acquireAccessToken: no active account")
-                        cont.resume(AuthResult.NeedsInteractiveSignIn)
-                        return
+            app.getCurrentAccountAsync(
+                object : ISingleAccountPublicClientApplication.CurrentAccountCallback {
+                    override fun onAccountLoaded(activeAccount: IAccount?) {
+                        if (!cont.isActive) return
+                        if (activeAccount == null) {
+                            Timber.w("OneDriveAuthManager.acquireAccessToken: no active account")
+                            cont.resume(AuthResult.NeedsInteractiveSignIn)
+                            return
+                        }
+
+                        // Validate that the active MSAL account matches the requested account to
+                        // avoid returning a token for a different principal than requested.
+                        if (activeAccount.id != account.id) {
+                            Timber.w(
+                                "OneDriveAuthManager.acquireAccessToken: active account mismatch " +
+                                    "(activeId=${activeAccount.id}, requestedId=${account.id})",
+                            )
+                            cont.resume(AuthResult.NeedsInteractiveSignIn)
+                            return
+                        }
+
+                        // Delegate the silent-acquisition nested-callback logic to a dedicated helper
+                        // that resumes the continuation exactly once (guarded via cont.isActive).
+                        acquireTokenSilent(app, activeAccount, cont)
                     }
 
-                    // Validate that the active MSAL account matches the requested account to
-                    // avoid returning a token for a different principal than requested.
-                    if (activeAccount.id != account.id) {
-                        Timber.w(
-                            "OneDriveAuthManager.acquireAccessToken: active account mismatch " +
-                                "(activeId=${activeAccount.id}, requestedId=${account.id})"
-                        )
+                    override fun onAccountChanged(priorAccount: IAccount?, currentAccount: IAccount?) {
+                        if (!cont.isActive) return
+                        Timber.w("OneDriveAuthManager.acquireAccessToken: account changed during acquisition")
                         cont.resume(AuthResult.NeedsInteractiveSignIn)
-                        return
                     }
 
-                    // Delegate the silent-acquisition nested-callback logic to a dedicated helper
-                    // that resumes the continuation exactly once (guarded via cont.isActive).
-                    acquireTokenSilent(app, activeAccount, cont)
-                }
-
-                override fun onAccountChanged(priorAccount: IAccount?, currentAccount: IAccount?) {
-                    if (!cont.isActive) return
-                    Timber.w("OneDriveAuthManager.acquireAccessToken: account changed during acquisition")
-                    cont.resume(AuthResult.NeedsInteractiveSignIn)
-                }
-
-                override fun onError(exception: MsalException) {
-                    if (!cont.isActive) return
-                    Timber.e(exception, "OneDriveAuthManager.acquireAccessToken: error loading account")
-                    cont.resume(AuthResult.Error(exception.message ?: "Failed to load account", exception))
-                }
-            })
+                    override fun onError(exception: MsalException) {
+                        if (!cont.isActive) return
+                        Timber.e(exception, "OneDriveAuthManager.acquireAccessToken: error loading account")
+                        cont.resume(AuthResult.Error(exception.message ?: "Failed to load account", exception))
+                    }
+                },
+            )
         }
     }
 
@@ -391,37 +408,42 @@ class OneDriveAuthManager private constructor(
         activeAccount: IAccount,
         cont: kotlinx.coroutines.CancellableContinuation<AuthResult<String>>,
     ) {
-        val params = AcquireTokenSilentParameters.Builder()
-            .forAccount(activeAccount)
-            .fromAuthority(activeAccount.authority)
-            .withScopes(scopes)
-            .withCallback(object : SilentAuthenticationCallback {
-                override fun onSuccess(authenticationResult: IAuthenticationResult?) {
-                    if (!cont.isActive) return
-                    val token = authenticationResult?.accessToken
-                    if (token.isNullOrBlank()) {
-                        Timber.e("OneDriveAuthManager.acquireAccessToken: success but null/empty token")
-                        cont.resume(AuthResult.NeedsInteractiveSignIn)
-                    } else {
-                        Timber.d("OneDriveAuthManager.acquireAccessToken: acquired token successfully")
-                        cont.resume(AuthResult.Success(token))
-                    }
-                }
+        val params =
+            AcquireTokenSilentParameters.Builder()
+                .forAccount(activeAccount)
+                .fromAuthority(activeAccount.authority)
+                .withScopes(scopes)
+                .withCallback(
+                    object : SilentAuthenticationCallback {
+                        override fun onSuccess(authenticationResult: IAuthenticationResult?) {
+                            if (!cont.isActive) return
+                            val token = authenticationResult?.accessToken
+                            if (token.isNullOrBlank()) {
+                                Timber.e("OneDriveAuthManager.acquireAccessToken: success but null/empty token")
+                                cont.resume(AuthResult.NeedsInteractiveSignIn)
+                            } else {
+                                Timber.d("OneDriveAuthManager.acquireAccessToken: acquired token successfully")
+                                cont.resume(AuthResult.Success(token))
+                            }
+                        }
 
-                override fun onError(exception: MsalException?) {
-                    if (!cont.isActive) return
-                    Timber.w(exception, "OneDriveAuthManager.acquireAccessToken: silent acquisition failed")
-                    val result = when (exception) {
-                        is MsalUiRequiredException -> AuthResult.NeedsInteractiveSignIn
-                        else -> AuthResult.Error(
-                            exception?.message ?: "Silent token acquisition failed",
-                            exception
-                        )
-                    }
-                    cont.resume(result)
-                }
-            })
-            .build()
+                        override fun onError(exception: MsalException?) {
+                            if (!cont.isActive) return
+                            Timber.w(exception, "OneDriveAuthManager.acquireAccessToken: silent acquisition failed")
+                            val result =
+                                when (exception) {
+                                    is MsalUiRequiredException -> AuthResult.NeedsInteractiveSignIn
+                                    else ->
+                                        AuthResult.Error(
+                                            exception?.message ?: "Silent token acquisition failed",
+                                            exception,
+                                        )
+                                }
+                            cont.resume(result)
+                        }
+                    },
+                )
+                .build()
 
         app.acquireTokenSilentAsync(params)
     }

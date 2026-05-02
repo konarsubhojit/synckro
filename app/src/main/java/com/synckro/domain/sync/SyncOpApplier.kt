@@ -459,16 +459,18 @@ class SyncOpApplier(
                         localFileAccess.stat(op.relativePath)
                             ?: error("Local file not found for conflict resolution: ${op.relativePath}")
                     var retried = false
-                    val updatedRemote = withRetry(onRetry = { _, _ -> retried = true }) {
-                        val stream = localFileAccess.openRead(op.relativePath)
-                            ?: error("Cannot read local file for conflict resolution: ${op.relativePath}")
-                        provider.updateContent(
-                            id = index.remoteId,
-                            content = stream,
-                            size = stat.sizeBytes,
-                            mimeType = stat.mimeType,
-                        )
-                    }
+                    val updatedRemote =
+                        withRetry(onRetry = { _, _ -> retried = true }) {
+                            val stream =
+                                localFileAccess.openRead(op.relativePath)
+                                    ?: error("Cannot read local file for conflict resolution: ${op.relativePath}")
+                            provider.updateContent(
+                                id = index.remoteId,
+                                content = stream,
+                                size = stat.sizeBytes,
+                                mimeType = stat.mimeType,
+                            )
+                        }
                     if (retried) {
                         eventRepository.log(
                             pair.id,

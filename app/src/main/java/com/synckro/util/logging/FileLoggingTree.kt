@@ -35,12 +35,14 @@ class FileLoggingTree(
     private val logDir: File = File(context.filesDir, "logs").apply { mkdirs() }
 
     private val logFile: File = File(context.filesDir, LOG_RELATIVE_PATH)
-    private val executor = Executors.newSingleThreadExecutor { r ->
-        Thread(r, "synckro-file-logger").apply { isDaemon = true }
-    }
-    private val dateFormat = ThreadLocal.withInitial {
-        SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US)
-    }
+    private val executor =
+        Executors.newSingleThreadExecutor { r ->
+            Thread(r, "synckro-file-logger").apply { isDaemon = true }
+        }
+    private val dateFormat =
+        ThreadLocal.withInitial {
+            SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US)
+        }
 
     /**
      * Absolute path to the current log file. Exposed so a debug "About"

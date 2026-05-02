@@ -2,6 +2,7 @@ package com.synckro.data.local.db
 
 import androidx.room.Database
 import androidx.room.RoomDatabase
+import androidx.room.TypeConverter
 import androidx.room.TypeConverters
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
@@ -20,51 +21,55 @@ import com.synckro.data.local.entity.SyncPairEntity
 import com.synckro.domain.model.CloudProviderType
 import com.synckro.domain.model.ConflictPolicy
 import com.synckro.domain.model.SyncDirection
-import androidx.room.TypeConverter
 
 class EnumConverters {
     /**
- * Converts a stored enum name into the corresponding SyncDirection.
- *
- * @param s The enum name as stored in the database.
- * @return The `SyncDirection` represented by `s`.
- */
-@TypeConverter fun dirFromString(s: String): SyncDirection = SyncDirection.valueOf(s)
+     * Converts a stored enum name into the corresponding SyncDirection.
+     *
+     * @param s The enum name as stored in the database.
+     * @return The `SyncDirection` represented by `s`.
+     */
+    @TypeConverter fun dirFromString(s: String): SyncDirection = SyncDirection.valueOf(s)
+
     /**
- * Convert a SyncDirection to its persisted string representation.
- *
- * @return The enum constant's name as stored in the database.
- */
-@TypeConverter fun dirToString(d: SyncDirection): String = d.name
+     * Convert a SyncDirection to its persisted string representation.
+     *
+     * @return The enum constant's name as stored in the database.
+     */
+    @TypeConverter fun dirToString(d: SyncDirection): String = d.name
+
     /**
- * Converts a persisted string into a ConflictPolicy enum.
- *
- * @param s The persisted enum name.
- * @return The ConflictPolicy corresponding to the provided enum name.
- */
-@TypeConverter fun policyFromString(s: String): ConflictPolicy = ConflictPolicy.valueOf(s)
+     * Converts a persisted string into a ConflictPolicy enum.
+     *
+     * @param s The persisted enum name.
+     * @return The ConflictPolicy corresponding to the provided enum name.
+     */
+    @TypeConverter fun policyFromString(s: String): ConflictPolicy = ConflictPolicy.valueOf(s)
+
     /**
- * Converts a ConflictPolicy enum value to its persisted string representation.
- *
- * @param p The conflict resolution policy to convert.
- * @return The enum's name used for storage.
- */
-@TypeConverter fun policyToString(p: ConflictPolicy): String = p.name
+     * Converts a ConflictPolicy enum value to its persisted string representation.
+     *
+     * @param p The conflict resolution policy to convert.
+     * @return The enum's name used for storage.
+     */
+    @TypeConverter fun policyToString(p: ConflictPolicy): String = p.name
+
     /**
- * Converts a persisted enum name into its corresponding CloudProviderType.
- *
- * @param s The enum name as stored in the database.
- * @return The matching CloudProviderType.
- * @throws IllegalArgumentException If `s` does not match any CloudProviderType constant.
- */
-@TypeConverter fun providerFromString(s: String): CloudProviderType = CloudProviderType.valueOf(s)
+     * Converts a persisted enum name into its corresponding CloudProviderType.
+     *
+     * @param s The enum name as stored in the database.
+     * @return The matching CloudProviderType.
+     * @throws IllegalArgumentException If `s` does not match any CloudProviderType constant.
+     */
+    @TypeConverter fun providerFromString(s: String): CloudProviderType = CloudProviderType.valueOf(s)
+
     /**
- * Converts a CloudProviderType to its persisted string representation.
- *
- * @param p The cloud provider enum to convert.
- * @return The enum's name as stored in the database.
- */
-@TypeConverter fun providerToString(p: CloudProviderType): String = p.name
+     * Converts a CloudProviderType to its persisted string representation.
+     *
+     * @param p The cloud provider enum to convert.
+     * @return The enum's name as stored in the database.
+     */
+    @TypeConverter fun providerToString(p: CloudProviderType): String = p.name
 }
 
 @Database(
@@ -87,12 +92,13 @@ abstract class SynckroDatabase : RoomDatabase() {
      * @return The [SyncPairDao] for performing operations on sync pair data.
      */
     abstract fun syncPairDao(): SyncPairDao
+
     /**
- * Provides the DAO for performing CRUD operations on file index records.
- *
- * @return The {@link FileIndexDao} used to access and modify file index data.
- */
-abstract fun fileIndexDao(): FileIndexDao
+     * Provides the DAO for performing CRUD operations on file index records.
+     *
+     * @return The {@link FileIndexDao} used to access and modify file index data.
+     */
+    abstract fun fileIndexDao(): FileIndexDao
 
     /**
      * Returns the DAO used to access and modify conflict record entities.
@@ -122,58 +128,64 @@ abstract fun fileIndexDao(): FileIndexDao
          * Migrates the database from version 1 to 2 by creating the `account` table.
          * This is the explicit migration required for release builds upgrading from v1.
          */
-        val MIGRATION_1_2 = object : Migration(1, 2) {
-            override fun migrate(db: SupportSQLiteDatabase) {
-                db.execSQL(
-                    "CREATE TABLE IF NOT EXISTS `account` (" +
-                        "`id` TEXT NOT NULL, " +
-                        "`providerType` TEXT NOT NULL, " +
-                        "`displayName` TEXT NOT NULL, " +
-                        "`email` TEXT, " +
-                        "`createdAtMillis` INTEGER NOT NULL, " +
-                        "PRIMARY KEY(`id`))"
-                )
+        val MIGRATION_1_2 =
+            object : Migration(1, 2) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL(
+                        "CREATE TABLE IF NOT EXISTS `account` (" +
+                            "`id` TEXT NOT NULL, " +
+                            "`providerType` TEXT NOT NULL, " +
+                            "`displayName` TEXT NOT NULL, " +
+                            "`email` TEXT, " +
+                            "`createdAtMillis` INTEGER NOT NULL, " +
+                            "PRIMARY KEY(`id`))",
+                    )
+                }
             }
-        }
 
         /**
          * Migrates the database from version 2 to 3 by adding the `mimeType` column
          * to `file_index`.  Existing rows will have NULL for the new column.
          */
-        val MIGRATION_2_3 = object : Migration(2, 3) {
-            override fun migrate(db: SupportSQLiteDatabase) {
-                db.execSQL("ALTER TABLE `file_index` ADD COLUMN `mimeType` TEXT")
+        val MIGRATION_2_3 =
+            object : Migration(2, 3) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL("ALTER TABLE `file_index` ADD COLUMN `mimeType` TEXT")
+                }
             }
-        }
+
         /**
          * Migrates the database from version 3 to 4 by adding the `lastSyncResult` column
          * to `sync_pair`. Existing rows will have NULL for the new column.
          */
-        val MIGRATION_3_4 = object : Migration(3, 4) {
-            override fun migrate(db: SupportSQLiteDatabase) {
-                db.execSQL("ALTER TABLE `sync_pair` ADD COLUMN `lastSyncResult` TEXT")
+        val MIGRATION_3_4 =
+            object : Migration(3, 4) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL("ALTER TABLE `sync_pair` ADD COLUMN `lastSyncResult` TEXT")
+                }
             }
-        }
+
         /**
          * Migrates the database from version 4 to 5 by creating the `sync_event` table.
          * This table stores structured log entries associated with sync-pair runs.
          */
-        val MIGRATION_4_5 = object : Migration(4, 5) {
-            override fun migrate(db: SupportSQLiteDatabase) {
-                db.execSQL(
-                    "CREATE TABLE IF NOT EXISTS `sync_event` (" +
-                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
-                        "`pairId` INTEGER, " +
-                        "`timestampMs` INTEGER NOT NULL, " +
-                        "`level` TEXT NOT NULL, " +
-                        "`tag` TEXT NOT NULL, " +
-                        "`message` TEXT NOT NULL, " +
-                        "FOREIGN KEY(`pairId`) REFERENCES `sync_pair`(`id`) ON DELETE CASCADE)"
-                )
-                db.execSQL("CREATE INDEX IF NOT EXISTS `index_sync_event_pairId` ON `sync_event` (`pairId`)")
-                db.execSQL("CREATE INDEX IF NOT EXISTS `index_sync_event_timestampMs` ON `sync_event` (`timestampMs`)")
+        val MIGRATION_4_5 =
+            object : Migration(4, 5) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL(
+                        "CREATE TABLE IF NOT EXISTS `sync_event` (" +
+                            "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                            "`pairId` INTEGER, " +
+                            "`timestampMs` INTEGER NOT NULL, " +
+                            "`level` TEXT NOT NULL, " +
+                            "`tag` TEXT NOT NULL, " +
+                            "`message` TEXT NOT NULL, " +
+                            "FOREIGN KEY(`pairId`) REFERENCES `sync_pair`(`id`) ON DELETE CASCADE)",
+                    )
+                    db.execSQL("CREATE INDEX IF NOT EXISTS `index_sync_event_pairId` ON `sync_event` (`pairId`)")
+                    db.execSQL("CREATE INDEX IF NOT EXISTS `index_sync_event_timestampMs` ON `sync_event` (`timestampMs`)")
+                }
             }
-        }
 
         /**
          * Migrates the database from version 5 to 6:
@@ -181,29 +193,30 @@ abstract fun fileIndexDao(): FileIndexDao
          * - Creates the `conflict_record` table for the conflict inbox with a unique
          *   constraint on `(pairId, relativePath)` to prevent duplicate entries.
          */
-        val MIGRATION_5_6 = object : Migration(5, 6) {
-            override fun migrate(db: SupportSQLiteDatabase) {
-                db.execSQL(
-                    "ALTER TABLE `sync_pair` ADD COLUMN `scheduleIntervalMinutes` INTEGER NOT NULL DEFAULT 60"
-                )
-                db.execSQL(
-                    "CREATE TABLE IF NOT EXISTS `conflict_record` (" +
-                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
-                        "`pairId` INTEGER NOT NULL, " +
-                        "`relativePath` TEXT NOT NULL, " +
-                        "`localLastModifiedMs` INTEGER NOT NULL, " +
-                        "`remoteLastModifiedMs` INTEGER NOT NULL, " +
-                        "`detectedAtMs` INTEGER NOT NULL, " +
-                        "`resolution` TEXT, " +
-                        "FOREIGN KEY(`pairId`) REFERENCES `sync_pair`(`id`) ON DELETE CASCADE, " +
-                        "UNIQUE(`pairId`, `relativePath`))"
-                )
-                db.execSQL(
-                    "CREATE INDEX IF NOT EXISTS `index_conflict_record_pairId` " +
-                        "ON `conflict_record` (`pairId`)"
-                )
+        val MIGRATION_5_6 =
+            object : Migration(5, 6) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL(
+                        "ALTER TABLE `sync_pair` ADD COLUMN `scheduleIntervalMinutes` INTEGER NOT NULL DEFAULT 60",
+                    )
+                    db.execSQL(
+                        "CREATE TABLE IF NOT EXISTS `conflict_record` (" +
+                            "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                            "`pairId` INTEGER NOT NULL, " +
+                            "`relativePath` TEXT NOT NULL, " +
+                            "`localLastModifiedMs` INTEGER NOT NULL, " +
+                            "`remoteLastModifiedMs` INTEGER NOT NULL, " +
+                            "`detectedAtMs` INTEGER NOT NULL, " +
+                            "`resolution` TEXT, " +
+                            "FOREIGN KEY(`pairId`) REFERENCES `sync_pair`(`id`) ON DELETE CASCADE, " +
+                            "UNIQUE(`pairId`, `relativePath`))",
+                    )
+                    db.execSQL(
+                        "CREATE INDEX IF NOT EXISTS `index_conflict_record_pairId` " +
+                            "ON `conflict_record` (`pairId`)",
+                    )
+                }
             }
-        }
 
         /**
          * Migrates the database from version 6 to 7:
@@ -212,25 +225,27 @@ abstract fun fileIndexDao(): FileIndexDao
          * - Creates the `local_index` table for lightweight per-file local snapshots used by
          *   the sync engine to compute diffs without re-hashing every file on every run.
          */
-        val MIGRATION_6_7 = object : Migration(6, 7) {
-            override fun migrate(db: SupportSQLiteDatabase) {
-                db.execSQL(
-                    "ALTER TABLE `sync_pair` ADD COLUMN `lastFullScanAtMs` INTEGER"
-                )
-                db.execSQL(
-                    "CREATE TABLE IF NOT EXISTS `local_index` (" +
-                        "`pairId` INTEGER NOT NULL, " +
-                        "`relativePath` TEXT NOT NULL, " +
-                        "`sizeBytes` INTEGER NOT NULL, " +
-                        "`mtimeMs` INTEGER NOT NULL, " +
-                        "`contentHash` TEXT, " +
-                        "`remoteId` TEXT, " +
-                        "PRIMARY KEY(`pairId`, `relativePath`), " +
-                        "FOREIGN KEY(`pairId`) REFERENCES `sync_pair`(`id`) " +
-                        "ON UPDATE NO ACTION ON DELETE CASCADE)"
-                )
+        val MIGRATION_6_7 =
+            object : Migration(6, 7) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL(
+                        "ALTER TABLE `sync_pair` ADD COLUMN `lastFullScanAtMs` INTEGER",
+                    )
+                    db.execSQL(
+                        "CREATE TABLE IF NOT EXISTS `local_index` (" +
+                            "`pairId` INTEGER NOT NULL, " +
+                            "`relativePath` TEXT NOT NULL, " +
+                            "`sizeBytes` INTEGER NOT NULL, " +
+                            "`mtimeMs` INTEGER NOT NULL, " +
+                            "`contentHash` TEXT, " +
+                            "`remoteId` TEXT, " +
+                            "PRIMARY KEY(`pairId`, `relativePath`), " +
+                            "FOREIGN KEY(`pairId`) REFERENCES `sync_pair`(`id`) " +
+                            "ON UPDATE NO ACTION ON DELETE CASCADE)",
+                    )
+                }
             }
-        }
+
         /**
          * Migrates the database from version 7 to 8:
          * - Adds three nullable remote-metadata columns to `local_index`:
@@ -240,12 +255,13 @@ abstract fun fileIndexDao(): FileIndexDao
          * change log.  Existing rows receive NULL for all three columns; they will be
          * populated by [com.synckro.domain.sync.SyncOpApplier] on the next sync.
          */
-        val MIGRATION_7_8 = object : Migration(7, 8) {
-            override fun migrate(db: SupportSQLiteDatabase) {
-                db.execSQL("ALTER TABLE `local_index` ADD COLUMN `remoteSizeBytes` INTEGER")
-                db.execSQL("ALTER TABLE `local_index` ADD COLUMN `remoteMtimeMs` INTEGER")
-                db.execSQL("ALTER TABLE `local_index` ADD COLUMN `remoteEtag` TEXT")
+        val MIGRATION_7_8 =
+            object : Migration(7, 8) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL("ALTER TABLE `local_index` ADD COLUMN `remoteSizeBytes` INTEGER")
+                    db.execSQL("ALTER TABLE `local_index` ADD COLUMN `remoteMtimeMs` INTEGER")
+                    db.execSQL("ALTER TABLE `local_index` ADD COLUMN `remoteEtag` TEXT")
+                }
             }
-        }
     }
 }

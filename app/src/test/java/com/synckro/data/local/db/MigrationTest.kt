@@ -217,10 +217,11 @@ class MigrationTest {
 
         SynckroDatabase.MIGRATION_7_8.migrate(db)
 
-        val cursor = db.query(
-            "SELECT remoteSizeBytes, remoteMtimeMs, remoteEtag FROM local_index WHERE pairId = $pairId",
-            emptyArray<Any?>(),
-        )
+        val cursor =
+            db.query(
+                "SELECT remoteSizeBytes, remoteMtimeMs, remoteEtag FROM local_index WHERE pairId = $pairId",
+                emptyArray<Any?>(),
+            )
         cursor.use {
             assertTrue(it.moveToFirst())
             assertTrue("remoteSizeBytes should be NULL for pre-migration rows", it.isNull(0))

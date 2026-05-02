@@ -44,8 +44,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.synckro.BuildConfig
 import com.synckro.R
 import com.synckro.ui.auth.ActivityAuthUiHost
-import java.io.File
 import com.synckro.util.logging.FileLoggingTree
+import java.io.File
 
 /**
  * Lists connected / connectable cloud accounts. This is the "login first"
@@ -166,17 +166,19 @@ private fun exportLog(
         // API 29+: insert directly into MediaStore Downloads — no permission needed.
         val destName = "synckro-debug.log"
         val resolver = context.contentResolver
-        val values = ContentValues().apply {
-            put(MediaStore.Downloads.DISPLAY_NAME, destName)
-            put(MediaStore.Downloads.MIME_TYPE, "text/plain")
-            put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
-            put(MediaStore.Downloads.IS_PENDING, 1)
-        }
+        val values =
+            ContentValues().apply {
+                put(MediaStore.Downloads.DISPLAY_NAME, destName)
+                put(MediaStore.Downloads.MIME_TYPE, "text/plain")
+                put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+                put(MediaStore.Downloads.IS_PENDING, 1)
+            }
         val collection = MediaStore.Downloads.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
-        val itemUri = resolver.insert(collection, values) ?: run {
-            Toast.makeText(context, insertFailMsg, Toast.LENGTH_LONG).show()
-            return
-        }
+        val itemUri =
+            resolver.insert(collection, values) ?: run {
+                Toast.makeText(context, insertFailMsg, Toast.LENGTH_LONG).show()
+                return
+            }
         try {
             resolver.openOutputStream(itemUri)?.use { out ->
                 logFile.inputStream().use { it.copyTo(out) }
@@ -196,17 +198,19 @@ private fun exportLog(
         }
     } else {
         // API 26–28 fallback: share via FileProvider content URI so any app can receive it.
-        val uri = FileProvider.getUriForFile(
-            context,
-            "${context.packageName}.fileprovider",
-            logFile,
-        )
-        val intent = Intent(Intent.ACTION_SEND).apply {
-            type = "text/plain"
-            putExtra(Intent.EXTRA_STREAM, uri)
-            putExtra(Intent.EXTRA_SUBJECT, subject)
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        }
+        val uri =
+            FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.fileprovider",
+                logFile,
+            )
+        val intent =
+            Intent(Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(Intent.EXTRA_STREAM, uri)
+                putExtra(Intent.EXTRA_SUBJECT, subject)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
         context.startActivity(Intent.createChooser(intent, chooser))
     }
 }

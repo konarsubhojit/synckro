@@ -11,7 +11,6 @@ import org.junit.Test
  * [OneDriveAuthConfig] is a plain Kotlin object with no framework dependencies.
  */
 class OneDriveAuthConfigTest {
-
     private val validClientId = "aaaabbbb-cccc-dddd-eeee-ffffffffffff"
     private val validRedirectUri = "msauth://com.synckro.debug/DtQuXucYhhudNaIP9tJG2ySmySA="
 
@@ -95,10 +94,11 @@ class OneDriveAuthConfigTest {
 
     @Test
     fun `valid config with different hash returns Valid`() {
-        val result = OneDriveAuthConfig.validate(
-            "12345678-1234-1234-1234-123456789012",
-            "msauth://com.synckro.debug/SomeOtherBase64Hash=",
-        )
+        val result =
+            OneDriveAuthConfig.validate(
+                "12345678-1234-1234-1234-123456789012",
+                "msauth://com.synckro.debug/SomeOtherBase64Hash=",
+            )
         assertEquals(OneDriveAuthConfig.ValidationResult.Valid, result)
     }
 

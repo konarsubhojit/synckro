@@ -49,10 +49,13 @@ import javax.inject.Singleton
  */
 private object NoOpLocalFileAccess : LocalFileAccess {
     override fun openRead(relativePath: String): InputStream? = null
+
     override fun write(relativePath: String, content: InputStream, mimeType: String?): LocalFileStat {
         error("NoOpLocalFileAccess: write not implemented — wire a real LocalFileAccess implementation")
     }
+
     override fun delete(relativePath: String): Boolean = false
+
     override fun stat(relativePath: String): LocalFileStat? = null
 }
 
@@ -178,19 +181,20 @@ object AppModule {
         syncPairDao: SyncPairDao,
         localIndexDao: LocalIndexDao,
         eventRepository: SyncEventRepository,
-    ): SyncEngine = SyncEngine(
-        conflictRepository = conflictRepository,
-        providers = providers,
-        localFsEnumerator = localFsEnumerator,
-        remoteEnumerators = remoteEnumerators,
-        syncPairDao = syncPairDao,
-        localIndexDao = localIndexDao,
-        eventRepository = eventRepository,
-        // LocalFileAccess has no production SAF implementation yet; real file
-        // transfer will fail gracefully through SyncOpApplier's per-op error
-        // handling until a production implementation is wired here.
-        localFileAccess = NoOpLocalFileAccess,
-    )
+    ): SyncEngine =
+        SyncEngine(
+            conflictRepository = conflictRepository,
+            providers = providers,
+            localFsEnumerator = localFsEnumerator,
+            remoteEnumerators = remoteEnumerators,
+            syncPairDao = syncPairDao,
+            localIndexDao = localIndexDao,
+            eventRepository = eventRepository,
+            // LocalFileAccess has no production SAF implementation yet; real file
+            // transfer will fail gracefully through SyncOpApplier's per-op error
+            // handling until a production implementation is wired here.
+            localFileAccess = NoOpLocalFileAccess,
+        )
 
     @Provides @IntoMap
     @CloudProviderKey(CloudProviderType.ONEDRIVE)

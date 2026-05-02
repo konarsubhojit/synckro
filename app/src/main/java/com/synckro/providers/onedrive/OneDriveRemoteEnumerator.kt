@@ -5,9 +5,9 @@ import com.synckro.domain.sync.RemoteChange
 import com.synckro.domain.sync.RemoteChangeType
 import com.synckro.domain.sync.RemoteEnumerator
 import com.synckro.domain.sync.RemoteSnapshot
+import timber.log.Timber
 import javax.inject.Inject
 import javax.inject.Singleton
-import timber.log.Timber
 
 /**
  * [RemoteEnumerator] for OneDrive, backed by [OneDriveGraphClient.changesSince].
@@ -26,58 +26,60 @@ import timber.log.Timber
  * MODIFY against the local index).
  */
 @Singleton
-class OneDriveRemoteEnumerator @Inject constructor(
-    private val provider: OneDriveProvider,
-    private val graphClient: OneDriveGraphClient,
-) : RemoteEnumerator {
-
-    /**
-     * Acquires an access token via [provider] and delegates to
-     * [enumerateWithToken]. Authentication errors are surfaced as
-     * [CloudProviderException] subtypes.
-     */
-    override suspend fun enumerate(deltaToken: String?): RemoteSnapshot {
-        val token = provider.obtainAccessToken()
-        return enumerateWithToken(token, deltaToken)
-    }
-
-    /**
-     * Test seam: enumerate using a directly-supplied bearer token. Tests can
-     * point [graphClient] at a `MockWebServer` and exercise the full HTTP
-     * round-trip without going through MSAL.
-     */
-    internal suspend fun enumerateWithToken(
-        token: String,
-        deltaToken: String?,
-    ): RemoteSnapshot {
-        val (items, nextDeltaLink) = try {
-            graphClient.changesSince(token, deltaToken)
-        } catch (e: GraphApiException) {
-            when (e.statusCode) {
-                401 -> throw CloudProviderException.AuthenticationRequired(
-                    "OneDrive access token rejected by Graph API (401). Please re-authenticate.",
-                    e,
-                )
-                410 -> {
-                    // Delta link has expired — fall back to a fresh baseline so the next
-                    // sync starts from a clean slate without replaying history.
-                    // This is a normal operational scenario: delta links expire after ~30
-                    // days of inactivity per the Microsoft Graph API contract.
-                    Timber.w("OneDrive: delta link expired (410); deltaToken=%s; falling back to baseline", deltaToken)
-                    val (baseItems, baseDeltaLink) = graphClient.changesSince(token, null)
-                    return RemoteSnapshot(
-                        changes = baseItems.mapNotNull { it.toRemoteChange() },
-                        newDeltaToken = baseDeltaLink,
-                    )
-                }
-                else -> throw e
-            }
+class OneDriveRemoteEnumerator
+    @Inject
+    constructor(
+        private val provider: OneDriveProvider,
+        private val graphClient: OneDriveGraphClient,
+    ) : RemoteEnumerator {
+        /**
+         * Acquires an access token via [provider] and delegates to
+         * [enumerateWithToken]. Authentication errors are surfaced as
+         * [CloudProviderException] subtypes.
+         */
+        override suspend fun enumerate(deltaToken: String?): RemoteSnapshot {
+            val token = provider.obtainAccessToken()
+            return enumerateWithToken(token, deltaToken)
         }
 
-        val changes = items.mapNotNull { it.toRemoteChange() }
-        return RemoteSnapshot(changes = changes, newDeltaToken = nextDeltaLink)
+        /**
+         * Test seam: enumerate using a directly-supplied bearer token. Tests can
+         * point [graphClient] at a `MockWebServer` and exercise the full HTTP
+         * round-trip without going through MSAL.
+         */
+        internal suspend fun enumerateWithToken(
+            token: String,
+            deltaToken: String?,
+        ): RemoteSnapshot {
+            val (items, nextDeltaLink) =
+                try {
+                    graphClient.changesSince(token, deltaToken)
+                } catch (e: GraphApiException) {
+                    when (e.statusCode) {
+                        401 -> throw CloudProviderException.AuthenticationRequired(
+                            "OneDrive access token rejected by Graph API (401). Please re-authenticate.",
+                            e,
+                        )
+                        410 -> {
+                            // Delta link has expired — fall back to a fresh baseline so the next
+                            // sync starts from a clean slate without replaying history.
+                            // This is a normal operational scenario: delta links expire after ~30
+                            // days of inactivity per the Microsoft Graph API contract.
+                            Timber.w("OneDrive: delta link expired (410); deltaToken=%s; falling back to baseline", deltaToken)
+                            val (baseItems, baseDeltaLink) = graphClient.changesSince(token, null)
+                            return RemoteSnapshot(
+                                changes = baseItems.mapNotNull { it.toRemoteChange() },
+                                newDeltaToken = baseDeltaLink,
+                            )
+                        }
+                        else -> throw e
+                    }
+                }
+
+            val changes = items.mapNotNull { it.toRemoteChange() }
+            return RemoteSnapshot(changes = changes, newDeltaToken = nextDeltaLink)
+        }
     }
-}
 
 /**
  * Maps a Graph API [GraphDriveItem] from a delta response to a [RemoteChange].

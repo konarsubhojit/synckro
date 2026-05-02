@@ -30,15 +30,15 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class OneDriveAuthManagerTest {
-
     private lateinit var context: Context
     private val fakeHost: AuthUiHost = object : AuthUiHost {}
-    private val fakeAccount = Account(
-        id = "test-oid",
-        provider = CloudProviderType.ONEDRIVE,
-        displayName = "Test User",
-        email = "test@example.com",
-    )
+    private val fakeAccount =
+        Account(
+            id = "test-oid",
+            provider = CloudProviderType.ONEDRIVE,
+            displayName = "Test User",
+            email = "test@example.com",
+        )
 
     @Before
     fun setUp() {
@@ -50,110 +50,127 @@ class OneDriveAuthManagerTest {
     // -------------------------------------------------------------------------
 
     @Test
-    fun `isConfigured returns false when both fields are blank`() = runTest {
-        val mgr = OneDriveAuthManager.forTest(context, clientId = "", redirectUri = "")
-        assertFalse(mgr.isConfigured())
-    }
+    fun `isConfigured returns false when both fields are blank`() =
+        runTest {
+            val mgr = OneDriveAuthManager.forTest(context, clientId = "", redirectUri = "")
+            assertFalse(mgr.isConfigured())
+        }
 
     @Test
-    fun `isConfigured returns false when clientId is blank`() = runTest {
-        val mgr = OneDriveAuthManager.forTest(
-            context,
-            clientId = "",
-            redirectUri = "msauth://com.synckro.debug/abc=",
-        )
-        assertFalse(mgr.isConfigured())
-    }
+    fun `isConfigured returns false when clientId is blank`() =
+        runTest {
+            val mgr =
+                OneDriveAuthManager.forTest(
+                    context,
+                    clientId = "",
+                    redirectUri = "msauth://com.synckro.debug/abc=",
+                )
+            assertFalse(mgr.isConfigured())
+        }
 
     @Test
-    fun `isConfigured returns false when redirectUri is blank`() = runTest {
-        val mgr = OneDriveAuthManager.forTest(
-            context,
-            clientId = "some-client-id",
-            redirectUri = "",
-        )
-        assertFalse(mgr.isConfigured())
-    }
+    fun `isConfigured returns false when redirectUri is blank`() =
+        runTest {
+            val mgr =
+                OneDriveAuthManager.forTest(
+                    context,
+                    clientId = "some-client-id",
+                    redirectUri = "",
+                )
+            assertFalse(mgr.isConfigured())
+        }
 
     @Test
-    fun `isConfigured returns false when redirectUri has wrong scheme`() = runTest {
-        val mgr = OneDriveAuthManager.forTest(
-            context,
-            clientId = "some-client-id",
-            redirectUri = "https://com.example/abc",
-        )
-        assertFalse(mgr.isConfigured())
-    }
+    fun `isConfigured returns false when redirectUri has wrong scheme`() =
+        runTest {
+            val mgr =
+                OneDriveAuthManager.forTest(
+                    context,
+                    clientId = "some-client-id",
+                    redirectUri = "https://com.example/abc",
+                )
+            assertFalse(mgr.isConfigured())
+        }
 
     @Test
-    fun `isConfigured returns true for valid config`() = runTest {
-        val mgr = OneDriveAuthManager.forTest(
-            context,
-            clientId = "aaaabbbb-cccc-dddd-eeee-ffffffffffff",
-            redirectUri = "msauth://com.synckro.debug/DtQuXuc=",
-        )
-        assertTrue(mgr.isConfigured())
-    }
+    fun `isConfigured returns true for valid config`() =
+        runTest {
+            val mgr =
+                OneDriveAuthManager.forTest(
+                    context,
+                    clientId = "aaaabbbb-cccc-dddd-eeee-ffffffffffff",
+                    redirectUri = "msauth://com.synckro.debug/DtQuXuc=",
+                )
+            assertTrue(mgr.isConfigured())
+        }
 
     // -------------------------------------------------------------------------
     // signIn() — not-configured short-circuit (no MSAL call)
     // -------------------------------------------------------------------------
 
     @Test
-    fun `signIn returns NotConfigured when both fields are blank`() = runTest {
-        val mgr = OneDriveAuthManager.forTest(context, clientId = "", redirectUri = "")
-        val result = mgr.signIn(fakeHost)
-        assertTrue("Expected NotConfigured, got $result", result is AuthResult.NotConfigured)
-    }
+    fun `signIn returns NotConfigured when both fields are blank`() =
+        runTest {
+            val mgr = OneDriveAuthManager.forTest(context, clientId = "", redirectUri = "")
+            val result = mgr.signIn(fakeHost)
+            assertTrue("Expected NotConfigured, got $result", result is AuthResult.NotConfigured)
+        }
 
     @Test
-    fun `signIn returns NotConfigured when only clientId is blank`() = runTest {
-        val mgr = OneDriveAuthManager.forTest(
-            context,
-            clientId = "",
-            redirectUri = "msauth://com.synckro.debug/abc=",
-        )
-        val result = mgr.signIn(fakeHost)
-        assertTrue("Expected NotConfigured, got $result", result is AuthResult.NotConfigured)
-    }
+    fun `signIn returns NotConfigured when only clientId is blank`() =
+        runTest {
+            val mgr =
+                OneDriveAuthManager.forTest(
+                    context,
+                    clientId = "",
+                    redirectUri = "msauth://com.synckro.debug/abc=",
+                )
+            val result = mgr.signIn(fakeHost)
+            assertTrue("Expected NotConfigured, got $result", result is AuthResult.NotConfigured)
+        }
 
     @Test
-    fun `signIn returns NotConfigured when only redirectUri is blank`() = runTest {
-        val mgr = OneDriveAuthManager.forTest(
-            context,
-            clientId = "some-client-id",
-            redirectUri = "",
-        )
-        val result = mgr.signIn(fakeHost)
-        assertTrue("Expected NotConfigured, got $result", result is AuthResult.NotConfigured)
-    }
+    fun `signIn returns NotConfigured when only redirectUri is blank`() =
+        runTest {
+            val mgr =
+                OneDriveAuthManager.forTest(
+                    context,
+                    clientId = "some-client-id",
+                    redirectUri = "",
+                )
+            val result = mgr.signIn(fakeHost)
+            assertTrue("Expected NotConfigured, got $result", result is AuthResult.NotConfigured)
+        }
 
     @Test
-    fun `signIn NotConfigured message is non-blank`() = runTest {
-        val mgr = OneDriveAuthManager.forTest(context, clientId = "", redirectUri = "")
-        val result = mgr.signIn(fakeHost) as AuthResult.NotConfigured
-        assertTrue("NotConfigured message should be non-blank", result.message.isNotBlank())
-    }
+    fun `signIn NotConfigured message is non-blank`() =
+        runTest {
+            val mgr = OneDriveAuthManager.forTest(context, clientId = "", redirectUri = "")
+            val result = mgr.signIn(fakeHost) as AuthResult.NotConfigured
+            assertTrue("NotConfigured message should be non-blank", result.message.isNotBlank())
+        }
 
     // -------------------------------------------------------------------------
     // acquireAccessToken() — not-configured short-circuit (no MSAL call)
     // -------------------------------------------------------------------------
 
     @Test
-    fun `acquireAccessToken returns NotConfigured when blank config`() = runTest {
-        val mgr = OneDriveAuthManager.forTest(context, clientId = "", redirectUri = "")
-        val result = mgr.acquireAccessToken(fakeAccount)
-        assertTrue("Expected NotConfigured, got $result", result is AuthResult.NotConfigured)
-    }
+    fun `acquireAccessToken returns NotConfigured when blank config`() =
+        runTest {
+            val mgr = OneDriveAuthManager.forTest(context, clientId = "", redirectUri = "")
+            val result = mgr.acquireAccessToken(fakeAccount)
+            assertTrue("Expected NotConfigured, got $result", result is AuthResult.NotConfigured)
+        }
 
     // -------------------------------------------------------------------------
     // currentAccounts() — returns empty list without touching MSAL when unconfigured
     // -------------------------------------------------------------------------
 
     @Test
-    fun `currentAccounts returns empty list when not configured`() = runTest {
-        val mgr = OneDriveAuthManager.forTest(context, clientId = "", redirectUri = "")
-        val accounts = mgr.currentAccounts()
-        assertTrue("Expected empty, got $accounts", accounts.isEmpty())
-    }
+    fun `currentAccounts returns empty list when not configured`() =
+        runTest {
+            val mgr = OneDriveAuthManager.forTest(context, clientId = "", redirectUri = "")
+            val accounts = mgr.currentAccounts()
+            assertTrue("Expected empty, got $accounts", accounts.isEmpty())
+        }
 }

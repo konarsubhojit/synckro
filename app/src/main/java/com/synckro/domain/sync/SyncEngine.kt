@@ -142,18 +142,24 @@ class SyncEngine(
      * errors to [Result.Retriable]; [CancellationException] always propagates.
      */
     private suspend fun runReal(pair: SyncPair, provider: CloudProvider): Result {
-        val fsEnumerator = localFsEnumerator
-            ?: return Result.Terminal("SyncEngine: LocalFsEnumerator not configured for ${pair.provider}")
-        val remoteEnumerator = remoteEnumerators[pair.provider]
-            ?: return Result.Terminal("SyncEngine: no RemoteEnumerator registered for ${pair.provider}")
-        val pairDao = syncPairDao
-            ?: return Result.Terminal("SyncEngine: SyncPairDao not configured")
-        val indexDao = localIndexDao
-            ?: return Result.Terminal("SyncEngine: LocalIndexDao not configured")
-        val evtRepo = eventRepository
-            ?: return Result.Terminal("SyncEngine: SyncEventRepository not configured")
-        val fileAccess = localFileAccess
-            ?: return Result.Terminal("SyncEngine: LocalFileAccess not configured")
+        val fsEnumerator =
+            localFsEnumerator
+                ?: return Result.Terminal("SyncEngine: LocalFsEnumerator not configured for ${pair.provider}")
+        val remoteEnumerator =
+            remoteEnumerators[pair.provider]
+                ?: return Result.Terminal("SyncEngine: no RemoteEnumerator registered for ${pair.provider}")
+        val pairDao =
+            syncPairDao
+                ?: return Result.Terminal("SyncEngine: SyncPairDao not configured")
+        val indexDao =
+            localIndexDao
+                ?: return Result.Terminal("SyncEngine: LocalIndexDao not configured")
+        val evtRepo =
+            eventRepository
+                ?: return Result.Terminal("SyncEngine: SyncEventRepository not configured")
+        val fileAccess =
+            localFileAccess
+                ?: return Result.Terminal("SyncEngine: LocalFileAccess not configured")
 
         return try {
             runRealImpl(pair, provider, fsEnumerator, remoteEnumerator, pairDao, indexDao, evtRepo, fileAccess)
@@ -200,11 +206,12 @@ class SyncEngine(
         // Step 1 – Enumerate local files (full scan, updates local_index).
         // -----------------------------------------------------------------
         val treeUri = Uri.parse(pair.localTreeUri)
-        val localEnum = fsEnumerator.enumerate(
-            pairId = pair.id,
-            treeUri = treeUri,
-            ignoreGlobs = pair.excludeGlobs,
-        )
+        val localEnum =
+            fsEnumerator.enumerate(
+                pairId = pair.id,
+                treeUri = treeUri,
+                ignoreGlobs = pair.excludeGlobs,
+            )
 
         // -----------------------------------------------------------------
         // Step 2 – Enumerate remote changes (delta since last token).
@@ -227,14 +234,15 @@ class SyncEngine(
         //   local files (in index post-scan but not yet uploaded) do not
         //   appear as "in index but not in remote" → DeleteLocal.
         // -----------------------------------------------------------------
-        val localSnapshots = localEnum.snapshot.map { entry ->
-            FileSnapshot(
-                relativePath = entry.relativePath,
-                size = entry.sizeBytes,
-                lastModifiedMs = entry.mtimeMs,
-                hash = entry.contentHash,
-            )
-        }
+        val localSnapshots =
+            localEnum.snapshot.map { entry ->
+                FileSnapshot(
+                    relativePath = entry.relativePath,
+                    size = entry.sizeBytes,
+                    lastModifiedMs = entry.mtimeMs,
+                    hash = entry.contentHash,
+                )
+            }
 
         // Build synthetic remote snapshot starting from last-known remote state
         // (pre-scan index rows that have remote metadata), then apply the delta.
@@ -242,12 +250,13 @@ class SyncEngine(
         for (idx in preScanIndex) {
             val remoteSize = idx.remoteSizeBytes ?: continue
             val remoteMtime = idx.remoteMtimeMs ?: continue
-            syntheticRemote[idx.relativePath] = FileSnapshot(
-                relativePath = idx.relativePath,
-                size = remoteSize,
-                lastModifiedMs = remoteMtime,
-                hash = idx.remoteEtag,
-            )
+            syntheticRemote[idx.relativePath] =
+                FileSnapshot(
+                    relativePath = idx.relativePath,
+                    size = remoteSize,
+                    lastModifiedMs = remoteMtime,
+                    hash = idx.remoteEtag,
+                )
         }
         // Apply remote delta: ADD/MODIFY override the baseline; DELETE removes.
         // For ADD/MODIFY, only update if we have concrete metadata; if both the
@@ -260,12 +269,13 @@ class SyncEngine(
                     val resolvedSize = change.sizeBytes ?: baseline?.size
                     val resolvedMtime = change.mtimeMs ?: baseline?.lastModifiedMs
                     if (resolvedSize != null && resolvedMtime != null) {
-                        syntheticRemote[change.relativePath] = FileSnapshot(
-                            relativePath = change.relativePath,
-                            size = resolvedSize,
-                            lastModifiedMs = resolvedMtime,
-                            hash = change.etag,
-                        )
+                        syntheticRemote[change.relativePath] =
+                            FileSnapshot(
+                                relativePath = change.relativePath,
+                                size = resolvedSize,
+                                lastModifiedMs = resolvedMtime,
+                                hash = change.etag,
+                            )
                     }
                     // If no size/mtime available (neither delta nor baseline), skip rather
                     // than inserting a FS(0, 0) stub that would trigger spurious ops.
@@ -277,20 +287,22 @@ class SyncEngine(
 
         // Use only pre-scan synced entries (remoteId != null) as the SyncDiffer
         // baseline — entries without remoteId are not yet synced to remote.
-        val fileIndexEntries = preScanIndex
-            .filter { it.remoteId != null }
-            .map { it.toFileIndexEntry() }
+        val fileIndexEntries =
+            preScanIndex
+                .filter { it.remoteId != null }
+                .map { it.toFileIndexEntry() }
 
         // -----------------------------------------------------------------
         // Step 4 – Compute ops.
         // -----------------------------------------------------------------
-        val ops = SyncDiffer.diff(
-            local = localSnapshots,
-            remote = syntheticRemote.values,
-            lastIndex = fileIndexEntries,
-            direction = pair.direction,
-            conflictPolicy = pair.conflictPolicy,
-        )
+        val ops =
+            SyncDiffer.diff(
+                local = localSnapshots,
+                remote = syntheticRemote.values,
+                lastIndex = fileIndexEntries,
+                direction = pair.direction,
+                conflictPolicy = pair.conflictPolicy,
+            )
 
         // -----------------------------------------------------------------
         // Step 5 – Apply previously-resolved ConflictRecords (same pattern
@@ -298,9 +310,10 @@ class SyncEngine(
         // -----------------------------------------------------------------
         var appliedResolutions = 0
         val resolutionErrors = mutableListOf<String>()
-        val resolved = runCatching { conflictRepository.getResolvedForPair(pair.id) }
-            .onFailure { Timber.w(it, "SyncEngine: could not read resolved conflicts for pair %d", pair.id) }
-            .getOrDefault(emptyList())
+        val resolved =
+            runCatching { conflictRepository.getResolvedForPair(pair.id) }
+                .onFailure { Timber.w(it, "SyncEngine: could not read resolved conflicts for pair %d", pair.id) }
+                .getOrDefault(emptyList())
         for (conflict in resolved) {
             try {
                 applyRealResolution(conflict, pair, provider, fileAccess, indexDao, evtRepo)
@@ -325,33 +338,36 @@ class SyncEngine(
                     // For providers returning a full file record (like FakeRemoteEnumerator),
                     // this is sufficient for SyncOpApplier.
                     change.sizeBytes?.let {
-                        change.relativePath to RemoteFile(
-                            id = change.remoteId,
-                            name = change.relativePath.substringAfterLast('/'),
-                            parentId = null,
-                            isFolder = false,
-                            size = change.sizeBytes,
-                            lastModifiedMs = change.mtimeMs,
-                            eTag = change.etag,
-                            mimeType = null,
-                        )
+                        change.relativePath to
+                            RemoteFile(
+                                id = change.remoteId,
+                                name = change.relativePath.substringAfterLast('/'),
+                                parentId = null,
+                                isFolder = false,
+                                size = change.sizeBytes,
+                                lastModifiedMs = change.mtimeMs,
+                                eTag = change.etag,
+                                mimeType = null,
+                            )
                     }
                 }
                 .toMap()
 
-        val applier = SyncOpApplier(
-            provider = provider,
-            localIndexDao = indexDao,
-            conflictRepository = conflictRepository,
-            eventRepository = evtRepo,
-            localFileAccess = fileAccess,
-        )
-        val applyResult = applier.apply(
-            ops = ops,
-            pair = pair,
-            remoteFilesByPath = remoteFilesByPath,
-            localIndexByPath = preScanIndexByPath,
-        )
+        val applier =
+            SyncOpApplier(
+                provider = provider,
+                localIndexDao = indexDao,
+                conflictRepository = conflictRepository,
+                eventRepository = evtRepo,
+                localFileAccess = fileAccess,
+            )
+        val applyResult =
+            applier.apply(
+                ops = ops,
+                pair = pair,
+                remoteFilesByPath = remoteFilesByPath,
+                localIndexByPath = preScanIndexByPath,
+            )
 
         // -----------------------------------------------------------------
         // Step 7 – Persist delta token and last-full-scan timestamp.
@@ -400,13 +416,14 @@ class SyncEngine(
             conflict.relativePath,
         )
         // Delegate to SyncOpApplier to reuse retry / index-update logic.
-        val applier = SyncOpApplier(
-            provider = provider,
-            localIndexDao = indexDao,
-            conflictRepository = conflictRepository,
-            eventRepository = evtRepo,
-            localFileAccess = fileAccess,
-        )
+        val applier =
+            SyncOpApplier(
+                provider = provider,
+                localIndexDao = indexDao,
+                conflictRepository = conflictRepository,
+                eventRepository = evtRepo,
+                localFileAccess = fileAccess,
+            )
         when (conflict.resolution) {
             ConflictRecord.RESOLUTION_KEEP_LOCAL ->
                 applier.apply(
@@ -416,19 +433,21 @@ class SyncEngine(
                     localIndexByPath = emptyMap(),
                 )
             ConflictRecord.RESOLUTION_KEEP_REMOTE -> {
-                val indexEntry = indexDao.getForPair(pair.id)
-                    .firstOrNull { it.relativePath == conflict.relativePath }
+                val indexEntry =
+                    indexDao.getForPair(pair.id)
+                        .firstOrNull { it.relativePath == conflict.relativePath }
                 if (indexEntry?.remoteId != null) {
-                    val remoteFile = RemoteFile(
-                        id = indexEntry.remoteId,
-                        name = conflict.relativePath.substringAfterLast('/'),
-                        parentId = null,
-                        isFolder = false,
-                        size = indexEntry.remoteSizeBytes,
-                        lastModifiedMs = indexEntry.remoteMtimeMs,
-                        eTag = indexEntry.remoteEtag,
-                        mimeType = null,
-                    )
+                    val remoteFile =
+                        RemoteFile(
+                            id = indexEntry.remoteId,
+                            name = conflict.relativePath.substringAfterLast('/'),
+                            parentId = null,
+                            isFolder = false,
+                            size = indexEntry.remoteSizeBytes,
+                            lastModifiedMs = indexEntry.remoteMtimeMs,
+                            eTag = indexEntry.remoteEtag,
+                            mimeType = null,
+                        )
                     applier.apply(
                         ops = listOf(SyncOp.DownloadNew(conflict.relativePath)),
                         pair = pair,
@@ -540,16 +559,17 @@ class SyncEngine(
          * [SyncDiffer.diff]. Remote metadata columns populate the remote-side fields;
          * these are null until the first successful sync populates them via [SyncOpApplier].
          */
-        internal fun LocalIndexEntity.toFileIndexEntry() = FileIndexEntry(
-            pairId = pairId,
-            relativePath = relativePath,
-            localSize = sizeBytes,
-            localLastModifiedMs = mtimeMs,
-            localHash = contentHash,
-            remoteId = remoteId,
-            remoteETag = remoteEtag,
-            remoteSize = remoteSizeBytes,
-            remoteLastModifiedMs = remoteMtimeMs,
-        )
+        internal fun LocalIndexEntity.toFileIndexEntry() =
+            FileIndexEntry(
+                pairId = pairId,
+                relativePath = relativePath,
+                localSize = sizeBytes,
+                localLastModifiedMs = mtimeMs,
+                localHash = contentHash,
+                remoteId = remoteId,
+                remoteETag = remoteEtag,
+                remoteSize = remoteSizeBytes,
+                remoteLastModifiedMs = remoteMtimeMs,
+            )
     }
 }

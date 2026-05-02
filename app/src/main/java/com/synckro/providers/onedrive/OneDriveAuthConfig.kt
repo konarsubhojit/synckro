@@ -11,7 +11,6 @@ package com.synckro.providers.onedrive
  * built without auth secrets.
  */
 object OneDriveAuthConfig {
-
     /**
      * Outcome of a config validation.
      *
@@ -25,8 +24,12 @@ object OneDriveAuthConfig {
      */
     sealed interface ValidationResult {
         data object Valid : ValidationResult
+
         data object NotConfigured : ValidationResult
-        data class Invalid(val reason: String) : ValidationResult
+
+        data class Invalid(
+            val reason: String,
+        ) : ValidationResult
     }
 
     /**
@@ -44,18 +47,21 @@ object OneDriveAuthConfig {
         val uriBlank = redirectUri.isBlank()
         return when {
             idBlank && uriBlank -> ValidationResult.NotConfigured
-            idBlank -> ValidationResult.Invalid(
-                "MS_CLIENT_ID is not set but MSAL_REDIRECT_URI is. " +
-                    "Both must be provided together. See docs/login-setup.md.",
-            )
-            uriBlank -> ValidationResult.Invalid(
-                "MSAL_REDIRECT_URI is not set but MS_CLIENT_ID is. " +
-                    "Both must be provided together. See docs/login-setup.md.",
-            )
-            !redirectUri.startsWith("msauth://") -> ValidationResult.Invalid(
-                "MSAL_REDIRECT_URI must start with 'msauth://'. " +
-                    "Got: '$redirectUri'. See docs/login-setup.md.",
-            )
+            idBlank ->
+                ValidationResult.Invalid(
+                    "MS_CLIENT_ID is not set but MSAL_REDIRECT_URI is. " +
+                        "Both must be provided together. See docs/login-setup.md.",
+                )
+            uriBlank ->
+                ValidationResult.Invalid(
+                    "MSAL_REDIRECT_URI is not set but MS_CLIENT_ID is. " +
+                        "Both must be provided together. See docs/login-setup.md.",
+                )
+            !redirectUri.startsWith("msauth://") ->
+                ValidationResult.Invalid(
+                    "MSAL_REDIRECT_URI must start with 'msauth://'. " +
+                        "Got: '$redirectUri'. See docs/login-setup.md.",
+                )
             else -> ValidationResult.Valid
         }
     }
