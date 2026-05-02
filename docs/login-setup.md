@@ -93,7 +93,7 @@ signature).
 1. Click **Create credentials → OAuth client ID** again.
 2. Application type: **Android**.
 3. Name: `Synckro Android debug`.
-4. Package name: `com.konarsubhojit.synckro.debug`
+4. Package name: `com.synckro.debug`
    (the `.debug` suffix comes from `applicationIdSuffix ".debug"` in the debug
    build type).
 5. SHA-1 certificate fingerprint: paste the **SHA-1** from your debug
@@ -106,7 +106,7 @@ signature).
 #### Android client (release build, if applicable)
 
 Repeat the Android client steps with:
-- Package name: `com.konarsubhojit.synckro`
+- Package name: `com.synckro`
 - SHA-1: your release keystore's SHA-1.
 
 ### 4. Add webClientId to your local build
@@ -222,13 +222,13 @@ The output is a 28-character base64 string (e.g. `qqqwww...==`).
 #### Register the Android platform in Azure
 
 1. In the app registration, go to **Authentication → Add a platform → Android**.
-2. Package name: `com.konarsubhojit.synckro.debug`.
+2. Package name: `com.synckro.debug`.
 3. Signature hash: paste the base64 string from the previous step.
 4. Click **Configure**.
 5. Azure displays a **redirect URI** of the form:
 
    ```
-   msauth://com.konarsubhojit.synckro.debug/<base64-hash>
+   msauth://com.synckro.debug/<base64-hash>
    ```
 
    Copy this **entire URI verbatim** (URL-encoded, do not modify).
@@ -243,7 +243,7 @@ manifest placeholders by the Gradle build scripts. You do not need to edit
 
 ```properties
 MS_CLIENT_ID=aaaabbbb-cccc-dddd-eeee-ffffgggggggg
-MSAL_REDIRECT_URI=msauth://com.konarsubhojit.synckro.debug/<base64-hash>
+MSAL_REDIRECT_URI=msauth://com.synckro.debug/<base64-hash>
 ```
 
 The app's `build.gradle.kts` reads these values and passes them as
@@ -299,7 +299,7 @@ Create the file with the following content, replacing the placeholders:
 {
   "client_id": "aaaabbbb-cccc-dddd-eeee-ffffgggggggg",
   "authorization_user_agent": "DEFAULT",
-  "redirect_uri": "msauth://com.konarsubhojit.synckro.debug/<base64-hash>",
+  "redirect_uri": "msauth://com.synckro.debug/<base64-hash>",
   "account_mode": "SINGLE",
   "authorities": [
     {

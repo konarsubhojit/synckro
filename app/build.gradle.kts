@@ -1,11 +1,12 @@
 import java.util.Properties
 
-val localProps = Properties().apply {
-    val f = rootProject.file("local.properties")
-    if (f.exists()) f.inputStream().use { load(it) }
-}
-fun secretOrEmpty(key: String): String =
-    (System.getenv(key) ?: localProps.getProperty(key) ?: "").trim()
+val localProps =
+    Properties().apply {
+        val f = rootProject.file("local.properties")
+        if (f.exists()) f.inputStream().use { load(it) }
+    }
+
+fun secretOrEmpty(key: String): String = (System.getenv(key) ?: localProps.getProperty(key) ?: "").trim()
 
 plugins {
     alias(libs.plugins.android.application)
@@ -14,14 +15,15 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.ksp)
     alias(libs.plugins.hilt)
+    alias(libs.plugins.ktlint)
 }
 
 android {
-    namespace = "com.konarsubhojit.synckro"
+    namespace = "com.synckro"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.konarsubhojit.synckro"
+        applicationId = "com.synckro"
         minSdk = 26
         targetSdk = 34
         versionCode = 1
@@ -38,18 +40,21 @@ android {
 
     signingConfigs {
         create("debugPinned") {
-            val ksPath = secretOrEmpty("DEBUG_KEYSTORE_PATH")
-                .ifEmpty { rootProject.file("debug.keystore").absolutePath }
+            val ksPath =
+                secretOrEmpty("DEBUG_KEYSTORE_PATH")
+                    .ifEmpty { rootProject.file("debug.keystore").absolutePath }
             val ksFile = file(ksPath)
-            if (ksFile.exists()
-                && secretOrEmpty("DEBUG_KEYSTORE_PASSWORD").isNotEmpty()
+            if (ksFile.exists() &&
+                secretOrEmpty("DEBUG_KEYSTORE_PASSWORD").isNotEmpty()
             ) {
                 storeFile = ksFile
                 storePassword = secretOrEmpty("DEBUG_KEYSTORE_PASSWORD")
-                keyAlias = secretOrEmpty("DEBUG_KEY_ALIAS")
-                    .ifEmpty { "androiddebugkey" }
-                keyPassword = secretOrEmpty("DEBUG_KEY_PASSWORD")
-                    .ifEmpty { secretOrEmpty("DEBUG_KEYSTORE_PASSWORD") }
+                keyAlias =
+                    secretOrEmpty("DEBUG_KEY_ALIAS")
+                        .ifEmpty { "androiddebugkey" }
+                keyPassword =
+                    secretOrEmpty("DEBUG_KEY_PASSWORD")
+                        .ifEmpty { secretOrEmpty("DEBUG_KEYSTORE_PASSWORD") }
             }
         }
     }
@@ -87,7 +92,7 @@ android {
             buildConfigField(
                 "String",
                 "GOOGLE_WEB_CLIENT_ID",
-                "\"${secretOrEmpty("GOOGLE_WEB_CLIENT_ID")}\""
+                "\"${secretOrEmpty("GOOGLE_WEB_CLIENT_ID")}\"",
             )
             val msClientId = secretOrEmpty("MS_CLIENT_ID")
             val msalRedirect = secretOrEmpty("MSAL_REDIRECT_URI")
@@ -126,6 +131,8 @@ android {
                             "Got: '$msalRedirect'. See docs/login-setup.md."
                     }
                     val host = msalRedirect.substringAfter("msauth://").substringBefore("/")
+                    val expectedHost = "com.synckro.debug"
+                    val legacyHost = "com.konarsubhojit.synckro.debug"
                     check(host.isNotEmpty()) {
                         "MSAL_REDIRECT_URI has no host component. " +
                             "Expected 'msauth://<applicationId>/<hash>'. See docs/login-setup.md."
@@ -134,27 +141,37 @@ android {
                         "MSAL_REDIRECT_URI has no path component after the host. " +
                             "Expected 'msauth://<applicationId>/<hash>'. See docs/login-setup.md."
                     }
-                    check(host == "com.konarsubhojit.synckro.debug") {
+                    check(host == expectedHost || host == legacyHost) {
                         "MSAL_REDIRECT_URI host '$host' must equal " +
-                            "'com.konarsubhojit.synckro.debug' (debug applicationId). " +
+                            "'$expectedHost' (debug applicationId) or the legacy '$legacyHost'. " +
                             "See docs/login-setup.md."
+                    }
+                    if (host == legacyHost) {
+                        println(
+                            "WARNING: MSAL_REDIRECT_URI uses legacy host '$legacyHost'. " +
+                                "Update CI/local secrets to '$expectedHost' to match the renamed debug applicationId.",
+                        )
                     }
                 }
             }
 
             // Extract host/path for manifest placeholders (empty when both secrets are unset).
-            val msalHost = msalRedirect
-                .substringAfter("msauth://", "")
-                .substringBefore("/", "")
-            val msalPath = if (msalHost.isNotEmpty())
-                "/" + msalRedirect.substringAfter("$msalHost/", "")
-            else "/"
+            val msalHost =
+                msalRedirect
+                    .substringAfter("msauth://", "")
+                    .substringBefore("/", "")
+            val msalPath =
+                if (msalHost.isNotEmpty()) {
+                    "/" + msalRedirect.substringAfter("$msalHost/", "")
+                } else {
+                    "/"
+                }
 
             buildConfigField("String", "MS_CLIENT_ID", "\"$msClientId\"")
             buildConfigField(
                 "String",
                 "MSAL_REDIRECT_URI",
-                "\"$msalRedirect\""
+                "\"$msalRedirect\"",
             )
             manifestPlaceholders["msalHost"] = msalHost
             manifestPlaceholders["msalPath"] = msalPath
@@ -176,12 +193,13 @@ android {
     }
 
     packaging {
-        resources.excludes += setOf(
-            "META-INF/AL2.0",
-            "META-INF/LGPL2.1",
-            "META-INF/LICENSE*",
-            "META-INF/NOTICE*",
-        )
+        resources.excludes +=
+            setOf(
+                "META-INF/AL2.0",
+                "META-INF/LGPL2.1",
+                "META-INF/LICENSE*",
+                "META-INF/NOTICE*",
+            )
     }
 
     testOptions {
@@ -208,30 +226,33 @@ android {
  */
 abstract class GenerateMsalConfigTask : DefaultTask() {
     @get:Input abstract val clientId: Property<String>
+
     @get:Input abstract val redirect: Property<String>
+
     @get:OutputDirectory abstract val outputDir: DirectoryProperty
 
     @TaskAction
     fun execute() {
         fun String.esc() = replace("\\", "\\\\").replace("\"", "\\\"")
-        val json = """
-        {
-          "client_id": "${clientId.get().esc()}",
-          "authorization_user_agent": "DEFAULT",
-          "redirect_uri": "${redirect.get().esc()}",
-          "account_mode": "SINGLE",
-          "broker_redirect_uri_registered": false,
-          "authorities": [
+        val json =
+            """
             {
-              "type": "AAD",
-              "audience": {
-                "type": "AzureADandPersonalMicrosoftAccount",
-                "tenant_id": "common"
-              }
+              "client_id": "${clientId.get().esc()}",
+              "authorization_user_agent": "DEFAULT",
+              "redirect_uri": "${redirect.get().esc()}",
+              "account_mode": "SINGLE",
+              "broker_redirect_uri_registered": false,
+              "authorities": [
+                {
+                  "type": "AAD",
+                  "audience": {
+                    "type": "AzureADandPersonalMicrosoftAccount",
+                    "tenant_id": "common"
+                  }
+                }
+              ]
             }
-          ]
-        }
-        """.trimIndent()
+            """.trimIndent()
         val raw = outputDir.get().asFile.resolve("raw")
         raw.mkdirs()
         raw.resolve("msal_config.json").writeText(json)
