@@ -100,7 +100,7 @@
     <string name="accounts_reconcile_failed_format">Couldn\u0027t refresh %1$s accounts: %2$s</string>
 
     <!-- Provider-specific auth errors -->
-    <string name="onedrive_not_configured">OneDrive is not configured. Set MS_CLIENT_ID and MSAL_REDIRECT_URI before building.</string>
+    <string name="onedrive_not_configured">OneDrive sign-in is not configured in this build.</string>
     <string name="onedrive_signin_coming_soon">OneDrive sign-in is coming in the next update.</string>
     <string name="onedrive_init_failed">Couldn\u0027t initialize OneDrive sign-in. Please try again.</string>
     <string name="onedrive_signin_null_result">OneDrive sign-in returned no account. Please try again.</string>

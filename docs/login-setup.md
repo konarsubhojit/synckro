@@ -267,9 +267,14 @@ The app's `build.gradle.kts` reads these values and passes them as
 </activity>
 ```
 
-If `MSAL_REDIRECT_URI` is blank the placeholder resolves to an empty host and
-the intent filter is effectively disabled — MSAL sign-in callbacks will not
-be routed back to the app.
+**Build-time validation rules (debug builds only):**
+
+| State | Result |
+|-------|--------|
+| Both `MS_CLIENT_ID` and `MSAL_REDIRECT_URI` unset | Build succeeds with a `WARNING:` line; OneDrive sign-in shows "not configured in this build" at runtime with no MSAL stack trace. |
+| Exactly one of the two set | **Build fails** with a message naming the missing variable and pointing at `docs/login-setup.md`. |
+| Both set but `MSAL_REDIRECT_URI` missing `msauth://` prefix, empty host, or empty path | **Build fails** with a descriptive error. |
+| Both set, URI valid | Build succeeds normally. |
 
 ### 3. Grant API permissions
 
@@ -334,8 +339,9 @@ call fails and `isConfigured()` returns `false`, causing the app to show a
 
 | Symptom | Likely cause | Fix |
 |---------|-------------|-----|
+| `MsalClientException: Intent filter for: BrowserTabActivity is missing` | `MSAL_REDIRECT_URI` or `MS_CLIENT_ID` was not set at build time, or a stale APK is installed | Uninstall the APK, set both values in `local.properties`, rebuild with `./gradlew assembleDebug`, and reinstall. The build will now fail loudly if either value is missing or malformed. |
+| "OneDrive sign-in is not configured in this build." in the app | Both `MS_CLIENT_ID` and `MSAL_REDIRECT_URI` were blank when the APK was built | Set both values in `local.properties` (or CI secrets) and rebuild. |
 | Browser doesn't redirect back to app | Redirect URI mismatch between Azure, `msal_config.json`, and `local.properties` | Copy the URI from Azure **exactly as shown** (URL-encoded). Check that all three places use the same string. |
-| `MSAL_REDIRECT_URI` missing in manifest | `MSAL_REDIRECT_URI` is blank in `local.properties` / env | Set `MSAL_REDIRECT_URI` and rebuild. The `${msalHost}` placeholder becomes empty otherwise. |
 | `MsalClientException: Configuration error` | `client_id` or `redirect_uri` in `msal_config.json` doesn't match Azure | Re-copy values from the Azure overview / Authentication pages. |
 | Sign-in succeeds but sync fails with 401 | `offline_access` permission missing → no refresh token | Add `offline_access` to API permissions in Azure (see Step 3). |
 | Debug build works but release build doesn't | Signature hash for release keystore not registered | Add a second Android platform entry in Azure with the release SHA-1 base64 hash. |
