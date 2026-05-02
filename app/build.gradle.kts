@@ -131,6 +131,8 @@ android {
                             "Got: '$msalRedirect'. See docs/login-setup.md."
                     }
                     val host = msalRedirect.substringAfter("msauth://").substringBefore("/")
+                    val expectedHost = "com.synckro.debug"
+                    val legacyHost = "com.konarsubhojit.synckro.debug"
                     check(host.isNotEmpty()) {
                         "MSAL_REDIRECT_URI has no host component. " +
                             "Expected 'msauth://<applicationId>/<hash>'. See docs/login-setup.md."
@@ -139,10 +141,16 @@ android {
                         "MSAL_REDIRECT_URI has no path component after the host. " +
                             "Expected 'msauth://<applicationId>/<hash>'. See docs/login-setup.md."
                     }
-                    check(host == "com.synckro.debug") {
+                    check(host == expectedHost || host == legacyHost) {
                         "MSAL_REDIRECT_URI host '$host' must equal " +
-                            "'com.synckro.debug' (debug applicationId). " +
+                            "'$expectedHost' (debug applicationId) or the legacy '$legacyHost'. " +
                             "See docs/login-setup.md."
+                    }
+                    if (host == legacyHost) {
+                        println(
+                            "WARNING: MSAL_REDIRECT_URI uses legacy host '$legacyHost'. " +
+                                "Update CI/local secrets to '$expectedHost' to match the renamed debug applicationId.",
+                        )
                     }
                 }
             }
