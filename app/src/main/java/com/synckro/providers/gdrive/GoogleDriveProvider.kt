@@ -49,7 +49,7 @@ class GoogleDriveProvider
 
         /**
          * Ensures a valid bearer token is cached and returns it. Used by
-         * [com.synckro.domain.sync.RemoteEnumerator] implementations
+         * [RemoteEnumerator] implementations
          * that need to make Drive calls outside the [CloudProvider] surface.
          *
          * Follows the same concurrency contract as [ensureAuthenticated]: callers

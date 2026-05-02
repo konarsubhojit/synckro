@@ -1,6 +1,8 @@
 package com.synckro.domain.sync
 
 import com.synckro.data.repository.ConflictRepository
+import com.synckro.data.worker.SyncWorker
+import com.synckro.di.CloudProviderModule
 import com.synckro.domain.model.CloudProviderType
 import com.synckro.domain.model.ConflictPolicy
 import com.synckro.domain.model.ConflictRecord
@@ -21,7 +23,7 @@ import timber.log.Timber
  * rows for unresolved [ConflictPolicy.KEEP_BOTH] conflicts.
  *
  * @param providers Map of all registered [CloudProvider] implementations, keyed by
- *   [CloudProviderType]. Injected by Hilt via [com.synckro.di.CloudProviderModule].
+ *   [CloudProviderType]. Injected by Hilt via [CloudProviderModule].
  */
 class SyncEngine(
     private val conflictRepository: ConflictRepository,
@@ -63,7 +65,7 @@ class SyncEngine(
          * @param needsReauth  True when the failure is auth-related (token expired /
          *   account removed / scope revoked / `MsalUiRequiredException` /
          *   `NotConfigured`). The Accounts screen uses this to show a "Re-authenticate"
-         *   CTA, and [com.synckro.data.worker.SyncWorker] uses it to
+         *   CTA, and [SyncWorker] uses it to
          *   persist a distinct `lastSyncResult` and emit ERROR events tagged `auth`.
          */
         data class Terminal(
