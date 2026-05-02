@@ -104,14 +104,15 @@ class PairEditorViewModelTest {
     fun `form field changes update state`() {
         val vm = createVm()
         vm.onDisplayNameChange("My Pair")
-        vm.onRemoteFolderIdChange("remote/folder")
+        vm.onRemoteFolderPicked("remote-folder-id", "My Remote Folder")
         vm.onWifiOnlyChange(false)
         vm.onRequiresChargingChange(true)
         vm.onConflictPolicyChange(ConflictPolicy.PREFER_LOCAL)
 
         val state = vm.state.value
         assertEquals("My Pair", state.displayName)
-        assertEquals("remote/folder", state.remoteFolderId)
+        assertEquals("remote-folder-id", state.remoteFolderId)
+        assertEquals("My Remote Folder", state.remoteFolderName)
         assertFalse(state.wifiOnly)
         assertTrue(state.requiresCharging)
         assertEquals(ConflictPolicy.PREFER_LOCAL, state.conflictPolicy)

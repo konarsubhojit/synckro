@@ -32,7 +32,6 @@ internal class SafLocalFileAccess(
     private val treeUri: Uri,
     private val childrenQuery: DocumentChildrenQuery = DefaultDocumentChildrenQuery,
 ) : LocalFileAccess {
-
     // -------------------------------------------------------------------------
     // LocalFileAccess
     // -------------------------------------------------------------------------

@@ -50,6 +50,10 @@ class PairEditorViewModel
             val localTreeUri: String = "",
             val provider: CloudProviderType = CloudProviderType.GOOGLE_DRIVE,
             val remoteFolderId: String = "",
+            /** Human-readable display name for [remoteFolderId], set when the user browses
+             *  and picks a folder via [PickRemoteFolderScreen]. Empty when the ID was loaded
+             *  from the database (name is not persisted) or typed manually. */
+            val remoteFolderName: String = "",
             val conflictPolicy: ConflictPolicy = ConflictPolicy.NEWEST_WINS,
             val direction: SyncDirection = SyncDirection.BIDIRECTIONAL,
             val wifiOnly: Boolean = true,
@@ -83,6 +87,13 @@ class PairEditorViewModel
                     userPickedFolder = true
                     _state.update { it.copy(localTreeUri = restored) }
                 }
+
+            // Restore the remote folder pick result across process death in the same way.
+            val restoredRemoteId = savedStateHandle.get<String?>(KEY_REMOTE_FOLDER_ID)?.takeIf { it.isNotEmpty() }
+            val restoredRemoteName = savedStateHandle.get<String?>(KEY_REMOTE_FOLDER_NAME).orEmpty()
+            if (restoredRemoteId != null) {
+                _state.update { it.copy(remoteFolderId = restoredRemoteId, remoteFolderName = restoredRemoteName) }
+            }
 
             if (pairId > 0L) loadExisting(pairId)
         }
@@ -135,9 +146,23 @@ class PairEditorViewModel
 
         fun onDisplayNameChange(value: String) = _state.update { it.copy(displayName = value) }
 
-        fun onRemoteFolderIdChange(value: String) = _state.update { it.copy(remoteFolderId = value) }
+        /**
+         * Called by the navigation layer when [PickRemoteFolderScreen] has returned a confirmed
+         * cloud folder. Both the folder ID and human-readable name are stored so the editor can
+         * display the name while still persisting the opaque provider ID.
+         */
+        fun onRemoteFolderPicked(id: String, name: String) {
+            savedStateHandle[KEY_REMOTE_FOLDER_ID] = id
+            savedStateHandle[KEY_REMOTE_FOLDER_NAME] = name
+            _state.update { it.copy(remoteFolderId = id, remoteFolderName = name) }
+        }
 
-        fun onProviderChange(value: CloudProviderType) = _state.update { it.copy(provider = value) }
+        fun onProviderChange(value: CloudProviderType) =
+            _state.update {
+                // Clear the remote folder selection when the provider changes because folder IDs
+                // are provider-specific and the previously chosen folder no longer applies.
+                it.copy(provider = value, remoteFolderId = "", remoteFolderName = "")
+            }
 
         fun onConflictPolicyChange(value: ConflictPolicy) = _state.update { it.copy(conflictPolicy = value) }
 
@@ -231,5 +256,18 @@ class PairEditorViewModel
              * [PickLocalFolderScreen] so the picker can pre-populate the current selection.
              */
             const val KEY_PICK_FOLDER_INITIAL_URI = "pickFolderInitialUri"
+
+            /**
+             * Key used by the navigation layer to deliver the chosen cloud folder ID from
+             * [PickRemoteFolderScreen] back to the editor via the back-stack entry's
+             * [SavedStateHandle]. Also used to persist the value across process death.
+             */
+            const val KEY_REMOTE_FOLDER_ID = "remotePickedFolderId"
+
+            /**
+             * Key used to deliver the human-readable name of the chosen cloud folder alongside
+             * [KEY_REMOTE_FOLDER_ID].
+             */
+            const val KEY_REMOTE_FOLDER_NAME = "remotePickedFolderName"
         }
     }
