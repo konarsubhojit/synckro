@@ -188,4 +188,30 @@ class GoogleDriveRemoteEnumeratorTest {
         assertEquals("token-final", snapshot.newDeltaToken)
         assertEquals(2, server.requestCount)
     }
+
+    @Test
+    fun `enumerate falls back to baseline when page token returns 410 Gone`() = runTest {
+        // First request (with stale page token) returns 410 Gone.
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(410)
+                .setBody("""{"error": {"code": "tokenExpired", "message": "The sync token is no longer valid."}}""")
+        )
+        // Baseline fallback: changes/startPageToken returns a fresh start token.
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(200)
+                .setBody("""{"startPageToken": "fresh-token-1"}""")
+        )
+
+        val snapshot = enumerator.enumerateWithToken(token, deltaToken = "stale-token")
+
+        assertTrue("Fallback snapshot should have no changes", snapshot.changes.isEmpty())
+        assertEquals(
+            "Fallback should return fresh start token",
+            "fresh-token-1",
+            snapshot.newDeltaToken,
+        )
+        assertEquals("Two requests should be made (stale + baseline)", 2, server.requestCount)
+    }
 }

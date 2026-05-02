@@ -7,6 +7,7 @@ import com.konarsubhojit.synckro.domain.sync.RemoteEnumerator
 import com.konarsubhojit.synckro.domain.sync.RemoteSnapshot
 import javax.inject.Inject
 import javax.inject.Singleton
+import timber.log.Timber
 
 /**
  * [RemoteEnumerator] for OneDrive, backed by [OneDriveGraphClient.changesSince].
@@ -52,13 +53,23 @@ class OneDriveRemoteEnumerator @Inject constructor(
         val (items, nextDeltaLink) = try {
             graphClient.changesSince(token, deltaToken)
         } catch (e: GraphApiException) {
-            if (e.statusCode == 401) {
-                throw CloudProviderException.AuthenticationRequired(
+            when (e.statusCode) {
+                401 -> throw CloudProviderException.AuthenticationRequired(
                     "OneDrive access token rejected by Graph API (401). Please re-authenticate.",
                     e,
                 )
+                410 -> {
+                    // Delta link has expired — fall back to a fresh baseline so the next
+                    // sync starts from a clean slate without replaying history.
+                    Timber.w("OneDrive: delta link expired (410); falling back to baseline")
+                    val (baseItems, baseDeltaLink) = graphClient.changesSince(token, null)
+                    return RemoteSnapshot(
+                        changes = baseItems.mapNotNull { it.toRemoteChange() },
+                        newDeltaToken = baseDeltaLink,
+                    )
+                }
+                else -> throw e
             }
-            throw e
         }
 
         val changes = items.mapNotNull { it.toRemoteChange() }
