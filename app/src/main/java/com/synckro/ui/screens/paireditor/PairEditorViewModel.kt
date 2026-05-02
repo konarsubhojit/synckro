@@ -146,8 +146,6 @@ class PairEditorViewModel
 
         fun onDisplayNameChange(value: String) = _state.update { it.copy(displayName = value) }
 
-        fun onRemoteFolderIdChange(value: String) = _state.update { it.copy(remoteFolderId = value, remoteFolderName = "") }
-
         /**
          * Called by the navigation layer when [PickRemoteFolderScreen] has returned a confirmed
          * cloud folder. Both the folder ID and human-readable name are stored so the editor can

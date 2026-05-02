@@ -317,9 +317,10 @@ private fun ProviderDropdown(
     modifier: Modifier = Modifier,
 ) {
     var expanded by remember { mutableStateOf(false) }
-    val selectableProviders = remember {
-        CloudProviderType.entries.filter { it != CloudProviderType.FAKE }
-    }
+    val selectableProviders =
+        remember {
+            CloudProviderType.entries.filter { it != CloudProviderType.FAKE }
+        }
 
     ExposedDropdownMenuBox(
         expanded = expanded,

@@ -21,7 +21,6 @@ import com.synckro.domain.auth.AuthManager
 import com.synckro.domain.model.CloudProviderType
 import com.synckro.domain.provider.CloudProvider
 import com.synckro.domain.scan.LocalFolderScanner
-import com.synckro.domain.sync.LocalFileAccess
 import com.synckro.domain.sync.RemoteEnumerator
 import com.synckro.domain.sync.SyncEngine
 import com.synckro.providers.fake.FakeCloudProvider

@@ -31,7 +31,10 @@ class PickRemoteFolderViewModel
         private val providers: Map<CloudProviderType, @JvmSuppressWildcards CloudProvider>,
     ) : ViewModel() {
         /** One entry in the breadcrumb trail; [folderId] is null for the root level. */
-        data class BreadcrumbEntry(val folderId: String?, val folderName: String)
+        data class BreadcrumbEntry(
+            val folderId: String?,
+            val folderName: String,
+        )
 
         data class UiState(
             val isLoading: Boolean = false,
@@ -44,9 +47,14 @@ class PickRemoteFolderViewModel
         )
 
         val providerType: CloudProviderType =
-            savedStateHandle.get<String>(ARG_PROVIDER)
-                ?.let { runCatching { CloudProviderType.valueOf(it) }.getOrNull() }
-                ?: CloudProviderType.GOOGLE_DRIVE
+            run {
+                val arg = savedStateHandle.get<String>(ARG_PROVIDER)
+                val resolved = arg?.let { runCatching { CloudProviderType.valueOf(it) }.getOrNull() }
+                if (resolved == null && arg != null) {
+                    Timber.w("PickRemoteFolderViewModel: unknown provider arg '%s', falling back to GOOGLE_DRIVE", arg)
+                }
+                resolved ?: CloudProviderType.GOOGLE_DRIVE
+            }
 
         private val provider: CloudProvider? = providers[providerType]
 
@@ -94,12 +102,13 @@ class PickRemoteFolderViewModel
         }
 
         private fun loadFolder(folderId: String?) {
-            val p = provider ?: run {
-                _state.update {
-                    it.copy(isLoading = false, error = "Provider not available: $providerType")
+            val p =
+                provider ?: run {
+                    _state.update {
+                        it.copy(isLoading = false, error = "Provider not available: $providerType")
+                    }
+                    return
                 }
-                return
-            }
             _state.update { it.copy(isLoading = true, error = null, currentFolderId = folderId) }
             viewModelScope.launch {
                 runCatching {
