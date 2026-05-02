@@ -30,6 +30,8 @@
     <string name="accounts_empty">No accounts connected yet.</string>
     <string name="accounts_not_configured_format">%1$s is not configured in this build.</string>
     <string name="accounts_signed_in_format">Signed in as %1$s</string>
+    <string name="accounts_reauth_required">Sign-in expired or access was revoked. Sync stopped — tap below to re-authenticate.</string>
+    <string name="accounts_reauth_button">Re-authenticate %1$s</string>
 
     <!-- Add sync pair (placeholder for PR #1; full wizard arrives in PR #2) -->
     <string name="add_pair_title">Add sync pair</string>
@@ -98,7 +100,7 @@
     <string name="accounts_reconcile_failed_format">Couldn\u0027t refresh %1$s accounts: %2$s</string>
 
     <!-- Provider-specific auth errors -->
-    <string name="onedrive_not_configured">OneDrive is not configured. Set MS_CLIENT_ID and MSAL_REDIRECT_URI before building.</string>
+    <string name="onedrive_not_configured">OneDrive sign-in is not configured in this build.</string>
     <string name="onedrive_signin_coming_soon">OneDrive sign-in is coming in the next update.</string>
     <string name="onedrive_init_failed">Couldn\u0027t initialize OneDrive sign-in. Please try again.</string>
     <string name="onedrive_signin_null_result">OneDrive sign-in returned no account. Please try again.</string>
@@ -129,6 +131,14 @@
     <string name="sync_channel_description">Shows progress while Synckro is transferring files in the background.</string>
     <string name="sync_notification_title">Syncing %1$s</string>
     <string name="sync_notification_content">Transfer in progress…</string>
+
+    <!-- Debug log export (debug builds only) -->
+    <string name="accounts_export_debug_log">[DEBUG] Export app log file</string>
+    <string name="accounts_export_debug_log_subject">Synckro debug log</string>
+    <string name="accounts_export_debug_log_chooser">Share debug log via…</string>
+    <string name="accounts_export_debug_log_none">No debug log file found yet. Run the app for a moment and try again.</string>
+    <string name="accounts_export_debug_log_insert_failed">Couldn\u0027t create the log file in Downloads. Please try again.</string>
+    <string name="accounts_export_debug_log_saved">Debug log saved to Downloads/%1$s</string>
 
     <!-- Sync logs screen -->
     <string name="logs_title">Sync logs</string>

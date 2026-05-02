@@ -98,7 +98,7 @@ from the CI-built debug APK.
 4. **Create the Android OAuth client for the debug build**:
    - Click **Create credentials → OAuth client ID** again.
    - Application type: **Android**.
-   - Package name: `com.konarsubhojit.synckro.debug`
+   - Package name: `com.synckro.debug`
      (the `.debug` suffix comes from the `applicationIdSuffix` in the debug
      build type).
    - SHA-1 certificate fingerprint: paste the SHA-1 from Step 1.
@@ -133,7 +133,7 @@ These steps configure MSAL so it accepts a login from the CI-built debug APK.
 4. Add the Android platform redirect URI:
    - In the app registration, go to **Authentication → Add a platform →
      Android**.
-   - Package name: `com.konarsubhojit.synckro.debug`
+   - Package name: `com.synckro.debug`
    - Signature hash: paste the **Base64-encoded SHA-1** hash.
      To convert the colon-separated SHA-1 fingerprint from Step 1 to the
      format Azure expects:
@@ -147,7 +147,7 @@ These steps configure MSAL so it accepts a login from the CI-built debug APK.
    - Azure shows a **redirect URI** of the form:
 
      ```text
-     msauth://com.konarsubhojit.synckro.debug/<base64-hash>
+     msauth://com.synckro.debug/<base64-hash>
      ```
 
    - Copy this **entire URI verbatim** — this is your `MSAL_REDIRECT_URI`
@@ -183,22 +183,27 @@ Add each secret listed in the table below.
 |---------------------------|-----------------------------------------------------------------------|
 | `GOOGLE_WEB_CLIENT_ID`    | The Web OAuth Client ID from Step 2 (e.g. `123….apps.googleusercontent.com`). |
 | `MS_CLIENT_ID`            | The Application (client) ID from Step 3.                             |
-| `MSAL_REDIRECT_URI`       | The full redirect URI from Step 3 (e.g. `msauth://com.konarsubhojit.synckro.debug/<hash>`). |
+| `MSAL_REDIRECT_URI`       | The full redirect URI from Step 3 (e.g. `msauth://com.synckro.debug/<hash>`). |
 | `DEBUG_KEYSTORE_BASE64`   | The base64-encoded keystore from Step 1.                             |
 | `DEBUG_KEYSTORE_PASSWORD` | The keystore store password (e.g. `android`).                        |
 | `DEBUG_KEY_ALIAS`         | The key alias (e.g. `androiddebugkey`).                              |
 | `DEBUG_KEY_PASSWORD`      | The key password (e.g. `android`; may be the same as the store password). |
 
-> All seven secrets are independent — you can add them in any order.  Secrets
-> that are missing or empty cause the corresponding feature to silently degrade:
+> All seven secrets are independent — you can add them in any order.  The
+> effects of missing or empty secrets:
 > - Missing keystore secrets → CI falls back to AGP's auto-generated debug
 >   keystore (auth will fail for the reasons described at the top of this doc).
-> - Missing `MSAL_REDIRECT_URI` → the MSAL intent filter gets an empty host
->   and is effectively disabled; sign-in callbacks will not be routed back to
->   the app.
-> - Missing `GOOGLE_WEB_CLIENT_ID` / `MS_CLIENT_ID` → `BuildConfig` fields
->   are empty strings; the auth flow fails with a configuration error at
->   runtime.
+> - Missing `MSAL_REDIRECT_URI` **or** `MS_CLIENT_ID` (only one of the two set)
+>   → **`assembleDebug` fails at configuration time** with a message naming the
+>   missing variable and pointing at `docs/login-setup.md`.
+> - Both `MS_CLIENT_ID` **and** `MSAL_REDIRECT_URI` missing/empty → build
+>   succeeds with a `WARNING:` line; OneDrive sign-in shows "not configured in
+>   this build" at runtime with no MSAL stack trace spam.
+> - `MSAL_REDIRECT_URI` present but malformed (missing `msauth://` prefix, empty
+>   host, or empty path) → **`assembleDebug` fails at configuration time**.
+> - Missing `GOOGLE_WEB_CLIENT_ID` → `BuildConfig.GOOGLE_WEB_CLIENT_ID` is an
+>   empty string; `GoogleDriveAuthManager.signIn()` returns `NotConfigured`
+>   without touching the credential flow.
 
 ---
 
@@ -230,7 +235,7 @@ test authentication on a locally built APK:
    ```properties
    GOOGLE_WEB_CLIENT_ID=<your web client id>
    MS_CLIENT_ID=<your azure app client id>
-   MSAL_REDIRECT_URI=msauth://com.konarsubhojit.synckro.debug/<base64-hash>
+   MSAL_REDIRECT_URI=msauth://com.synckro.debug/<base64-hash>
    DEBUG_KEYSTORE_PASSWORD=android
    DEBUG_KEY_ALIAS=androiddebugkey
    DEBUG_KEY_PASSWORD=android
