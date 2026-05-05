@@ -47,7 +47,7 @@ import kotlin.coroutines.resume
  * Sign-in flow:
  *  1. [CredentialManager.getCredential] with [GetGoogleIdOption] → Google ID token.
  *  2. [Identity.getAuthorizationClient] + [AuthorizationRequest] for
- *     `https://www.googleapis.com/auth/drive.file` → access token (may show a
+ *     `https://www.googleapis.com/auth/drive` → access token (may show a
  *     consent screen on first use via a [PendingIntent]).
  *
  * Token refresh ([acquireAccessToken]):
@@ -67,7 +67,7 @@ class GoogleDriveAuthManager private constructor(
     private val webClientId: String,
 ) : AuthManager {
     companion object {
-        private const val DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file"
+        private const val DRIVE_SCOPE = "https://www.googleapis.com/auth/drive"
         private const val PREFS_NAME = "gdrive_account"
         private const val KEY_ACCOUNT_ID = "account_id"
         private const val KEY_DISPLAY_NAME = "display_name"
@@ -102,7 +102,7 @@ class GoogleDriveAuthManager private constructor(
     private val credentialManager: CredentialManager = CredentialManager.create(context)
 
     /**
-     * Reusable [AuthorizationRequest] for the Drive scope. Created once so both
+     * Reusable [AuthorizationRequest] for the full Drive scope. Created once so both
      * [signIn] and [acquireAccessToken] share the same request object.
      */
     private val driveAuthRequest: AuthorizationRequest =
