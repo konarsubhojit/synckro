@@ -169,13 +169,14 @@ class SyncOpApplier(
             // Pre-compute per-op transfer bytes once so we don't repeat map lookups
             // inside the hot apply loop.
             val opBytes = LongArray(totalFiles) { i ->
-                opTransferBytes(ops[i], remoteFilesByPath, localIndexByPath)
+                opTransferBytes(ops[i], pair, remoteFilesByPath, localIndexByPath)
             }
             val totalBytes = opBytes.sum()
             var filesProcessed = 0
             var bytesTransferred = 0L
 
             for ((index, op) in ops.withIndex()) {
+                var opSucceeded = false
                 try {
                     when (op) {
                         is SyncOp.UploadNew -> {
@@ -261,6 +262,7 @@ class SyncOpApplier(
                             conflicts++
                         }
                     }
+                    opSucceeded = true
                 } catch (e: CloudProviderException.AuthenticationRequired) {
                     throw e
                 } catch (e: CloudProviderException.AuthenticationFailed) {
@@ -274,7 +276,9 @@ class SyncOpApplier(
                 }
 
                 filesProcessed++
-                bytesTransferred += opBytes[index]
+                if (opSucceeded) {
+                    bytesTransferred += opBytes[index]
+                }
                 onProgress(
                     TransferProgress(
                         filesCompleted = filesProcessed,
@@ -620,6 +624,7 @@ class SyncOpApplier(
      */
     private fun opTransferBytes(
         op: SyncOp,
+        pair: SyncPair,
         remoteFilesByPath: Map<String, RemoteFile>,
         localIndexByPath: Map<String, LocalIndexEntity>,
     ): Long =
@@ -628,7 +633,28 @@ class SyncOpApplier(
             is SyncOp.UpdateLocal -> remoteFilesByPath[op.relativePath]?.size ?: 0L
             is SyncOp.UploadNew -> localIndexByPath[op.relativePath]?.sizeBytes ?: 0L
             is SyncOp.UpdateRemote -> localIndexByPath[op.relativePath]?.sizeBytes ?: 0L
-            is SyncOp.DeleteRemote, is SyncOp.DeleteLocal, is SyncOp.Conflict -> 0L
+            is SyncOp.Conflict -> conflictTransferBytes(op, pair, remoteFilesByPath, localIndexByPath)
+            is SyncOp.DeleteRemote, is SyncOp.DeleteLocal -> 0L
+        }
+
+    private fun conflictTransferBytes(
+        op: SyncOp.Conflict,
+        pair: SyncPair,
+        remoteFilesByPath: Map<String, RemoteFile>,
+        localIndexByPath: Map<String, LocalIndexEntity>,
+    ): Long =
+        when (pair.conflictPolicy) {
+            ConflictPolicy.KEEP_BOTH -> 0L
+            ConflictPolicy.PREFER_LOCAL ->
+                localIndexByPath[op.relativePath]?.sizeBytes ?: 0L
+            ConflictPolicy.PREFER_REMOTE ->
+                remoteFilesByPath[op.relativePath]?.size ?: 0L
+            ConflictPolicy.NEWEST_WINS ->
+                if (op.localNewerThanRemote) {
+                    localIndexByPath[op.relativePath]?.sizeBytes ?: 0L
+                } else {
+                    remoteFilesByPath[op.relativePath]?.size ?: 0L
+                }
         }
 
     private companion object {

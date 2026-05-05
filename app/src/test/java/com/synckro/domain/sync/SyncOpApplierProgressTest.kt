@@ -79,7 +79,7 @@ class SyncOpApplierProgressTest {
             ioDispatcher = Dispatchers.Unconfined,
         )
 
-    private fun pair() =
+    private fun pair(conflictPolicy: ConflictPolicy = ConflictPolicy.NEWEST_WINS) =
         SyncPair(
             id = 1L,
             displayName = "Test pair",
@@ -87,7 +87,7 @@ class SyncOpApplierProgressTest {
             provider = CloudProviderType.FAKE,
             remoteFolderId = "root",
             direction = SyncDirection.BIDIRECTIONAL,
-            conflictPolicy = ConflictPolicy.NEWEST_WINS,
+            conflictPolicy = conflictPolicy,
         )
 
     private fun indexEntry(
@@ -326,6 +326,74 @@ class SyncOpApplierProgressTest {
 
             assertEquals("progress event fired despite error", 1, events.size)
             assertEquals(1, events[0].filesCompleted)
+        }
+
+    @Test
+    fun `bytesTransferred does not advance for failed op with known size`() =
+        runTest {
+            // UpdateRemote has a known expected size from localIndexByPath, but the
+            // local file is absent so the op fails before any upload occurs.
+            val indexWithSize = indexEntry("missing-local.bin", remoteId = "remote-id", sizeBytes = 123L)
+
+            val events = mutableListOf<TransferProgress>()
+            buildApplier().apply(
+                ops = listOf(SyncOp.UpdateRemote("missing-local.bin")),
+                pair = pair(),
+                remoteFilesByPath = emptyMap(),
+                localIndexByPath = mapOf("missing-local.bin" to indexWithSize),
+                onProgress = { events += it },
+            )
+
+            assertEquals(123L, events.single().totalBytes)
+            assertEquals(0L, events.single().bytesTransferred)
+        }
+
+    // =========================================================================
+    // Conflict ops estimate transfer bytes from the selected resolution path
+    // =========================================================================
+
+    @Test
+    fun `conflict with PREFER_REMOTE uses remote size for byte progress`() =
+        runTest {
+            val content = ByteArray(300) { 0x42 }
+            val remote = seedRemote("conflict.bin", content)
+
+            val events = mutableListOf<TransferProgress>()
+            buildApplier().apply(
+                ops = listOf(SyncOp.Conflict("conflict.bin", localNewerThanRemote = false)),
+                pair = pair(conflictPolicy = ConflictPolicy.PREFER_REMOTE),
+                remoteFilesByPath = mapOf("conflict.bin" to remote),
+                localIndexByPath = emptyMap(),
+                onProgress = { events += it },
+            )
+
+            assertEquals(300L, events.single().totalBytes)
+            assertEquals(300L, events.single().bytesTransferred)
+        }
+
+    @Test
+    fun `conflict with local-wins policy uses local indexed size for byte progress`() =
+        runTest {
+            val content = ByteArray(200) { 0x24 }
+            val remote = seedRemote("conflict-local.bin", ByteArray(10) { 0x01 })
+            localFs.put("conflict-local.bin", content)
+            val localIndex = indexEntry(
+                "conflict-local.bin",
+                remoteId = remote.id,
+                sizeBytes = content.size.toLong(),
+            )
+
+            val events = mutableListOf<TransferProgress>()
+            buildApplier().apply(
+                ops = listOf(SyncOp.Conflict("conflict-local.bin", localNewerThanRemote = true)),
+                pair = pair(conflictPolicy = ConflictPolicy.NEWEST_WINS),
+                remoteFilesByPath = mapOf("conflict-local.bin" to remote),
+                localIndexByPath = mapOf("conflict-local.bin" to localIndex),
+                onProgress = { events += it },
+            )
+
+            assertEquals(200L, events.single().totalBytes)
+            assertEquals(200L, events.single().bytesTransferred)
         }
 
     // =========================================================================

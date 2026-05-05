@@ -140,6 +140,32 @@ class SyncWorker
 
             return coroutineScope {
                 val promotedToForeground = AtomicBoolean(false)
+                val foregroundPromotionInFlight = AtomicBoolean(false)
+
+                suspend fun tryPromoteToForeground(
+                    progress: TransferProgress? = null,
+                    logMessage: () -> Unit,
+                    failureMessage: String,
+                ): Boolean {
+                    if (promotedToForeground.get()) return true
+                    while (!foregroundPromotionInFlight.compareAndSet(false, true)) {
+                        if (promotedToForeground.get()) return true
+                        delay(50L)
+                    }
+                    return try {
+                        logMessage()
+                        setForeground(buildForegroundInfo(pairId, pair.displayName, progress))
+                        promotedToForeground.set(true)
+                        true
+                    } catch (c: CancellationException) {
+                        throw c
+                    } catch (e: Exception) {
+                        Timber.w(e, failureMessage, pairId)
+                        false
+                    } finally {
+                        foregroundPromotionInFlight.set(false)
+                    }
+                }
 
                 // Promote to a foreground service if the sync takes longer than the threshold.
                 // This keeps the transfer alive when the app is killed and prevents Doze
@@ -147,14 +173,16 @@ class SyncWorker
                 val foregroundJob =
                     launch {
                         delay(FOREGROUND_PROMOTE_DELAY_MS)
-                        if (promotedToForeground.compareAndSet(false, true)) {
-                            Timber.i("SyncWorker: promoting pair %d to foreground service after %d ms.", pairId, FOREGROUND_PROMOTE_DELAY_MS)
-                            try {
-                                setForeground(buildForegroundInfo(pairId, pair.displayName))
-                            } catch (e: Exception) {
-                                Timber.w(e, "SyncWorker: could not promote pair %d to foreground.", pairId)
-                            }
-                        }
+                        tryPromoteToForeground(
+                            logMessage = {
+                                Timber.i(
+                                    "SyncWorker: promoting pair %d to foreground service after %d ms.",
+                                    pairId,
+                                    FOREGROUND_PROMOTE_DELAY_MS,
+                                )
+                            },
+                            failureMessage = "SyncWorker: could not promote pair %d to foreground.",
+                        )
                     }
 
                 // Progress callback forwarded from SyncEngine → SyncOpApplier.
@@ -163,18 +191,19 @@ class SyncWorker
                 //  2. Updating the progress notification once the worker is in foreground.
                 val onSyncProgress: suspend (TransferProgress) -> Unit = { progress ->
                     if (!promotedToForeground.get() && progress.totalBytes >= LARGE_TRANSFER_THRESHOLD_BYTES) {
-                        if (promotedToForeground.compareAndSet(false, true)) {
-                            foregroundJob.cancel()
-                            Timber.i(
-                                "SyncWorker: early foreground promotion for pair %d (%d bytes total).",
-                                pairId,
-                                progress.totalBytes,
+                        if (tryPromoteToForeground(
+                                progress = progress,
+                                logMessage = {
+                                    Timber.i(
+                                        "SyncWorker: early foreground promotion for pair %d (%d bytes total).",
+                                        pairId,
+                                        progress.totalBytes,
+                                    )
+                                },
+                                failureMessage = "SyncWorker: could not early-promote pair %d to foreground.",
                             )
-                            try {
-                                setForeground(buildForegroundInfo(pairId, pair.displayName, progress))
-                            } catch (e: Exception) {
-                                Timber.w(e, "SyncWorker: could not early-promote pair %d to foreground.", pairId)
-                            }
+                        ) {
+                            foregroundJob.cancel()
                         }
                     }
                     if (promotedToForeground.get()) {
@@ -307,10 +336,7 @@ class SyncWorker
                         // Scale to 0..1000 so that byte counts don't overflow Int and
                         // the bar still advances smoothly for large files.
                         val max = 1_000
-                        val current =
-                            (progress.bytesTransferred * max / progress.totalBytes)
-                                .toInt()
-                                .coerceIn(0, max)
+                        val current = scaleByteProgress(progress.bytesTransferred, progress.totalBytes, max)
                         Triple(max, current, false)
                     }
                     progress != null && progress.totalFiles > 0 -> {
@@ -332,6 +358,18 @@ class SyncWorker
                 .setOngoing(true)
                 .setSilent(true)
                 .build()
+        }
+
+        private fun scaleByteProgress(
+            bytesTransferred: Long,
+            totalBytes: Long,
+            max: Int,
+        ): Int {
+            if (totalBytes <= 0L || max <= 0) return 0
+            val clampedBytes = bytesTransferred.coerceIn(0L, totalBytes)
+            return ((clampedBytes.toDouble() / totalBytes.toDouble()) * max)
+                .toInt()
+                .coerceIn(0, max)
         }
 
         companion object {
