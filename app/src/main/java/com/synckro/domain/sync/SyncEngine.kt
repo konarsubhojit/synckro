@@ -213,6 +213,7 @@ class SyncEngine(
             fsEnumerator.enumerate(
                 pairId = pair.id,
                 treeUri = treeUri,
+                includeGlobs = pair.includeGlobs,
                 ignoreGlobs = pair.excludeGlobs,
             )
 
