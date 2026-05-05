@@ -247,25 +247,51 @@ fun PairEditorScreen(
                     )
                 }
 
-                // Schedule interval
-                OutlinedTextField(
-                    value = state.scheduleIntervalMinutes.toString(),
-                    onValueChange = { v ->
-                        v.toLongOrNull()?.let { viewModel.onScheduleIntervalChange(it) }
-                    },
-                    label = { Text(stringResource(R.string.pair_editor_schedule_interval)) },
-                    supportingText = {
-                        if (state.scheduleIntervalMinutes < 15L) {
-                            Text(
-                                text = stringResource(R.string.pair_editor_schedule_interval_min_warning),
-                                color = MaterialTheme.colorScheme.error,
-                            )
-                        }
-                    },
-                    isError = state.scheduleIntervalMinutes < 15L,
-                    singleLine = true,
+                // Auto-sync toggle
+                Row(
                     modifier = Modifier.fillMaxWidth(),
-                )
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = stringResource(R.string.pair_editor_auto_sync),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Switch(
+                        checked = state.autoSyncEnabled,
+                        onCheckedChange = viewModel::onAutoSyncEnabledChange,
+                    )
+                }
+
+                // Schedule preset dropdown + custom interval — only shown when auto-sync is on
+                if (state.autoSyncEnabled) {
+                    SchedulePresetDropdown(
+                        selected = state.schedulePreset,
+                        onSelect = viewModel::onSchedulePresetChange,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+
+                    if (state.schedulePreset == SyncSchedulePreset.CUSTOM) {
+                        OutlinedTextField(
+                            value = state.customIntervalMinutes.toString(),
+                            onValueChange = { v ->
+                                v.toLongOrNull()?.let { viewModel.onCustomIntervalChange(it) }
+                            },
+                            label = { Text(stringResource(R.string.pair_editor_schedule_custom_interval)) },
+                            supportingText = {
+                                if (state.customIntervalMinutes < 15L) {
+                                    Text(
+                                        text = stringResource(R.string.pair_editor_schedule_interval_min_warning),
+                                        color = MaterialTheme.colorScheme.error,
+                                    )
+                                }
+                            },
+                            isError = state.customIntervalMinutes < 15L,
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                }
 
                 // Include globs
                 OutlinedTextField(
@@ -442,6 +468,49 @@ private fun DirectionDropdown(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SchedulePresetDropdown(
+    selected: SyncSchedulePreset,
+    onSelect: (SyncSchedulePreset) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { expanded = it },
+        modifier = modifier,
+    ) {
+        OutlinedTextField(
+            value = schedulePresetLabel(selected),
+            onValueChange = {},
+            readOnly = true,
+            label = { Text(stringResource(R.string.pair_editor_schedule_preset)) },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
+            modifier =
+                Modifier
+                    .menuAnchor(MenuAnchorType.PrimaryNotEditable)
+                    .fillMaxWidth(),
+        )
+        ExposedDropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+        ) {
+            SyncSchedulePreset.entries.forEach { preset ->
+                DropdownMenuItem(
+                    text = { Text(schedulePresetLabel(preset)) },
+                    onClick = {
+                        onSelect(preset)
+                        expanded = false
+                    },
+                    contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding,
+                )
+            }
+        }
+    }
+}
+
 @Composable
 private fun providerLabel(provider: CloudProviderType): String =
     when (provider) {
@@ -465,4 +534,14 @@ private fun directionLabel(dir: SyncDirection): String =
         SyncDirection.LOCAL_TO_REMOTE -> stringResource(R.string.direction_local_to_remote)
         SyncDirection.REMOTE_TO_LOCAL -> stringResource(R.string.direction_remote_to_local)
         SyncDirection.BIDIRECTIONAL -> stringResource(R.string.direction_bidirectional)
+    }
+
+@Composable
+private fun schedulePresetLabel(preset: SyncSchedulePreset): String =
+    when (preset) {
+        SyncSchedulePreset.FIFTEEN_MINUTES -> stringResource(R.string.pair_editor_schedule_15min)
+        SyncSchedulePreset.THIRTY_MINUTES -> stringResource(R.string.pair_editor_schedule_30min)
+        SyncSchedulePreset.HOURLY -> stringResource(R.string.pair_editor_schedule_hourly)
+        SyncSchedulePreset.DAILY -> stringResource(R.string.pair_editor_schedule_daily)
+        SyncSchedulePreset.CUSTOM -> stringResource(R.string.pair_editor_schedule_custom)
     }

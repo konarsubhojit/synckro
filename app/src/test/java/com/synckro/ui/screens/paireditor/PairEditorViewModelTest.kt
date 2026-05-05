@@ -186,14 +186,34 @@ class PairEditorViewModelTest {
             vm.save {}
             advanceUntilIdle()
 
-            coVerify { mockSyncScheduler.schedulePeriodic(any(), any()) }
+            coVerify { mockSyncScheduler.scheduleOrCancel(any()) }
         }
 
     @Test
-    fun `save sets error state when schedulePeriodic throws`() =
+    fun `save with autoSyncEnabled false cancels periodic sync`() =
         runTest {
             coEvery { mockRepo.upsert(any()) } returns 42L
-            every { mockSyncScheduler.schedulePeriodic(any(), any()) } throws RuntimeException("WorkManager unavailable")
+
+            val vm = createVmWithFolder()
+            vm.onDisplayNameChange("Test Pair")
+            vm.onAutoSyncEnabledChange(false)
+            advanceUntilIdle()
+
+            vm.save {}
+            advanceUntilIdle()
+
+            coVerify {
+                mockSyncScheduler.scheduleOrCancel(
+                    match { !it.autoSyncEnabled },
+                )
+            }
+        }
+
+    @Test
+    fun `save sets error state when scheduleOrCancel throws`() =
+        runTest {
+            coEvery { mockRepo.upsert(any()) } returns 42L
+            every { mockSyncScheduler.scheduleOrCancel(any()) } throws RuntimeException("WorkManager unavailable")
 
             val vm = createVmWithFolder()
             vm.onDisplayNameChange("Test Pair")
@@ -203,7 +223,7 @@ class PairEditorViewModelTest {
             vm.save { savedId = it }
             advanceUntilIdle()
 
-            // schedulePeriodic is inside runCatching so the exception is caught and
+            // scheduleOrCancel is inside runCatching so the exception is caught and
             // onSaved must NOT be called; an error message should be set instead.
             assertNull("onSaved must not be called when scheduling fails", savedId)
             assertTrue(

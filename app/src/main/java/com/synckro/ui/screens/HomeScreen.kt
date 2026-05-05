@@ -227,6 +227,38 @@ private fun SyncPairRow(
                     color = MaterialTheme.colorScheme.error,
                 )
             }
+            // Auto-sync status line
+            Text(
+                text =
+                    if (pair.autoSyncEnabled) {
+                        stringResource(R.string.home_auto_sync_enabled)
+                    } else {
+                        stringResource(R.string.home_auto_sync_disabled)
+                    },
+                style = MaterialTheme.typography.bodySmall,
+                color =
+                    if (pair.autoSyncEnabled) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+            )
+            // Last sync time
+            Text(
+                text =
+                    if (pair.lastSyncAtMs != null) {
+                        stringResource(
+                            R.string.home_last_sync_format,
+                            java.text.DateFormat
+                                .getDateTimeInstance(java.text.DateFormat.SHORT, java.text.DateFormat.SHORT)
+                                .format(java.util.Date(pair.lastSyncAtMs)),
+                        )
+                    } else {
+                        stringResource(R.string.home_never_synced)
+                    },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End,
