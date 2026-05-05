@@ -93,6 +93,7 @@
     <!-- Pick remote (cloud) folder browser -->
     <string name="pick_remote_folder_title">Pick cloud folder</string>
     <string name="pick_remote_folder_empty">No sub-folders found here.</string>
+    <string name="pick_remote_folder_empty_root">No folders found. If you expected to see folders here, make sure you signed in with the correct account and granted Drive access.</string>
     <string name="pick_remote_folder_confirm">Use &#8220;%1$s&#8221;</string>
     <string name="pick_remote_folder_retry">Retry</string>
     <string name="pick_remote_folder_navigate_into">Open folder</string>

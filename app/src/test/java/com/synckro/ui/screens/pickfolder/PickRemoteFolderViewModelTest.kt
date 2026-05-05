@@ -270,6 +270,57 @@ class PickRemoteFolderViewModelTest {
             assertFalse(state.isLoading)
         }
 
+    @Test
+    fun `Google Drive empty root shows empty items with null currentFolderId`() =
+        runTest {
+            val mockGDrive = mockk<CloudProvider>(relaxed = true)
+            coEvery { mockGDrive.list(null) } returns emptyList()
+
+            val vm =
+                PickRemoteFolderViewModel(
+                    savedStateHandle =
+                        SavedStateHandle(
+                            mapOf(PickRemoteFolderViewModel.ARG_PROVIDER to CloudProviderType.GOOGLE_DRIVE.name),
+                        ),
+                    providers = mapOf(CloudProviderType.GOOGLE_DRIVE to mockGDrive),
+                )
+            advanceUntilIdle()
+
+            val state = vm.state.value
+            assertTrue(state.items.isEmpty())
+            assertNull(state.error)
+            assertNull(state.currentFolderId) // at root — UI shows root-level empty message
+            assertFalse(state.isLoading)
+        }
+
+    @Test
+    fun `Google Drive empty subfolder shows empty items with non-null currentFolderId`() =
+        runTest {
+            val mockGDrive = mockk<CloudProvider>(relaxed = true)
+            val subFolder = RemoteFile("sub1", "SubFolder", null, isFolder = true, null, null, null, null)
+            coEvery { mockGDrive.list(null) } returns listOf(subFolder)
+            coEvery { mockGDrive.list("sub1") } returns emptyList()
+
+            val vm =
+                PickRemoteFolderViewModel(
+                    savedStateHandle =
+                        SavedStateHandle(
+                            mapOf(PickRemoteFolderViewModel.ARG_PROVIDER to CloudProviderType.GOOGLE_DRIVE.name),
+                        ),
+                    providers = mapOf(CloudProviderType.GOOGLE_DRIVE to mockGDrive),
+                )
+            advanceUntilIdle()
+
+            vm.navigateInto(subFolder)
+            advanceUntilIdle()
+
+            val state = vm.state.value
+            assertTrue(state.items.isEmpty())
+            assertNull(state.error)
+            assertEquals("sub1", state.currentFolderId) // inside subfolder — UI shows subfolder empty message
+            assertFalse(state.isLoading)
+        }
+
     // -------------------------------------------------------------------------
     // Provider type resolution
     // -------------------------------------------------------------------------
