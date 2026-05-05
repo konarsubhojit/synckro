@@ -269,18 +269,25 @@ class SyncOpApplier(
         val stat =
             localFileAccess.stat(op.relativePath)
                 ?: error("Local file not found for UploadNew: ${op.relativePath}")
+
+        // Resolve or create the remote parent folder hierarchy so nested local
+        // files are uploaded to the correct location. For flat paths (no '/'),
+        // ensureRemoteFolderPath returns pair.remoteFolderId immediately with no
+        // provider calls.
+        val pathSegments = op.relativePath.split('/')
+        val parentSegments = pathSegments.dropLast(1)
+        val fileName = pathSegments.last()
+        val parentId = ensureRemoteFolderPath(pair.remoteFolderId, parentSegments)
+
         var retried = false
         val remote =
             withRetry(onRetry = { _, _ -> retried = true }) {
                 val stream =
                     localFileAccess.openRead(op.relativePath)
                         ?: error("Cannot read local file for UploadNew: ${op.relativePath}")
-                // Use only the leaf filename; nested folder creation is out of scope
-                // for this applier — callers are responsible for pre-creating remote
-                // parent directories when needed.
                 provider.uploadNew(
-                    parentId = pair.remoteFolderId,
-                    name = op.relativePath.substringAfterLast('/'),
+                    parentId = parentId,
+                    name = fileName,
                     content = stream,
                     size = stat.sizeBytes,
                     mimeType = stat.mimeType,
@@ -569,6 +576,33 @@ class SyncOpApplier(
     // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
+
+    /**
+     * Walks [segments] under [rootId], creating any missing intermediate folders
+     * via [provider.createFolder]. If a folder with the given name already exists
+     * as a direct child of the current parent it is reused without creating a
+     * duplicate.
+     *
+     * Returns the provider ID of the innermost folder (i.e. the direct parent
+     * that the file should be uploaded into). If [segments] is empty [rootId] is
+     * returned immediately with no provider calls.
+     *
+     * @param rootId   The provider ID of the starting folder (e.g. [SyncPair.remoteFolderId]).
+     * @param segments Path components to traverse/create, in order (e.g. `["docs", "subdir"]`).
+     * @return Provider ID of the deepest resolved folder.
+     */
+    private suspend fun ensureRemoteFolderPath(
+        rootId: String,
+        segments: List<String>,
+    ): String {
+        var currentId = rootId
+        for (segment in segments) {
+            val children = provider.list(currentId)
+            val existing = children.find { it.isFolder && it.name == segment }
+            currentId = existing?.id ?: provider.createFolder(currentId, segment).id
+        }
+        return currentId
+    }
 
     private fun opLabel(op: SyncOp): String =
         when (op) {

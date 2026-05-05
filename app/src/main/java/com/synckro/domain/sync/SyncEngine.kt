@@ -203,6 +203,13 @@ class SyncEngine(
         // -----------------------------------------------------------------
         val preScanIndex = indexDao.getForPair(pair.id)
         val preScanIndexByPath = preScanIndex.associateBy { it.relativePath }
+        // Reverse map: stable remote ID → index entry. Used to look up canonical
+        // paths for DELETE events (where the item may no longer be in the remote
+        // store) and to detect renames (MODIFY with a different path than indexed).
+        val preScanIndexById =
+            preScanIndex
+                .filter { it.remoteId != null }
+                .associateBy { it.remoteId!! }
 
         // -----------------------------------------------------------------
         // Step 1 – Enumerate local files (full scan, updates local_index).
@@ -265,9 +272,20 @@ class SyncEngine(
         // For ADD/MODIFY, only update if we have concrete metadata; if both the
         // delta and the baseline lack size/mtime (provider returned a partial
         // change record), leave the existing baseline entry unchanged.
+        //
+        // Rename/move detection: if the stable remoteId is already in the
+        // pre-scan index under a different path, remove the old path from the
+        // synthetic remote and add the new one so SyncDiffer sees a delete of
+        // the old path and an add of the new one.
         for (change in remoteSnapshot.changes) {
             when (change.type) {
                 RemoteChangeType.ADD, RemoteChangeType.MODIFY -> {
+                    // Detect rename/move: look up the existing path by stable remote ID.
+                    val existingPath = preScanIndexById[change.remoteId]?.relativePath
+                    if (existingPath != null && existingPath != change.relativePath) {
+                        // Item was renamed or moved — evict the old path from the snapshot.
+                        syntheticRemote.remove(existingPath)
+                    }
                     val baseline = syntheticRemote[change.relativePath]
                     val resolvedSize = change.sizeBytes ?: baseline?.size
                     val resolvedMtime = change.mtimeMs ?: baseline?.lastModifiedMs
@@ -283,8 +301,14 @@ class SyncEngine(
                     // If no size/mtime available (neither delta nor baseline), skip rather
                     // than inserting a FS(0, 0) stub that would trigger spurious ops.
                 }
-                RemoteChangeType.DELETE ->
-                    syntheticRemote.remove(change.relativePath)
+                RemoteChangeType.DELETE -> {
+                    // Prefer the canonical path from the pre-scan index (identified by the
+                    // stable remote ID) over change.relativePath, which providers typically
+                    // populate with only the item name or the ID itself.
+                    val knownPath = preScanIndexById[change.remoteId]?.relativePath
+                        ?: change.relativePath
+                    syntheticRemote.remove(knownPath)
+                }
             }
         }
 

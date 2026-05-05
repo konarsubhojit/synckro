@@ -165,10 +165,16 @@ class SyncOpApplierTest {
 
             assertEquals(1, result.applied)
             assertEquals(0, result.errors.size)
-            // Verify provider received the bytes
-            val remotes = fakeProvider.list("root")
-            assertEquals(1, remotes.size)
-            assertEquals("hello.txt", remotes.single().name)
+            // Nested path: a "docs" folder should be created under root, and
+            // "hello.txt" should be uploaded inside it.
+            val rootChildren = fakeProvider.list("root")
+            assertEquals(1, rootChildren.size)
+            val docsFolder = rootChildren.single()
+            assertEquals("docs", docsFolder.name)
+            assertTrue(docsFolder.isFolder)
+            val docsChildren = fakeProvider.list(docsFolder.id)
+            assertEquals(1, docsChildren.size)
+            assertEquals("hello.txt", docsChildren.single().name)
         }
 
     @Test
@@ -220,6 +226,106 @@ class SyncOpApplierTest {
 
             assertEquals(0, result.applied)
             assertEquals(1, result.errors.size)
+        }
+
+    // =========================================================================
+    // UploadNew — nested path / folder creation
+    // =========================================================================
+
+    @Test
+    fun `UploadNew for deeply nested file creates full folder hierarchy`() =
+        runTest {
+            val content = "nested".toByteArray()
+            localFs.put("a/b/c/file.txt", content)
+
+            val result =
+                buildApplier().apply(
+                    ops = listOf(SyncOp.UploadNew("a/b/c/file.txt")),
+                    pair = pair(),
+                    remoteFilesByPath = emptyMap(),
+                    localIndexByPath = emptyMap(),
+                )
+
+            assertEquals(1, result.applied)
+            assertTrue(result.errors.isEmpty())
+
+            // root → a → b → c → file.txt
+            val rootChildren = fakeProvider.list("root")
+            assertEquals(1, rootChildren.size)
+            val aFolder = rootChildren.single()
+            assertEquals("a", aFolder.name)
+            assertTrue(aFolder.isFolder)
+
+            val aChildren = fakeProvider.list(aFolder.id)
+            assertEquals(1, aChildren.size)
+            val bFolder = aChildren.single()
+            assertEquals("b", bFolder.name)
+            assertTrue(bFolder.isFolder)
+
+            val bChildren = fakeProvider.list(bFolder.id)
+            assertEquals(1, bChildren.size)
+            val cFolder = bChildren.single()
+            assertEquals("c", cFolder.name)
+            assertTrue(cFolder.isFolder)
+
+            val cChildren = fakeProvider.list(cFolder.id)
+            assertEquals(1, cChildren.size)
+            assertEquals("file.txt", cChildren.single().name)
+            assertFalse(cChildren.single().isFolder)
+        }
+
+    @Test
+    fun `UploadNew for nested file reuses existing remote folders`() =
+        runTest {
+            // Pre-create the "docs" folder so the applier should reuse it.
+            val existingDocs = fakeProvider.createFolder("root", "docs")
+
+            val content = "reused parent".toByteArray()
+            localFs.put("docs/report.txt", content)
+
+            val result =
+                buildApplier().apply(
+                    ops = listOf(SyncOp.UploadNew("docs/report.txt")),
+                    pair = pair(),
+                    remoteFilesByPath = emptyMap(),
+                    localIndexByPath = emptyMap(),
+                )
+
+            assertEquals(1, result.applied)
+            assertTrue(result.errors.isEmpty())
+            // Still exactly one "docs" folder under root — no duplicate was created.
+            val rootChildren = fakeProvider.list("root")
+            val docsItems = rootChildren.filter { it.isFolder && it.name == "docs" }
+            assertEquals("Should reuse the existing docs folder, not create a duplicate", 1, docsItems.size)
+            assertEquals(existingDocs.id, docsItems.single().id)
+            // report.txt must be in the existing "docs" folder.
+            val docsChildren = fakeProvider.list(existingDocs.id)
+            assertEquals(1, docsChildren.size)
+            assertEquals("report.txt", docsChildren.single().name)
+        }
+
+    @Test
+    fun `UploadNew for flat path uploads directly to remote root`() =
+        runTest {
+            val content = "flat".toByteArray()
+            localFs.put("flat.txt", content)
+
+            val result =
+                buildApplier().apply(
+                    ops = listOf(SyncOp.UploadNew("flat.txt")),
+                    pair = pair(),
+                    remoteFilesByPath = emptyMap(),
+                    localIndexByPath = emptyMap(),
+                )
+
+            assertEquals(1, result.applied)
+            assertTrue(result.errors.isEmpty())
+            // Flat file goes directly under the remote root with no extra folders.
+            val rootChildren = fakeProvider.list("root")
+            assertEquals(1, rootChildren.size)
+            val uploaded = rootChildren.single()
+            assertEquals("flat.txt", uploaded.name)
+            assertFalse(uploaded.isFolder)
         }
 
     // =========================================================================

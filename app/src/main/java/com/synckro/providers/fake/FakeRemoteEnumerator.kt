@@ -14,8 +14,10 @@ import javax.inject.Singleton
  * yields an empty baseline snapshot, otherwise the slice of the log since the
  * recorded index is returned.
  *
- * Items with a non-null `file` become [RemoteChangeType.MODIFY]; items with a
- * non-null `removedId` become [RemoteChangeType.DELETE].
+ * Items with a non-null `file` become [RemoteChangeType.MODIFY] with the canonical
+ * relative path resolved via [FakeCloudProvider.resolvePath]; items with a non-null
+ * `removedId` become [RemoteChangeType.DELETE] (the path is resolved from the stable
+ * remote ID by the sync engine using the pre-scan index).
  */
 @Singleton
 class FakeRemoteEnumerator
@@ -30,13 +32,19 @@ class FakeRemoteEnumerator
                     when {
                         c.removedId != null ->
                             RemoteChange(
+                                // Deleted items are no longer in the store; the sync engine
+                                // looks up the canonical path via the stable remoteId in the
+                                // pre-scan index, so we use the remoteId as a fallback here.
                                 relativePath = c.removedId,
                                 type = RemoteChangeType.DELETE,
                                 remoteId = c.removedId,
                             )
                         c.file != null ->
                             RemoteChange(
-                                relativePath = c.file.name,
+                                // Resolve the full path relative to the sync root so that
+                                // nested files are represented with their complete path
+                                // (e.g. "docs/subdir/report.pdf" rather than "report.pdf").
+                                relativePath = provider.resolvePath(c.file.id).ifEmpty { c.file.name },
                                 type = RemoteChangeType.MODIFY,
                                 remoteId = c.file.id,
                                 sizeBytes = c.file.size,
