@@ -587,6 +587,12 @@ class SyncOpApplier(
      * that the file should be uploaded into). If [segments] is empty [rootId] is
      * returned immediately with no provider calls.
      *
+     * **Performance note**: each path segment requires one `provider.list()` call
+     * to detect whether the folder already exists. For typical sync payloads with
+     * shallow nesting (1–2 levels) this is acceptable. Deeper hierarchies or
+     * bulk operations could benefit from a per-run folder-ID cache, which can be
+     * added if profiling shows it to be a bottleneck.
+     *
      * @param rootId   The provider ID of the starting folder (e.g. [SyncPair.remoteFolderId]).
      * @param segments Path components to traverse/create, in order (e.g. `["docs", "subdir"]`).
      * @return Provider ID of the deepest resolved folder.

@@ -206,6 +206,9 @@ class SyncEngine(
         // Reverse map: stable remote ID → index entry. Used to look up canonical
         // paths for DELETE events (where the item may no longer be in the remote
         // store) and to detect renames (MODIFY with a different path than indexed).
+        // Remote IDs are provider-assigned and expected to be unique within a pair;
+        // if duplicates somehow exist (data inconsistency), the last entry wins,
+        // which is acceptable since any matching entry gives us the canonical path.
         val preScanIndexById =
             preScanIndex
                 .filter { it.remoteId != null }
