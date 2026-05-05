@@ -129,6 +129,7 @@ private fun SyncPairEntity.toDomain(needsReLink: Boolean): SyncPair =
         lastSyncResult = lastSyncResult,
         deltaToken = lastDeltaToken,
         lastFullScanAtMs = lastFullScanAtMs,
+        retentionDays = retentionDays,
     )
 
 private fun SyncPair.toEntity(): SyncPairEntity =
@@ -147,4 +148,5 @@ private fun SyncPair.toEntity(): SyncPairEntity =
         scheduleIntervalMinutes = scheduleIntervalMinutes,
         lastDeltaToken = deltaToken,
         lastFullScanAtMs = lastFullScanAtMs,
+        retentionDays = retentionDays,
     )

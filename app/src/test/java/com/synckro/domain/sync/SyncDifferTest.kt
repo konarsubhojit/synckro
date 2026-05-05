@@ -22,6 +22,7 @@ class SyncDifferTest {
         hash: String? = null,
         remoteSize: Long? = size,
         remoteMtime: Long? = mtime,
+        remoteId: String? = null,
     ) = FileIndexEntry(
         pairId = 1,
         relativePath = path,
@@ -30,6 +31,7 @@ class SyncDifferTest {
         localHash = hash,
         remoteSize = remoteSize,
         remoteLastModifiedMs = remoteMtime,
+        remoteId = remoteId,
     )
 
     @Test
@@ -664,5 +666,396 @@ class SyncDifferTest {
             )
 
         assertEquals(listOf<SyncOp>(SyncOp.UploadNew(emojiPath)), ops)
+    }
+
+    // -------------------------------------------------------------------------
+    // UPLOAD_AND_DELETE_LOCAL_AFTER_N_DAYS – upload-only with retention
+    // -------------------------------------------------------------------------
+
+    @Test
+    fun `upload-delete-local mode uploads new local file on first sync`() {
+        val ops =
+            SyncDiffer.diff(
+                local = listOf(snap("photo.jpg")),
+                remote = emptyList(),
+                lastIndex = emptyList(),
+                direction = SyncDirection.UPLOAD_AND_DELETE_LOCAL_AFTER_N_DAYS,
+                conflictPolicy = ConflictPolicy.NEWEST_WINS,
+            )
+
+        assertEquals(listOf<SyncOp>(SyncOp.UploadNew("photo.jpg")), ops)
+    }
+
+    @Test
+    fun `upload-delete-local mode skips remote-only file on first sync`() {
+        val ops =
+            SyncDiffer.diff(
+                local = emptyList(),
+                remote = listOf(snap("cloud-only.txt")),
+                lastIndex = emptyList(),
+                direction = SyncDirection.UPLOAD_AND_DELETE_LOCAL_AFTER_N_DAYS,
+                conflictPolicy = ConflictPolicy.NEWEST_WINS,
+            )
+
+        assertTrue(ops.isEmpty())
+    }
+
+    @Test
+    fun `upload-delete-local mode updates remote when local file changes`() {
+        val ops =
+            SyncDiffer.diff(
+                local = listOf(snap("a.txt", size = 20, mtime = 2_000)),
+                remote = listOf(snap("a.txt")),
+                lastIndex = listOf(idx("a.txt")),
+                direction = SyncDirection.UPLOAD_AND_DELETE_LOCAL_AFTER_N_DAYS,
+                conflictPolicy = ConflictPolicy.NEWEST_WINS,
+            )
+
+        assertEquals(listOf<SyncOp>(SyncOp.UpdateRemote("a.txt")), ops)
+    }
+
+    @Test
+    fun `upload-delete-local mode does not update local when remote changes`() {
+        val ops =
+            SyncDiffer.diff(
+                local = listOf(snap("a.txt")),
+                remote = listOf(snap("a.txt", size = 20, mtime = 2_000)),
+                lastIndex = listOf(idx("a.txt")),
+                direction = SyncDirection.UPLOAD_AND_DELETE_LOCAL_AFTER_N_DAYS,
+                conflictPolicy = ConflictPolicy.NEWEST_WINS,
+            )
+
+        assertTrue(ops.isEmpty())
+    }
+
+    @Test
+    fun `upload-delete-local mode does not propagate local delete to remote`() {
+        // Local file was deleted (perhaps by a prior retention cleanup).
+        // The remote backup must NOT be deleted.
+        val ops =
+            SyncDiffer.diff(
+                local = emptyList(),
+                remote = listOf(snap("a.txt")),
+                lastIndex = listOf(idx("a.txt")),
+                direction = SyncDirection.UPLOAD_AND_DELETE_LOCAL_AFTER_N_DAYS,
+                conflictPolicy = ConflictPolicy.NEWEST_WINS,
+            )
+
+        assertTrue(ops.isEmpty())
+    }
+
+    @Test
+    fun `upload-delete-local mode re-uploads file when remote is unexpectedly deleted`() {
+        // Remote backup was deleted but local source still exists → re-upload.
+        val ops =
+            SyncDiffer.diff(
+                local = listOf(snap("a.txt")),
+                remote = emptyList(),
+                lastIndex = listOf(idx("a.txt")),
+                direction = SyncDirection.UPLOAD_AND_DELETE_LOCAL_AFTER_N_DAYS,
+                conflictPolicy = ConflictPolicy.NEWEST_WINS,
+            )
+
+        assertEquals(listOf<SyncOp>(SyncOp.UploadNew("a.txt")), ops)
+    }
+
+    @Test
+    fun `upload-delete-local mode does not delete local before retention period elapses`() {
+        val nowMs = 10_000L
+        val retentionDays = 1
+        // File mtime is 1 ms before the threshold (should NOT be deleted).
+        val thresholdMs = retentionDays.toLong() * 24 * 60 * 60 * 1000
+        val fileMtime = nowMs - thresholdMs + 1
+
+        val ops =
+            SyncDiffer.diff(
+                local = listOf(snap("photo.jpg", mtime = fileMtime)),
+                remote = listOf(snap("photo.jpg", mtime = fileMtime)),
+                lastIndex = listOf(idx("photo.jpg", mtime = fileMtime, remoteSize = 10, remoteMtime = fileMtime, remoteId = "r-photo")),
+                direction = SyncDirection.UPLOAD_AND_DELETE_LOCAL_AFTER_N_DAYS,
+                conflictPolicy = ConflictPolicy.NEWEST_WINS,
+                retentionDays = retentionDays,
+                nowMs = nowMs,
+            )
+
+        assertTrue("No retention delete expected before threshold", ops.isEmpty())
+    }
+
+    @Test
+    fun `upload-delete-local mode deletes local after retention period elapses`() {
+        val retentionDays = 7
+        val thresholdMs = retentionDays.toLong() * 24 * 60 * 60 * 1000
+        val nowMs = thresholdMs + 1_000L
+        // File was last modified exactly at the threshold boundary.
+        val fileMtime = nowMs - thresholdMs
+
+        val ops =
+            SyncDiffer.diff(
+                local = listOf(snap("photo.jpg", mtime = fileMtime)),
+                remote = listOf(snap("photo.jpg", mtime = fileMtime)),
+                lastIndex = listOf(idx("photo.jpg", mtime = fileMtime, remoteSize = 10, remoteMtime = fileMtime, remoteId = "r-photo")),
+                direction = SyncDirection.UPLOAD_AND_DELETE_LOCAL_AFTER_N_DAYS,
+                conflictPolicy = ConflictPolicy.NEWEST_WINS,
+                retentionDays = retentionDays,
+                nowMs = nowMs,
+            )
+
+        assertEquals(listOf<SyncOp>(SyncOp.DeleteLocalRetention("photo.jpg")), ops)
+    }
+
+    @Test
+    fun `upload-delete-local mode does not delete local when retentionDays is null`() {
+        val nowMs = 1_000_000L
+        val oldMtime = 1L // ancient file
+
+        val ops =
+            SyncDiffer.diff(
+                local = listOf(snap("photo.jpg", mtime = oldMtime)),
+                remote = listOf(snap("photo.jpg", mtime = oldMtime)),
+                lastIndex = listOf(idx("photo.jpg", mtime = oldMtime, remoteSize = 10, remoteMtime = oldMtime, remoteId = "r-photo")),
+                direction = SyncDirection.UPLOAD_AND_DELETE_LOCAL_AFTER_N_DAYS,
+                conflictPolicy = ConflictPolicy.NEWEST_WINS,
+                retentionDays = null,
+                nowMs = nowMs,
+            )
+
+        assertTrue("retentionDays=null must not produce any retention delete", ops.isEmpty())
+    }
+
+    @Test
+    fun `upload-delete-local mode does not delete local when file is not yet in index`() {
+        // File was just uploaded in this run (not in lastIndex); retention must NOT fire.
+        val nowMs = 1_000_000L
+
+        val ops =
+            SyncDiffer.diff(
+                local = listOf(snap("new.txt", mtime = 1L)),
+                remote = emptyList(),
+                lastIndex = emptyList(),
+                direction = SyncDirection.UPLOAD_AND_DELETE_LOCAL_AFTER_N_DAYS,
+                conflictPolicy = ConflictPolicy.NEWEST_WINS,
+                retentionDays = 0, // even zero days
+                nowMs = nowMs,
+            )
+
+        // Only UploadNew should be present; no DeleteLocalRetention.
+        assertEquals(listOf<SyncOp>(SyncOp.UploadNew("new.txt")), ops)
+    }
+
+    @Test
+    fun `upload-delete-local mode does not generate retention delete for file already being updated`() {
+        // File is in index (previously synced) but is also locally modified in this run.
+        // The UpdateRemote op should win; no DeleteLocalRetention for the same path.
+        val retentionDays = 0
+        val fileMtime = 500L
+        val nowMs = 1_000_000L
+
+        val ops =
+            SyncDiffer.diff(
+                local = listOf(snap("a.txt", size = 99, mtime = fileMtime)),
+                remote = listOf(snap("a.txt", size = 10, mtime = 1L)),
+                lastIndex = listOf(idx("a.txt", size = 10, mtime = 1L, remoteSize = 10, remoteMtime = 1L, remoteId = "r-a")),
+                direction = SyncDirection.UPLOAD_AND_DELETE_LOCAL_AFTER_N_DAYS,
+                conflictPolicy = ConflictPolicy.NEWEST_WINS,
+                retentionDays = retentionDays,
+                nowMs = nowMs,
+            )
+
+        // Should contain UpdateRemote but NOT DeleteLocalRetention.
+        assertEquals(listOf<SyncOp>(SyncOp.UpdateRemote("a.txt")), ops)
+    }
+
+    // -------------------------------------------------------------------------
+    // DOWNLOAD_AND_DELETE_REMOTE_AFTER_N_DAYS – download-only with retention
+    // -------------------------------------------------------------------------
+
+    @Test
+    fun `download-delete-remote mode downloads new remote file on first sync`() {
+        val ops =
+            SyncDiffer.diff(
+                local = emptyList(),
+                remote = listOf(snap("cloud.txt")),
+                lastIndex = emptyList(),
+                direction = SyncDirection.DOWNLOAD_AND_DELETE_REMOTE_AFTER_N_DAYS,
+                conflictPolicy = ConflictPolicy.NEWEST_WINS,
+            )
+
+        assertEquals(listOf<SyncOp>(SyncOp.DownloadNew("cloud.txt")), ops)
+    }
+
+    @Test
+    fun `download-delete-remote mode skips local-only file on first sync`() {
+        val ops =
+            SyncDiffer.diff(
+                local = listOf(snap("local-only.txt")),
+                remote = emptyList(),
+                lastIndex = emptyList(),
+                direction = SyncDirection.DOWNLOAD_AND_DELETE_REMOTE_AFTER_N_DAYS,
+                conflictPolicy = ConflictPolicy.NEWEST_WINS,
+            )
+
+        assertTrue(ops.isEmpty())
+    }
+
+    @Test
+    fun `download-delete-remote mode updates local when remote file changes`() {
+        val ops =
+            SyncDiffer.diff(
+                local = listOf(snap("a.txt")),
+                remote = listOf(snap("a.txt", size = 20, mtime = 2_000)),
+                lastIndex = listOf(idx("a.txt")),
+                direction = SyncDirection.DOWNLOAD_AND_DELETE_REMOTE_AFTER_N_DAYS,
+                conflictPolicy = ConflictPolicy.NEWEST_WINS,
+            )
+
+        assertEquals(listOf<SyncOp>(SyncOp.UpdateLocal("a.txt")), ops)
+    }
+
+    @Test
+    fun `download-delete-remote mode does not update remote when local changes`() {
+        val ops =
+            SyncDiffer.diff(
+                local = listOf(snap("a.txt", size = 20, mtime = 2_000)),
+                remote = listOf(snap("a.txt")),
+                lastIndex = listOf(idx("a.txt")),
+                direction = SyncDirection.DOWNLOAD_AND_DELETE_REMOTE_AFTER_N_DAYS,
+                conflictPolicy = ConflictPolicy.NEWEST_WINS,
+            )
+
+        assertTrue(ops.isEmpty())
+    }
+
+    @Test
+    fun `download-delete-remote mode does not propagate remote delete to local`() {
+        // Remote file was deleted (perhaps by a prior retention cleanup).
+        // The local copy must NOT be deleted.
+        val ops =
+            SyncDiffer.diff(
+                local = listOf(snap("a.txt")),
+                remote = emptyList(),
+                lastIndex = listOf(idx("a.txt")),
+                direction = SyncDirection.DOWNLOAD_AND_DELETE_REMOTE_AFTER_N_DAYS,
+                conflictPolicy = ConflictPolicy.NEWEST_WINS,
+            )
+
+        assertTrue(ops.isEmpty())
+    }
+
+    @Test
+    fun `download-delete-remote mode re-downloads file when local is unexpectedly deleted`() {
+        val ops =
+            SyncDiffer.diff(
+                local = emptyList(),
+                remote = listOf(snap("a.txt")),
+                lastIndex = listOf(idx("a.txt")),
+                direction = SyncDirection.DOWNLOAD_AND_DELETE_REMOTE_AFTER_N_DAYS,
+                conflictPolicy = ConflictPolicy.NEWEST_WINS,
+            )
+
+        assertEquals(listOf<SyncOp>(SyncOp.DownloadNew("a.txt")), ops)
+    }
+
+    @Test
+    fun `download-delete-remote mode does not delete remote before retention period elapses`() {
+        val nowMs = 10_000L
+        val retentionDays = 1
+        val thresholdMs = retentionDays.toLong() * 24 * 60 * 60 * 1000
+        val remoteMtime = nowMs - thresholdMs + 1 // 1 ms before threshold
+
+        val ops =
+            SyncDiffer.diff(
+                local = listOf(snap("cloud.txt", mtime = remoteMtime)),
+                remote = listOf(snap("cloud.txt", mtime = remoteMtime)),
+                lastIndex = listOf(idx("cloud.txt", mtime = remoteMtime, remoteSize = 10, remoteMtime = remoteMtime, remoteId = "r-cloud")),
+                direction = SyncDirection.DOWNLOAD_AND_DELETE_REMOTE_AFTER_N_DAYS,
+                conflictPolicy = ConflictPolicy.NEWEST_WINS,
+                retentionDays = retentionDays,
+                nowMs = nowMs,
+            )
+
+        assertTrue("No retention delete expected before threshold", ops.isEmpty())
+    }
+
+    @Test
+    fun `download-delete-remote mode deletes remote after retention period elapses`() {
+        val retentionDays = 7
+        val thresholdMs = retentionDays.toLong() * 24 * 60 * 60 * 1000
+        val nowMs = thresholdMs + 1_000L
+        val remoteMtime = nowMs - thresholdMs
+
+        val ops =
+            SyncDiffer.diff(
+                local = listOf(snap("cloud.txt", mtime = remoteMtime)),
+                remote = listOf(snap("cloud.txt", mtime = remoteMtime)),
+                lastIndex = listOf(idx("cloud.txt", mtime = remoteMtime, remoteSize = 10, remoteMtime = remoteMtime, remoteId = "r-cloud")),
+                direction = SyncDirection.DOWNLOAD_AND_DELETE_REMOTE_AFTER_N_DAYS,
+                conflictPolicy = ConflictPolicy.NEWEST_WINS,
+                retentionDays = retentionDays,
+                nowMs = nowMs,
+            )
+
+        assertEquals(listOf<SyncOp>(SyncOp.DeleteRemoteRetention("cloud.txt")), ops)
+    }
+
+    @Test
+    fun `download-delete-remote mode does not delete remote when retentionDays is null`() {
+        val nowMs = 1_000_000L
+        val oldMtime = 1L
+
+        val ops =
+            SyncDiffer.diff(
+                local = listOf(snap("cloud.txt", mtime = oldMtime)),
+                remote = listOf(snap("cloud.txt", mtime = oldMtime)),
+                lastIndex = listOf(idx("cloud.txt", mtime = oldMtime, remoteSize = 10, remoteMtime = oldMtime, remoteId = "r-cloud")),
+                direction = SyncDirection.DOWNLOAD_AND_DELETE_REMOTE_AFTER_N_DAYS,
+                conflictPolicy = ConflictPolicy.NEWEST_WINS,
+                retentionDays = null,
+                nowMs = nowMs,
+            )
+
+        assertTrue("retentionDays=null must not produce any retention delete", ops.isEmpty())
+    }
+
+    @Test
+    fun `download-delete-remote mode does not generate retention delete for file not yet in index`() {
+        val nowMs = 1_000_000L
+
+        val ops =
+            SyncDiffer.diff(
+                local = emptyList(),
+                remote = listOf(snap("new.txt", mtime = 1L)),
+                lastIndex = emptyList(),
+                direction = SyncDirection.DOWNLOAD_AND_DELETE_REMOTE_AFTER_N_DAYS,
+                conflictPolicy = ConflictPolicy.NEWEST_WINS,
+                retentionDays = 0,
+                nowMs = nowMs,
+            )
+
+        // Only DownloadNew; no DeleteRemoteRetention.
+        assertEquals(listOf<SyncOp>(SyncOp.DownloadNew("new.txt")), ops)
+    }
+
+    @Test
+    fun `retention does not fire for other directions even when retentionDays is set`() {
+        val nowMs = 1_000_000L
+        val oldMtime = 1L
+
+        for (dir in listOf(SyncDirection.BIDIRECTIONAL, SyncDirection.LOCAL_TO_REMOTE, SyncDirection.REMOTE_TO_LOCAL)) {
+            val ops =
+                SyncDiffer.diff(
+                    local = listOf(snap("a.txt", mtime = oldMtime)),
+                    remote = listOf(snap("a.txt", mtime = oldMtime)),
+                    lastIndex = listOf(idx("a.txt", mtime = oldMtime, remoteSize = 10, remoteMtime = oldMtime, remoteId = "r-a")),
+                    direction = dir,
+                    conflictPolicy = ConflictPolicy.NEWEST_WINS,
+                    retentionDays = 0,
+                    nowMs = nowMs,
+                )
+
+            assertTrue(
+                "Direction $dir should produce no retention ops even with retentionDays=0",
+                ops.none { it is SyncOp.DeleteLocalRetention || it is SyncOp.DeleteRemoteRetention },
+            )
+        }
     }
 }

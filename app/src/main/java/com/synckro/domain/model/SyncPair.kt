@@ -38,4 +38,17 @@ data class SyncPair(
     val deltaToken: String? = null,
     /** Epoch-milliseconds timestamp of the last completed full local scan, or null if never scanned. */
     val lastFullScanAtMs: Long? = null,
+    /**
+     * Number of days after which source files may be deleted in retention-cleanup modes.
+     *
+     * Only meaningful for [SyncDirection.UPLOAD_AND_DELETE_LOCAL_AFTER_N_DAYS] and
+     * [SyncDirection.DOWNLOAD_AND_DELETE_REMOTE_AFTER_N_DAYS]. A value of `null`
+     * disables automatic deletion even in those modes. A value of `0` requests
+     * immediate deletion on the first sync (not recommended — the UI should
+     * require explicit confirmation before saving zero).
+     *
+     * The retention clock is based on the source file's last-modified timestamp
+     * (local mtime for upload modes, remote mtime for download modes).
+     */
+    val retentionDays: Int? = null,
 )

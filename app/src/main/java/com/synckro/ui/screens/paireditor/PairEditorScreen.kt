@@ -465,4 +465,6 @@ private fun directionLabel(dir: SyncDirection): String =
         SyncDirection.LOCAL_TO_REMOTE -> stringResource(R.string.direction_local_to_remote)
         SyncDirection.REMOTE_TO_LOCAL -> stringResource(R.string.direction_remote_to_local)
         SyncDirection.BIDIRECTIONAL -> stringResource(R.string.direction_bidirectional)
+        SyncDirection.UPLOAD_AND_DELETE_LOCAL_AFTER_N_DAYS -> stringResource(R.string.direction_upload_delete_local)
+        SyncDirection.DOWNLOAD_AND_DELETE_REMOTE_AFTER_N_DAYS -> stringResource(R.string.direction_download_delete_remote)
     }

@@ -216,13 +216,21 @@ class LocalFsEnumerator internal constructor(
             snapshot
                 .filter { it.relativePath in added || it.relativePath in modified }
                 .map { entry ->
+                    val existing = cached[entry.relativePath]
                     LocalIndexEntity(
                         pairId = pairId,
                         relativePath = entry.relativePath,
                         sizeBytes = entry.sizeBytes,
                         mtimeMs = entry.mtimeMs,
                         contentHash = entry.contentHash,
-                        remoteId = cached[entry.relativePath]?.remoteId,
+                        remoteId = existing?.remoteId,
+                        // Preserve remote metadata so that a local-mtime-only change does not
+                        // make the file disappear from syntheticRemote and trigger a spurious
+                        // re-upload or remote-deletion on the next sync run.  Remote metadata
+                        // is only refreshed by SyncOpApplier after a real remote operation.
+                        remoteSizeBytes = existing?.remoteSizeBytes,
+                        remoteMtimeMs = existing?.remoteMtimeMs,
+                        remoteEtag = existing?.remoteEtag,
                     )
                 }
         localIndexDao.reconcileForPair(pairId, toUpsert, snapshotPaths.toList())

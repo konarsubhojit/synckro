@@ -237,6 +237,31 @@ class SyncOpApplier(
                             )
                         }
 
+                        is SyncOp.DeleteLocalRetention -> {
+                            applyDeleteLocal(SyncOp.DeleteLocal(op.relativePath), pair)
+                            applied++
+                            eventRepository.log(
+                                pair.id,
+                                SyncEventLevel.INFO,
+                                TAG,
+                                "Deleted local file (retention cleanup): ${op.relativePath}",
+                            )
+                        }
+
+                        is SyncOp.DeleteRemoteRetention -> {
+                            val index =
+                                localIndexByPath[op.relativePath]
+                                    ?: error("No index entry for DeleteRemoteRetention: ${op.relativePath}")
+                            applyDeleteRemote(SyncOp.DeleteRemote(op.relativePath), pair, index)
+                            applied++
+                            eventRepository.log(
+                                pair.id,
+                                SyncEventLevel.INFO,
+                                TAG,
+                                "Deleted remote file (retention cleanup): ${op.relativePath}",
+                            )
+                        }
+
                         is SyncOp.Conflict -> {
                             applyConflict(op, pair, remoteFilesByPath, localIndexByPath)
                             conflicts++
@@ -578,6 +603,8 @@ class SyncOpApplier(
             is SyncOp.UpdateLocal -> "UpdateLocal(${op.relativePath})"
             is SyncOp.DeleteRemote -> "DeleteRemote(${op.relativePath})"
             is SyncOp.DeleteLocal -> "DeleteLocal(${op.relativePath})"
+            is SyncOp.DeleteLocalRetention -> "DeleteLocalRetention(${op.relativePath})"
+            is SyncOp.DeleteRemoteRetention -> "DeleteRemoteRetention(${op.relativePath})"
             is SyncOp.Conflict -> "Conflict(${op.relativePath})"
         }
 
