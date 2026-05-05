@@ -119,7 +119,12 @@ fun PickRemoteFolderScreen(
                     }
                     state.items.isEmpty() -> {
                         Text(
-                            text = stringResource(R.string.pick_remote_folder_empty),
+                            text =
+                                if (state.currentFolderId == null) {
+                                    stringResource(R.string.pick_remote_folder_empty_root)
+                                } else {
+                                    stringResource(R.string.pick_remote_folder_empty)
+                                },
                             modifier =
                                 Modifier
                                     .align(Alignment.Center)

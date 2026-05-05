@@ -19,7 +19,7 @@ the provider-side console setup needed before the app can authenticate.
    - [2. Configure the OAuth consent screen](#2-configure-the-oauth-consent-screen)
    - [3. Create OAuth 2.0 client IDs](#3-create-oauth-20-client-ids)
    - [4. Add webClientId to your local build](#4-add-webclientid-to-your-local-build)
-   - [5. Required scope — drive.file](#5-required-scope--drivefile)
+   - [5. Required scope — drive](#5-required-scope--drive)
    - [6. First-run sign-in flow in the app](#6-first-run-sign-in-flow-in-the-app)
    - [7. Troubleshooting Google Drive](#7-troubleshooting-google-drive)
 2. [OneDrive](#onedrive)
@@ -40,7 +40,7 @@ the provider-side console setup needed before the app can authenticate.
 
 The app uses **Credential Manager + Google Identity Services (GIS)** for
 sign-in, and `Identity.getAuthorizationClient(...).authorize(...)` for the
-`drive.file` OAuth scope.
+`drive` OAuth scope.
 
 ### 1. Create a Google Cloud project and enable the Drive API
 
@@ -137,18 +137,19 @@ and returns `AuthResult.NotConfigured` from `signIn()` if it is blank, so the
 app will not crash — it will just show a "not configured" message in the
 Accounts screen.
 
-### 5. Required scope — drive.file
+### 5. Required scope — drive
 
-The app requests the `https://www.googleapis.com/auth/drive.file` scope, which
-grants access only to files and folders the app itself creates. No broader
-access to the user's Drive is required.
+The app requests the `https://www.googleapis.com/auth/drive` scope, which
+grants full access to the user's Google Drive. This is required so Synckro can
+list arbitrary existing folders and sync files to any location the user selects
+in Drive.
 
 The scope is requested during `signIn()` by:
 
 ```kotlin
 // GoogleDriveAuthManager.kt (simplified)
 val driveAuthRequest = AuthorizationRequest.builder()
-    .setRequestedScopes(listOf(Scope("https://www.googleapis.com/auth/drive.file")))
+    .setRequestedScopes(listOf(Scope("https://www.googleapis.com/auth/drive")))
     .build()
 
 Identity.getAuthorizationClient(activity).authorize(driveAuthRequest)
@@ -163,8 +164,8 @@ before sign-in completes.
 2. Tap **Sign in** under **Google Drive**.
 3. The Credential Manager bottom sheet appears — select your Google account.
 4. If this is the first sign-in (or the scope was revoked), a consent screen
-   appears asking to allow "Synckro" to manage files in your Google Drive. Tap
-   **Allow**.
+   appears asking to allow "Synckro" to view and manage all files in your
+   Google Drive. Tap **Allow**.
 5. Sign-in completes. The **Accounts** screen now shows your Google account
    row with your display name and email.
 6. After adding a sync pair that points to Google Drive, Synckro can read and
