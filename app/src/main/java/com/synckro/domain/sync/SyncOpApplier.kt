@@ -139,10 +139,18 @@ class SyncOpApplier(
      * Terminal auth exceptions propagate immediately; all other exceptions are collected
      * in [ApplyResult.errors] so a single bad file does not abort the whole batch.
      *
+     * After each op (success or failure) [onProgress] is invoked with a [TransferProgress]
+     * snapshot. [TransferProgress.totalBytes] is the sum of file sizes that could be resolved
+     * from [remoteFilesByPath] and [localIndexByPath] before the batch started; it is 0 when
+     * no sizes are available, in which case [TransferProgress.totalFiles] should be used as a
+     * fallback denominator.
+     *
      * @param ops              Ordered list of operations to apply.
      * @param pair             The sync pair owning the ops.
      * @param remoteFilesByPath Map from relative path to [RemoteFile] for all remote files.
      * @param localIndexByPath  Map from relative path to [LocalIndexEntity] for all indexed files.
+     * @param onProgress       Called after every op with the current [TransferProgress].
+     *                         Defaults to a no-op so existing callers are unaffected.
      * @return [ApplyResult] summarising what was applied, how many conflicts, and any errors.
      */
     suspend fun apply(
@@ -150,13 +158,24 @@ class SyncOpApplier(
         pair: SyncPair,
         remoteFilesByPath: Map<String, RemoteFile>,
         localIndexByPath: Map<String, LocalIndexEntity>,
+        onProgress: suspend (TransferProgress) -> Unit = {},
     ): ApplyResult =
         withContext(ioDispatcher) {
             var applied = 0
             var conflicts = 0
             val errors = mutableListOf<String>()
 
-            for (op in ops) {
+            val totalFiles = ops.size
+            // Pre-compute per-op transfer bytes once so we don't repeat map lookups
+            // inside the hot apply loop.
+            val opBytes = LongArray(totalFiles) { i ->
+                opTransferBytes(ops[i], remoteFilesByPath, localIndexByPath)
+            }
+            val totalBytes = opBytes.sum()
+            var filesProcessed = 0
+            var bytesTransferred = 0L
+
+            for ((index, op) in ops.withIndex()) {
                 try {
                     when (op) {
                         is SyncOp.UploadNew -> {
@@ -253,6 +272,17 @@ class SyncOpApplier(
                     errors += msg
                     eventRepository.log(pair.id, SyncEventLevel.ERROR, TAG, msg)
                 }
+
+                filesProcessed++
+                bytesTransferred += opBytes[index]
+                onProgress(
+                    TransferProgress(
+                        filesCompleted = filesProcessed,
+                        totalFiles = totalFiles,
+                        bytesTransferred = bytesTransferred,
+                        totalBytes = totalBytes,
+                    ),
+                )
             }
 
             ApplyResult(applied = applied, conflicts = conflicts, errors = errors)
@@ -579,6 +609,26 @@ class SyncOpApplier(
             is SyncOp.DeleteRemote -> "DeleteRemote(${op.relativePath})"
             is SyncOp.DeleteLocal -> "DeleteLocal(${op.relativePath})"
             is SyncOp.Conflict -> "Conflict(${op.relativePath})"
+        }
+
+    /**
+     * Returns the number of bytes expected to be transferred for a single [op].
+     *
+     * For download ops the size comes from [remoteFilesByPath]; for upload ops it
+     * comes from [localIndexByPath]. Returns 0 when the size is not known (new
+     * local files not yet indexed, delete ops, unresolvable conflicts).
+     */
+    private fun opTransferBytes(
+        op: SyncOp,
+        remoteFilesByPath: Map<String, RemoteFile>,
+        localIndexByPath: Map<String, LocalIndexEntity>,
+    ): Long =
+        when (op) {
+            is SyncOp.DownloadNew -> remoteFilesByPath[op.relativePath]?.size ?: 0L
+            is SyncOp.UpdateLocal -> remoteFilesByPath[op.relativePath]?.size ?: 0L
+            is SyncOp.UploadNew -> localIndexByPath[op.relativePath]?.sizeBytes ?: 0L
+            is SyncOp.UpdateRemote -> localIndexByPath[op.relativePath]?.sizeBytes ?: 0L
+            is SyncOp.DeleteRemote, is SyncOp.DeleteLocal, is SyncOp.Conflict -> 0L
         }
 
     private companion object {
