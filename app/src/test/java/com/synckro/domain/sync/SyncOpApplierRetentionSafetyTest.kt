@@ -16,6 +16,7 @@ import io.mockk.slot
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import java.io.ByteArrayInputStream
@@ -207,9 +208,9 @@ class SyncOpApplierRetentionSafetyTest {
             val logSlot = slot<String>()
             coVerify { eventRepo.log(1L, SyncEventLevel.INFO, "SyncOpApplier", capture(logSlot)) }
             val msg = logSlot.captured
-            assert(msg.contains("7d")) { "Expected '7d' in log message but got: $msg" }
-            assert(msg.contains("local")) { "Expected 'local' in log message but got: $msg" }
-            assert(msg.contains("My Pair")) { "Expected pair name in log message but got: $msg" }
+            assertTrue("Expected '7d' in log message but got: $msg", msg.contains("7d"))
+            assertTrue("Expected 'local' in log message but got: $msg", msg.contains("local"))
+            assertTrue("Expected pair name in log message but got: $msg", msg.contains("My Pair"))
         }
 
     @Test
@@ -232,6 +233,41 @@ class SyncOpApplierRetentionSafetyTest {
     // =========================================================================
     // DeleteRemoteRetention — safety checks
     // =========================================================================
+
+    @Test
+    fun `DeleteRemoteRetention is skipped and logs WARN when index has no entry`() =
+        runTest {
+            // No index entry at all.
+            val result =
+                buildApplier().apply(
+                    ops = listOf(SyncOp.DeleteRemoteRetention("ghost.txt")),
+                    pair = retentionPair(direction = SyncDirection.DOWNLOAD_AND_DELETE_REMOTE_AFTER_N_DAYS),
+                    remoteFilesByPath = emptyMap(),
+                    localIndexByPath = emptyMap(),
+                )
+
+            assertEquals(0, result.applied)
+            assertEquals(0, result.errors.size)
+            coVerify { eventRepo.log(1L, SyncEventLevel.WARN, "SyncOpApplier", match { it.contains("not confirmed") }) }
+        }
+
+    @Test
+    fun `DeleteRemoteRetention is skipped and logs WARN when index entry has null remoteId`() =
+        runTest {
+            val idx = indexEntry("file.txt", remoteId = null)
+
+            val result =
+                buildApplier().apply(
+                    ops = listOf(SyncOp.DeleteRemoteRetention("file.txt")),
+                    pair = retentionPair(direction = SyncDirection.DOWNLOAD_AND_DELETE_REMOTE_AFTER_N_DAYS),
+                    remoteFilesByPath = emptyMap(),
+                    localIndexByPath = mapOf("file.txt" to idx),
+                )
+
+            assertEquals(0, result.applied)
+            assertEquals(0, result.errors.size)
+            coVerify { eventRepo.log(1L, SyncEventLevel.WARN, "SyncOpApplier", match { it.contains("not confirmed") }) }
+        }
 
     @Test
     fun `DeleteRemoteRetention is skipped and logs WARN when local file does not exist`() =
@@ -281,9 +317,9 @@ class SyncOpApplierRetentionSafetyTest {
             val logSlot = slot<String>()
             coVerify { eventRepo.log(1L, SyncEventLevel.INFO, "SyncOpApplier", capture(logSlot)) }
             val msg = logSlot.captured
-            assert(msg.contains("14d")) { "Expected '14d' in log message but got: $msg" }
-            assert(msg.contains("remote")) { "Expected 'remote' in log message but got: $msg" }
-            assert(msg.contains("My Pair")) { "Expected pair name in log message but got: $msg" }
+            assertTrue("Expected '14d' in log message but got: $msg", msg.contains("14d"))
+            assertTrue("Expected 'remote' in log message but got: $msg", msg.contains("remote"))
+            assertTrue("Expected pair name in log message but got: $msg", msg.contains("My Pair"))
         }
 
     @Test

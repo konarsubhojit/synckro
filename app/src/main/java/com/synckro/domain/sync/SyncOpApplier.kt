@@ -280,27 +280,35 @@ class SyncOpApplier(
                         }
 
                         is SyncOp.DeleteRemoteRetention -> {
-                            val index =
-                                localIndexByPath[op.relativePath]
-                                    ?: error("No index entry for DeleteRemoteRetention: ${op.relativePath}")
-                            val localStat = localFileAccess.stat(op.relativePath)
-                            if (localStat == null) {
-                                // Fail safe: local copy not found — skip remote deletion.
+                            val index = localIndexByPath[op.relativePath]
+                            if (index?.remoteId == null) {
+                                // Fail safe: no index entry or remoteId absent — skip remote deletion.
                                 eventRepository.log(
                                     pair.id,
                                     SyncEventLevel.WARN,
                                     TAG,
-                                    "Skipped retention-delete remote [${pair.displayName}]: ${op.relativePath} — local copy not found",
+                                    "Skipped retention-delete remote [${pair.displayName}]: ${op.relativePath} — remote copy not confirmed in index",
                                 )
                             } else {
-                                applyDeleteRemote(SyncOp.DeleteRemote(op.relativePath), pair, index)
-                                applied++
-                                eventRepository.log(
-                                    pair.id,
-                                    SyncEventLevel.INFO,
-                                    TAG,
-                                    "Retention delete (remote, ${pair.retentionDays}d) [${pair.displayName}]: ${op.relativePath}",
-                                )
+                                val localStat = localFileAccess.stat(op.relativePath)
+                                if (localStat == null) {
+                                    // Fail safe: local copy not found — skip remote deletion.
+                                    eventRepository.log(
+                                        pair.id,
+                                        SyncEventLevel.WARN,
+                                        TAG,
+                                        "Skipped retention-delete remote [${pair.displayName}]: ${op.relativePath} — local copy not found",
+                                    )
+                                } else {
+                                    applyDeleteRemote(SyncOp.DeleteRemote(op.relativePath), pair, index)
+                                    applied++
+                                    eventRepository.log(
+                                        pair.id,
+                                        SyncEventLevel.INFO,
+                                        TAG,
+                                        "Retention delete (remote, ${pair.retentionDays}d) [${pair.displayName}]: ${op.relativePath}",
+                                    )
+                                }
                             }
                         }
 

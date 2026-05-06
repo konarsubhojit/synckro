@@ -97,10 +97,12 @@ fun PairEditorScreen(
     val pendingDir = state.pendingDestructiveDirection
     if (pendingDir != null) {
         val bodyText =
-            if (pendingDir == SyncDirection.UPLOAD_AND_DELETE_LOCAL_AFTER_N_DAYS) {
-                stringResource(R.string.pair_editor_destructive_confirm_upload_delete)
-            } else {
-                stringResource(R.string.pair_editor_destructive_confirm_download_delete)
+            when (pendingDir) {
+                SyncDirection.UPLOAD_AND_DELETE_LOCAL_AFTER_N_DAYS ->
+                    stringResource(R.string.pair_editor_destructive_confirm_upload_delete)
+                SyncDirection.DOWNLOAD_AND_DELETE_REMOTE_AFTER_N_DAYS ->
+                    stringResource(R.string.pair_editor_destructive_confirm_download_delete)
+                else -> error("Unexpected destructive direction: $pendingDir")
             }
         AlertDialog(
             onDismissRequest = { viewModel.dismissDestructiveDirection() },
