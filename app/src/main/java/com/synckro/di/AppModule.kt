@@ -66,6 +66,7 @@ object AppModule {
                     SynckroDatabase.MIGRATION_7_8,
                     SynckroDatabase.MIGRATION_8_9,
                     SynckroDatabase.MIGRATION_9_10,
+                    SynckroDatabase.MIGRATION_10_11,
                 )
         // Destructive fallback is only acceptable while the schema is still
         // pre-1.0. In release builds we refuse to drop user sync state and

@@ -91,6 +91,10 @@ class PairEditorViewModel
             val includeGlobsText: String = "",
             /** Newline-separated glob patterns. */
             val excludeGlobsText: String = "",
+            /** When true, only root-level files are synced; sub-directories are ignored. */
+            val excludeSubfolders: Boolean = false,
+            /** When true, empty directories are excluded from the sync scope. */
+            val excludeEmptyFolders: Boolean = false,
             /**
              * Text representation of the retention period in days. Only meaningful
              * when [direction] is [SyncDirection.UPLOAD_AND_DELETE_LOCAL_AFTER_N_DAYS]
@@ -185,6 +189,8 @@ class PairEditorViewModel
                             customIntervalText = entity.scheduleIntervalMinutes.toString(),
                             includeGlobsText = entity.includeGlobs.joinToString("\n"),
                             excludeGlobsText = entity.excludeGlobs.joinToString("\n"),
+                            excludeSubfolders = entity.excludeSubfolders,
+                            excludeEmptyFolders = entity.excludeEmptyFolders,
                             retentionDaysText = entity.retentionDays?.toString() ?: "",
                         )
                     }
@@ -274,6 +280,10 @@ class PairEditorViewModel
 
         fun onExcludeGlobsChange(value: String) = _state.update { it.copy(excludeGlobsText = value) }
 
+        fun onExcludeSubfoldersChange(value: Boolean) = _state.update { it.copy(excludeSubfolders = value) }
+
+        fun onExcludeEmptyFoldersChange(value: Boolean) = _state.update { it.copy(excludeEmptyFolders = value) }
+
         fun onRetentionDaysChange(value: String) = _state.update { it.copy(retentionDaysText = value.filter { ch -> ch.isDigit() }) }
 
         /**
@@ -324,6 +334,8 @@ class PairEditorViewModel
                                     .split('\n')
                                     .map { it.trim() }
                                     .filter { it.isNotBlank() },
+                            excludeSubfolders = s.excludeSubfolders,
+                            excludeEmptyFolders = s.excludeEmptyFolders,
                             retentionDays = retentionDays,
                         )
                     val savedId = syncPairRepository.upsert(pair)

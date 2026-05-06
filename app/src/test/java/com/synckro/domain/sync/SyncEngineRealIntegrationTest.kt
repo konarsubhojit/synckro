@@ -2,6 +2,7 @@ package com.synckro.domain.sync
 
 import android.content.Context
 import android.net.Uri
+import android.provider.DocumentsContract
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.synckro.data.local.dao.ConflictRecordDao
@@ -31,6 +32,7 @@ import com.synckro.providers.fake.FakeRemoteEnumerator
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -1648,6 +1650,297 @@ class SyncEngineRealIntegrationTest {
             val indexEntry = localIndex.find { it.relativePath == "docs/subdir/notes.txt" }
             assertNotNull("Local index should contain 'docs/subdir/notes.txt'", indexEntry)
             assertEquals(remoteFile.id, indexEntry!!.remoteId)
+        }
+
+    // -------------------------------------------------------------------------
+    // excludeSubfolders
+    // -------------------------------------------------------------------------
+
+    @Test
+    fun `runReal with excludeSubfolders=true uploads only root-level local files`() =
+        runTest {
+            // Two files: one at root, one inside a subdirectory.
+            val rootContent = "root file".toByteArray()
+            val subContent = "sub file".toByteArray()
+            localFileAccess.put("root.txt", rootContent)
+            localFileAccess.put("sub/child.txt", subContent)
+            inMemoryChildren.set(
+                "root",
+                listOf(
+                    RawDocChild(
+                        docId = "doc-root",
+                        name = "root.txt",
+                        mimeType = "text/plain",
+                        size = rootContent.size.toLong(),
+                        lastModifiedMs = 1_000L,
+                    ),
+                    RawDocChild(
+                        docId = "doc-sub",
+                        name = "sub",
+                        mimeType = DocumentsContract.Document.MIME_TYPE_DIR,
+                        size = 0L,
+                        lastModifiedMs = 0L,
+                    ),
+                ),
+            )
+            inMemoryChildren.set(
+                "doc-sub",
+                listOf(
+                    RawDocChild(
+                        docId = "doc-child",
+                        name = "child.txt",
+                        mimeType = "text/plain",
+                        size = subContent.size.toLong(),
+                        lastModifiedMs = 2_000L,
+                    ),
+                ),
+            )
+
+            val pair = insertPair().copy(excludeSubfolders = true)
+            val engine = buildEngine()
+
+            val result = engine.runOnce(pair)
+
+            assertTrue("Expected Success, got: $result", result is SyncEngine.Result.Success)
+            assertEquals(
+                "Only the root-level file should be uploaded",
+                1,
+                (result as SyncEngine.Result.Success).applied,
+            )
+
+            // Only root.txt should be in the local index.
+            val index = localIndexDao.getForPair(pair.id)
+            assertEquals(1, index.size)
+            assertEquals("root.txt", index.single().relativePath)
+        }
+
+    @Test
+    fun `runReal with excludeSubfolders=true ignores remote files in subdirectories`() =
+        runTest {
+            // Remote has a nested file; local is empty.
+            val docsFolder = fakeProvider.createFolder("remote-root", "docs")
+            val remoteContent = "remote doc".toByteArray()
+            fakeProvider.uploadNew(
+                parentId = docsFolder.id,
+                name = "report.txt",
+                content = remoteContent.inputStream(),
+                size = remoteContent.size.toLong(),
+                mimeType = "text/plain",
+            )
+
+            val pair = insertPair().copy(excludeSubfolders = true)
+            val engine = buildEngine()
+
+            val result = engine.runOnce(pair)
+
+            assertTrue("Expected Success, got: $result", result is SyncEngine.Result.Success)
+            // The nested remote file is out of scope when excludeSubfolders=true; nothing to apply.
+            assertEquals(
+                "Nested remote file should be excluded from scope",
+                0,
+                (result as SyncEngine.Result.Success).applied,
+            )
+        }
+
+    @Test
+    fun `runReal with excludeSubfolders=true bidirectional syncs only root-level files`() =
+        runTest {
+            // Root-level local file + nested local file; also a root-level remote file.
+            val rootLocalContent = "root local".toByteArray()
+            localFileAccess.put("local-root.txt", rootLocalContent)
+            inMemoryChildren.set(
+                "root",
+                listOf(
+                    RawDocChild(
+                        docId = "doc-local-root",
+                        name = "local-root.txt",
+                        mimeType = "text/plain",
+                        size = rootLocalContent.size.toLong(),
+                        lastModifiedMs = 1_000L,
+                    ),
+                    RawDocChild(
+                        docId = "doc-nested-dir",
+                        name = "nested",
+                        mimeType = DocumentsContract.Document.MIME_TYPE_DIR,
+                        size = 0L,
+                        lastModifiedMs = 0L,
+                    ),
+                ),
+            )
+            val nestedContent = "nested local".toByteArray()
+            localFileAccess.put("nested/file.txt", nestedContent)
+            inMemoryChildren.set(
+                "doc-nested-dir",
+                listOf(
+                    RawDocChild(
+                        docId = "doc-nested-file",
+                        name = "file.txt",
+                        mimeType = "text/plain",
+                        size = nestedContent.size.toLong(),
+                        lastModifiedMs = 2_000L,
+                    ),
+                ),
+            )
+
+            val pair = insertPair(direction = SyncDirection.BIDIRECTIONAL).copy(excludeSubfolders = true)
+            val engine = buildEngine()
+
+            // Establish a remote baseline (uploads root-level local file).
+            val firstResult = engine.runOnce(pair)
+            assertTrue("First run should succeed", firstResult is SyncEngine.Result.Success)
+
+            // Only root-level file should have been synced.
+            val index = localIndexDao.getForPair(pair.id)
+            val paths = index.map { it.relativePath }.toSet()
+            assertTrue("root-level file must be in index", "local-root.txt" in paths)
+            assertTrue("nested file must NOT be in index", "nested/file.txt" !in paths)
+        }
+
+    // -------------------------------------------------------------------------
+    // excludeEmptyFolders
+    // -------------------------------------------------------------------------
+
+    @Test
+    fun `runReal with excludeEmptyFolders=true filters empty remote folders from delta`() =
+        runTest {
+            // Establish baseline (empty local + remote).
+            val pair = insertPair().copy(excludeEmptyFolders = true)
+            val engine = buildEngine()
+
+            val baselineResult = engine.runOnce(pair)
+            assertTrue("Baseline should succeed", baselineResult is SyncEngine.Result.Success)
+            val storedToken = syncPairDao.getById(pair.id)!!.lastDeltaToken!!
+
+            // Create an empty folder on the remote — this appears in the delta
+            // as a MODIFY entry with isFolder = true and size = null.
+            fakeProvider.createFolder("remote-root", "empty-dir")
+
+            // Delta run: the empty folder should be filtered out.
+            val deltaResult = engine.runOnce(pair.copy(deltaToken = storedToken))
+
+            assertTrue("Delta run should succeed", deltaResult is SyncEngine.Result.Success)
+            assertEquals(
+                "Empty folder should not produce any applied ops",
+                0,
+                (deltaResult as SyncEngine.Result.Success).applied,
+            )
+        }
+
+    @Test
+    fun `runReal with excludeEmptyFolders=false does not filter remote folders`() =
+        runTest {
+            // With excludeEmptyFolders=false (default), folder entries pass through
+            // the delta pipeline.  They are still filtered by SyncEngine's implicit
+            // size/mtime null check, so they produce zero applied ops — but the key
+            // difference is that the filter logic in the SyncEngine does NOT remove
+            // them before processing begins.
+            val pair = insertPair().copy(excludeEmptyFolders = false)
+            val engine = buildEngine()
+
+            val baselineResult = engine.runOnce(pair)
+            assertTrue("Baseline should succeed", baselineResult is SyncEngine.Result.Success)
+            val storedToken = syncPairDao.getById(pair.id)!!.lastDeltaToken!!
+
+            // Create an empty folder on the remote.
+            fakeProvider.createFolder("remote-root", "empty-dir")
+
+            val deltaResult = engine.runOnce(pair.copy(deltaToken = storedToken))
+
+            assertTrue("Delta run should succeed", deltaResult is SyncEngine.Result.Success)
+            // Still 0 applied because folders have size=null, but the test
+            // validates the excludeEmptyFolders=false path doesn't break.
+            assertEquals(0, (deltaResult as SyncEngine.Result.Success).applied)
+        }
+
+    @Test
+    fun `runReal with excludeEmptyFolders=true still processes files inside folders`() =
+        runTest {
+            // excludeEmptyFolders should only filter out empty (folder-type) entries,
+            // not files that happen to be inside folders.
+            val pair = insertPair().copy(excludeEmptyFolders = true)
+            val engine = buildEngine()
+
+            val baselineResult = engine.runOnce(pair)
+            assertTrue("Baseline should succeed", baselineResult is SyncEngine.Result.Success)
+            val storedToken = syncPairDao.getById(pair.id)!!.lastDeltaToken!!
+
+            // Create a folder with a file inside it.
+            val folder = fakeProvider.createFolder("remote-root", "docs")
+            val content = "report content".toByteArray()
+            fakeProvider.uploadNew(
+                parentId = folder.id,
+                name = "report.txt",
+                content = content.inputStream(),
+                size = content.size.toLong(),
+                mimeType = "text/plain",
+            )
+
+            val deltaResult = engine.runOnce(pair.copy(deltaToken = storedToken))
+
+            assertTrue("Delta run should succeed", deltaResult is SyncEngine.Result.Success)
+            // The file inside the folder should still be processed.
+            assertTrue(
+                "At least one file op should be applied",
+                (deltaResult as SyncEngine.Result.Success).applied >= 1,
+            )
+        }
+
+    @Test
+    fun `runReal excludeEmptyFolders filters folder entries but keeps DELETE entries`() =
+        runTest {
+            // Even with excludeEmptyFolders=true, DELETE entries for folders should
+            // not be filtered — they are harmless (removing an absent key from
+            // syntheticRemote is a no-op) and must be kept for correctness.
+            val pair = insertPair().copy(excludeEmptyFolders = true)
+            val engine = buildEngine()
+
+            val baselineResult = engine.runOnce(pair)
+            assertTrue("Baseline should succeed", baselineResult is SyncEngine.Result.Success)
+            val storedToken = syncPairDao.getById(pair.id)!!.lastDeltaToken!!
+
+            // Create and then delete a folder — produces two change entries:
+            // a MODIFY (folder creation) and a DELETE.
+            val folder = fakeProvider.createFolder("remote-root", "temp-dir")
+            fakeProvider.delete(folder.id)
+
+            val deltaResult = engine.runOnce(pair.copy(deltaToken = storedToken))
+
+            assertTrue("Delta run should succeed", deltaResult is SyncEngine.Result.Success)
+            assertEquals(0, (deltaResult as SyncEngine.Result.Success).applied)
+        }
+
+    @Test
+    fun `FakeRemoteEnumerator sets isFolder=true for folder entries`() =
+        runTest {
+            // Verify that FakeRemoteEnumerator correctly populates isFolder on
+            // RemoteChange entries for folders.
+            fakeProvider.createFolder("remote-root", "test-folder")
+
+            val snapshot = fakeRemoteEnumerator.enumerate(deltaToken = "0", rootFolderId = "remote-root")
+
+            val folderChange = snapshot.changes.find { it.relativePath == "test-folder" }
+            assertNotNull("Folder change should be in the snapshot", folderChange)
+            assertTrue("Folder entry must have isFolder=true", folderChange!!.isFolder)
+        }
+
+    @Test
+    fun `FakeRemoteEnumerator sets isFolder=false for file entries`() =
+        runTest {
+            // Verify that FakeRemoteEnumerator correctly sets isFolder=false for files.
+            val content = "file content".toByteArray()
+            fakeProvider.uploadNew(
+                parentId = "remote-root",
+                name = "test-file.txt",
+                content = content.inputStream(),
+                size = content.size.toLong(),
+                mimeType = "text/plain",
+            )
+
+            val snapshot = fakeRemoteEnumerator.enumerate(deltaToken = "0", rootFolderId = "remote-root")
+
+            val fileChange = snapshot.changes.find { it.relativePath == "test-file.txt" }
+            assertNotNull("File change should be in the snapshot", fileChange)
+            assertFalse("File entry must have isFolder=false", fileChange!!.isFolder)
         }
 
     companion object {

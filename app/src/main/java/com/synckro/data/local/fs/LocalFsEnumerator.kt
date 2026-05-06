@@ -119,6 +119,9 @@ class LocalFsEnumerator internal constructor(
      *                     excluded from the snapshot and treated as deleted from
      *                     `local_index` if they were previously indexed.  Exclude
      *                     patterns take precedence over include matches.
+     * @param excludeSubfolders When `true`, only files at the immediate root of the
+     *                     SAF tree are enumerated — sub-directories are not traversed.
+     *                     Combine with [ignoreGlobs] for fine-grained filtering.
      * @return [EnumerationResult] containing the full snapshot and diff sets.
      */
     suspend fun enumerate(
@@ -126,6 +129,7 @@ class LocalFsEnumerator internal constructor(
         treeUri: Uri,
         includeGlobs: List<String> = emptyList(),
         ignoreGlobs: List<String> = emptyList(),
+        excludeSubfolders: Boolean = false,
     ): EnumerationResult {
         // 1. Load existing local_index as a map for O(1) lookup.
         val cached: Map<String, LocalIndexEntity> =
@@ -180,7 +184,11 @@ class LocalFsEnumerator internal constructor(
                     if (prefix.isEmpty()) child.name else "$prefix/${child.name}"
 
                 if (child.mimeType == DocumentsContract.Document.MIME_TYPE_DIR) {
-                    queue.add(child.docId to relativePath)
+                    // When excludeSubfolders is enabled, skip traversing into any
+                    // subdirectories so only root-level files are enumerated.
+                    if (!excludeSubfolders) {
+                        queue.add(child.docId to relativePath)
+                    }
                     continue
                 }
 

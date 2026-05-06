@@ -234,6 +234,7 @@ class SyncEngine(
                 treeUri = treeUri,
                 includeGlobs = pair.includeGlobs,
                 ignoreGlobs = pair.excludeGlobs,
+                excludeSubfolders = pair.excludeSubfolders,
             )
 
         // -----------------------------------------------------------------
@@ -245,11 +246,27 @@ class SyncEngine(
         // are returned as MODIFY changes and can be downloaded.  For existing
         // pairs the persisted delta token is used for incremental polling.
         // -----------------------------------------------------------------
-        val remoteSnapshot =
+        val rawRemoteSnapshot =
             if (pair.deltaToken == null) {
                 remoteEnumerator.enumerateFull(pair.remoteFolderId)
             } else {
                 remoteEnumerator.enumerate(pair.deltaToken, pair.remoteFolderId)
+            }
+
+        // When excludeEmptyFolders is enabled, filter out folder entries from
+        // the remote delta.  Folder entries (isFolder = true) represent empty
+        // directories on the remote side; keeping them would let the engine
+        // process them as file changes.  Only non-DELETE folder entries are
+        // filtered — DELETE entries are harmless (removing an absent key from
+        // syntheticRemote is a no-op) and must be kept so that previously-
+        // tracked items with the same remoteId are not orphaned.
+        val remoteSnapshot =
+            if (pair.excludeEmptyFolders) {
+                rawRemoteSnapshot.copy(
+                    changes = rawRemoteSnapshot.changes.filterNot { it.isFolder && it.type != RemoteChangeType.DELETE },
+                )
+            } else {
+                rawRemoteSnapshot
             }
 
         // -----------------------------------------------------------------
@@ -286,6 +303,10 @@ class SyncEngine(
         fun isInScope(path: String): Boolean {
             if (scopeExcludeGlobs.any { it.matches(path) }) return false
             if (includeFilterActive && scopeIncludeGlobs.none { it.matches(path) }) return false
+            // When excludeSubfolders is enabled, only root-level paths (no '/' separator)
+            // are in scope.  This mirrors the LocalFsEnumerator's BFS behaviour where
+            // sub-directories are not traversed.
+            if (pair.excludeSubfolders && path.contains('/')) return false
             return true
         }
 
@@ -324,7 +345,15 @@ class SyncEngine(
         // synthetic remote and add the new one so SyncDiffer sees a delete of
         // the old path and an add of the new one.
         for (change in remoteSnapshot.changes) {
-            if (!isInScope(change.relativePath)) continue
+            // Use the canonical path from the pre-scan index (resolved via the
+            // stable remote ID) when available, because change.relativePath is
+            // "best-effort" and may fall back to a leaf name when the provider
+            // cannot resolve hierarchy in a delta batch.  Without this, nested
+            // items could be misclassified as root-level when excludeSubfolders
+            // is enabled (the path.contains('/') check would not fire).
+            val canonicalPath = preScanIndexById[change.remoteId]?.relativePath
+                ?: change.relativePath
+            if (!isInScope(canonicalPath)) continue
             when (change.type) {
                 RemoteChangeType.ADD, RemoteChangeType.MODIFY -> {
                     // Detect rename/move: look up the existing path by stable remote ID.

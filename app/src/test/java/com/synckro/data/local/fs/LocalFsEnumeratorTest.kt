@@ -902,6 +902,121 @@ class LocalFsEnumeratorTest {
         }
 
     // -------------------------------------------------------------------------
+    // excludeSubfolders
+    // -------------------------------------------------------------------------
+
+    @Test
+    fun `excludeSubfolders=true returns only root-level files`() =
+        runTest {
+            val pairId = insertPair()
+
+            val (fakeTree, bytesMap) =
+                buildFakeTree(
+                    listOf(
+                        Triple("root.txt", 10L, 100L),
+                        Triple("sub/child.txt", 20L, 200L),
+                        Triple("sub/nested/deep.txt", 30L, 300L),
+                    ),
+                )
+            val result =
+                enumeratorWith(fakeTree, FakeFsAccess(bytesMap))
+                    .enumerate(pairId, treeUri, excludeSubfolders = true)
+
+            assertEquals(1, result.snapshot.size)
+            assertEquals("root.txt", result.snapshot.single().relativePath)
+        }
+
+    @Test
+    fun `excludeSubfolders=false still traverses nested dirs (default behaviour)`() =
+        runTest {
+            val pairId = insertPair()
+
+            val (fakeTree, bytesMap) =
+                buildFakeTree(
+                    listOf(
+                        Triple("root.txt", 10L, 100L),
+                        Triple("sub/child.txt", 20L, 200L),
+                    ),
+                )
+            val result =
+                enumeratorWith(fakeTree, FakeFsAccess(bytesMap))
+                    .enumerate(pairId, treeUri, excludeSubfolders = false)
+
+            assertEquals(2, result.snapshot.size)
+        }
+
+    @Test
+    fun `excludeSubfolders=true marks previously-indexed subdirectory files as deleted`() =
+        runTest {
+            val pairId = insertPair()
+
+            // Seed an entry from a subdirectory that was previously indexed.
+            localIndexDao.upsert(
+                LocalIndexEntity(pairId, "sub/old.txt", sizeBytes = 10L, mtimeMs = 100L),
+            )
+
+            val fakeTree =
+                mapOf(
+                    "root" to
+                        listOf(
+                            file("root.txt", size = 5),
+                            dir("sub"),
+                        ),
+                    "sub" to listOf(file("old.txt", size = 10, lastModifiedMs = 100)),
+                )
+            val result =
+                enumeratorWith(fakeTree).enumerate(pairId, treeUri, excludeSubfolders = true)
+
+            assertTrue(
+                "sub/old.txt must appear in deleted set when subfolders are excluded",
+                "sub/old.txt" in result.deleted,
+            )
+            assertEquals(1, result.snapshot.size)
+            assertEquals("root.txt", result.snapshot.single().relativePath)
+        }
+
+    @Test
+    fun `excludeSubfolders=true with empty root returns empty result`() =
+        runTest {
+            val pairId = insertPair()
+            val result =
+                enumeratorWith(mapOf("root" to emptyList()))
+                    .enumerate(pairId, treeUri, excludeSubfolders = true)
+
+            assertTrue(result.snapshot.isEmpty())
+            assertTrue(result.added.isEmpty())
+            assertTrue(result.deleted.isEmpty())
+        }
+
+    @Test
+    fun `excludeSubfolders=true is compatible with ignoreGlobs`() =
+        runTest {
+            val pairId = insertPair()
+
+            val fakeTree =
+                mapOf(
+                    "root" to
+                        listOf(
+                            file("keep.txt", size = 10),
+                            file("ignore.tmp", size = 5),
+                            dir("sub"),
+                        ),
+                    "sub" to listOf(file("nested.txt", size = 20)),
+                )
+            val result =
+                enumeratorWith(fakeTree)
+                    .enumerate(
+                        pairId,
+                        treeUri,
+                        ignoreGlobs = listOf("*.tmp"),
+                        excludeSubfolders = true,
+                    )
+
+            assertEquals(1, result.snapshot.size)
+            assertEquals("keep.txt", result.snapshot.single().relativePath)
+        }
+
+    // -------------------------------------------------------------------------
     // glob helpers
     // -------------------------------------------------------------------------
 

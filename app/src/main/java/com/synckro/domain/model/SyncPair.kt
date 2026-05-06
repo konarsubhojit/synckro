@@ -54,4 +54,25 @@ data class SyncPair(
      * (local mtime for upload modes, remote mtime for download modes).
      */
     val retentionDays: Int? = null,
+    /**
+     * When `true`, only files located directly inside the sync root folder are
+     * included in the sync scope.  Nested sub-directories (and all files within
+     * them) are ignored on both the local and remote sides.  Combine with
+     * [excludeGlobs] for fine-grained path-based filtering.
+     */
+    val excludeSubfolders: Boolean = false,
+    /**
+     * When `true`, empty directories are excluded from the sync scope.
+     *
+     * **Remote side**: folder entries reported by the remote enumerator are
+     * explicitly filtered out of the delta before the sync differ sees them,
+     * preventing empty remote folders from being processed as sync operations.
+     *
+     * **Local side**: [LocalFsEnumerator] already only emits file entries;
+     * empty local directories produce no snapshot entries and therefore never
+     * trigger remote folder creation (folders are created on-demand by
+     * [SyncOpApplier.ensureRemoteFolderPath] only when a file needs to be
+     * uploaded into them).
+     */
+    val excludeEmptyFolders: Boolean = false,
 )

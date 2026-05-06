@@ -44,6 +44,16 @@ data class RemoteChange(
     val sizeBytes: Long? = null,
     val mtimeMs: Long? = null,
     val etag: String? = null,
+    /**
+     * `true` when the change represents a folder rather than a file.
+     *
+     * Populated by [RemoteEnumerator] implementations from the provider-specific
+     * item metadata (e.g. [RemoteFile.isFolder], `GraphDriveItem.folder`,
+     * `DriveFile.mimeType == FOLDER_MIME_TYPE`).  The sync engine uses this to
+     * explicitly filter folder entries when [com.synckro.domain.model.SyncPair.excludeEmptyFolders]
+     * is enabled.
+     */
+    val isFolder: Boolean = false,
 )
 
 /**
