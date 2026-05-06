@@ -43,6 +43,20 @@ class OneDriveRemoteEnumerator
         }
 
         /**
+         * Performs a full initial listing of [rootFolderId] by calling
+         * [OneDriveGraphClient.listAll], which uses the OneDrive `/delta` endpoint
+         * without `$deltaToken=latest` so all current items are returned.
+         *
+         * When [rootFolderId] is empty, falls back to the baseline [enumerate]
+         * (empty changes + fresh deltaLink).
+         */
+        override suspend fun enumerateFull(rootFolderId: String): RemoteSnapshot {
+            if (rootFolderId.isEmpty()) return enumerate(null, rootFolderId)
+            val token = provider.obtainAccessToken()
+            return enumerateAllWithToken(token, rootFolderId)
+        }
+
+        /**
          * Test seam: enumerate using a directly-supplied bearer token. Tests can
          * point [graphClient] at a `MockWebServer` and exercise the full HTTP
          * round-trip without going through MSAL.
@@ -80,6 +94,34 @@ class OneDriveRemoteEnumerator
             val pathCache = buildPathCache(items, rootFolderId)
             val changes = items.mapNotNull { it.toRemoteChange(pathCache) }
             return RemoteSnapshot(changes = changes, newDeltaToken = nextDeltaLink)
+        }
+
+        /**
+         * Test seam: perform a full initial listing using a directly-supplied bearer token.
+         * Calls [OneDriveGraphClient.listAll] which uses the `/delta` endpoint without
+         * `$deltaToken=latest` to return all current items under [rootFolderId].
+         */
+        internal suspend fun enumerateAllWithToken(
+            token: String,
+            rootFolderId: String,
+        ): RemoteSnapshot {
+            return try {
+                val (items, nextDeltaLink) = graphClient.listAll(token, rootFolderId)
+                // Filter out the root folder itself (included by the delta endpoint) and folder items;
+                // only files are relevant for the sync diff.
+                val fileItems = items.filter { it.folder == null && it.deleted == null }
+                val pathCache = buildPathCache(fileItems, rootFolderId)
+                val changes = fileItems.mapNotNull { it.toRemoteChange(pathCache) }
+                RemoteSnapshot(changes = changes, newDeltaToken = nextDeltaLink)
+            } catch (e: GraphApiException) {
+                when (e.statusCode) {
+                    401 -> throw CloudProviderException.AuthenticationRequired(
+                        "OneDrive access token rejected by Graph API (401). Please re-authenticate.",
+                        e,
+                    )
+                    else -> throw e
+                }
+            }
         }
     }
 

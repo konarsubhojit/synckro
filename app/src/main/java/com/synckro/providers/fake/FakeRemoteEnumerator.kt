@@ -1,5 +1,6 @@
 package com.synckro.providers.fake
 
+import com.synckro.domain.provider.RemoteFile
 import com.synckro.domain.sync.RemoteChange
 import com.synckro.domain.sync.RemoteChangeType
 import com.synckro.domain.sync.RemoteEnumerator
@@ -55,5 +56,43 @@ class FakeRemoteEnumerator
                     }
                 }
             return RemoteSnapshot(changes = mapped, newDeltaToken = page.nextToken)
+        }
+
+        /**
+         * Returns the complete current remote state for a brand-new pair by recursively
+         * listing all files under [rootFolderId] via [FakeCloudProvider.list].
+         *
+         * When [rootFolderId] is empty, falls back to the baseline [enumerate] (empty
+         * changes + current token), because there is no root to list from.
+         */
+        override suspend fun enumerateFull(rootFolderId: String): RemoteSnapshot {
+            if (rootFolderId.isEmpty()) return enumerate(null, rootFolderId)
+            val baselineToken = provider.changesSince(null).nextToken
+            val changes = listAllFiles(rootFolderId)
+            return RemoteSnapshot(changes = changes, newDeltaToken = baselineToken)
+        }
+
+        /**
+         * Recursively collects all non-folder items under [folderId] as
+         * [RemoteChangeType.MODIFY] [RemoteChange] entries.
+         */
+        private suspend fun listAllFiles(folderId: String): List<RemoteChange> {
+            val items: List<RemoteFile> = provider.list(folderId)
+            return items.flatMap { item ->
+                if (item.isFolder) {
+                    listAllFiles(item.id)
+                } else {
+                    listOf(
+                        RemoteChange(
+                            relativePath = provider.resolvePath(item.id).ifEmpty { item.name },
+                            type = RemoteChangeType.MODIFY,
+                            remoteId = item.id,
+                            sizeBytes = item.size,
+                            mtimeMs = item.lastModifiedMs,
+                            etag = item.eTag,
+                        ),
+                    )
+                }
+            }
         }
     }

@@ -90,4 +90,28 @@ interface RemoteEnumerator {
      *   strategy in that case.
      */
     suspend fun enumerate(deltaToken: String?, rootFolderId: String = ""): RemoteSnapshot
+
+    /**
+     * Returns the current complete remote state as a [RemoteSnapshot], for use
+     * when seeding a brand-new sync pair that has no prior delta token.
+     *
+     * The returned [RemoteSnapshot.changes] contains **all** currently-existing
+     * remote files as [RemoteChangeType.MODIFY] entries, so that [SyncDiffer]
+     * can produce [com.synckro.domain.sync.SyncOp.DownloadNew] operations for
+     * each file that is absent locally.  [RemoteSnapshot.newDeltaToken] is a
+     * fresh token suitable for passing to [enumerate] on the next incremental
+     * sync run.
+     *
+     * The default implementation delegates to [enumerate] with a null delta
+     * token, which establishes a baseline without replaying history (i.e. it
+     * returns an empty change list).  Concrete implementations that can perform
+     * a true full folder listing — for example OneDrive `/delta` without
+     * `$deltaToken=latest`, or a recursive `files.list` for Google Drive —
+     * **should override** this method to return all existing items.
+     *
+     * @param rootFolderId The provider-specific ID of the sync root folder.
+     *   Pass an empty string when unavailable; the default implementation
+     *   forwards it to [enumerate] unchanged.
+     */
+    suspend fun enumerateFull(rootFolderId: String = ""): RemoteSnapshot = enumerate(null, rootFolderId)
 }
