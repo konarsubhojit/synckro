@@ -55,6 +55,7 @@ class SyncSchedulerTest {
         id: Long = 1L,
         wifiOnly: Boolean = true,
         requiresCharging: Boolean = false,
+        autoSyncEnabled: Boolean = true,
     ) = SyncPair(
         id = id,
         displayName = "Test $id",
@@ -65,6 +66,7 @@ class SyncSchedulerTest {
         conflictPolicy = ConflictPolicy.NEWEST_WINS,
         wifiOnly = wifiOnly,
         requiresCharging = requiresCharging,
+        autoSyncEnabled = autoSyncEnabled,
     )
 
     // -------------------------------------------------------------------------
@@ -210,6 +212,41 @@ class SyncSchedulerTest {
                 .get()
         assertTrue(
             "After cancel the work should be CANCELLED or absent",
+            infos.isEmpty() || infos.all { it.state == WorkInfo.State.CANCELLED },
+        )
+    }
+
+    // -------------------------------------------------------------------------
+    // scheduleOrCancel
+    // -------------------------------------------------------------------------
+
+    @Test
+    fun `scheduleOrCancel with autoSyncEnabled true enqueues work`() {
+        val p = pair(id = 10L, autoSyncEnabled = true)
+        scheduler.scheduleOrCancel(p)
+
+        val infos =
+            workManager
+                .getWorkInfosForUniqueWork(SyncWorker.uniqueName(p.id))
+                .get()
+        assertFalse("Expected work to be enqueued when autoSyncEnabled=true", infos.isEmpty())
+    }
+
+    @Test
+    fun `scheduleOrCancel with autoSyncEnabled false cancels work`() {
+        val p = pair(id = 11L, autoSyncEnabled = true)
+        // Schedule first, then disable.
+        scheduler.scheduleOrCancel(p)
+
+        val disabled = p.copy(autoSyncEnabled = false)
+        scheduler.scheduleOrCancel(disabled)
+
+        val infos =
+            workManager
+                .getWorkInfosForUniqueWork(SyncWorker.uniqueName(p.id))
+                .get()
+        assertTrue(
+            "Work should be CANCELLED or absent when autoSyncEnabled=false",
             infos.isEmpty() || infos.all { it.state == WorkInfo.State.CANCELLED },
         )
     }

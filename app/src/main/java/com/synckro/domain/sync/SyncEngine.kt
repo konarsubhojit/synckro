@@ -110,17 +110,20 @@ class SyncEngine(
      * all other providers. [runReal] requires the optional constructor dependencies
      * to be provided; if any are absent it returns [Result.Terminal].
      *
-     * @param pair The SyncPair describing the local and remote endpoints.
+     * @param pair       The SyncPair describing the local and remote endpoints.
+     * @param onProgress Called after each file operation with a [TransferProgress] snapshot.
+     *                   Only fires during [runReal]; no-op for [CloudProviderType.FAKE].
+     *                   Defaults to a no-op so existing callers are unaffected.
      * @return A [Result] describing the sync outcome.
      */
-    suspend fun runOnce(pair: SyncPair): Result {
+    suspend fun runOnce(pair: SyncPair, onProgress: suspend (TransferProgress) -> Unit = {}): Result {
         val provider =
             providers[pair.provider]
                 ?: return Result.Terminal("Unsupported provider: ${pair.provider}")
         if (pair.provider == CloudProviderType.FAKE) {
             return runFake(pair, provider as FakeCloudProvider)
         }
-        return runReal(pair, provider)
+        return runReal(pair, provider, onProgress)
     }
 
     // -------------------------------------------------------------------------
@@ -143,7 +146,7 @@ class SyncEngine(
      * Auth exceptions are converted to [Result.Terminal]; network/rate-limit
      * errors to [Result.Retriable]; [CancellationException] always propagates.
      */
-    private suspend fun runReal(pair: SyncPair, provider: CloudProvider): Result {
+    private suspend fun runReal(pair: SyncPair, provider: CloudProvider, onProgress: suspend (TransferProgress) -> Unit): Result {
         val fsEnumerator =
             localFsEnumerator
                 ?: return Result.Terminal("SyncEngine: LocalFsEnumerator not configured for ${pair.provider}")
@@ -164,7 +167,7 @@ class SyncEngine(
                 ?: return Result.Terminal("SyncEngine: LocalFileAccess not configured")
 
         return try {
-            runRealImpl(pair, provider, fsEnumerator, remoteEnumerator, pairDao, indexDao, evtRepo, fileAccessFactory)
+            runRealImpl(pair, provider, fsEnumerator, remoteEnumerator, pairDao, indexDao, evtRepo, fileAccessFactory, onProgress)
         } catch (c: CancellationException) {
             // Cooperative cancellation: do NOT write partial state; just rethrow.
             throw c
@@ -182,6 +185,7 @@ class SyncEngine(
         indexDao: LocalIndexDao,
         evtRepo: SyncEventRepository,
         fileAccessFactory: (Uri) -> LocalFileAccess,
+        onProgress: suspend (TransferProgress) -> Unit,
     ): Result {
         // -----------------------------------------------------------------
         // Step 0 – Snapshot the index BEFORE local enumeration.
@@ -371,6 +375,7 @@ class SyncEngine(
                 pair = pair,
                 remoteFilesByPath = remoteFilesByPath,
                 localIndexByPath = preScanIndexByPath,
+                onProgress = onProgress,
             )
 
         // -----------------------------------------------------------------

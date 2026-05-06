@@ -1,8 +1,8 @@
 {
   "formatVersion": 1,
   "database": {
-    "version": 9,
-    "identityHash": "5bb862851d5af930b632ecdaba47dc4a",
+    "version": 10,
+    "identityHash": "f4a3e946b5f7ea461f8e0ed3df8f65ba",
     "entities": [
       {
         "tableName": "account",
@@ -50,7 +50,7 @@
       },
       {
         "tableName": "sync_pair",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `displayName` TEXT NOT NULL, `localTreeUri` TEXT NOT NULL, `provider` TEXT NOT NULL, `remoteFolderId` TEXT NOT NULL, `direction` TEXT NOT NULL, `conflictPolicy` TEXT NOT NULL, `includeGlobs` TEXT NOT NULL, `excludeGlobs` TEXT NOT NULL, `wifiOnly` INTEGER NOT NULL, `requiresCharging` INTEGER NOT NULL, `autoSyncEnabled` INTEGER NOT NULL, `lastDeltaToken` TEXT, `lastSyncAtMs` INTEGER, `lastSyncResult` TEXT, `scheduleIntervalMinutes` INTEGER NOT NULL, `lastFullScanAtMs` INTEGER)",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `displayName` TEXT NOT NULL, `localTreeUri` TEXT NOT NULL, `provider` TEXT NOT NULL, `remoteFolderId` TEXT NOT NULL, `direction` TEXT NOT NULL, `conflictPolicy` TEXT NOT NULL, `includeGlobs` TEXT NOT NULL, `excludeGlobs` TEXT NOT NULL, `wifiOnly` INTEGER NOT NULL, `requiresCharging` INTEGER NOT NULL, `autoSyncEnabled` INTEGER NOT NULL, `lastDeltaToken` TEXT, `lastSyncAtMs` INTEGER, `lastSyncResult` TEXT, `scheduleIntervalMinutes` INTEGER NOT NULL, `lastFullScanAtMs` INTEGER, `retentionDays` INTEGER)",
         "fields": [
           {
             "fieldPath": "id",
@@ -151,6 +151,12 @@
           {
             "fieldPath": "lastFullScanAtMs",
             "columnName": "lastFullScanAtMs",
+            "affinity": "INTEGER",
+            "notNull": false
+          },
+          {
+            "fieldPath": "retentionDays",
+            "columnName": "retentionDays",
             "affinity": "INTEGER",
             "notNull": false
           }
@@ -505,7 +511,7 @@
     "views": [],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '5bb862851d5af930b632ecdaba47dc4a')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'f4a3e946b5f7ea461f8e0ed3df8f65ba')"
     ]
   }
 }

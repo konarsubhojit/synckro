@@ -17,6 +17,10 @@
     <string name="home_edit_pair">Edit pair</string>
     <string name="home_delete_pair">Delete pair</string>
     <string name="home_needs_relink">Folder access lost — tap Edit to re-select the folder.</string>
+    <string name="home_auto_sync_enabled">Auto-sync on</string>
+    <string name="home_auto_sync_disabled">Auto-sync off</string>
+    <string name="home_last_sync_format">Last sync: %1$s</string>
+    <string name="home_never_synced">Never synced</string>
     <string name="home_delete_title">Delete sync pair?</string>
     <string name="home_delete_body_format">"%1$s" will be removed. This cannot be undone.</string>
     <string name="home_delete_confirm">Delete</string>
@@ -56,8 +60,15 @@
     <string name="pair_editor_direction">Sync direction</string>
     <string name="pair_editor_wifi_only">Sync on Wi-Fi only</string>
     <string name="pair_editor_requires_charging">Sync only while charging</string>
+    <string name="pair_editor_auto_sync">Auto-sync</string>
+    <string name="pair_editor_schedule_preset">Sync schedule</string>
+    <string name="pair_editor_schedule_custom_interval">Custom interval (minutes)</string>
+    <string name="pair_editor_schedule_15min">Every 15 minutes</string>
+    <string name="pair_editor_schedule_30min">Every 30 minutes</string>
+    <string name="pair_editor_schedule_hourly">Hourly</string>
+    <string name="pair_editor_schedule_daily">Daily</string>
+    <string name="pair_editor_schedule_custom">Custom</string>
     <string name="pair_editor_save">Save</string>
-    <string name="pair_editor_schedule_interval">Sync interval (minutes)</string>
     <string name="pair_editor_schedule_interval_min_warning">Minimum interval is 15 minutes (WorkManager limit)</string>
     <string name="pair_editor_include_globs">Include patterns (one per line)</string>
     <string name="pair_editor_exclude_globs">Exclude patterns (one per line)</string>
@@ -89,6 +100,7 @@
     <string name="pair_editor_retention_days_hint">Leave blank to disable automatic deletion</string>
     <string name="pair_editor_retention_days_info_upload">Local files are deleted based on their last-modified time, only after they have been safely uploaded to the cloud.</string>
     <string name="pair_editor_retention_days_info_download">Remote files are deleted based on their last-modified time, only after they have been safely downloaded to this device.</string>
+    <string name="pair_editor_retention_days_error">Enter a number of days between 0 and 36500</string>
 
     <!-- Pick local folder (SAF tree-URI picker) -->
     <string name="pick_folder_title">Pick local folder</string>

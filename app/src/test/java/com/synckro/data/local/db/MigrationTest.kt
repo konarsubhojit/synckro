@@ -231,15 +231,33 @@ class MigrationTest {
     }
 
     // -------------------------------------------------------------------------
-    // MIGRATION_8_9 – retentionDays column on sync_pair
+    // MIGRATION_8_9 – autoSyncEnabled column on sync_pair
     // -------------------------------------------------------------------------
 
     @Test
-    fun `MIGRATION_8_9 adds retentionDays column to sync_pair`() {
+    fun `MIGRATION_8_9 adds autoSyncEnabled column to sync_pair`() {
         insertSyncPair(db)
         SynckroDatabase.MIGRATION_6_7.migrate(db)
         SynckroDatabase.MIGRATION_7_8.migrate(db)
         SynckroDatabase.MIGRATION_8_9.migrate(db)
+
+        assertTrue(
+            "autoSyncEnabled column must exist in sync_pair after migration",
+            "autoSyncEnabled" in columnNames(db, "sync_pair"),
+        )
+    }
+
+    // -------------------------------------------------------------------------
+    // MIGRATION_9_10 – retentionDays column on sync_pair
+    // -------------------------------------------------------------------------
+
+    @Test
+    fun `MIGRATION_9_10 adds retentionDays column to sync_pair`() {
+        insertSyncPair(db)
+        SynckroDatabase.MIGRATION_6_7.migrate(db)
+        SynckroDatabase.MIGRATION_7_8.migrate(db)
+        SynckroDatabase.MIGRATION_8_9.migrate(db)
+        SynckroDatabase.MIGRATION_9_10.migrate(db)
 
         assertTrue(
             "retentionDays column must exist in sync_pair after migration",
@@ -248,11 +266,12 @@ class MigrationTest {
     }
 
     @Test
-    fun `MIGRATION_8_9 existing sync_pair row has null retentionDays after migration`() {
+    fun `MIGRATION_9_10 existing sync_pair row has null retentionDays after migration`() {
         insertSyncPair(db)
         SynckroDatabase.MIGRATION_6_7.migrate(db)
         SynckroDatabase.MIGRATION_7_8.migrate(db)
         SynckroDatabase.MIGRATION_8_9.migrate(db)
+        SynckroDatabase.MIGRATION_9_10.migrate(db)
 
         val cursor: Cursor =
             db.query(
@@ -269,11 +288,11 @@ class MigrationTest {
     }
 
     // -------------------------------------------------------------------------
-    // Full migration chain v1 → v9
+    // Full migration chain v1 → v10
     // -------------------------------------------------------------------------
 
     @Test
-    fun `all migrations from v1 to v9 run without error`() {
+    fun `all migrations from v1 to v10 run without error`() {
         val v1Db = openAtV1(context)
         try {
             SynckroDatabase.MIGRATION_1_2.migrate(v1Db)
@@ -284,8 +303,10 @@ class MigrationTest {
             SynckroDatabase.MIGRATION_6_7.migrate(v1Db)
             SynckroDatabase.MIGRATION_7_8.migrate(v1Db)
             SynckroDatabase.MIGRATION_8_9.migrate(v1Db)
+            SynckroDatabase.MIGRATION_9_10.migrate(v1Db)
 
             val syncPairCols = columnNames(v1Db, "sync_pair")
+            assertTrue("autoSyncEnabled must exist in sync_pair after full migration chain", "autoSyncEnabled" in syncPairCols)
             assertTrue("retentionDays must exist in sync_pair after full migration chain", "retentionDays" in syncPairCols)
             val localIndexCols = columnNames(v1Db, "local_index")
             assertTrue("remoteSizeBytes must exist after full migration chain", "remoteSizeBytes" in localIndexCols)
