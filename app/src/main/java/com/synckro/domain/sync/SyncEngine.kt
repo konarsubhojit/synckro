@@ -572,6 +572,7 @@ class SyncEngine(
                     }
                     if (downloadOk) {
                         // 2. Upload the conflict copy to remote as a new file.
+                        //    UploadNew does not need remoteFilesByPath (upload-only op).
                         applier.apply(
                             ops = listOf(SyncOp.UploadNew(copyPath)),
                             pair = pair,
@@ -579,6 +580,7 @@ class SyncEngine(
                             localIndexByPath = emptyMap(),
                         )
                         // 3. Overwrite the remote original with the local content so both sides agree.
+                        //    UpdateRemote does not need remoteFilesByPath (uses index for the remoteId).
                         applier.apply(
                             ops = listOf(SyncOp.UpdateRemote(conflict.relativePath)),
                             pair = pair,
@@ -593,6 +595,7 @@ class SyncEngine(
                         )
                     } else {
                         // Remote was deleted (modify-delete): re-upload the surviving local file.
+                        //    UploadNew does not need remoteFilesByPath (upload-only op).
                         applier.apply(
                             ops = listOf(SyncOp.UploadNew(conflict.relativePath)),
                             pair = pair,

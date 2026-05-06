@@ -1257,7 +1257,7 @@ class SyncEngineRealIntegrationTest {
     @Test
     fun `KEEP_BOTH resolution for both-modified conflict preserves both versions locally and remotely`() =
         runTest {
-            val detectedAtMs = 1_700_000_000_000L // 2023-11-14 UTC
+            val detectedAtMs = CONFLICT_DETECTED_AT_MS
             val localContent = "local content".toByteArray()
             val remoteContent = "remote content".toByteArray()
 
@@ -1375,7 +1375,7 @@ class SyncEngineRealIntegrationTest {
     @Test
     fun `KEEP_BOTH resolution for modify-delete conflict re-uploads surviving local file`() =
         runTest {
-            val detectedAtMs = 1_700_000_000_000L // 2023-11-14 UTC
+            val detectedAtMs = CONFLICT_DETECTED_AT_MS
             val localContent = "local modified content".toByteArray()
 
             // Simulate a file that was previously synced (has a remoteId in the index)
@@ -1515,4 +1515,12 @@ class SyncEngineRealIntegrationTest {
             assertNotNull("Local index should contain 'docs/subdir/notes.txt'", indexEntry)
             assertEquals(remoteFile.id, indexEntry!!.remoteId)
         }
+
+    companion object {
+        /**
+         * Fixed epoch-ms timestamp used for keep-both conflict detection in tests.
+         * Corresponds to 2023-11-14T22:13:20 UTC, producing a conflict-copy date label of "2023-11-14".
+         */
+        private const val CONFLICT_DETECTED_AT_MS = 1_700_000_000_000L
+    }
 }
