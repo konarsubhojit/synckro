@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -23,6 +24,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuAnchorType
+import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
@@ -37,12 +39,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.documentfile.provider.DocumentFile
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -217,6 +218,53 @@ fun PairEditorScreen(
                     onSelect = viewModel::onDirectionChange,
                     modifier = Modifier.fillMaxWidth(),
                 )
+
+                // Retention days – only shown for the two cleanup modes
+                val isRetentionMode =
+                    state.direction == SyncDirection.UPLOAD_AND_DELETE_LOCAL_AFTER_N_DAYS ||
+                        state.direction == SyncDirection.DOWNLOAD_AND_DELETE_REMOTE_AFTER_N_DAYS
+                if (isRetentionMode) {
+                    val retentionInfoText =
+                        if (state.direction == SyncDirection.UPLOAD_AND_DELETE_LOCAL_AFTER_N_DAYS) {
+                            stringResource(R.string.pair_editor_retention_days_info_upload)
+                        } else {
+                            stringResource(R.string.pair_editor_retention_days_info_download)
+                        }
+                    OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+                        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(
+                                text = retentionInfoText,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            OutlinedTextField(
+                                value = state.retentionDaysText,
+                                onValueChange = { v ->
+                                    // Accept digits only; the ViewModel will validate the range.
+                                    viewModel.onRetentionDaysChange(v.filter { it.isDigit() })
+                                },
+                                label = { Text(stringResource(R.string.pair_editor_retention_days)) },
+                                placeholder = { Text(stringResource(R.string.pair_editor_retention_days_hint)) },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                singleLine = true,
+                                isError = state.retentionDaysText.isNotBlank() &&
+                                    state.retentionDaysText
+                                        .toIntOrNull()
+                                        .let { it == null || it !in 0..PairEditorViewModel.MAX_RETENTION_DAYS },
+                                supportingText = {
+                                    if (state.retentionDaysText.isNotBlank() &&
+                                        state.retentionDaysText
+                                            .toIntOrNull()
+                                            .let { it == null || it !in 0..PairEditorViewModel.MAX_RETENTION_DAYS }
+                                    ) {
+                                        Text(stringResource(R.string.pair_editor_retention_days_error))
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
+                    }
+                }
 
                 // Wi-Fi only toggle
                 Row(
@@ -539,6 +587,8 @@ private fun directionLabel(dir: SyncDirection): String =
         SyncDirection.LOCAL_TO_REMOTE -> stringResource(R.string.direction_local_to_remote)
         SyncDirection.REMOTE_TO_LOCAL -> stringResource(R.string.direction_remote_to_local)
         SyncDirection.BIDIRECTIONAL -> stringResource(R.string.direction_bidirectional)
+        SyncDirection.UPLOAD_AND_DELETE_LOCAL_AFTER_N_DAYS -> stringResource(R.string.direction_upload_delete_local)
+        SyncDirection.DOWNLOAD_AND_DELETE_REMOTE_AFTER_N_DAYS -> stringResource(R.string.direction_download_delete_remote)
     }
 
 @Composable

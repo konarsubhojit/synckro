@@ -41,6 +41,11 @@ data class SyncPairEntity(
     val scheduleIntervalMinutes: Long = 60,
     /** Epoch-milliseconds timestamp of the last completed full local scan, or null if never scanned. */
     val lastFullScanAtMs: Long? = null,
+    /**
+     * Number of days after which source files may be deleted by the retention-cleanup
+     * sync modes. Null disables automatic deletion. See [SyncPair.retentionDays].
+     */
+    val retentionDays: Int? = null,
 )
 
 @Entity(

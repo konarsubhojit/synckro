@@ -5,6 +5,24 @@ enum class SyncDirection {
     LOCAL_TO_REMOTE,
     REMOTE_TO_LOCAL,
     BIDIRECTIONAL,
+    /**
+     * Upload-only backup mode: local files are uploaded to remote but remote
+     * changes are never downloaded. After a file has been confirmed in the
+     * remote (i.e. it has a remote ID in the index) and its local last-modified
+     * time is older than [SyncPair.retentionDays] days, the local copy is
+     * deleted. Setting [SyncPair.retentionDays] to `null` disables automatic
+     * local deletion, making this equivalent to a pure upload-only mode.
+     */
+    UPLOAD_AND_DELETE_LOCAL_AFTER_N_DAYS,
+    /**
+     * Download-only offload mode: remote files are downloaded to local but
+     * local changes are never uploaded. After a file has been confirmed in the
+     * local index and its remote last-modified time is older than
+     * [SyncPair.retentionDays] days, the remote copy is deleted. Setting
+     * [SyncPair.retentionDays] to `null` disables automatic remote deletion,
+     * making this equivalent to a pure download-only mode.
+     */
+    DOWNLOAD_AND_DELETE_REMOTE_AFTER_N_DAYS,
 }
 
 /** How to resolve a file that was modified on both sides since the last sync. */

@@ -334,6 +334,7 @@ class SyncEngine(
                 lastIndex = fileIndexEntries,
                 direction = pair.direction,
                 conflictPolicy = pair.conflictPolicy,
+                retentionDays = pair.retentionDays,
             )
 
         // -----------------------------------------------------------------

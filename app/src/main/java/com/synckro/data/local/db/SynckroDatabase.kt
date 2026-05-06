@@ -74,7 +74,7 @@ class EnumConverters {
 
 @Database(
     entities = [AccountEntity::class, SyncPairEntity::class, FileIndexEntity::class, SyncEventEntity::class, ConflictRecordEntity::class, LocalIndexEntity::class],
-    version = 9,
+    version = 10,
     exportSchema = true,
 )
 @TypeConverters(EnumConverters::class)
@@ -274,6 +274,21 @@ abstract class SynckroDatabase : RoomDatabase() {
                     db.execSQL(
                         "ALTER TABLE `sync_pair` ADD COLUMN `autoSyncEnabled` INTEGER NOT NULL DEFAULT 1",
                     )
+                }
+            }
+
+        /**
+         * Migrates the database from version 9 to 10:
+         * - Adds `retentionDays` nullable column to `sync_pair`.
+         *   Stores the per-pair retention period (in days) used by the
+         *   [com.synckro.domain.model.SyncDirection.UPLOAD_AND_DELETE_LOCAL_AFTER_N_DAYS] and
+         *   [com.synckro.domain.model.SyncDirection.DOWNLOAD_AND_DELETE_REMOTE_AFTER_N_DAYS] modes.
+         *   Existing rows receive NULL, meaning no automatic deletion is performed.
+         */
+        val MIGRATION_9_10 =
+            object : Migration(9, 10) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL("ALTER TABLE `sync_pair` ADD COLUMN `retentionDays` INTEGER")
                 }
             }
     }

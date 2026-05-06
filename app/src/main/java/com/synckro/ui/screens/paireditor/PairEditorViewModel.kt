@@ -90,6 +90,13 @@ class PairEditorViewModel
             val includeGlobsText: String = "",
             /** Newline-separated glob patterns. */
             val excludeGlobsText: String = "",
+            /**
+             * Text representation of the retention period in days. Only meaningful
+             * when [direction] is [SyncDirection.UPLOAD_AND_DELETE_LOCAL_AFTER_N_DAYS]
+             * or [SyncDirection.DOWNLOAD_AND_DELETE_REMOTE_AFTER_N_DAYS].
+             * Empty string means no automatic deletion (null retention).
+             */
+            val retentionDaysText: String = "",
             val isSaving: Boolean = false,
             val saveError: String? = null,
         ) {
@@ -170,6 +177,7 @@ class PairEditorViewModel
                             customIntervalText = entity.scheduleIntervalMinutes.toString(),
                             includeGlobsText = entity.includeGlobs.joinToString("\n"),
                             excludeGlobsText = entity.excludeGlobs.joinToString("\n"),
+                            retentionDaysText = entity.retentionDays?.toString() ?: "",
                         )
                     }
                 } else {
@@ -232,6 +240,8 @@ class PairEditorViewModel
 
         fun onExcludeGlobsChange(value: String) = _state.update { it.copy(excludeGlobsText = value) }
 
+        fun onRetentionDaysChange(value: String) = _state.update { it.copy(retentionDaysText = value.filter { ch -> ch.isDigit() }) }
+
         /**
          * Validates and persists the current form state. Calls [onSaved] with the
          * persisted row ID on success, or sets [UiState.saveError] on failure.
@@ -244,6 +254,12 @@ class PairEditorViewModel
             }
             if (s.localTreeUri.isBlank()) {
                 _state.update { it.copy(saveError = strings.getString(R.string.pair_editor_error_folder_required)) }
+                return
+            }
+            val retentionDaysText = s.retentionDaysText.trim()
+            val retentionDays = retentionDaysText.takeIf { it.isNotBlank() }?.toIntOrNull()
+            if (retentionDaysText.isNotBlank() && (retentionDays == null || retentionDays !in 0..MAX_RETENTION_DAYS)) {
+                _state.update { it.copy(saveError = strings.getString(R.string.pair_editor_retention_days_error)) }
                 return
             }
             _state.update { it.copy(isSaving = true, saveError = null) }
@@ -274,6 +290,7 @@ class PairEditorViewModel
                                     .split('\n')
                                     .map { it.trim() }
                                     .filter { it.isNotBlank() },
+                            retentionDays = retentionDays,
                         )
                     val savedId = syncPairRepository.upsert(pair)
                     // Schedule or cancel depending on autoSyncEnabled.
@@ -325,5 +342,8 @@ class PairEditorViewModel
              * [KEY_REMOTE_FOLDER_ID].
              */
             const val KEY_REMOTE_FOLDER_NAME = "remotePickedFolderName"
+
+            /** Maximum retention period accepted by the pair editor. */
+            const val MAX_RETENTION_DAYS = 36500
         }
     }

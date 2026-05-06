@@ -694,6 +694,90 @@ class SyncEngineRealIntegrationTest {
         }
 
     // -------------------------------------------------------------------------
+    // Repeated-upload regression: mtime-only change must not re-upload
+    // -------------------------------------------------------------------------
+
+    /**
+     * Regression test for the "uploading same file every time" bug.
+     *
+     * Root cause: [LocalFsEnumerator] used to clear remote metadata
+     * (remoteSizeBytes/remoteMtimeMs/remoteEtag) when updating a local index entry
+     * for a modified file.  If the file's content hash was unchanged (mtime-only
+     * change) the diff produced no upload op, so SyncOpApplier never ran to restore
+     * the remote metadata.  On the NEXT sync run the missing remoteSizeBytes caused
+     * the file to be absent from syntheticRemote, making it look remote-deleted →
+     * UploadNew (for LOCAL_TO_REMOTE) or DeleteLocal (for BIDIRECTIONAL).
+     *
+     * The fix is: [LocalFsEnumerator] must preserve remote metadata columns when
+     * writing a "modified" entry so that the remote state is never implicitly
+     * reset from a local filesystem event.
+     */
+    @Test
+    fun `mtime-only change does not cause re-upload on subsequent sync runs`() =
+        runTest {
+            // Arrange: upload a file successfully with matching mtimes.
+            // Both InMemoryLocalFileAccess.stat() and the filesystem child report 5_000L,
+            // so after run 1 the index has mtimeMs = 5_000L and remoteSizeBytes is set.
+            val fileContent = "stable content".toByteArray()
+            localFileAccess.put("stable.txt", fileContent)
+            inMemoryChildren.set(
+                "root",
+                listOf(
+                    RawDocChild(
+                        docId = "doc-stable",
+                        name = "stable.txt",
+                        mimeType = "text/plain",
+                        size = fileContent.size.toLong(),
+                        lastModifiedMs = 5_000L, // matches InMemoryLocalFileAccess.nowMs
+                    ),
+                ),
+            )
+
+            val pair = insertPair(direction = SyncDirection.LOCAL_TO_REMOTE)
+            val engine = buildEngine()
+
+            // Run 1: upload the file. Index stores remoteId + remoteSizeBytes.
+            val firstResult = engine.runOnce(pair)
+            assertTrue("First run should succeed", firstResult is SyncEngine.Result.Success)
+            assertEquals("First run must upload 1 file", 1, (firstResult as SyncEngine.Result.Success).applied)
+
+            // Simulate a mtime-only change: the OS updates the file's mtime from 5_000L
+            // to 3_000L without changing its content.
+            inMemoryChildren.set(
+                "root",
+                listOf(
+                    RawDocChild(
+                        docId = "doc-stable",
+                        name = "stable.txt",
+                        mimeType = "text/plain",
+                        size = fileContent.size.toLong(),
+                        lastModifiedMs = 3_000L, // mtime changed but content is unchanged
+                    ),
+                ),
+            )
+
+            val storedToken2 = syncPairDao.getById(pair.id)!!.lastDeltaToken!!
+            val pairWithToken2 = pair.copy(deltaToken = storedToken2)
+
+            // Run 2: LocalFsEnumerator detects "modified" (3_000 ≠ 5_000).
+            // Without the fix, remoteSizeBytes is wiped here, so syntheticRemote would
+            // be empty on run 3 and the file would be classified as remote-deleted →
+            // UploadNew, creating a second remote copy.
+            // With the fix, remoteSizeBytes is preserved.
+            engine.runOnce(pairWithToken2)
+
+            // Critical assertion: there must be exactly ONE remote copy.
+            // Without the fix a second UploadNew would spawn a duplicate remote file.
+            val remoteFiles = fakeProvider.list("remote-root").filter { !it.isFolder }
+            assertEquals(
+                "There must be exactly one remote copy (no duplicates from spurious UploadNew)",
+                1,
+                remoteFiles.size,
+            )
+        }
+
+
+    // -------------------------------------------------------------------------
     // Conflict policy: NEWEST_WINS (remote wins)
     // -------------------------------------------------------------------------
 
