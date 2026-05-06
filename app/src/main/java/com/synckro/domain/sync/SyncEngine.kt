@@ -12,12 +12,17 @@ import com.synckro.domain.model.CloudProviderType
 import com.synckro.domain.model.ConflictPolicy
 import com.synckro.domain.model.ConflictRecord
 import com.synckro.domain.model.FileIndexEntry
+import com.synckro.domain.model.SyncEventLevel
 import com.synckro.domain.model.SyncPair
 import com.synckro.domain.provider.CloudProvider
 import com.synckro.domain.provider.RemoteFile
 import com.synckro.providers.fake.FakeCloudProvider
 import kotlinx.coroutines.CancellationException
 import timber.log.Timber
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.TimeZone
 
 /**
  * Orchestrates a single sync run for a [SyncPair].
@@ -465,8 +470,11 @@ class SyncEngine(
      *
      * - [ConflictRecord.RESOLUTION_KEEP_LOCAL]: upload the local copy to overwrite remote.
      * - [ConflictRecord.RESOLUTION_KEEP_REMOTE]: download the remote copy to overwrite local.
-     * - [ConflictRecord.RESOLUTION_KEEP_BOTH]: no-op (the user has acknowledged; both copies
-     *   exist separately — future UX will rename one).
+     * - [ConflictRecord.RESOLUTION_KEEP_BOTH]:
+     *   - *Both-modified*: downloads the remote content to a conflict copy (named via
+     *     [conflictCopyPath]), uploads it as a new remote file, and overwrites the remote
+     *     original with the local content so both versions are accessible.
+     *   - *Modify-delete* (remote was deleted): re-uploads the surviving local file.
      * - null / unknown: logged as a warning, treated as no-op.
      */
     private suspend fun applyRealResolution(
@@ -528,8 +536,93 @@ class SyncEngine(
                     )
                 }
             }
-            ConflictRecord.RESOLUTION_KEEP_BOTH ->
-                Timber.i("SyncEngine: KEEP_BOTH conflict acknowledged for %s; no file operation needed", conflict.relativePath)
+            ConflictRecord.RESOLUTION_KEEP_BOTH -> {
+                val indexEntry =
+                    indexDao.getForPair(pair.id)
+                        .firstOrNull { it.relativePath == conflict.relativePath }
+                if (indexEntry?.remoteId != null) {
+                    // Both-modified conflict: preserve both versions.
+                    // Attempt to download the remote content to create a conflict copy.
+                    // If the remote file is gone (modify-delete conflict with a stale index
+                    // entry), fall back to re-uploading the surviving local file.
+                    val copyPath = conflictCopyPath(conflict.relativePath, conflict.detectedAtMs)
+                    var downloadOk = false
+                    try {
+                        var retried = false
+                        withRetry(onRetry = { _, _ -> retried = true }) {
+                            val stream = provider.download(indexEntry.remoteId)
+                            fileAccess.write(copyPath, stream, null)
+                        }
+                        if (retried) {
+                            evtRepo.log(
+                                pair.id,
+                                SyncEventLevel.WARN,
+                                TAG,
+                                "Retried keep-both download for conflict copy: $copyPath",
+                            )
+                        }
+                        downloadOk = true
+                    } catch (e: Exception) {
+                        Timber.w(
+                            e,
+                            "SyncEngine: keep-both download failed for %s; treating as modify-delete",
+                            conflict.relativePath,
+                        )
+                        fileAccess.delete(copyPath) // remove any partial write
+                    }
+                    if (downloadOk) {
+                        // 2. Upload the conflict copy to remote as a new file.
+                        applier.apply(
+                            ops = listOf(SyncOp.UploadNew(copyPath)),
+                            pair = pair,
+                            remoteFilesByPath = emptyMap(),
+                            localIndexByPath = emptyMap(),
+                        )
+                        // 3. Overwrite the remote original with the local content so both sides agree.
+                        applier.apply(
+                            ops = listOf(SyncOp.UpdateRemote(conflict.relativePath)),
+                            pair = pair,
+                            remoteFilesByPath = emptyMap(),
+                            localIndexByPath = mapOf(conflict.relativePath to indexEntry),
+                        )
+                        evtRepo.log(
+                            pair.id,
+                            SyncEventLevel.INFO,
+                            TAG,
+                            "Conflict resolved (keep-both): ${conflict.relativePath} → copy at $copyPath",
+                        )
+                    } else {
+                        // Remote was deleted (modify-delete): re-upload the surviving local file.
+                        applier.apply(
+                            ops = listOf(SyncOp.UploadNew(conflict.relativePath)),
+                            pair = pair,
+                            remoteFilesByPath = emptyMap(),
+                            localIndexByPath = emptyMap(),
+                        )
+                        evtRepo.log(
+                            pair.id,
+                            SyncEventLevel.INFO,
+                            TAG,
+                            "Conflict resolved (keep-both, remote deleted): ${conflict.relativePath} re-uploaded",
+                        )
+                    }
+                } else {
+                    // No remote ID in index (file was never synced or index was cleared).
+                    // Re-upload the surviving local file.
+                    applier.apply(
+                        ops = listOf(SyncOp.UploadNew(conflict.relativePath)),
+                        pair = pair,
+                        remoteFilesByPath = emptyMap(),
+                        localIndexByPath = emptyMap(),
+                    )
+                    evtRepo.log(
+                        pair.id,
+                        SyncEventLevel.INFO,
+                        TAG,
+                        "Conflict resolved (keep-both, no remote): ${conflict.relativePath} uploaded",
+                    )
+                }
+            }
             else ->
                 Timber.w("SyncEngine: unknown resolution '%s' for %s; skipping", conflict.resolution, conflict.relativePath)
         }
@@ -638,5 +731,39 @@ class SyncEngine(
                 remoteSize = remoteSizeBytes,
                 remoteLastModifiedMs = remoteMtimeMs,
             )
+
+        /**
+         * Returns a deterministic conflict-copy path for a "keep-both" resolution.
+         *
+         * The conflict copy carries a date suffix so that multiple conflicts on the
+         * same file on different days each produce a distinct name.
+         *
+         * Examples:
+         * - `document.txt` → `document (conflict 2024-01-15).txt`
+         * - `photos/vacation.jpg` → `photos/vacation (conflict 2024-01-15).jpg`
+         * - `README` → `README (conflict 2024-01-15)`
+         *
+         * @param originalPath Relative path of the conflicting file.
+         * @param detectedAtMs Epoch-milliseconds timestamp when the conflict was detected.
+         */
+        internal fun conflictCopyPath(
+            originalPath: String,
+            detectedAtMs: Long,
+        ): String {
+            val fmt =
+                SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).also {
+                    it.timeZone = TimeZone.getTimeZone("UTC")
+                }
+            val dateLabel = fmt.format(Date(detectedAtMs))
+            val dir = originalPath.substringBeforeLast('/', "")
+            val name = originalPath.substringAfterLast('/')
+            val hasDot = '.' in name
+            val stem = if (hasDot) name.substringBeforeLast('.') else name
+            val ext = if (hasDot) ".${name.substringAfterLast('.')}" else ""
+            val copyName = "$stem (conflict $dateLabel)$ext"
+            return if (dir.isEmpty()) copyName else "$dir/$copyName"
+        }
+
+        private const val TAG = "SyncEngine"
     }
 }

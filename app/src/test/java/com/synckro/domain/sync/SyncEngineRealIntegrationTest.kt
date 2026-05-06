@@ -18,6 +18,7 @@ import com.synckro.data.scanner.DocumentChildrenQuery
 import com.synckro.data.scanner.RawDocChild
 import com.synckro.domain.model.CloudProviderType
 import com.synckro.domain.model.ConflictPolicy
+import com.synckro.domain.model.ConflictRecord
 import com.synckro.domain.model.SyncDirection
 import com.synckro.domain.model.SyncPair
 import com.synckro.domain.provider.CloudProviderException
@@ -1240,6 +1241,230 @@ class SyncEngineRealIntegrationTest {
                 2,
                 (renameResult as SyncEngine.Result.Success).applied,
             )
+        }
+
+    // -------------------------------------------------------------------------
+    // KEEP_BOTH resolution: both-modified and modify-delete
+    // -------------------------------------------------------------------------
+
+    /**
+     * Both-modified conflict resolved with KEEP_BOTH:
+     * - The local file keeps the local version at the original path.
+     * - A conflict copy (with the remote version) is created locally and uploaded to remote.
+     * - The remote original is overwritten with the local version.
+     * - After resolution both versions are accessible on both sides.
+     */
+    @Test
+    fun `KEEP_BOTH resolution for both-modified conflict preserves both versions locally and remotely`() =
+        runTest {
+            val detectedAtMs = 1_700_000_000_000L // 2023-11-14 UTC
+            val localContent = "local content".toByteArray()
+            val remoteContent = "remote content".toByteArray()
+
+            // Upload the remote version to fakeProvider so we have a real remoteId.
+            val remoteFile =
+                fakeProvider.uploadNew(
+                    parentId = "remote-root",
+                    name = "document.txt",
+                    content = remoteContent.inputStream(),
+                    size = remoteContent.size.toLong(),
+                    mimeType = "text/plain",
+                )
+
+            // Local file with the local version.
+            localFileAccess.put("document.txt", localContent)
+
+            // SAF tree reports the local file so the enumerator sees it.
+            inMemoryChildren.set(
+                "root",
+                listOf(
+                    RawDocChild(
+                        docId = "doc-document",
+                        name = "document.txt",
+                        mimeType = "text/plain",
+                        size = localContent.size.toLong(),
+                        lastModifiedMs = 5_000L, // matches InMemoryLocalFileAccess.nowMs
+                    ),
+                ),
+            )
+
+            val pair = insertPair(conflictPolicy = ConflictPolicy.KEEP_BOTH)
+
+            // Seed the local index with the pre-conflict state: local version at sizeBytes
+            // and the remote file's metadata so the diff sees no new changes.
+            localIndexDao.upsert(
+                LocalIndexEntity(
+                    pairId = pair.id,
+                    relativePath = "document.txt",
+                    sizeBytes = localContent.size.toLong(),
+                    mtimeMs = 5_000L,
+                    contentHash = null,
+                    remoteId = remoteFile.id,
+                    remoteSizeBytes = remoteFile.size,
+                    remoteMtimeMs = remoteFile.lastModifiedMs,
+                    remoteEtag = remoteFile.eTag,
+                ),
+            )
+
+            // Record the KEEP_BOTH resolution chosen by the user.
+            val conflictId =
+                conflictRepository.insert(
+                    ConflictRecord(
+                        id = 0,
+                        pairId = pair.id,
+                        relativePath = "document.txt",
+                        localLastModifiedMs = 5_000L,
+                        remoteLastModifiedMs = remoteFile.lastModifiedMs ?: 0L,
+                        detectedAtMs = detectedAtMs,
+                    ),
+                )
+            conflictRepository.resolve(conflictId, ConflictRecord.RESOLUTION_KEEP_BOTH)
+
+            val result = buildEngine().runOnce(pair)
+
+            assertTrue("Expected Success, got: $result", result is SyncEngine.Result.Success)
+            val success = result as SyncEngine.Result.Success
+            // The resolved conflict counts as 1 applied op.
+            assertEquals("Resolved conflict should count as 1 applied op", 1, success.applied)
+            assertEquals("No new conflicts should be detected", 0, success.conflicts)
+
+            // Local: original file still has local content.
+            val localOriginal = localFileAccess.openRead("document.txt")?.readBytes()
+            assertNotNull("Original local file should still exist", localOriginal)
+            assertEquals(
+                "Original local file should still contain local content",
+                "local content",
+                localOriginal!!.toString(Charsets.UTF_8),
+            )
+
+            // Local: conflict copy exists with the remote content.
+            val copyPath = SyncEngine.conflictCopyPath("document.txt", detectedAtMs)
+            val localCopy = localFileAccess.openRead(copyPath)?.readBytes()
+            assertNotNull("Conflict copy should exist locally at $copyPath", localCopy)
+            assertEquals(
+                "Conflict copy should contain the remote content",
+                "remote content",
+                localCopy!!.toString(Charsets.UTF_8),
+            )
+
+            // Remote: original file should now contain the local version.
+            val remoteOriginalContent = fakeProvider.download(remoteFile.id).readBytes()
+            assertEquals(
+                "Remote original should be overwritten with local content",
+                "local content",
+                remoteOriginalContent.toString(Charsets.UTF_8),
+            )
+
+            // Remote: conflict copy should exist as a new file.
+            val remoteFiles = fakeProvider.list("remote-root").filter { !it.isFolder }
+            assertTrue(
+                "Remote should contain the conflict copy",
+                remoteFiles.any { it.name == copyPath },
+            )
+
+            // Conflict record should be deleted after successful resolution.
+            val remainingResolved = conflictRepository.getResolvedForPair(pair.id)
+            assertTrue("Conflict record should be removed after resolution", remainingResolved.isEmpty())
+        }
+
+    /**
+     * Modify-delete conflict resolved with KEEP_BOTH:
+     * - The remote file was deleted while the local file was modified.
+     * - KEEP_BOTH re-uploads the surviving local file to restore it on the remote.
+     */
+    @Test
+    fun `KEEP_BOTH resolution for modify-delete conflict re-uploads surviving local file`() =
+        runTest {
+            val detectedAtMs = 1_700_000_000_000L // 2023-11-14 UTC
+            val localContent = "local modified content".toByteArray()
+
+            // Simulate a file that was previously synced (has a remoteId in the index)
+            // but since then the remote copy was deleted.
+            val deletedRemoteFile =
+                fakeProvider.uploadNew(
+                    parentId = "remote-root",
+                    name = "document.txt",
+                    content = localContent.inputStream(),
+                    size = localContent.size.toLong(),
+                    mimeType = "text/plain",
+                )
+            // Delete the remote file to simulate the modify-delete scenario.
+            fakeProvider.delete(deletedRemoteFile.id)
+
+            localFileAccess.put("document.txt", localContent)
+            inMemoryChildren.set(
+                "root",
+                listOf(
+                    RawDocChild(
+                        docId = "doc-document",
+                        name = "document.txt",
+                        mimeType = "text/plain",
+                        size = localContent.size.toLong(),
+                        lastModifiedMs = 5_000L,
+                    ),
+                ),
+            )
+
+            val pair = insertPair(conflictPolicy = ConflictPolicy.KEEP_BOTH)
+
+            // Seed the index with the stale remoteId (the remote was deleted after this was set).
+            localIndexDao.upsert(
+                LocalIndexEntity(
+                    pairId = pair.id,
+                    relativePath = "document.txt",
+                    sizeBytes = localContent.size.toLong(),
+                    mtimeMs = 5_000L,
+                    contentHash = null,
+                    remoteId = deletedRemoteFile.id,
+                    remoteSizeBytes = deletedRemoteFile.size,
+                    remoteMtimeMs = deletedRemoteFile.lastModifiedMs,
+                    remoteEtag = deletedRemoteFile.eTag,
+                ),
+            )
+
+            val conflictId =
+                conflictRepository.insert(
+                    ConflictRecord(
+                        id = 0,
+                        pairId = pair.id,
+                        relativePath = "document.txt",
+                        localLastModifiedMs = 5_000L,
+                        remoteLastModifiedMs = 0L, // remote was deleted
+                        detectedAtMs = detectedAtMs,
+                    ),
+                )
+            conflictRepository.resolve(conflictId, ConflictRecord.RESOLUTION_KEEP_BOTH)
+
+            val result = buildEngine().runOnce(pair)
+
+            assertTrue("Expected Success, got: $result", result is SyncEngine.Result.Success)
+            val success = result as SyncEngine.Result.Success
+            assertEquals("Resolved conflict should count as 1 applied op", 1, success.applied)
+            assertEquals("No new conflicts should be detected", 0, success.conflicts)
+
+            // Local file should still exist with the original content.
+            val localFile = localFileAccess.openRead("document.txt")?.readBytes()
+            assertNotNull("Local file should still exist", localFile)
+            assertEquals(
+                "Local file content should be unchanged",
+                "local modified content",
+                localFile!!.toString(Charsets.UTF_8),
+            )
+
+            // The local file should have been re-uploaded to remote.
+            val remoteFiles = fakeProvider.list("remote-root").filter { !it.isFolder }
+            assertEquals("Remote should have exactly one file (re-uploaded local)", 1, remoteFiles.size)
+            assertEquals("document.txt", remoteFiles.single().name)
+            val reuploadedContent = fakeProvider.download(remoteFiles.single().id).readBytes()
+            assertEquals(
+                "Re-uploaded remote file should contain the local content",
+                "local modified content",
+                reuploadedContent.toString(Charsets.UTF_8),
+            )
+
+            // Conflict record should be deleted.
+            val remainingResolved = conflictRepository.getResolvedForPair(pair.id)
+            assertTrue("Conflict record should be removed after resolution", remainingResolved.isEmpty())
         }
 
     // -------------------------------------------------------------------------
