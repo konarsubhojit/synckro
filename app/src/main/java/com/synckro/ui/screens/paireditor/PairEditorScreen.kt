@@ -37,6 +37,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -273,21 +276,23 @@ fun PairEditorScreen(
 
                     if (state.schedulePreset == SyncSchedulePreset.CUSTOM) {
                         OutlinedTextField(
-                            value = state.customIntervalMinutes.toString(),
-                            onValueChange = { v ->
-                                v.toLongOrNull()?.let { viewModel.onCustomIntervalChange(it) }
-                            },
+                            value = state.customIntervalText,
+                            onValueChange = viewModel::onCustomIntervalChange,
                             label = { Text(stringResource(R.string.pair_editor_schedule_custom_interval)) },
                             supportingText = {
-                                if (state.customIntervalMinutes < 15L) {
+                                if (state.customIntervalError) {
                                     Text(
                                         text = stringResource(R.string.pair_editor_schedule_interval_min_warning),
                                         color = MaterialTheme.colorScheme.error,
                                     )
                                 }
                             },
-                            isError = state.customIntervalMinutes < 15L,
+                            isError = state.customIntervalError,
                             singleLine = true,
+                            keyboardOptions = KeyboardOptions(
+                                keyboardType = KeyboardType.Number,
+                                imeAction = ImeAction.Done,
+                            ),
                             modifier = Modifier.fillMaxWidth(),
                         )
                     }

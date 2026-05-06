@@ -244,14 +244,13 @@ private fun SyncPairRow(
                     },
             )
             // Last sync time
+            val dateFormatter = remember { java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.SHORT, java.text.DateFormat.SHORT) }
             Text(
                 text =
                     if (pair.lastSyncAtMs != null) {
                         stringResource(
                             R.string.home_last_sync_format,
-                            java.text.DateFormat
-                                .getDateTimeInstance(java.text.DateFormat.SHORT, java.text.DateFormat.SHORT)
-                                .format(java.util.Date(pair.lastSyncAtMs)),
+                            dateFormatter.format(java.util.Date(pair.lastSyncAtMs)),
                         )
                     } else {
                         stringResource(R.string.home_never_synced)
