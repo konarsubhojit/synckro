@@ -549,6 +549,8 @@ class SyncEngine(
                     var downloadOk = false
                     try {
                         var retried = false
+                        // Suppress unused-parameter warning: attempt index and cause are
+                        // not needed here; only the fact that a retry occurred matters.
                         withRetry(onRetry = { _, _ -> retried = true }) {
                             val stream = provider.download(indexEntry.remoteId)
                             fileAccess.write(copyPath, stream, null)
@@ -572,7 +574,8 @@ class SyncEngine(
                     }
                     if (downloadOk) {
                         // 2. Upload the conflict copy to remote as a new file.
-                        //    UploadNew does not need remoteFilesByPath (upload-only op).
+                        //    UploadNew reads from local FS; remoteFilesByPath is not consulted
+                        //    for upload ops, so an empty map is the correct value here.
                         applier.apply(
                             ops = listOf(SyncOp.UploadNew(copyPath)),
                             pair = pair,
@@ -580,7 +583,8 @@ class SyncEngine(
                             localIndexByPath = emptyMap(),
                         )
                         // 3. Overwrite the remote original with the local content so both sides agree.
-                        //    UpdateRemote does not need remoteFilesByPath (uses index for the remoteId).
+                        //    UpdateRemote resolves the remoteId from localIndexByPath, not from
+                        //    remoteFilesByPath, so an empty map is the correct value here.
                         applier.apply(
                             ops = listOf(SyncOp.UpdateRemote(conflict.relativePath)),
                             pair = pair,
@@ -595,7 +599,8 @@ class SyncEngine(
                         )
                     } else {
                         // Remote was deleted (modify-delete): re-upload the surviving local file.
-                        //    UploadNew does not need remoteFilesByPath (upload-only op).
+                        //    UploadNew reads from local FS; remoteFilesByPath is not consulted
+                        //    for upload ops, so an empty map is the correct value here.
                         applier.apply(
                             ops = listOf(SyncOp.UploadNew(conflict.relativePath)),
                             pair = pair,
