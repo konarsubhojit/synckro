@@ -642,6 +642,34 @@ class LocalFsEnumeratorTest {
             assertEquals("app.kt", result.snapshot.single().relativePath)
         }
 
+    @Test
+    fun `all invalid include patterns exclude all files (fail closed)`() =
+        runTest {
+            val pairId = insertPair()
+
+            val fakeTree =
+                mapOf(
+                    "root" to
+                        listOf(
+                            file("main.kt", size = 100),
+                            file("readme.md", size = 200),
+                        ),
+                )
+            // "[]" produces a regex character class with no content, which throws
+            // PatternSyntaxException → mapNotNull drops it → compiledIncludeGlobs is empty.
+            // The include filter is still active (includeGlobs.isNotEmpty()), so all files
+            // are excluded (fail-closed) rather than all files passing.
+            val result =
+                enumeratorWith(fakeTree)
+                    .enumerate(pairId, treeUri, includeGlobs = listOf("[]"))
+
+            assertEquals(
+                "All files must be excluded when every include pattern is invalid",
+                0,
+                result.snapshot.size,
+            )
+        }
+
     // -------------------------------------------------------------------------
     // Nested directories
     // -------------------------------------------------------------------------

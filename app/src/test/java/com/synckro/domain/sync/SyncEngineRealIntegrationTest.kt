@@ -9,6 +9,7 @@ import com.synckro.data.local.dao.LocalIndexDao
 import com.synckro.data.local.dao.SyncEventDao
 import com.synckro.data.local.dao.SyncPairDao
 import com.synckro.data.local.db.SynckroDatabase
+import com.synckro.data.local.entity.LocalIndexEntity
 import com.synckro.data.local.entity.SyncPairEntity
 import com.synckro.data.local.fs.LocalFsEnumerator
 import com.synckro.data.repository.ConflictRepository
@@ -766,5 +767,46 @@ class SyncEngineRealIntegrationTest {
             val success = result as SyncEngine.Result.Success
             assertEquals("Remote-wins op should be applied (download)", 1, success.applied)
             assertEquals(0, success.conflicts)
+        }
+
+    // -------------------------------------------------------------------------
+    // Include-glob scope filtering
+    // -------------------------------------------------------------------------
+
+    @Test
+    fun `previously-synced file outside includeGlobs does not generate DeleteRemote`() =
+        runTest {
+            // Seed local_index as if "report.log" was synced in a previous run:
+            // remoteId + remoteSizeBytes + remoteMtimeMs are all set, so the engine
+            // would normally place it in syntheticRemote and SyncDiffer would see
+            // "file in remote, absent from local" → DeleteRemote.
+            val pair = insertPair()
+            localIndexDao.upsert(
+                LocalIndexEntity(
+                    pairId = pair.id,
+                    relativePath = "report.log",
+                    sizeBytes = 512L,
+                    mtimeMs = 1_000L,
+                    remoteId = "remote-log-id",
+                    remoteSizeBytes = 512L,
+                    remoteMtimeMs = 1_000L,
+                ),
+            )
+
+            // Local FS is empty — the file no longer exists locally.
+            // inMemoryChildren returns nothing by default.
+
+            // Configure includeGlobs to only *.kt files; "report.log" is outside scope.
+            val pairWithGlobs = pair.copy(includeGlobs = listOf("*.kt"))
+            val engine = buildEngine()
+
+            val result = engine.runOnce(pairWithGlobs)
+
+            assertTrue("Expected Success, got: $result", result is SyncEngine.Result.Success)
+            assertEquals(
+                "No ops should be applied — out-of-scope file must not trigger DeleteRemote",
+                0,
+                (result as SyncEngine.Result.Success).applied,
+            )
         }
 }

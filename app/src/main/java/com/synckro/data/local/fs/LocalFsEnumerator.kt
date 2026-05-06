@@ -191,8 +191,11 @@ class LocalFsEnumerator internal constructor(
                 }
 
                 // Skip files not matching any include glob (when include globs are configured).
-                if (compiledIncludeGlobs.isNotEmpty() && compiledIncludeGlobs.none { it.matches(relativePath) }) {
-                    Timber.d("LocalFsEnumerator: skipping non-included file '%s'", relativePath)
+                // Use `includeGlobs.isNotEmpty()` (the original list) rather than
+                // `compiledIncludeGlobs.isNotEmpty()` so that a misconfiguration where
+                // all patterns fail to compile still activates the filter (fail-closed:
+                // no file passes a broken include glob rather than all files passing).
+                if (includeGlobs.isNotEmpty() && compiledIncludeGlobs.none { it.matches(relativePath) }) {
                     continue
                 }
 
