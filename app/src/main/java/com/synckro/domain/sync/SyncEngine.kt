@@ -568,7 +568,7 @@ class SyncEngine(
                             "SyncEngine: keep-both download failed for %s; treating as modify-delete",
                             conflict.relativePath,
                         )
-                        fileAccess.delete(copyPath) // remove any partial write
+                        runCatching { fileAccess.delete(copyPath) } // best-effort cleanup of any partial write
                     }
                     if (downloadOk) {
                         // 2. Upload the conflict copy to remote as a new file.
@@ -760,7 +760,10 @@ class SyncEngine(
             val dateLabel = fmt.format(Date(detectedAtMs))
             val dir = originalPath.substringBeforeLast('/', "")
             val name = originalPath.substringAfterLast('/')
-            val hasDot = '.' in name
+            // Treat a leading dot (hidden files like ".gitignore") as part of the stem,
+            // not as an extension separator, so ".gitignore" → ".gitignore (conflict…)"
+            // rather than " (conflict…).gitignore".
+            val hasDot = '.' in name.drop(1)
             val stem = if (hasDot) name.substringBeforeLast('.') else name
             val ext = if (hasDot) ".${name.substringAfterLast('.')}" else ""
             val copyName = "$stem (conflict $dateLabel)$ext"

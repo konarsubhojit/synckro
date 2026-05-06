@@ -182,4 +182,48 @@ class SyncEngineTest {
             val googleDriveResult = multiEngine.runOnce(pair(CloudProviderType.GOOGLE_DRIVE))
             assertTrue("GOOGLE_DRIVE resolves to Terminal", googleDriveResult is SyncEngine.Result.Terminal)
         }
+
+    // =========================================================================
+    // conflictCopyPath
+    // =========================================================================
+
+    @Test
+    fun `conflictCopyPath appends conflict date suffix before extension`() {
+        // 1_700_000_000_000L = 2023-11-14T22:13:20 UTC → date label "2023-11-14"
+        val result = SyncEngine.conflictCopyPath("document.txt", 1_700_000_000_000L)
+        assertEquals("document (conflict 2023-11-14).txt", result)
+    }
+
+    @Test
+    fun `conflictCopyPath preserves directory prefix`() {
+        val result = SyncEngine.conflictCopyPath("photos/vacation.jpg", 1_700_000_000_000L)
+        assertEquals("photos/vacation (conflict 2023-11-14).jpg", result)
+    }
+
+    @Test
+    fun `conflictCopyPath works for files with no extension`() {
+        val result = SyncEngine.conflictCopyPath("README", 1_700_000_000_000L)
+        assertEquals("README (conflict 2023-11-14)", result)
+    }
+
+    @Test
+    fun `conflictCopyPath treats leading-dot hidden files as extension-free`() {
+        // ".gitignore" has a leading dot but no real extension — conflict copy should be
+        // ".gitignore (conflict 2023-11-14)", not " (conflict 2023-11-14).gitignore".
+        val result = SyncEngine.conflictCopyPath(".gitignore", 1_700_000_000_000L)
+        assertEquals(".gitignore (conflict 2023-11-14)", result)
+    }
+
+    @Test
+    fun `conflictCopyPath handles hidden files with real extension`() {
+        // ".hidden.txt" has a leading dot AND a real extension.
+        val result = SyncEngine.conflictCopyPath(".hidden.txt", 1_700_000_000_000L)
+        assertEquals(".hidden (conflict 2023-11-14).txt", result)
+    }
+
+    @Test
+    fun `conflictCopyPath works for nested path with no extension`() {
+        val result = SyncEngine.conflictCopyPath("docs/notes", 1_700_000_000_000L)
+        assertEquals("docs/notes (conflict 2023-11-14)", result)
+    }
 }
