@@ -63,10 +63,15 @@ internal class DefaultFsAccess(
  * **Features**
  * - BFS tree walk via [DocumentChildrenQuery] (avoids stack overflow on deep trees).
  * - Skips hidden files (display name starts with `.`).
+ * - Supports **include-glob filtering**: when [LocalFsEnumerator.enumerate]'s
+ *   `includeGlobs` list is non-empty, only files matching **at least one** include
+ *   pattern are retained.  When the list is empty, all files pass the include filter
+ *   (preserves previous behaviour).
  * - Skips files matching any pattern in [LocalFsEnumerator.enumerate]'s
  *   `ignoreGlobs` list (patterns matched against the full relative path;
  *   `*` matches within a single path component, `**` matches across separators,
  *   `?` matches a single non-separator character, `{a,b}` matches alternatives).
+ *   Exclude patterns always take precedence over include matches.
  * - **Lazy SHA-256**: the hash is recomputed (via [FsAccess]) only when a file's
  *   `(sizeBytes, mtimeMs)` differ from the cached `local_index` row.  Unchanged
  *   files reuse the cached hash with zero I/O cost.
@@ -102,18 +107,24 @@ class LocalFsEnumerator internal constructor(
      * Enumerates the SAF tree at [treeUri] for sync pair [pairId], computing the
      * diff against the current `local_index` and atomically persisting the result.
      *
-     * @param pairId      The [com.synckro.domain.model.SyncPair.id]
-     *                    this enumeration belongs to.
-     * @param treeUri     Persisted SAF tree URI from `ACTION_OPEN_DOCUMENT_TREE`.
-     * @param ignoreGlobs Optional list of glob patterns (matched against the full
-     *                    relative path).  Files matching **any** pattern are
-     *                    excluded from the snapshot and treated as deleted from
-     *                    `local_index` if they were previously indexed.
+     * @param pairId       The [com.synckro.domain.model.SyncPair.id]
+     *                     this enumeration belongs to.
+     * @param treeUri      Persisted SAF tree URI from `ACTION_OPEN_DOCUMENT_TREE`.
+     * @param includeGlobs Optional list of glob patterns.  When non-empty, only
+     *                     files matching **at least one** pattern are included in
+     *                     the snapshot.  An empty list means "include everything"
+     *                     (the default).
+     * @param ignoreGlobs  Optional list of glob patterns (matched against the full
+     *                     relative path).  Files matching **any** pattern are
+     *                     excluded from the snapshot and treated as deleted from
+     *                     `local_index` if they were previously indexed.  Exclude
+     *                     patterns take precedence over include matches.
      * @return [EnumerationResult] containing the full snapshot and diff sets.
      */
     suspend fun enumerate(
         pairId: Long,
         treeUri: Uri,
+        includeGlobs: List<String> = emptyList(),
         ignoreGlobs: List<String> = emptyList(),
     ): EnumerationResult {
         // 1. Load existing local_index as a map for O(1) lookup.
@@ -121,12 +132,23 @@ class LocalFsEnumerator internal constructor(
             localIndexDao.getForPair(pairId).associateBy { it.relativePath }
 
         // Pre-compile ignore-glob patterns for efficiency.
-        val compiledGlobs =
+        val compiledIgnoreGlobs =
             ignoreGlobs.mapNotNull { pattern ->
                 try {
                     globToRegex(pattern)
                 } catch (_: Exception) {
                     Timber.w("LocalFsEnumerator: invalid ignore glob '%s', skipping", pattern)
+                    null
+                }
+            }
+
+        // Pre-compile include-glob patterns for efficiency.
+        val compiledIncludeGlobs =
+            includeGlobs.mapNotNull { pattern ->
+                try {
+                    globToRegex(pattern)
+                } catch (_: Exception) {
+                    Timber.w("LocalFsEnumerator: invalid include glob '%s', skipping", pattern)
                     null
                 }
             }
@@ -168,8 +190,17 @@ class LocalFsEnumerator internal constructor(
                     continue
                 }
 
-                // Skip files matching any ignore glob.
-                if (compiledGlobs.any { it.matches(relativePath) }) {
+                // Skip files not matching any include glob (when include globs are configured).
+                // Use `includeGlobs.isNotEmpty()` (the original list) rather than
+                // `compiledIncludeGlobs.isNotEmpty()` so that a misconfiguration where
+                // all patterns fail to compile still activates the filter (fail-closed:
+                // no file passes a broken include glob rather than all files passing).
+                if (includeGlobs.isNotEmpty() && compiledIncludeGlobs.none { it.matches(relativePath) }) {
+                    continue
+                }
+
+                // Skip files matching any ignore glob (excludes take precedence over includes).
+                if (compiledIgnoreGlobs.any { it.matches(relativePath) }) {
                     Timber.d("LocalFsEnumerator: skipping ignored file '%s'", relativePath)
                     continue
                 }
