@@ -323,6 +323,57 @@ class GoogleDriveRestClient
             return Pair(allChanges, nextToken)
         }
 
+        /**
+         * Retrieves all non-folder descendants of [rootFolderId] recursively, along with a
+         * fresh changes start page token for subsequent incremental polling.
+         *
+         * Performs a depth-first recursive walk: for each child returned by [list], folders
+         * are recursed into and file-type items are appended to the result.  The path of
+         * each file relative to [rootFolderId] is tracked during the walk so that nested
+         * files receive compound paths (e.g. `"docs/report.pdf"`).
+         *
+         * The `startPageToken` is fetched separately via `changes/startPageToken` so it
+         * represents the state **at the time the listing was taken**; callers should pass it
+         * to [changesSince] on the next incremental sync.
+         *
+         * @return A pair of ((file, relativePath) pairs, startPageToken).
+         * @throws DriveApiException on HTTP errors.
+         * @throws IOException on network failures.
+         */
+        internal suspend fun listAllDescendants(
+            token: String,
+            rootFolderId: String,
+        ): Pair<List<Pair<DriveFile, String>>, String> {
+            val result = mutableListOf<Pair<DriveFile, String>>()
+            collectDescendants(token, rootFolderId, parentRelPath = "", result)
+            val resp = executeWithRetry(buildGetRequest("$driveBaseUrl/changes/startPageToken", token))
+            val startTokenResp = parseBody<DriveStartPageTokenResponse>(resp)
+            return Pair(result, startTokenResp.startPageToken)
+        }
+
+        /**
+         * Recursively collects non-folder items under [folderId].
+         *
+         * @param parentRelPath The relative path of [folderId] from the original root folder,
+         *   used to construct compound paths for nested items (empty string for the root).
+         */
+        private suspend fun collectDescendants(
+            token: String,
+            folderId: String,
+            parentRelPath: String,
+            result: MutableList<Pair<DriveFile, String>>,
+        ) {
+            val children = list(token, folderId)
+            for (child in children) {
+                val childPath = if (parentRelPath.isEmpty()) child.name else "$parentRelPath/${child.name}"
+                if (child.mimeType == FOLDER_MIME_TYPE) {
+                    collectDescendants(token, child.id, childPath, result)
+                } else {
+                    result += Pair(child, childPath)
+                }
+            }
+        }
+
         // -------------------------------------------------------------------------
         // Internal helpers
         // -------------------------------------------------------------------------

@@ -254,6 +254,46 @@ class OneDriveGraphClient
             return Pair(allItems, nextLink)
         }
 
+        /**
+         * Retrieves the complete current state of the folder identified by [rootFolderId]
+         * by calling `items/{rootFolderId}/delta` **without** `$deltaToken=latest`.
+         *
+         * Unlike [changesSince] with a null token (which skips existing items to establish a
+         * baseline), this method returns **all** items currently under [rootFolderId] — suitable
+         * for seeding a brand-new sync pair.  The returned deltaLink can subsequently be passed
+         * to [changesSince] for incremental polling.
+         *
+         * @param token        Bearer access token.
+         * @param rootFolderId Provider-specific folder ID to enumerate from.
+         * @return A pair of (all current items, deltaLink for future incremental syncs).
+         * @throws GraphApiException on HTTP errors.
+         * @throws IOException on network failures.
+         */
+        internal suspend fun listAll(
+            token: String,
+            rootFolderId: String,
+        ): Pair<List<GraphDriveItem>, String> {
+            val allItems = mutableListOf<GraphDriveItem>()
+            // Calling /delta without $deltaToken=latest returns the full current state.
+            var currentUrl: String? = "$graphBaseUrl/items/$rootFolderId/delta"
+            var finalDeltaLink: String? = null
+
+            while (currentUrl != null) {
+                val req = buildGetRequest(currentUrl, token)
+                val resp = executeWithRetry(req)
+                val delta = parseBody<GraphDeltaResponse>(resp)
+
+                allItems += delta.value
+                finalDeltaLink = delta.deltaLink
+                currentUrl = delta.nextLink
+            }
+
+            val nextLink =
+                finalDeltaLink
+                    ?: throw IOException("Delta response did not include @odata.deltaLink")
+            return Pair(allItems, nextLink)
+        }
+
         // -------------------------------------------------------------------------
         // Internal helpers
         // -------------------------------------------------------------------------

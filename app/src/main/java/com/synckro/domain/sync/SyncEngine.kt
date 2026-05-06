@@ -232,9 +232,20 @@ class SyncEngine(
             )
 
         // -----------------------------------------------------------------
-        // Step 2 – Enumerate remote changes (delta since last token).
+        // Step 2 – Enumerate remote changes (full listing for new pairs,
+        //          incremental delta for established pairs).
+        //
+        // When pair.deltaToken is null this is a brand-new pair: call
+        // enumerateFull() so that files already present in the remote folder
+        // are returned as MODIFY changes and can be downloaded.  For existing
+        // pairs the persisted delta token is used for incremental polling.
         // -----------------------------------------------------------------
-        val remoteSnapshot = remoteEnumerator.enumerate(pair.deltaToken, pair.remoteFolderId)
+        val remoteSnapshot =
+            if (pair.deltaToken == null) {
+                remoteEnumerator.enumerateFull(pair.remoteFolderId)
+            } else {
+                remoteEnumerator.enumerate(pair.deltaToken, pair.remoteFolderId)
+            }
 
         // -----------------------------------------------------------------
         // Step 3 – Build inputs for SyncDiffer.
