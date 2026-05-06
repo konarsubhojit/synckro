@@ -1603,10 +1603,158 @@ class SyncEngineRealIntegrationTest {
             assertTrue("Conflict record should be removed after resolution", remainingResolved.isEmpty())
         }
 
-    // -------------------------------------------------------------------------
-    // Nested download: remote files with hierarchical paths are downloaded
-    // to the correct nested local path
-    // -------------------------------------------------------------------------
+    /**
+     * Two conflicts are both resolved with KEEP_LOCAL in a single sync run.
+     *
+     * Validates that the single shared [SyncOpApplier] instance (created once per sync run in
+     * [SyncEngine.runRealImpl]) is correctly reused for each conflict resolution, as required by
+     * issue #95 ("SyncOpApplier should be reused within a sync run").
+     */
+    @Test
+    fun `multiple KEEP_LOCAL resolutions in a single sync run are all applied correctly`() =
+        runTest {
+            val localContent1 = "local-alpha".toByteArray()
+            val localContent2 = "local-beta".toByteArray()
+
+            // Seed two remote files that are "outdated" compared to the local versions.
+            val remoteFile1 =
+                fakeProvider.uploadNew(
+                    parentId = "remote-root",
+                    name = "alpha.txt",
+                    content = "remote-alpha".toByteArray().inputStream(),
+                    size = "remote-alpha".length.toLong(),
+                    mimeType = "text/plain",
+                )
+            val remoteFile2 =
+                fakeProvider.uploadNew(
+                    parentId = "remote-root",
+                    name = "beta.txt",
+                    content = "remote-beta".toByteArray().inputStream(),
+                    size = "remote-beta".length.toLong(),
+                    mimeType = "text/plain",
+                )
+
+            localFileAccess.put("alpha.txt", localContent1)
+            localFileAccess.put("beta.txt", localContent2)
+            inMemoryChildren.set(
+                "root",
+                listOf(
+                    RawDocChild(
+                        docId = "doc-alpha",
+                        name = "alpha.txt",
+                        mimeType = "text/plain",
+                        size = localContent1.size.toLong(),
+                        lastModifiedMs = 5_000L,
+                    ),
+                    RawDocChild(
+                        docId = "doc-beta",
+                        name = "beta.txt",
+                        mimeType = "text/plain",
+                        size = localContent2.size.toLong(),
+                        lastModifiedMs = 5_000L,
+                    ),
+                ),
+            )
+
+            val pair = insertPair(conflictPolicy = ConflictPolicy.KEEP_BOTH)
+
+            // Seed the index for both files with their remote metadata.
+            localIndexDao.upsert(
+                LocalIndexEntity(
+                    pairId = pair.id,
+                    relativePath = "alpha.txt",
+                    sizeBytes = localContent1.size.toLong(),
+                    mtimeMs = 5_000L,
+                    contentHash = null,
+                    remoteId = remoteFile1.id,
+                    remoteSizeBytes = remoteFile1.size,
+                    remoteMtimeMs = remoteFile1.lastModifiedMs,
+                    remoteEtag = remoteFile1.eTag,
+                ),
+            )
+            localIndexDao.upsert(
+                LocalIndexEntity(
+                    pairId = pair.id,
+                    relativePath = "beta.txt",
+                    sizeBytes = localContent2.size.toLong(),
+                    mtimeMs = 5_000L,
+                    contentHash = null,
+                    remoteId = remoteFile2.id,
+                    remoteSizeBytes = remoteFile2.size,
+                    remoteMtimeMs = remoteFile2.lastModifiedMs,
+                    remoteEtag = remoteFile2.eTag,
+                ),
+            )
+
+            // Insert and resolve two KEEP_LOCAL conflicts.
+            val conflictId1 =
+                conflictRepository.insert(
+                    ConflictRecord(
+                        id = 0,
+                        pairId = pair.id,
+                        relativePath = "alpha.txt",
+                        localLastModifiedMs = 5_000L,
+                        remoteLastModifiedMs = remoteFile1.lastModifiedMs ?: 0L,
+                        detectedAtMs = CONFLICT_DETECTED_AT_MS,
+                    ),
+                )
+            conflictRepository.resolve(conflictId1, ConflictRecord.RESOLUTION_KEEP_LOCAL)
+
+            val conflictId2 =
+                conflictRepository.insert(
+                    ConflictRecord(
+                        id = 0,
+                        pairId = pair.id,
+                        relativePath = "beta.txt",
+                        localLastModifiedMs = 5_000L,
+                        remoteLastModifiedMs = remoteFile2.lastModifiedMs ?: 0L,
+                        detectedAtMs = CONFLICT_DETECTED_AT_MS,
+                    ),
+                )
+            conflictRepository.resolve(conflictId2, ConflictRecord.RESOLUTION_KEEP_LOCAL)
+
+            val result = buildEngine().runOnce(pair)
+
+            assertTrue("Expected Success, got: $result", result is SyncEngine.Result.Success)
+            val success = result as SyncEngine.Result.Success
+            assertEquals("Both resolved conflicts should count as 2 applied ops", 2, success.applied)
+            assertEquals("No new conflicts should be detected", 0, success.conflicts)
+
+            // Remote files should now have the local content uploaded as new files.
+            // (KEEP_LOCAL resolution calls UploadNew which creates a new remote file.)
+            val remoteFiles = fakeProvider.list("remote-root").filter { !it.isFolder }
+            val remoteAlpha = remoteFiles.filter { it.name == "alpha.txt" }
+            assertTrue(
+                "At least one remote file named alpha.txt should exist after KEEP_LOCAL",
+                remoteAlpha.isNotEmpty(),
+            )
+            val alphaHasLocalContent =
+                remoteAlpha.any { rf ->
+                    fakeProvider.download(rf.id).readBytes().toString(Charsets.UTF_8) == "local-alpha"
+                }
+            assertTrue(
+                "One of the remote alpha.txt files should contain local-alpha content",
+                alphaHasLocalContent,
+            )
+
+            val remoteBeta = remoteFiles.filter { it.name == "beta.txt" }
+            assertTrue(
+                "At least one remote file named beta.txt should exist after KEEP_LOCAL",
+                remoteBeta.isNotEmpty(),
+            )
+            val betaHasLocalContent =
+                remoteBeta.any { rf ->
+                    fakeProvider.download(rf.id).readBytes().toString(Charsets.UTF_8) == "local-beta"
+                }
+            assertTrue(
+                "One of the remote beta.txt files should contain local-beta content",
+                betaHasLocalContent,
+            )
+
+            // Both conflict records should be deleted after resolution.
+            val remaining = conflictRepository.getResolvedForPair(pair.id)
+            assertTrue("All conflict records should be removed after resolution", remaining.isEmpty())
+        }
 
     @Test
     fun `runReal downloads nested remote file to correct local path`() =

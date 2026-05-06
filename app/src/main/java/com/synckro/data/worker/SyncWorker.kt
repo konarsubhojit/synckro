@@ -242,9 +242,29 @@ class SyncWorker
                                 Result.success()
                             }
                             is SyncEngine.Result.Retriable -> {
-                                Timber.i("Retrying sync for pair %d: %s", pairId, r.reason)
-                                syncEventRepository.log(pairId, SyncEventLevel.WARN, LOG_TAG, "Sync retriable, will retry: ${r.reason}")
-                                Result.retry()
+                                if (runAttemptCount + 1 >= MAX_RETRY_ATTEMPTS) {
+                                    Timber.w(
+                                        "Sync for pair %d exhausted %d attempt(s): %s",
+                                        pairId, MAX_RETRY_ATTEMPTS, r.reason,
+                                    )
+                                    syncPairDao.updateLastSyncResult(pairId, System.currentTimeMillis(), RESULT_FAILURE)
+                                    syncEventRepository.log(
+                                        pairId, SyncEventLevel.ERROR, LOG_TAG,
+                                        "Sync failed after $MAX_RETRY_ATTEMPTS attempt(s), giving up: ${r.reason}",
+                                    )
+                                    WorkManager.getInstance(applicationContext).cancelUniqueWork(uniqueName(pairId))
+                                    Result.failure()
+                                } else {
+                                    Timber.i(
+                                        "Retrying sync for pair %d (attempt %d/%d): %s",
+                                        pairId, runAttemptCount + 1, MAX_RETRY_ATTEMPTS, r.reason,
+                                    )
+                                    syncEventRepository.log(
+                                        pairId, SyncEventLevel.WARN, LOG_TAG,
+                                        "Sync retriable, will retry (attempt ${runAttemptCount + 1}/$MAX_RETRY_ATTEMPTS): ${r.reason}",
+                                    )
+                                    Result.retry()
+                                }
                             }
                             is SyncEngine.Result.Terminal -> {
                                 // Misconfigured pair (e.g. revoked auth, unsupported provider).
@@ -286,20 +306,66 @@ class SyncWorker
                                 Result.failure()
                             }
                             is SyncEngine.Result.Retriable -> {
-                                Timber.i(e, "Retriable CloudProviderException for pair %d: %s", pairId, mapped.reason)
                                 // Auth-related retriable failures (e.g. AuthenticationFailed during refresh)
                                 // are still tagged `auth` so the user can find them in LogsScreen.
                                 val tag = if (e is CloudProviderException.AuthenticationFailed) LOG_TAG_AUTH else LOG_TAG
-                                syncEventRepository.log(pairId, SyncEventLevel.WARN, tag, "Sync retriable, will retry: ${mapped.reason}")
-                                Result.retry()
+                                if (runAttemptCount + 1 >= MAX_RETRY_ATTEMPTS) {
+                                    Timber.w(
+                                        e,
+                                        "Sync for pair %d exhausted %d attempt(s): %s",
+                                        pairId, MAX_RETRY_ATTEMPTS, mapped.reason,
+                                    )
+                                    syncPairDao.updateLastSyncResult(pairId, System.currentTimeMillis(), RESULT_FAILURE)
+                                    syncEventRepository.log(
+                                        pairId, SyncEventLevel.ERROR, tag,
+                                        "Sync failed after $MAX_RETRY_ATTEMPTS attempt(s), giving up: ${mapped.reason}",
+                                    )
+                                    WorkManager.getInstance(applicationContext).cancelUniqueWork(uniqueName(pairId))
+                                    Result.failure()
+                                } else {
+                                    Timber.i(
+                                        e,
+                                        "Retriable CloudProviderException for pair %d (attempt %d/%d): %s",
+                                        pairId, runAttemptCount + 1, MAX_RETRY_ATTEMPTS, mapped.reason,
+                                    )
+                                    syncEventRepository.log(
+                                        pairId, SyncEventLevel.WARN, tag,
+                                        "Sync retriable, will retry (attempt ${runAttemptCount + 1}/$MAX_RETRY_ATTEMPTS): ${mapped.reason}",
+                                    )
+                                    Result.retry()
+                                }
                             }
                             // Mapper never returns Success / PartialFailure for an exception input.
-                            else -> Result.retry()
+                            else -> if (runAttemptCount + 1 >= MAX_RETRY_ATTEMPTS) {
+                                syncPairDao.updateLastSyncResult(pairId, System.currentTimeMillis(), RESULT_FAILURE)
+                                syncEventRepository.log(
+                                    pairId, SyncEventLevel.ERROR, LOG_TAG,
+                                    "Sync failed after $MAX_RETRY_ATTEMPTS attempt(s), giving up: ${e.message}",
+                                )
+                                WorkManager.getInstance(applicationContext).cancelUniqueWork(uniqueName(pairId))
+                                Result.failure()
+                            } else {
+                                Result.retry()
+                            }
                         }
                     } catch (t: Throwable) {
-                        Timber.w(t, "Sync failed for pair %d", pairId)
-                        syncEventRepository.log(pairId, SyncEventLevel.ERROR, LOG_TAG, "Sync threw an exception, will retry: ${t.message}")
-                        Result.retry()
+                        if (runAttemptCount + 1 >= MAX_RETRY_ATTEMPTS) {
+                            Timber.w(t, "Sync for pair %d exhausted %d attempt(s)", pairId, MAX_RETRY_ATTEMPTS)
+                            syncPairDao.updateLastSyncResult(pairId, System.currentTimeMillis(), RESULT_FAILURE)
+                            syncEventRepository.log(
+                                pairId, SyncEventLevel.ERROR, LOG_TAG,
+                                "Sync failed after $MAX_RETRY_ATTEMPTS attempt(s), giving up: ${t.message}",
+                            )
+                            WorkManager.getInstance(applicationContext).cancelUniqueWork(uniqueName(pairId))
+                            Result.failure()
+                        } else {
+                            Timber.w(t, "Sync failed for pair %d", pairId)
+                            syncEventRepository.log(
+                                pairId, SyncEventLevel.ERROR, LOG_TAG,
+                                "Sync threw an exception, will retry (attempt ${runAttemptCount + 1}/$MAX_RETRY_ATTEMPTS): ${t.message}",
+                            )
+                            Result.retry()
+                        }
                     } finally {
                         foregroundJob.cancel()
                     }
@@ -415,6 +481,17 @@ class SyncWorker
 
             /** Maximum number of error strings included in the partial-failure log message. */
             private const val MAX_LOGGED_ERRORS = 5
+
+            /**
+             * Maximum number of total attempts (first run + retries) for a [SyncEngine.Result.Retriable]
+             * result or a retriable exception before the worker escalates to a terminal failure and
+             * cancels the periodic sync chain.  This prevents indefinite retry storms when an
+             * underlying transient error persists for a long time.
+             *
+             * Example: with the default WorkManager exponential backoff (starting at 30 s) and
+             * MAX_RETRY_ATTEMPTS = 5, the worker gives up after roughly 7.5 minutes of retrying.
+             */
+            const val MAX_RETRY_ATTEMPTS = 5
 
             /**
              * Produces a deterministic unique WorkManager name for a SyncPair.
