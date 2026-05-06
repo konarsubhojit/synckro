@@ -62,12 +62,17 @@ data class SyncPair(
      */
     val excludeSubfolders: Boolean = false,
     /**
-     * When `true`, empty directories are excluded from the sync scope.  Because
-     * the sync engine is file-centric (it tracks individual files, not folders),
-     * this flag has no effect on the current local SAF enumeration (which already
-     * emits only file entries).  It is persisted so that future provider
-     * implementations that may surface explicit folder-creation events can honour
-     * it, and to expose the user intent in the UI.
+     * When `true`, empty directories are excluded from the sync scope.
+     *
+     * **Remote side**: folder entries reported by the remote enumerator are
+     * explicitly filtered out of the delta before the sync differ sees them,
+     * preventing empty remote folders from being processed as sync operations.
+     *
+     * **Local side**: [LocalFsEnumerator] already only emits file entries;
+     * empty local directories produce no snapshot entries and therefore never
+     * trigger remote folder creation (folders are created on-demand by
+     * [SyncOpApplier.ensureRemoteFolderPath] only when a file needs to be
+     * uploaded into them).
      */
     val excludeEmptyFolders: Boolean = false,
 )

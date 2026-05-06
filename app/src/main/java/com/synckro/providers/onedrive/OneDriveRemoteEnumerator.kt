@@ -142,6 +142,7 @@ internal fun GraphDriveItem.toRemoteChange(pathCache: Map<String, String> = empt
             sizeBytes = size,
             mtimeMs = lastModifiedDateTime?.let { parseIso8601(it) },
             etag = eTag?.trim('"'),
+            isFolder = folder != null,
         )
     }
 }

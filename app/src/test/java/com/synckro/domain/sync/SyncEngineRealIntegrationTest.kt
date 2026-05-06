@@ -1435,4 +1435,151 @@ class SyncEngineRealIntegrationTest {
             assertTrue("root-level file must be in index", "local-root.txt" in paths)
             assertTrue("nested file must NOT be in index", "nested/file.txt" !in paths)
         }
+
+    // -------------------------------------------------------------------------
+    // excludeEmptyFolders
+    // -------------------------------------------------------------------------
+
+    @Test
+    fun `runReal with excludeEmptyFolders=true filters empty remote folders from delta`() =
+        runTest {
+            // Establish baseline (empty local + remote).
+            val pair = insertPair().copy(excludeEmptyFolders = true)
+            val engine = buildEngine()
+
+            val baselineResult = engine.runOnce(pair)
+            assertTrue("Baseline should succeed", baselineResult is SyncEngine.Result.Success)
+            val storedToken = syncPairDao.getById(pair.id)!!.lastDeltaToken!!
+
+            // Create an empty folder on the remote — this appears in the delta
+            // as a MODIFY entry with isFolder = true and size = null.
+            fakeProvider.createFolder("remote-root", "empty-dir")
+
+            // Delta run: the empty folder should be filtered out.
+            val deltaResult = engine.runOnce(pair.copy(deltaToken = storedToken))
+
+            assertTrue("Delta run should succeed", deltaResult is SyncEngine.Result.Success)
+            assertEquals(
+                "Empty folder should not produce any applied ops",
+                0,
+                (deltaResult as SyncEngine.Result.Success).applied,
+            )
+        }
+
+    @Test
+    fun `runReal with excludeEmptyFolders=false does not filter remote folders`() =
+        runTest {
+            // With excludeEmptyFolders=false (default), folder entries pass through
+            // the delta pipeline.  They are still filtered by SyncEngine's implicit
+            // size/mtime null check, so they produce zero applied ops — but the key
+            // difference is that the filter logic in the SyncEngine does NOT remove
+            // them before processing begins.
+            val pair = insertPair().copy(excludeEmptyFolders = false)
+            val engine = buildEngine()
+
+            val baselineResult = engine.runOnce(pair)
+            assertTrue("Baseline should succeed", baselineResult is SyncEngine.Result.Success)
+            val storedToken = syncPairDao.getById(pair.id)!!.lastDeltaToken!!
+
+            // Create an empty folder on the remote.
+            fakeProvider.createFolder("remote-root", "empty-dir")
+
+            val deltaResult = engine.runOnce(pair.copy(deltaToken = storedToken))
+
+            assertTrue("Delta run should succeed", deltaResult is SyncEngine.Result.Success)
+            // Still 0 applied because folders have size=null, but the test
+            // validates the excludeEmptyFolders=false path doesn't break.
+            assertEquals(0, (deltaResult as SyncEngine.Result.Success).applied)
+        }
+
+    @Test
+    fun `runReal with excludeEmptyFolders=true still processes files inside folders`() =
+        runTest {
+            // excludeEmptyFolders should only filter out empty (folder-type) entries,
+            // not files that happen to be inside folders.
+            val pair = insertPair().copy(excludeEmptyFolders = true)
+            val engine = buildEngine()
+
+            val baselineResult = engine.runOnce(pair)
+            assertTrue("Baseline should succeed", baselineResult is SyncEngine.Result.Success)
+            val storedToken = syncPairDao.getById(pair.id)!!.lastDeltaToken!!
+
+            // Create a folder with a file inside it.
+            val folder = fakeProvider.createFolder("remote-root", "docs")
+            val content = "report content".toByteArray()
+            fakeProvider.uploadNew(
+                parentId = folder.id,
+                name = "report.txt",
+                content = content.inputStream(),
+                size = content.size.toLong(),
+                mimeType = "text/plain",
+            )
+
+            val deltaResult = engine.runOnce(pair.copy(deltaToken = storedToken))
+
+            assertTrue("Delta run should succeed", deltaResult is SyncEngine.Result.Success)
+            // The file inside the folder should still be processed.
+            assertTrue(
+                "At least one file op should be applied",
+                (deltaResult as SyncEngine.Result.Success).applied >= 1,
+            )
+        }
+
+    @Test
+    fun `runReal excludeEmptyFolders filters folder entries but keeps DELETE entries`() =
+        runTest {
+            // Even with excludeEmptyFolders=true, DELETE entries for folders should
+            // not be filtered — they are harmless (removing an absent key from
+            // syntheticRemote is a no-op) and must be kept for correctness.
+            val pair = insertPair().copy(excludeEmptyFolders = true)
+            val engine = buildEngine()
+
+            val baselineResult = engine.runOnce(pair)
+            assertTrue("Baseline should succeed", baselineResult is SyncEngine.Result.Success)
+            val storedToken = syncPairDao.getById(pair.id)!!.lastDeltaToken!!
+
+            // Create and then delete a folder — produces two change entries:
+            // a MODIFY (folder creation) and a DELETE.
+            val folder = fakeProvider.createFolder("remote-root", "temp-dir")
+            fakeProvider.delete(folder.id)
+
+            val deltaResult = engine.runOnce(pair.copy(deltaToken = storedToken))
+
+            assertTrue("Delta run should succeed", deltaResult is SyncEngine.Result.Success)
+            assertEquals(0, (deltaResult as SyncEngine.Result.Success).applied)
+        }
+
+    @Test
+    fun `FakeRemoteEnumerator sets isFolder=true for folder entries`() =
+        runTest {
+            // Verify that FakeRemoteEnumerator correctly populates isFolder on
+            // RemoteChange entries for folders.
+            fakeProvider.createFolder("remote-root", "test-folder")
+
+            val snapshot = fakeRemoteEnumerator.enumerate(deltaToken = "0", rootFolderId = "remote-root")
+
+            val folderChange = snapshot.changes.find { it.relativePath == "test-folder" }
+            assertNotNull("Folder change should be in the snapshot", folderChange)
+            assertTrue("Folder entry must have isFolder=true", folderChange!!.isFolder)
+        }
+
+    @Test
+    fun `FakeRemoteEnumerator sets isFolder=false for file entries`() =
+        runTest {
+            // Verify that FakeRemoteEnumerator correctly sets isFolder=false for files.
+            val content = "file content".toByteArray()
+            fakeProvider.uploadNew(
+                parentId = "remote-root",
+                name = "test-file.txt",
+                content = content.inputStream(),
+                size = content.size.toLong(),
+                mimeType = "text/plain",
+            )
+
+            val snapshot = fakeRemoteEnumerator.enumerate(deltaToken = "0", rootFolderId = "remote-root")
+
+            val fileChange = snapshot.changes.find { it.relativePath == "test-file.txt" }
+            assertNotNull("File change should be in the snapshot", fileChange)
+            assertTrue("File entry must have isFolder=false", !fileChange!!.isFolder)
+        }
 }

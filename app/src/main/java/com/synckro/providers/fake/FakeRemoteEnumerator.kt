@@ -50,6 +50,7 @@ class FakeRemoteEnumerator
                                 sizeBytes = c.file.size,
                                 mtimeMs = c.file.lastModifiedMs,
                                 etag = c.file.eTag,
+                                isFolder = c.file.isFolder,
                             )
                         else -> null
                     }

@@ -235,7 +235,23 @@ class SyncEngine(
         // -----------------------------------------------------------------
         // Step 2 – Enumerate remote changes (delta since last token).
         // -----------------------------------------------------------------
-        val remoteSnapshot = remoteEnumerator.enumerate(pair.deltaToken, pair.remoteFolderId)
+        val rawRemoteSnapshot = remoteEnumerator.enumerate(pair.deltaToken, pair.remoteFolderId)
+
+        // When excludeEmptyFolders is enabled, filter out folder entries from
+        // the remote delta.  Folder entries (isFolder = true) represent empty
+        // directories on the remote side; keeping them would let the engine
+        // process them as file changes.  Only non-DELETE folder entries are
+        // filtered — DELETE entries are harmless (removing an absent key from
+        // syntheticRemote is a no-op) and must be kept so that previously-
+        // tracked items with the same remoteId are not orphaned.
+        val remoteSnapshot =
+            if (pair.excludeEmptyFolders) {
+                rawRemoteSnapshot.copy(
+                    changes = rawRemoteSnapshot.changes.filterNot { it.isFolder && it.type != RemoteChangeType.DELETE },
+                )
+            } else {
+                rawRemoteSnapshot
+            }
 
         // -----------------------------------------------------------------
         // Step 3 – Build inputs for SyncDiffer.

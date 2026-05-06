@@ -148,5 +148,6 @@ internal fun DriveChange.toRemoteChange(pathCache: Map<String, String> = emptyMa
         sizeBytes = f.size?.toLongOrNull(),
         mtimeMs = f.modifiedTime?.let { parseIso8601(it) },
         etag = f.md5Checksum,
+        isFolder = f.mimeType == FOLDER_MIME_TYPE,
     )
 }
