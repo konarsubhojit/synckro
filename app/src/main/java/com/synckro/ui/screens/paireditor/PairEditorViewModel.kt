@@ -93,14 +93,17 @@ class PairEditorViewModel
             val isSaving: Boolean = false,
             val saveError: String? = null,
         ) {
+            /** Parses [customIntervalText] as a non-negative Long, or 0 if the text is blank/invalid. */
+            private val parsedCustomInterval: Long
+                get() = customIntervalText.trim().toLongOrNull() ?: 0L
+
             /** Effective sync interval in minutes derived from the active preset or custom value.
-             *  Custom text that is blank or non-numeric is treated as 0, which the scheduler then
-             *  clamps to the 15-minute WorkManager floor. */
+             *  Custom text that is blank or non-numeric is treated as 0 and clamped here to the
+             *  15-minute WorkManager floor. */
             val scheduleIntervalMinutes: Long
                 get() {
                     if (schedulePreset != SyncSchedulePreset.CUSTOM) return schedulePreset.minutes
-                    val parsed = customIntervalText.trim().toLongOrNull() ?: 0L
-                    return parsed.coerceAtLeast(15L)
+                    return parsedCustomInterval.coerceAtLeast(15L)
                 }
 
             /** True when the custom interval text is non-empty but does not parse as a valid long ≥ 15. */
@@ -108,7 +111,7 @@ class PairEditorViewModel
                 get() =
                     schedulePreset == SyncSchedulePreset.CUSTOM &&
                         customIntervalText.isNotEmpty() &&
-                        (customIntervalText.trim().toLongOrNull() ?: 0L) < 15L
+                        parsedCustomInterval < 15L
         }
 
         private val _state = MutableStateFlow(UiState())
