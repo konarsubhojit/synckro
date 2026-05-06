@@ -359,6 +359,131 @@ class PairEditorViewModelTest {
         }
 
     // -------------------------------------------------------------------------
+    // Retention days
+    // -------------------------------------------------------------------------
+
+    @Test
+    fun `onRetentionDaysChange updates retentionDaysText`() {
+        val vm = createVm()
+        vm.onRetentionDaysChange("14")
+        assertEquals("14", vm.state.value.retentionDaysText)
+    }
+
+    @Test
+    fun `onRetentionDaysChange accepts empty string to clear retention`() {
+        val vm = createVm()
+        vm.onRetentionDaysChange("7")
+        vm.onRetentionDaysChange("")
+        assertEquals("", vm.state.value.retentionDaysText)
+    }
+
+    @Test
+    fun `onRetentionDaysChange filters non-digit input`() {
+        val vm = createVm()
+        vm.onRetentionDaysChange("1a2-3")
+        assertEquals("123", vm.state.value.retentionDaysText)
+    }
+
+    @Test
+    fun `edit mode loads retentionDays from existing pair`() =
+        runTest {
+            val existingPair =
+                SyncPair(
+                    id = 7L,
+                    displayName = "Backup",
+                    localTreeUri = "content://test",
+                    provider = CloudProviderType.FAKE,
+                    remoteFolderId = "remote",
+                    retentionDays = 30,
+                )
+            coEvery { mockRepo.getById(7L) } returns existingPair
+
+            val vm = createVm(pairId = 7L)
+            advanceUntilIdle()
+
+            assertEquals("30", vm.state.value.retentionDaysText)
+        }
+
+    @Test
+    fun `edit mode shows empty retentionDaysText when pair has no retention`() =
+        runTest {
+            val existingPair =
+                SyncPair(
+                    id = 7L,
+                    displayName = "Pair",
+                    localTreeUri = "content://test",
+                    provider = CloudProviderType.FAKE,
+                    remoteFolderId = "remote",
+                    retentionDays = null,
+                )
+            coEvery { mockRepo.getById(7L) } returns existingPair
+
+            val vm = createVm(pairId = 7L)
+            advanceUntilIdle()
+
+            assertEquals("", vm.state.value.retentionDaysText)
+        }
+
+    @Test
+    fun `save passes retentionDays to repository when set`() =
+        runTest {
+            var savedPair: SyncPair? = null
+            coEvery { mockRepo.upsert(any()) } answers {
+                savedPair = firstArg()
+                1L
+            }
+
+            val vm = createVmWithFolder()
+            vm.onDisplayNameChange("Backup Pair")
+            vm.onRetentionDaysChange("7")
+            advanceUntilIdle()
+
+            vm.save {}
+            advanceUntilIdle()
+
+            assertEquals(7, savedPair?.retentionDays)
+        }
+
+    @Test
+    fun `save passes null retentionDays to repository when field is blank`() =
+        runTest {
+            var savedPair: SyncPair? = null
+            coEvery { mockRepo.upsert(any()) } answers {
+                savedPair = firstArg()
+                1L
+            }
+
+            val vm = createVmWithFolder()
+            vm.onDisplayNameChange("Pair")
+            vm.onRetentionDaysChange("")
+            advanceUntilIdle()
+
+            vm.save {}
+            advanceUntilIdle()
+
+            assertNull(savedPair?.retentionDays)
+        }
+
+    @Test
+    fun `save rejects retentionDays above maximum`() =
+        runTest {
+            coEvery { mockRepo.upsert(any()) } returns 1L
+
+            val vm = createVmWithFolder()
+            vm.onDisplayNameChange("Pair")
+            vm.onRetentionDaysChange((PairEditorViewModel.MAX_RETENTION_DAYS + 1).toString())
+            advanceUntilIdle()
+
+            var savedId: Long? = null
+            vm.save { savedId = it }
+            advanceUntilIdle()
+
+            assertNull(savedId)
+            assertTrue(vm.state.value.saveError?.isNotEmpty() == true)
+            coVerify(exactly = 0) { mockRepo.upsert(any()) }
+        }
+
+    // -------------------------------------------------------------------------
     // Error management
     // -------------------------------------------------------------------------
 

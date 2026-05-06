@@ -800,6 +800,108 @@ class LocalFsEnumeratorTest {
         }
 
     // -------------------------------------------------------------------------
+    // Remote-metadata preservation on modified files
+    // (regression test for the repeated-upload bug)
+    // -------------------------------------------------------------------------
+
+    /**
+     * When a file's mtime changes but its content stays the same, [LocalFsEnumerator]
+     * marks it as 'modified' and creates a new [LocalIndexEntity]. Before the fix, the
+     * new entity omitted remoteSizeBytes/remoteMtimeMs/remoteEtag (they defaulted to
+     * null). On the next sync run those null values prevented the file from appearing
+     * in syntheticRemote, making the file look like it had been deleted remotely and
+     * triggering a spurious re-upload.
+     *
+     * After the fix, remote metadata must survive a local mtime-only change.
+     */
+    @Test
+    fun `remote metadata preserved when file mtime changes but content stays same`() =
+        runTest {
+            val pairId = insertPair()
+            val content = "unchanged content".toByteArray()
+            val hash = LocalFsEnumerator.sha256Hex(content.inputStream())
+
+            // Seed the index as if the file was previously uploaded (has remote metadata).
+            localIndexDao.upsert(
+                LocalIndexEntity(
+                    pairId = pairId,
+                    relativePath = "notes.txt",
+                    sizeBytes = content.size.toLong(),
+                    mtimeMs = 1_000L,
+                    contentHash = hash,
+                    remoteId = "remote-abc",
+                    remoteSizeBytes = content.size.toLong(),
+                    remoteMtimeMs = 9_000L,
+                    remoteEtag = "etag-abc",
+                ),
+            )
+
+            // File's mtime has changed on disk (same size, same content, different mtime).
+            val fs = FakeFsAccess(mapOf("notes.txt" to content))
+            enumeratorWith(
+                mapOf("root" to listOf(file("notes.txt", size = content.size.toLong(), lastModifiedMs = 2_000L))),
+                fs,
+            ).enumerate(pairId, treeUri)
+
+            val stored = localIndexDao.getForPair(pairId).single()
+            assertEquals("mtime should be updated to the new filesystem value", 2_000L, stored.mtimeMs)
+            assertEquals("remoteId must be preserved", "remote-abc", stored.remoteId)
+            assertEquals("remoteSizeBytes must be preserved (not wiped)", content.size.toLong(), stored.remoteSizeBytes)
+            assertEquals("remoteMtimeMs must be preserved (not wiped)", 9_000L, stored.remoteMtimeMs)
+            assertEquals("remoteEtag must be preserved (not wiped)", "etag-abc", stored.remoteEtag)
+        }
+
+    @Test
+    fun `remote metadata preserved when file size changes`() =
+        runTest {
+            val pairId = insertPair()
+
+            localIndexDao.upsert(
+                LocalIndexEntity(
+                    pairId = pairId,
+                    relativePath = "doc.txt",
+                    sizeBytes = 10L,
+                    mtimeMs = 1_000L,
+                    contentHash = null,
+                    remoteId = "remote-xyz",
+                    remoteSizeBytes = 10L,
+                    remoteMtimeMs = 8_000L,
+                    remoteEtag = "etag-xyz",
+                ),
+            )
+
+            // File size changed on disk.
+            enumeratorWith(
+                mapOf("root" to listOf(file("doc.txt", size = 20L, lastModifiedMs = 2_000L))),
+            ).enumerate(pairId, treeUri)
+
+            val stored = localIndexDao.getForPair(pairId).single()
+            assertEquals("size must be updated", 20L, stored.sizeBytes)
+            assertEquals("remoteId must be preserved", "remote-xyz", stored.remoteId)
+            assertEquals("remoteSizeBytes must be preserved", 10L, stored.remoteSizeBytes)
+            assertEquals("remoteMtimeMs must be preserved", 8_000L, stored.remoteMtimeMs)
+            assertEquals("remoteEtag must be preserved", "etag-xyz", stored.remoteEtag)
+        }
+
+    @Test
+    fun `new file has null remote metadata`() =
+        runTest {
+            val pairId = insertPair()
+
+            // No pre-existing index entry — file is brand new.
+            enumeratorWith(
+                mapOf("root" to listOf(file("new.txt", size = 5L, lastModifiedMs = 1_000L))),
+            ).enumerate(pairId, treeUri)
+
+            val stored = localIndexDao.getForPair(pairId).single()
+            assertEquals("new.txt", stored.relativePath)
+            assertNull("new file has no remoteId", stored.remoteId)
+            assertNull("new file has no remoteSizeBytes", stored.remoteSizeBytes)
+            assertNull("new file has no remoteMtimeMs", stored.remoteMtimeMs)
+            assertNull("new file has no remoteEtag", stored.remoteEtag)
+        }
+
+    // -------------------------------------------------------------------------
     // glob helpers
     // -------------------------------------------------------------------------
 

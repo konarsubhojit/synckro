@@ -89,9 +89,18 @@
     <string name="conflict_policy_keep_both">Keep both</string>
 
     <!-- Sync-direction display names -->
-    <string name="direction_local_to_remote">Local → Remote</string>
-    <string name="direction_remote_to_local">Remote → Local</string>
+    <string name="direction_local_to_remote">Upload only (Local → Remote)</string>
+    <string name="direction_remote_to_local">Download only (Remote → Local)</string>
     <string name="direction_bidirectional">Bidirectional</string>
+    <string name="direction_upload_delete_local">Upload and delete local after N days</string>
+    <string name="direction_download_delete_remote">Download and delete remote after N days</string>
+
+    <!-- Retention days configuration (shown for retention sync modes) -->
+    <string name="pair_editor_retention_days">Delete after (days)</string>
+    <string name="pair_editor_retention_days_hint">Leave blank to disable automatic deletion</string>
+    <string name="pair_editor_retention_days_info_upload">Local files are deleted based on their last-modified time, only after they have been safely uploaded to the cloud.</string>
+    <string name="pair_editor_retention_days_info_download">Remote files are deleted based on their last-modified time, only after they have been safely downloaded to this device.</string>
+    <string name="pair_editor_retention_days_error">Enter a number of days between 0 and 36500</string>
 
     <!-- Pick local folder (SAF tree-URI picker) -->
     <string name="pick_folder_title">Pick local folder</string>
