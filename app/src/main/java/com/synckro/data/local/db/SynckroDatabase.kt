@@ -74,7 +74,7 @@ class EnumConverters {
 
 @Database(
     entities = [AccountEntity::class, SyncPairEntity::class, FileIndexEntity::class, SyncEventEntity::class, ConflictRecordEntity::class, LocalIndexEntity::class],
-    version = 10,
+    version = 11,
     exportSchema = true,
 )
 @TypeConverters(EnumConverters::class)
@@ -289,6 +289,27 @@ abstract class SynckroDatabase : RoomDatabase() {
             object : Migration(9, 10) {
                 override fun migrate(db: SupportSQLiteDatabase) {
                     db.execSQL("ALTER TABLE `sync_pair` ADD COLUMN `retentionDays` INTEGER")
+                }
+            }
+
+        /**
+         * Migrates the database from version 10 to 11:
+         * - Adds `excludeSubfolders` column to `sync_pair` (default 0 = false).
+         *   When true, only root-level files are synced; nested sub-directories are
+         *   excluded from both local enumeration and remote delta inputs.
+         * - Adds `excludeEmptyFolders` column to `sync_pair` (default 0 = false).
+         *   When true, empty directories are excluded from the sync scope.
+         *   Existing rows keep the previous behaviour (false for both flags).
+         */
+        val MIGRATION_10_11 =
+            object : Migration(10, 11) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL(
+                        "ALTER TABLE `sync_pair` ADD COLUMN `excludeSubfolders` INTEGER NOT NULL DEFAULT 0",
+                    )
+                    db.execSQL(
+                        "ALTER TABLE `sync_pair` ADD COLUMN `excludeEmptyFolders` INTEGER NOT NULL DEFAULT 0",
+                    )
                 }
             }
     }

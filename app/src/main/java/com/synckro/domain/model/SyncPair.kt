@@ -54,4 +54,20 @@ data class SyncPair(
      * (local mtime for upload modes, remote mtime for download modes).
      */
     val retentionDays: Int? = null,
+    /**
+     * When `true`, only files located directly inside the sync root folder are
+     * included in the sync scope.  Nested sub-directories (and all files within
+     * them) are ignored on both the local and remote sides.  Combine with
+     * [excludeGlobs] for fine-grained path-based filtering.
+     */
+    val excludeSubfolders: Boolean = false,
+    /**
+     * When `true`, empty directories are excluded from the sync scope.  Because
+     * the sync engine is file-centric (it tracks individual files, not folders),
+     * this flag has no effect on the current local SAF enumeration (which already
+     * emits only file entries).  It is persisted so that future provider
+     * implementations that may surface explicit folder-creation events can honour
+     * it, and to expose the user intent in the UI.
+     */
+    val excludeEmptyFolders: Boolean = false,
 )

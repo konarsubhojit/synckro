@@ -2,6 +2,7 @@ package com.synckro.domain.sync
 
 import android.content.Context
 import android.net.Uri
+import android.provider.DocumentsContract
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.synckro.data.local.dao.ConflictRecordDao
@@ -1289,5 +1290,149 @@ class SyncEngineRealIntegrationTest {
             val indexEntry = localIndex.find { it.relativePath == "docs/subdir/notes.txt" }
             assertNotNull("Local index should contain 'docs/subdir/notes.txt'", indexEntry)
             assertEquals(remoteFile.id, indexEntry!!.remoteId)
+        }
+
+    // -------------------------------------------------------------------------
+    // excludeSubfolders
+    // -------------------------------------------------------------------------
+
+    @Test
+    fun `runReal with excludeSubfolders=true uploads only root-level local files`() =
+        runTest {
+            // Two files: one at root, one inside a subdirectory.
+            val rootContent = "root file".toByteArray()
+            val subContent = "sub file".toByteArray()
+            localFileAccess.put("root.txt", rootContent)
+            localFileAccess.put("sub/child.txt", subContent)
+            inMemoryChildren.set(
+                "root",
+                listOf(
+                    RawDocChild(
+                        docId = "doc-root",
+                        name = "root.txt",
+                        mimeType = "text/plain",
+                        size = rootContent.size.toLong(),
+                        lastModifiedMs = 1_000L,
+                    ),
+                    RawDocChild(
+                        docId = "doc-sub",
+                        name = "sub",
+                        mimeType = DocumentsContract.Document.MIME_TYPE_DIR,
+                        size = 0L,
+                        lastModifiedMs = 0L,
+                    ),
+                ),
+            )
+            inMemoryChildren.set(
+                "doc-sub",
+                listOf(
+                    RawDocChild(
+                        docId = "doc-child",
+                        name = "child.txt",
+                        mimeType = "text/plain",
+                        size = subContent.size.toLong(),
+                        lastModifiedMs = 2_000L,
+                    ),
+                ),
+            )
+
+            val pair = insertPair().copy(excludeSubfolders = true)
+            val engine = buildEngine()
+
+            val result = engine.runOnce(pair)
+
+            assertTrue("Expected Success, got: $result", result is SyncEngine.Result.Success)
+            assertEquals(
+                "Only the root-level file should be uploaded",
+                1,
+                (result as SyncEngine.Result.Success).applied,
+            )
+
+            // Only root.txt should be in the local index.
+            val index = localIndexDao.getForPair(pair.id)
+            assertEquals(1, index.size)
+            assertEquals("root.txt", index.single().relativePath)
+        }
+
+    @Test
+    fun `runReal with excludeSubfolders=true ignores remote files in subdirectories`() =
+        runTest {
+            // Remote has a nested file; local is empty.
+            val docsFolder = fakeProvider.createFolder("remote-root", "docs")
+            val remoteContent = "remote doc".toByteArray()
+            fakeProvider.uploadNew(
+                parentId = docsFolder.id,
+                name = "report.txt",
+                content = remoteContent.inputStream(),
+                size = remoteContent.size.toLong(),
+                mimeType = "text/plain",
+            )
+
+            val pair = insertPair().copy(excludeSubfolders = true)
+            val engine = buildEngine()
+
+            val result = engine.runOnce(pair)
+
+            assertTrue("Expected Success, got: $result", result is SyncEngine.Result.Success)
+            // The nested remote file is out of scope when excludeSubfolders=true; nothing to apply.
+            assertEquals(
+                "Nested remote file should be excluded from scope",
+                0,
+                (result as SyncEngine.Result.Success).applied,
+            )
+        }
+
+    @Test
+    fun `runReal with excludeSubfolders=true bidirectional syncs only root-level files`() =
+        runTest {
+            // Root-level local file + nested local file; also a root-level remote file.
+            val rootLocalContent = "root local".toByteArray()
+            localFileAccess.put("local-root.txt", rootLocalContent)
+            inMemoryChildren.set(
+                "root",
+                listOf(
+                    RawDocChild(
+                        docId = "doc-local-root",
+                        name = "local-root.txt",
+                        mimeType = "text/plain",
+                        size = rootLocalContent.size.toLong(),
+                        lastModifiedMs = 1_000L,
+                    ),
+                    RawDocChild(
+                        docId = "doc-nested-dir",
+                        name = "nested",
+                        mimeType = DocumentsContract.Document.MIME_TYPE_DIR,
+                        size = 0L,
+                        lastModifiedMs = 0L,
+                    ),
+                ),
+            )
+            val nestedContent = "nested local".toByteArray()
+            localFileAccess.put("nested/file.txt", nestedContent)
+            inMemoryChildren.set(
+                "doc-nested-dir",
+                listOf(
+                    RawDocChild(
+                        docId = "doc-nested-file",
+                        name = "file.txt",
+                        mimeType = "text/plain",
+                        size = nestedContent.size.toLong(),
+                        lastModifiedMs = 2_000L,
+                    ),
+                ),
+            )
+
+            val pair = insertPair(direction = SyncDirection.BIDIRECTIONAL).copy(excludeSubfolders = true)
+            val engine = buildEngine()
+
+            // Establish a remote baseline (uploads root-level local file).
+            val firstResult = engine.runOnce(pair)
+            assertTrue("First run should succeed", firstResult is SyncEngine.Result.Success)
+
+            // Only root-level file should have been synced.
+            val index = localIndexDao.getForPair(pair.id)
+            val paths = index.map { it.relativePath }.toSet()
+            assertTrue("root-level file must be in index", "local-root.txt" in paths)
+            assertTrue("nested file must NOT be in index", "nested/file.txt" !in paths)
         }
 }

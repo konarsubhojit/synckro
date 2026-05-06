@@ -229,6 +229,7 @@ class SyncEngine(
                 treeUri = treeUri,
                 includeGlobs = pair.includeGlobs,
                 ignoreGlobs = pair.excludeGlobs,
+                excludeSubfolders = pair.excludeSubfolders,
             )
 
         // -----------------------------------------------------------------
@@ -270,6 +271,10 @@ class SyncEngine(
         fun isInScope(path: String): Boolean {
             if (scopeExcludeGlobs.any { it.matches(path) }) return false
             if (includeFilterActive && scopeIncludeGlobs.none { it.matches(path) }) return false
+            // When excludeSubfolders is enabled, only root-level paths (no '/' separator)
+            // are in scope.  This mirrors the LocalFsEnumerator's BFS behaviour where
+            // sub-directories are not traversed.
+            if (pair.excludeSubfolders && path.contains('/')) return false
             return true
         }
 

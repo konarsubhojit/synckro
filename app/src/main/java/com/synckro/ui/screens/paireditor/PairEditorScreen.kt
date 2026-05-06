@@ -346,6 +346,38 @@ fun PairEditorScreen(
                     }
                 }
 
+                // Exclude subfolders toggle
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = stringResource(R.string.pair_editor_exclude_subfolders),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Switch(
+                        checked = state.excludeSubfolders,
+                        onCheckedChange = viewModel::onExcludeSubfoldersChange,
+                    )
+                }
+
+                // Exclude empty folders toggle
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = stringResource(R.string.pair_editor_exclude_empty_folders),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Switch(
+                        checked = state.excludeEmptyFolders,
+                        onCheckedChange = viewModel::onExcludeEmptyFoldersChange,
+                    )
+                }
+
                 // Include globs
                 OutlinedTextField(
                     value = state.includeGlobsText,

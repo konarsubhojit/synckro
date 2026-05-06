@@ -46,6 +46,13 @@ data class SyncPairEntity(
      * sync modes. Null disables automatic deletion. See [SyncPair.retentionDays].
      */
     val retentionDays: Int? = null,
+    /** When true, only root-level files are synced; nested sub-directories are ignored. */
+    val excludeSubfolders: Boolean = false,
+    /**
+     * When true, empty directories are excluded from the sync scope.
+     * See [SyncPair.excludeEmptyFolders] for the full rationale.
+     */
+    val excludeEmptyFolders: Boolean = false,
 )
 
 @Entity(

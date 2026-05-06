@@ -131,6 +131,8 @@ private fun SyncPairEntity.toDomain(needsReLink: Boolean): SyncPair =
         deltaToken = lastDeltaToken,
         lastFullScanAtMs = lastFullScanAtMs,
         retentionDays = retentionDays,
+        excludeSubfolders = excludeSubfolders,
+        excludeEmptyFolders = excludeEmptyFolders,
     )
 
 private fun SyncPair.toEntity(): SyncPairEntity =
@@ -151,4 +153,6 @@ private fun SyncPair.toEntity(): SyncPairEntity =
         lastDeltaToken = deltaToken,
         lastFullScanAtMs = lastFullScanAtMs,
         retentionDays = retentionDays,
+        excludeSubfolders = excludeSubfolders,
+        excludeEmptyFolders = excludeEmptyFolders,
     )
