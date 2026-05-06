@@ -378,6 +378,13 @@ class PairEditorViewModelTest {
     }
 
     @Test
+    fun `onRetentionDaysChange filters non-digit input`() {
+        val vm = createVm()
+        vm.onRetentionDaysChange("1a2-3")
+        assertEquals("123", vm.state.value.retentionDaysText)
+    }
+
+    @Test
     fun `edit mode loads retentionDays from existing pair`() =
         runTest {
             val existingPair =
@@ -455,6 +462,25 @@ class PairEditorViewModelTest {
             advanceUntilIdle()
 
             assertNull(savedPair?.retentionDays)
+        }
+
+    @Test
+    fun `save rejects retentionDays above maximum`() =
+        runTest {
+            coEvery { mockRepo.upsert(any()) } returns 1L
+
+            val vm = createVmWithFolder()
+            vm.onDisplayNameChange("Pair")
+            vm.onRetentionDaysChange((PairEditorViewModel.MAX_RETENTION_DAYS + 1).toString())
+            advanceUntilIdle()
+
+            var savedId: Long? = null
+            vm.save { savedId = it }
+            advanceUntilIdle()
+
+            assertNull(savedId)
+            assertTrue(vm.state.value.saveError?.isNotEmpty() == true)
+            coVerify(exactly = 0) { mockRepo.upsert(any()) }
         }
 
     // -------------------------------------------------------------------------

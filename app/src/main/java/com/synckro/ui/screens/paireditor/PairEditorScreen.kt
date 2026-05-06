@@ -248,10 +248,14 @@ fun PairEditorScreen(
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                 singleLine = true,
                                 isError = state.retentionDaysText.isNotBlank() &&
-                                    state.retentionDaysText.toIntOrNull().let { it == null || it < 0 || it > 36500 },
+                                    state.retentionDaysText
+                                        .toIntOrNull()
+                                        .let { it == null || it !in 0..PairEditorViewModel.MAX_RETENTION_DAYS },
                                 supportingText = {
                                     if (state.retentionDaysText.isNotBlank() &&
-                                        state.retentionDaysText.toIntOrNull().let { it == null || it < 0 || it > 36500 }
+                                        state.retentionDaysText
+                                            .toIntOrNull()
+                                            .let { it == null || it !in 0..PairEditorViewModel.MAX_RETENTION_DAYS }
                                     ) {
                                         Text(stringResource(R.string.pair_editor_retention_days_error))
                                     }

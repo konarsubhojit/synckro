@@ -240,7 +240,7 @@ class PairEditorViewModel
 
         fun onExcludeGlobsChange(value: String) = _state.update { it.copy(excludeGlobsText = value) }
 
-        fun onRetentionDaysChange(value: String) = _state.update { it.copy(retentionDaysText = value) }
+        fun onRetentionDaysChange(value: String) = _state.update { it.copy(retentionDaysText = value.filter { ch -> ch.isDigit() }) }
 
         /**
          * Validates and persists the current form state. Calls [onSaved] with the
@@ -254,6 +254,12 @@ class PairEditorViewModel
             }
             if (s.localTreeUri.isBlank()) {
                 _state.update { it.copy(saveError = strings.getString(R.string.pair_editor_error_folder_required)) }
+                return
+            }
+            val retentionDaysText = s.retentionDaysText.trim()
+            val retentionDays = retentionDaysText.takeIf { it.isNotBlank() }?.toIntOrNull()
+            if (retentionDaysText.isNotBlank() && (retentionDays == null || retentionDays !in 0..MAX_RETENTION_DAYS)) {
+                _state.update { it.copy(saveError = strings.getString(R.string.pair_editor_retention_days_error)) }
                 return
             }
             _state.update { it.copy(isSaving = true, saveError = null) }
@@ -284,7 +290,7 @@ class PairEditorViewModel
                                     .split('\n')
                                     .map { it.trim() }
                                     .filter { it.isNotBlank() },
-                            retentionDays = s.retentionDaysText.trim().toIntOrNull(),
+                            retentionDays = retentionDays,
                         )
                     val savedId = syncPairRepository.upsert(pair)
                     // Schedule or cancel depending on autoSyncEnabled.
@@ -336,5 +342,8 @@ class PairEditorViewModel
              * [KEY_REMOTE_FOLDER_ID].
              */
             const val KEY_REMOTE_FOLDER_NAME = "remotePickedFolderName"
+
+            /** Maximum retention period accepted by the pair editor. */
+            const val MAX_RETENTION_DAYS = 36500
         }
     }
