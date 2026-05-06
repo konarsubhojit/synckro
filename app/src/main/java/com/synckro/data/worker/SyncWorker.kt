@@ -1,6 +1,7 @@
 package com.synckro.data.worker
 
 import android.app.Notification
+import android.app.NotificationManager
 import android.content.Context
 import android.content.pm.ServiceInfo
 import android.os.Build
@@ -23,6 +24,7 @@ import com.synckro.domain.model.SyncPair
 import com.synckro.domain.provider.CloudProviderException
 import com.synckro.domain.sync.CloudExceptionMapper
 import com.synckro.domain.sync.SyncEngine
+import com.synckro.domain.sync.TransferProgress
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import kotlinx.coroutines.CancellationException
@@ -31,16 +33,20 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Background worker that runs a single sync pass for one [SyncPair].
  * Scheduled by [SyncScheduler]; can also be enqueued manually ("Sync now").
  *
- * If the sync takes longer than [FOREGROUND_PROMOTE_DELAY_MS] (30 s), the
- * worker promotes itself to a foreground service with a progress notification
- * so that the transfer survives app death and Doze mode. Once the engine is
- * wired to report progress, the 10-MiB threshold can be added here by calling
- * [setForeground] from a progress callback.
+ * If the sync takes longer than [FOREGROUND_PROMOTE_DELAY_MS] (30 s) **or** if
+ * the total transfer size reported by the engine reaches [LARGE_TRANSFER_THRESHOLD_BYTES]
+ * (10 MiB), the worker promotes itself to a foreground service with a progress
+ * notification so that the transfer survives app death and Doze mode.
+ *
+ * When the engine reports a known total byte count the notification shows a
+ * determinate progress bar; otherwise it falls back to a file-count-based bar,
+ * and finally to an indeterminate spinner when no sizes are available at all.
  */
 @HiltWorker
 class SyncWorker
@@ -128,24 +134,89 @@ class SyncWorker
                 "Sync started for \"${pair.displayName}\" (attempt ${runAttemptCount + 1})",
             )
 
+            val notificationId = NOTIFICATION_ID_BASE + (pairId and 0xFFFFL).toInt()
+            val notificationManager =
+                applicationContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+
             return coroutineScope {
+                val promotedToForeground = AtomicBoolean(false)
+                val foregroundPromotionInFlight = AtomicBoolean(false)
+
+                suspend fun tryPromoteToForeground(
+                    progress: TransferProgress? = null,
+                    logMessage: () -> Unit,
+                    failureMessage: String,
+                ): Boolean {
+                    if (promotedToForeground.get()) return true
+                    while (!foregroundPromotionInFlight.compareAndSet(false, true)) {
+                        if (promotedToForeground.get()) return true
+                        delay(50L)
+                    }
+                    return try {
+                        logMessage()
+                        setForeground(buildForegroundInfo(pairId, pair.displayName, progress))
+                        promotedToForeground.set(true)
+                        true
+                    } catch (c: CancellationException) {
+                        throw c
+                    } catch (e: Exception) {
+                        Timber.w(e, failureMessage, pairId)
+                        false
+                    } finally {
+                        foregroundPromotionInFlight.set(false)
+                    }
+                }
+
                 // Promote to a foreground service if the sync takes longer than the threshold.
                 // This keeps the transfer alive when the app is killed and prevents Doze
                 // from deferring the worker on API 31+.
                 val foregroundJob =
                     launch {
                         delay(FOREGROUND_PROMOTE_DELAY_MS)
-                        Timber.i("SyncWorker: promoting pair %d to foreground service after %d ms.", pairId, FOREGROUND_PROMOTE_DELAY_MS)
-                        try {
-                            setForeground(buildForegroundInfo(pairId, pair.displayName))
-                        } catch (e: Exception) {
-                            Timber.w(e, "SyncWorker: could not promote pair %d to foreground.", pairId)
+                        tryPromoteToForeground(
+                            logMessage = {
+                                Timber.i(
+                                    "SyncWorker: promoting pair %d to foreground service after %d ms.",
+                                    pairId,
+                                    FOREGROUND_PROMOTE_DELAY_MS,
+                                )
+                            },
+                            failureMessage = "SyncWorker: could not promote pair %d to foreground.",
+                        )
+                    }
+
+                // Progress callback forwarded from SyncEngine → SyncOpApplier.
+                // Handles two concerns:
+                //  1. Early foreground promotion for large transfers (≥ LARGE_TRANSFER_THRESHOLD_BYTES).
+                //  2. Updating the progress notification once the worker is in foreground.
+                val onSyncProgress: suspend (TransferProgress) -> Unit = { progress ->
+                    if (!promotedToForeground.get() && progress.totalBytes >= LARGE_TRANSFER_THRESHOLD_BYTES) {
+                        if (tryPromoteToForeground(
+                                progress = progress,
+                                logMessage = {
+                                    Timber.i(
+                                        "SyncWorker: early foreground promotion for pair %d (%d bytes total).",
+                                        pairId,
+                                        progress.totalBytes,
+                                    )
+                                },
+                                failureMessage = "SyncWorker: could not early-promote pair %d to foreground.",
+                            )
+                        ) {
+                            foregroundJob.cancel()
                         }
                     }
+                    if (promotedToForeground.get()) {
+                        notificationManager.notify(
+                            notificationId,
+                            buildProgressNotification(pair.displayName, progress),
+                        )
+                    }
+                }
 
                 val workerResult =
                     try {
-                        when (val r = engine.runOnce(pair)) {
+                        when (val r = engine.runOnce(pair, onSyncProgress)) {
                             is SyncEngine.Result.Success -> {
                                 syncPairDao.updateLastSyncResult(pairId, System.currentTimeMillis(), RESULT_SUCCESS)
                                 syncEventRepository.log(
@@ -240,8 +311,9 @@ class SyncWorker
         private fun buildForegroundInfo(
             pairId: Long,
             displayName: String,
+            progress: TransferProgress? = null,
         ): ForegroundInfo {
-            val notification = buildProgressNotification(displayName)
+            val notification = buildProgressNotification(displayName, progress)
             // Clamp pairId into Int range for the notification ID. We keep the lower
             // 16 bits (0–65535) so that the resulting Int is always positive and small
             // enough to avoid wrapping. The NOTIFICATION_ID_BASE offset prevents
@@ -254,17 +326,51 @@ class SyncWorker
             }
         }
 
-        private fun buildProgressNotification(displayName: String): Notification =
-            NotificationCompat
+        private fun buildProgressNotification(
+            displayName: String,
+            progress: TransferProgress? = null,
+        ): Notification {
+            val (progressMax, progressCurrent, indeterminate) =
+                when {
+                    progress != null && progress.totalBytes > 0L -> {
+                        // Scale to 0..1000 so that byte counts don't overflow Int and
+                        // the bar still advances smoothly for large files.
+                        val max = 1_000
+                        val current = scaleByteProgress(progress.bytesTransferred, progress.totalBytes, max)
+                        Triple(max, current, false)
+                    }
+                    progress != null && progress.totalFiles > 0 -> {
+                        Triple(
+                            progress.totalFiles,
+                            progress.filesCompleted.coerceIn(0, progress.totalFiles),
+                            false,
+                        )
+                    }
+                    else -> Triple(0, 0, true)
+                }
+            return NotificationCompat
                 .Builder(applicationContext, SYNC_CHANNEL_ID)
                 .setSmallIcon(android.R.drawable.stat_sys_upload)
                 .setContentTitle(
                     applicationContext.getString(R.string.sync_notification_title, displayName),
                 ).setContentText(applicationContext.getString(R.string.sync_notification_content))
-                .setProgress(0, 0, true)
+                .setProgress(progressMax, progressCurrent, indeterminate)
                 .setOngoing(true)
                 .setSilent(true)
                 .build()
+        }
+
+        private fun scaleByteProgress(
+            bytesTransferred: Long,
+            totalBytes: Long,
+            max: Int,
+        ): Int {
+            if (totalBytes <= 0L || max <= 0) return 0
+            val clampedBytes = bytesTransferred.coerceIn(0L, totalBytes)
+            return ((clampedBytes.toDouble() / totalBytes.toDouble()) * max)
+                .toInt()
+                .coerceIn(0, max)
+        }
 
         companion object {
             const val KEY_PAIR_ID = "pair_id"
@@ -274,6 +380,13 @@ class SyncWorker
 
             /** Delay before promoting to a foreground service: 30 seconds. */
             const val FOREGROUND_PROMOTE_DELAY_MS = 30_000L
+
+            /**
+             * Byte threshold above which a sync is considered a "large transfer".
+             * When the engine reports a total transfer size at or above this value the worker
+             * promotes to a foreground service immediately (before the 30-second delay).
+             */
+            const val LARGE_TRANSFER_THRESHOLD_BYTES = 10L * 1024 * 1024 // 10 MiB
 
             /** Base notification ID to avoid collisions with other app notifications. */
             private const val NOTIFICATION_ID_BASE = 1_000
