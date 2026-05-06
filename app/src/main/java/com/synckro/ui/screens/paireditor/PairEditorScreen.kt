@@ -22,6 +22,7 @@ import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedCard
@@ -31,6 +32,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -89,6 +91,32 @@ fun PairEditorScreen(
         val err = state.saveError ?: return@LaunchedEffect
         snackbarHostState.showSnackbar(err)
         viewModel.clearSaveError()
+    }
+
+    // Confirmation dialog shown when the user selects a destructive sync direction.
+    val pendingDir = state.pendingDestructiveDirection
+    if (pendingDir != null) {
+        val bodyText =
+            if (pendingDir == SyncDirection.UPLOAD_AND_DELETE_LOCAL_AFTER_N_DAYS) {
+                stringResource(R.string.pair_editor_destructive_confirm_upload_delete)
+            } else {
+                stringResource(R.string.pair_editor_destructive_confirm_download_delete)
+            }
+        AlertDialog(
+            onDismissRequest = { viewModel.dismissDestructiveDirection() },
+            title = { Text(stringResource(R.string.pair_editor_destructive_mode_title)) },
+            text = { Text(bodyText) },
+            confirmButton = {
+                TextButton(onClick = { viewModel.confirmDestructiveDirection() }) {
+                    Text(stringResource(R.string.pair_editor_destructive_confirm))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.dismissDestructiveDirection() }) {
+                    Text(stringResource(R.string.pair_editor_destructive_cancel))
+                }
+            },
+        )
     }
 
     Scaffold(
@@ -215,7 +243,7 @@ fun PairEditorScreen(
                 // Sync direction selector
                 DirectionDropdown(
                     selected = state.direction,
-                    onSelect = viewModel::onDirectionChange,
+                    onSelect = viewModel::onDirectionChangeRequested,
                     modifier = Modifier.fillMaxWidth(),
                 )
 

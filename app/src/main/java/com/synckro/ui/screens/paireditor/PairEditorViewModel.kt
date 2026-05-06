@@ -10,6 +10,7 @@ import com.synckro.domain.model.CloudProviderType
 import com.synckro.domain.model.ConflictPolicy
 import com.synckro.domain.model.SyncDirection
 import com.synckro.domain.model.SyncPair
+import com.synckro.domain.model.isDestructive
 import com.synckro.util.StringProvider
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -99,6 +100,13 @@ class PairEditorViewModel
             val retentionDaysText: String = "",
             val isSaving: Boolean = false,
             val saveError: String? = null,
+            /**
+             * Non-null when the user has selected a destructive sync direction that
+             * requires an explicit confirmation before being applied. The screen
+             * should display a warning dialog and call [confirmDestructiveDirection]
+             * or [dismissDestructiveDirection] based on the user's choice.
+             */
+            val pendingDestructiveDirection: SyncDirection? = null,
         ) {
             /** Parses [customIntervalText] as a non-negative Long, or 0 if the text is blank/invalid. */
             private val parsedCustomInterval: Long
@@ -224,7 +232,33 @@ class PairEditorViewModel
 
         fun onConflictPolicyChange(value: ConflictPolicy) = _state.update { it.copy(conflictPolicy = value) }
 
-        fun onDirectionChange(value: SyncDirection) = _state.update { it.copy(direction = value) }
+        /**
+         * Called when the user selects a sync direction in the pair editor. For non-destructive
+         * directions the change is applied immediately. For directions that can automatically delete
+         * files (see [SyncDirection.isDestructive]) the selection is held in
+         * [UiState.pendingDestructiveDirection] so the screen can show a confirmation dialog before
+         * the direction is committed.
+         */
+        fun onDirectionChangeRequested(value: SyncDirection) {
+            if (value.isDestructive) {
+                _state.update { it.copy(pendingDestructiveDirection = value) }
+            } else {
+                _state.update { it.copy(direction = value, pendingDestructiveDirection = null) }
+            }
+        }
+
+        /** Commits the pending destructive direction after the user confirmed the warning dialog. */
+        fun confirmDestructiveDirection() {
+            _state.update { s ->
+                s.copy(
+                    direction = s.pendingDestructiveDirection ?: s.direction,
+                    pendingDestructiveDirection = null,
+                )
+            }
+        }
+
+        /** Discards the pending destructive direction when the user dismisses the warning dialog. */
+        fun dismissDestructiveDirection() = _state.update { it.copy(pendingDestructiveDirection = null) }
 
         fun onWifiOnlyChange(value: Boolean) = _state.update { it.copy(wifiOnly = value) }
 
