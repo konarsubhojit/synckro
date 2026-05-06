@@ -21,6 +21,9 @@ data class SyncPair(
     val excludeGlobs: List<String> = emptyList(),
     val wifiOnly: Boolean = true,
     val requiresCharging: Boolean = false,
+    /** Whether automatic periodic sync is enabled for this pair. When false the WorkManager
+     *  periodic job is cancelled; manual "Sync now" remains available regardless. */
+    val autoSyncEnabled: Boolean = true,
     /** Desired periodic sync interval in minutes (minimum 15, WorkManager floor). */
     val scheduleIntervalMinutes: Long = 60,
     /**

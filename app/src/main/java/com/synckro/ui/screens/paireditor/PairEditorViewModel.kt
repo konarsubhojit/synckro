@@ -21,6 +21,28 @@ import timber.log.Timber
 import javax.inject.Inject
 
 /**
+ * Friendly schedule preset options shown in the pair editor.
+ * [CUSTOM] falls back to the user's manually entered interval.
+ */
+enum class SyncSchedulePreset(
+    /** Interval in minutes for this preset (0 for CUSTOM – interval is user-supplied). */
+    val minutes: Long,
+) {
+    FIFTEEN_MINUTES(15L),
+    THIRTY_MINUTES(30L),
+    HOURLY(60L),
+    DAILY(1440L),
+    CUSTOM(0L),
+    ;
+
+    companion object {
+        /** Maps a stored interval to the matching named preset, or [CUSTOM] if none matches exactly. */
+        fun fromMinutes(minutes: Long): SyncSchedulePreset =
+            entries.firstOrNull { it != CUSTOM && it.minutes == minutes } ?: CUSTOM
+    }
+}
+
+/**
  * ViewModel for [PairEditorScreen]. Supports both create (pairId == 0) and edit
  * (pairId > 0) modes. The local folder URI result from [PickLocalFolderScreen] is
  * delivered by the navigation layer (which observes the back-stack entry's own
@@ -58,14 +80,39 @@ class PairEditorViewModel
             val direction: SyncDirection = SyncDirection.BIDIRECTIONAL,
             val wifiOnly: Boolean = true,
             val requiresCharging: Boolean = false,
-            val scheduleIntervalMinutes: Long = 60L,
+            /** Whether periodic auto-sync is enabled for this pair. */
+            val autoSyncEnabled: Boolean = true,
+            /** Currently selected schedule preset. */
+            val schedulePreset: SyncSchedulePreset = SyncSchedulePreset.HOURLY,
+            /** Raw text for the custom interval field; only used when [schedulePreset] is [SyncSchedulePreset.CUSTOM]. */
+            val customIntervalText: String = "60",
             /** Newline-separated glob patterns. */
             val includeGlobsText: String = "",
             /** Newline-separated glob patterns. */
             val excludeGlobsText: String = "",
             val isSaving: Boolean = false,
             val saveError: String? = null,
-        )
+        ) {
+            /** Parses [customIntervalText] as a non-negative Long, or 0 if the text is blank/invalid. */
+            private val parsedCustomInterval: Long
+                get() = customIntervalText.trim().toLongOrNull() ?: 0L
+
+            /** Effective sync interval in minutes derived from the active preset or custom value.
+             *  Custom text that is blank or non-numeric is treated as 0 and clamped here to the
+             *  15-minute WorkManager floor. */
+            val scheduleIntervalMinutes: Long
+                get() {
+                    if (schedulePreset != SyncSchedulePreset.CUSTOM) return schedulePreset.minutes
+                    return parsedCustomInterval.coerceAtLeast(15L)
+                }
+
+            /** True when the custom interval text is non-empty but does not parse as a valid long ≥ 15. */
+            val customIntervalError: Boolean
+                get() =
+                    schedulePreset == SyncSchedulePreset.CUSTOM &&
+                        customIntervalText.isNotEmpty() &&
+                        parsedCustomInterval < 15L
+        }
 
         private val _state = MutableStateFlow(UiState())
         val state: StateFlow<UiState> = _state.asStateFlow()
@@ -103,6 +150,7 @@ class PairEditorViewModel
             viewModelScope.launch {
                 val entity = syncPairRepository.getById(id)
                 if (entity != null) {
+                    val preset = SyncSchedulePreset.fromMinutes(entity.scheduleIntervalMinutes)
                     _state.update {
                         it.copy(
                             isLoading = false,
@@ -117,7 +165,9 @@ class PairEditorViewModel
                             direction = entity.direction,
                             wifiOnly = entity.wifiOnly,
                             requiresCharging = entity.requiresCharging,
-                            scheduleIntervalMinutes = entity.scheduleIntervalMinutes,
+                            autoSyncEnabled = entity.autoSyncEnabled,
+                            schedulePreset = preset,
+                            customIntervalText = entity.scheduleIntervalMinutes.toString(),
                             includeGlobsText = entity.includeGlobs.joinToString("\n"),
                             excludeGlobsText = entity.excludeGlobs.joinToString("\n"),
                         )
@@ -172,7 +222,11 @@ class PairEditorViewModel
 
         fun onRequiresChargingChange(value: Boolean) = _state.update { it.copy(requiresCharging = value) }
 
-        fun onScheduleIntervalChange(value: Long) = _state.update { it.copy(scheduleIntervalMinutes = value) }
+        fun onAutoSyncEnabledChange(value: Boolean) = _state.update { it.copy(autoSyncEnabled = value) }
+
+        fun onSchedulePresetChange(value: SyncSchedulePreset) = _state.update { it.copy(schedulePreset = value) }
+
+        fun onCustomIntervalChange(value: String) = _state.update { it.copy(customIntervalText = value) }
 
         fun onIncludeGlobsChange(value: String) = _state.update { it.copy(includeGlobsText = value) }
 
@@ -206,9 +260,10 @@ class PairEditorViewModel
                             direction = s.direction,
                             wifiOnly = s.wifiOnly,
                             requiresCharging = s.requiresCharging,
+                            autoSyncEnabled = s.autoSyncEnabled,
                             // Enforce WorkManager's 15-minute floor here so the persisted value
                             // always matches what the scheduler will actually use.
-                            scheduleIntervalMinutes = s.scheduleIntervalMinutes.coerceAtLeast(15L),
+                            scheduleIntervalMinutes = s.scheduleIntervalMinutes,
                             includeGlobs =
                                 s.includeGlobsText
                                     .split('\n')
@@ -221,7 +276,8 @@ class PairEditorViewModel
                                     .filter { it.isNotBlank() },
                         )
                     val savedId = syncPairRepository.upsert(pair)
-                    syncScheduler.schedulePeriodic(pair.copy(id = savedId), pair.scheduleIntervalMinutes)
+                    // Schedule or cancel depending on autoSyncEnabled.
+                    syncScheduler.scheduleOrCancel(pair.copy(id = savedId))
                     savedId
                 }.onSuccess { savedId ->
                     _state.update { it.copy(isSaving = false) }

@@ -522,6 +522,155 @@ class LocalFsEnumeratorTest {
         }
 
     // -------------------------------------------------------------------------
+    // Include globs
+    // -------------------------------------------------------------------------
+
+    @Test
+    fun `include glob keeps only matching files`() =
+        runTest {
+            val pairId = insertPair()
+
+            val fakeTree =
+                mapOf(
+                    "root" to
+                        listOf(
+                            file("photo.jpg", size = 100),
+                            file("document.pdf", size = 200),
+                            file("notes.txt", size = 300),
+                        ),
+                )
+            val result =
+                enumeratorWith(fakeTree)
+                    .enumerate(pairId, treeUri, includeGlobs = listOf("*.jpg"))
+
+            assertEquals(1, result.snapshot.size)
+            assertEquals("photo.jpg", result.snapshot.single().relativePath)
+        }
+
+    @Test
+    fun `empty include glob keeps all files`() =
+        runTest {
+            val pairId = insertPair()
+
+            val fakeTree =
+                mapOf(
+                    "root" to
+                        listOf(
+                            file("photo.jpg", size = 100),
+                            file("document.pdf", size = 200),
+                            file("notes.txt", size = 300),
+                        ),
+                )
+            val result =
+                enumeratorWith(fakeTree)
+                    .enumerate(pairId, treeUri, includeGlobs = emptyList())
+
+            assertEquals(3, result.snapshot.size)
+        }
+
+    @Test
+    fun `exclude glob takes precedence over include glob`() =
+        runTest {
+            val pairId = insertPair()
+
+            val fakeTree =
+                mapOf(
+                    "root" to
+                        listOf(
+                            file("image.jpg", size = 100),
+                            file("thumb.jpg", size = 50),
+                            file("notes.txt", size = 300),
+                        ),
+                )
+            // Include all .jpg files, but exclude thumb.jpg specifically.
+            val result =
+                enumeratorWith(fakeTree)
+                    .enumerate(
+                        pairId,
+                        treeUri,
+                        includeGlobs = listOf("*.jpg"),
+                        ignoreGlobs = listOf("thumb.jpg"),
+                    )
+
+            assertEquals(1, result.snapshot.size)
+            assertEquals("image.jpg", result.snapshot.single().relativePath)
+        }
+
+    @Test
+    fun `include glob with double-star matches across directories`() =
+        runTest {
+            val pairId = insertPair()
+
+            val fakeTree =
+                mapOf(
+                    "root" to listOf(dir("src"), dir("docs"), file("readme.md")),
+                    "src" to listOf(file("Main.kt", size = 200), file("build.log", size = 50)),
+                    "docs" to listOf(file("guide.md", size = 300)),
+                )
+            val result =
+                enumeratorWith(fakeTree)
+                    .enumerate(pairId, treeUri, includeGlobs = listOf("**/*.kt"))
+
+            assertEquals(1, result.snapshot.size)
+            assertEquals("src/Main.kt", result.snapshot.single().relativePath)
+        }
+
+    @Test
+    fun `non-included file previously in local_index appears in deleted set`() =
+        runTest {
+            val pairId = insertPair()
+
+            // Seed an entry that will now be excluded by the include filter.
+            localIndexDao.upsert(
+                LocalIndexEntity(pairId, "archive.zip", sizeBytes = 500L, mtimeMs = 100L),
+            )
+
+            val fakeTree =
+                mapOf(
+                    "root" to
+                        listOf(
+                            file("archive.zip", size = 500, lastModifiedMs = 100),
+                            file("app.kt", size = 200, lastModifiedMs = 200),
+                        ),
+                )
+            val result =
+                enumeratorWith(fakeTree)
+                    .enumerate(pairId, treeUri, includeGlobs = listOf("*.kt"))
+
+            assertTrue("archive.zip must appear in deleted set", "archive.zip" in result.deleted)
+            assertEquals(1, result.snapshot.size)
+            assertEquals("app.kt", result.snapshot.single().relativePath)
+        }
+
+    @Test
+    fun `all invalid include patterns exclude all files (fail closed)`() =
+        runTest {
+            val pairId = insertPair()
+
+            val fakeTree =
+                mapOf(
+                    "root" to
+                        listOf(
+                            file("main.kt", size = 100),
+                            file("readme.md", size = 200),
+                        ),
+                )
+            // "[]" produces a regex character class with no content, which throws
+            // PatternSyntaxException → mapNotNull drops it → compiledIncludeGlobs is empty.
+            // The include filter is still active (includeGlobs.isNotEmpty()), so all files
+            // are excluded (fail-closed) rather than all files passing.
+            val result =
+                enumeratorWith(fakeTree)
+                    .enumerate(pairId, treeUri, includeGlobs = listOf("[]"))
+
+            assertEquals(
+                "All files must be excluded when every include pattern is invalid",
+                0,
+                result.snapshot.size,
+            )
+        }
+
+    // -------------------------------------------------------------------------
     // Nested directories
     // -------------------------------------------------------------------------
 

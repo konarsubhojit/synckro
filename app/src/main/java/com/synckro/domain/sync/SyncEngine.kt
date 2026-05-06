@@ -110,17 +110,20 @@ class SyncEngine(
      * all other providers. [runReal] requires the optional constructor dependencies
      * to be provided; if any are absent it returns [Result.Terminal].
      *
-     * @param pair The SyncPair describing the local and remote endpoints.
+     * @param pair       The SyncPair describing the local and remote endpoints.
+     * @param onProgress Called after each file operation with a [TransferProgress] snapshot.
+     *                   Only fires during [runReal]; no-op for [CloudProviderType.FAKE].
+     *                   Defaults to a no-op so existing callers are unaffected.
      * @return A [Result] describing the sync outcome.
      */
-    suspend fun runOnce(pair: SyncPair): Result {
+    suspend fun runOnce(pair: SyncPair, onProgress: suspend (TransferProgress) -> Unit = {}): Result {
         val provider =
             providers[pair.provider]
                 ?: return Result.Terminal("Unsupported provider: ${pair.provider}")
         if (pair.provider == CloudProviderType.FAKE) {
             return runFake(pair, provider as FakeCloudProvider)
         }
-        return runReal(pair, provider)
+        return runReal(pair, provider, onProgress)
     }
 
     // -------------------------------------------------------------------------
@@ -143,7 +146,7 @@ class SyncEngine(
      * Auth exceptions are converted to [Result.Terminal]; network/rate-limit
      * errors to [Result.Retriable]; [CancellationException] always propagates.
      */
-    private suspend fun runReal(pair: SyncPair, provider: CloudProvider): Result {
+    private suspend fun runReal(pair: SyncPair, provider: CloudProvider, onProgress: suspend (TransferProgress) -> Unit): Result {
         val fsEnumerator =
             localFsEnumerator
                 ?: return Result.Terminal("SyncEngine: LocalFsEnumerator not configured for ${pair.provider}")
@@ -164,7 +167,7 @@ class SyncEngine(
                 ?: return Result.Terminal("SyncEngine: LocalFileAccess not configured")
 
         return try {
-            runRealImpl(pair, provider, fsEnumerator, remoteEnumerator, pairDao, indexDao, evtRepo, fileAccessFactory)
+            runRealImpl(pair, provider, fsEnumerator, remoteEnumerator, pairDao, indexDao, evtRepo, fileAccessFactory, onProgress)
         } catch (c: CancellationException) {
             // Cooperative cancellation: do NOT write partial state; just rethrow.
             throw c
@@ -182,6 +185,7 @@ class SyncEngine(
         indexDao: LocalIndexDao,
         evtRepo: SyncEventRepository,
         fileAccessFactory: (Uri) -> LocalFileAccess,
+        onProgress: suspend (TransferProgress) -> Unit,
     ): Result {
         // -----------------------------------------------------------------
         // Step 0 – Snapshot the index BEFORE local enumeration.
@@ -223,6 +227,7 @@ class SyncEngine(
             fsEnumerator.enumerate(
                 pairId = pair.id,
                 treeUri = treeUri,
+                includeGlobs = pair.includeGlobs,
                 ignoreGlobs = pair.excludeGlobs,
             )
 
@@ -246,7 +251,28 @@ class SyncEngine(
         //   to FileIndexEntry. Using only synced entries ensures that new
         //   local files (in index post-scan but not yet uploaded) do not
         //   appear as "in index but not in remote" → DeleteLocal.
+        //
+        // The same include/exclude glob filter that LocalFsEnumerator applies
+        // to the local snapshot is mirrored here.  Without this, a previously-
+        // synced path that falls outside the configured globs (e.g. because the
+        // user added an includeGlobs pattern after the initial sync) would still
+        // appear in syntheticRemote and fileIndexEntries.  SyncDiffer would then
+        // interpret "in remote + in lastIndex, absent from local" as a local
+        // deletion and emit a DeleteRemote — causing data loss from what is
+        // effectively a configuration change.
         // -----------------------------------------------------------------
+        val scopeIncludeGlobs =
+            pair.includeGlobs.mapNotNull { runCatching { LocalFsEnumerator.globToRegex(it) }.getOrNull() }
+        val scopeExcludeGlobs =
+            pair.excludeGlobs.mapNotNull { runCatching { LocalFsEnumerator.globToRegex(it) }.getOrNull() }
+        val includeFilterActive = pair.includeGlobs.isNotEmpty()
+
+        fun isInScope(path: String): Boolean {
+            if (scopeExcludeGlobs.any { it.matches(path) }) return false
+            if (includeFilterActive && scopeIncludeGlobs.none { it.matches(path) }) return false
+            return true
+        }
+
         val localSnapshots =
             localEnum.snapshot.map { entry ->
                 FileSnapshot(
@@ -261,6 +287,7 @@ class SyncEngine(
         // (pre-scan index rows that have remote metadata), then apply the delta.
         val syntheticRemote = mutableMapOf<String, FileSnapshot>()
         for (idx in preScanIndex) {
+            if (!isInScope(idx.relativePath)) continue
             val remoteSize = idx.remoteSizeBytes ?: continue
             val remoteMtime = idx.remoteMtimeMs ?: continue
             syntheticRemote[idx.relativePath] =
@@ -281,6 +308,7 @@ class SyncEngine(
         // synthetic remote and add the new one so SyncDiffer sees a delete of
         // the old path and an add of the new one.
         for (change in remoteSnapshot.changes) {
+            if (!isInScope(change.relativePath)) continue
             when (change.type) {
                 RemoteChangeType.ADD, RemoteChangeType.MODIFY -> {
                     // Detect rename/move: look up the existing path by stable remote ID.
@@ -315,11 +343,12 @@ class SyncEngine(
             }
         }
 
-        // Use only pre-scan synced entries (remoteId != null) as the SyncDiffer
-        // baseline — entries without remoteId are not yet synced to remote.
+        // Use only pre-scan synced entries (remoteId != null, in scope) as the
+        // SyncDiffer baseline — entries without remoteId are not yet synced to
+        // remote; out-of-scope entries are excluded to match the local snapshot.
         val fileIndexEntries =
             preScanIndex
-                .filter { it.remoteId != null }
+                .filter { it.remoteId != null && isInScope(it.relativePath) }
                 .map { it.toFileIndexEntry() }
 
         // -----------------------------------------------------------------
@@ -397,6 +426,7 @@ class SyncEngine(
                 pair = pair,
                 remoteFilesByPath = remoteFilesByPath,
                 localIndexByPath = preScanIndexByPath,
+                onProgress = onProgress,
             )
 
         // -----------------------------------------------------------------

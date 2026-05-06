@@ -74,7 +74,7 @@ class EnumConverters {
 
 @Database(
     entities = [AccountEntity::class, SyncPairEntity::class, FileIndexEntity::class, SyncEventEntity::class, ConflictRecordEntity::class, LocalIndexEntity::class],
-    version = 8,
+    version = 9,
     exportSchema = true,
 )
 @TypeConverters(EnumConverters::class)
@@ -261,6 +261,19 @@ abstract class SynckroDatabase : RoomDatabase() {
                     db.execSQL("ALTER TABLE `local_index` ADD COLUMN `remoteSizeBytes` INTEGER")
                     db.execSQL("ALTER TABLE `local_index` ADD COLUMN `remoteMtimeMs` INTEGER")
                     db.execSQL("ALTER TABLE `local_index` ADD COLUMN `remoteEtag` TEXT")
+                }
+            }
+        /**
+         * Migrates the database from version 8 to 9:
+         * - Adds `autoSyncEnabled` column to `sync_pair` (default 1 = enabled).
+         *   Existing pairs default to auto-sync enabled so their schedules keep running.
+         */
+        val MIGRATION_8_9 =
+            object : Migration(8, 9) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL(
+                        "ALTER TABLE `sync_pair` ADD COLUMN `autoSyncEnabled` INTEGER NOT NULL DEFAULT 1",
+                    )
                 }
             }
     }
