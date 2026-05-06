@@ -19,6 +19,7 @@ import com.synckro.data.scanner.DocumentChildrenQuery
 import com.synckro.data.scanner.RawDocChild
 import com.synckro.domain.model.CloudProviderType
 import com.synckro.domain.model.ConflictPolicy
+import com.synckro.domain.model.ConflictRecord
 import com.synckro.domain.model.SyncDirection
 import com.synckro.domain.model.SyncPair
 import com.synckro.domain.provider.CloudProviderException
@@ -424,14 +425,13 @@ class SyncEngineRealIntegrationTest {
         }
 
     // -------------------------------------------------------------------------
-    // Download from remote
+    // Download from remote — initial full scan for new pairs
     // -------------------------------------------------------------------------
 
     @Test
-    fun `runReal downloads new remote file on first sync`() =
+    fun `runReal on new pair downloads existing remote files on first sync`() =
         runTest {
-            // Seed a remote file via fakeProvider, then sync with a deltaToken > 0
-            // so the change appears in the enumerated delta.
+            // Seed a remote file that already exists before the pair was created.
             val fileContent = "remote content".toByteArray()
             fakeProvider.uploadNew(
                 parentId = "remote-root",
@@ -444,18 +444,153 @@ class SyncEngineRealIntegrationTest {
             val pair = insertPair()
             val engine = buildEngine()
 
-            // Establish baseline (deltaToken = null → empty changes, newDeltaToken = "1")
-            val baselineResult = engine.runOnce(pair)
-            assertTrue("Baseline run should succeed", baselineResult is SyncEngine.Result.Success)
-            assertEquals(0, (baselineResult as SyncEngine.Result.Success).applied)
+            // First sync: enumerateFull() returns the existing remote file → DownloadNew.
+            val result = engine.runOnce(pair)
 
-            // Second run: upload another file so it appears in the delta
-            val deltaContent = "delta file".toByteArray()
+            assertTrue("First run should succeed", result is SyncEngine.Result.Success)
+            assertEquals(
+                "Existing remote file should be downloaded on first sync",
+                1,
+                (result as SyncEngine.Result.Success).applied,
+            )
+            assertNotNull(
+                "Downloaded file should be readable from local storage",
+                localFileAccess.openRead("remote.txt"),
+            )
+        }
+
+    @Test
+    fun `runReal on new pair with multiple existing remote files downloads all of them`() =
+        runTest {
+            // Seed several files in the remote folder before the pair is created.
+            val content1 = "alpha".toByteArray()
+            val content2 = "beta".toByteArray()
+            val content3 = "gamma".toByteArray()
+            fakeProvider.uploadNew("remote-root", "a.txt", content1.inputStream(), content1.size.toLong(), "text/plain")
+            fakeProvider.uploadNew("remote-root", "b.txt", content2.inputStream(), content2.size.toLong(), "text/plain")
+            fakeProvider.uploadNew("remote-root", "c.txt", content3.inputStream(), content3.size.toLong(), "text/plain")
+
+            val pair = insertPair()
+            val engine = buildEngine()
+
+            val result = engine.runOnce(pair)
+
+            assertTrue("First run should succeed", result is SyncEngine.Result.Success)
+            assertEquals(
+                "All three remote files should be downloaded on first sync",
+                3,
+                (result as SyncEngine.Result.Success).applied,
+            )
+            assertNotNull(localFileAccess.openRead("a.txt"))
+            assertNotNull(localFileAccess.openRead("b.txt"))
+            assertNotNull(localFileAccess.openRead("c.txt"))
+        }
+
+    @Test
+    fun `runReal on new pair with existing remote and local files syncs both directions`() =
+        runTest {
+            // Remote has "remote-only.txt"; local has "local-only.txt".
+            val remoteContent = "from cloud".toByteArray()
             fakeProvider.uploadNew(
                 parentId = "remote-root",
-                name = "delta.txt",
-                content = deltaContent.inputStream(),
-                size = deltaContent.size.toLong(),
+                name = "remote-only.txt",
+                content = remoteContent.inputStream(),
+                size = remoteContent.size.toLong(),
+                mimeType = "text/plain",
+            )
+
+            val localContent = "from device".toByteArray()
+            localFileAccess.put("local-only.txt", localContent)
+            inMemoryChildren.set(
+                "root",
+                listOf(
+                    RawDocChild(
+                        docId = "doc-local",
+                        name = "local-only.txt",
+                        mimeType = "text/plain",
+                        size = localContent.size.toLong(),
+                        lastModifiedMs = 5_000L,
+                    ),
+                ),
+            )
+
+            val pair = insertPair(direction = SyncDirection.BIDIRECTIONAL)
+            val engine = buildEngine()
+
+            val result = engine.runOnce(pair)
+
+            assertTrue("First run should succeed", result is SyncEngine.Result.Success)
+            assertEquals(
+                "Both remote-only and local-only file should be synced",
+                2,
+                (result as SyncEngine.Result.Success).applied,
+            )
+            // Remote file downloaded locally
+            assertNotNull(
+                "Remote-only file should have been downloaded",
+                localFileAccess.openRead("remote-only.txt"),
+            )
+            // Local file uploaded to remote
+            val remoteFiles = fakeProvider.list("remote-root").filter { !it.isFolder }
+            assertTrue(
+                "local-only.txt should have been uploaded to remote",
+                remoteFiles.any { it.name == "local-only.txt" },
+            )
+        }
+
+    @Test
+    fun `runReal on new pair with nested existing remote files downloads all of them`() =
+        runTest {
+            // Seed a nested structure: remote-root/docs/report.txt
+            val subFolder = fakeProvider.createFolder("remote-root", "docs")
+            val fileContent = "nested report".toByteArray()
+            fakeProvider.uploadNew(
+                parentId = subFolder.id,
+                name = "report.txt",
+                content = fileContent.inputStream(),
+                size = fileContent.size.toLong(),
+                mimeType = "text/plain",
+            )
+
+            val pair = insertPair()
+            val engine = buildEngine()
+
+            val result = engine.runOnce(pair)
+
+            assertTrue("First run should succeed", result is SyncEngine.Result.Success)
+            assertEquals(
+                "Nested remote file should be downloaded on first sync",
+                1,
+                (result as SyncEngine.Result.Success).applied,
+            )
+            assertNotNull(
+                "Nested file should be readable at its full relative path",
+                localFileAccess.openRead("docs/report.txt"),
+            )
+        }
+
+    @Test
+    fun `runReal downloads new remote file added after baseline`() =
+        runTest {
+            // Start with empty remote — first sync establishes the baseline token.
+            val pair = insertPair()
+            val engine = buildEngine()
+
+            val baselineResult = engine.runOnce(pair)
+            assertTrue("Baseline run should succeed", baselineResult is SyncEngine.Result.Success)
+            assertEquals(
+                "No files to apply in empty baseline run",
+                0,
+                (baselineResult as SyncEngine.Result.Success).applied,
+            )
+
+            // Add a new remote file AFTER the baseline token was stored.
+            val fileContent = "new remote content".toByteArray()
+            fakeProvider.uploadNew(
+                parentId = "remote-root",
+                name = "new-remote.txt",
+                content = fileContent.inputStream(),
+                size = fileContent.size.toLong(),
                 mimeType = "text/plain",
             )
 
@@ -465,7 +600,7 @@ class SyncEngineRealIntegrationTest {
 
             assertTrue("Delta run should succeed", deltaResult is SyncEngine.Result.Success)
             assertEquals(
-                "One new remote file should be downloaded",
+                "New remote file added after baseline should be downloaded",
                 1,
                 (deltaResult as SyncEngine.Result.Success).applied,
             )
@@ -1245,6 +1380,230 @@ class SyncEngineRealIntegrationTest {
         }
 
     // -------------------------------------------------------------------------
+    // KEEP_BOTH resolution: both-modified and modify-delete
+    // -------------------------------------------------------------------------
+
+    /**
+     * Both-modified conflict resolved with KEEP_BOTH:
+     * - The local file keeps the local version at the original path.
+     * - A conflict copy (with the remote version) is created locally and uploaded to remote.
+     * - The remote original is overwritten with the local version.
+     * - After resolution both versions are accessible on both sides.
+     */
+    @Test
+    fun `KEEP_BOTH resolution for both-modified conflict preserves both versions locally and remotely`() =
+        runTest {
+            val detectedAtMs = CONFLICT_DETECTED_AT_MS
+            val localContent = "local content".toByteArray()
+            val remoteContent = "remote content".toByteArray()
+
+            // Upload the remote version to fakeProvider so we have a real remoteId.
+            val remoteFile =
+                fakeProvider.uploadNew(
+                    parentId = "remote-root",
+                    name = "document.txt",
+                    content = remoteContent.inputStream(),
+                    size = remoteContent.size.toLong(),
+                    mimeType = "text/plain",
+                )
+
+            // Local file with the local version.
+            localFileAccess.put("document.txt", localContent)
+
+            // SAF tree reports the local file so the enumerator sees it.
+            inMemoryChildren.set(
+                "root",
+                listOf(
+                    RawDocChild(
+                        docId = "doc-document",
+                        name = "document.txt",
+                        mimeType = "text/plain",
+                        size = localContent.size.toLong(),
+                        lastModifiedMs = 5_000L, // matches InMemoryLocalFileAccess.nowMs
+                    ),
+                ),
+            )
+
+            val pair = insertPair(conflictPolicy = ConflictPolicy.KEEP_BOTH)
+
+            // Seed the local index with the pre-conflict state: local version at sizeBytes
+            // and the remote file's metadata so the diff sees no new changes.
+            localIndexDao.upsert(
+                LocalIndexEntity(
+                    pairId = pair.id,
+                    relativePath = "document.txt",
+                    sizeBytes = localContent.size.toLong(),
+                    mtimeMs = 5_000L,
+                    contentHash = null,
+                    remoteId = remoteFile.id,
+                    remoteSizeBytes = remoteFile.size,
+                    remoteMtimeMs = remoteFile.lastModifiedMs,
+                    remoteEtag = remoteFile.eTag,
+                ),
+            )
+
+            // Record the KEEP_BOTH resolution chosen by the user.
+            val conflictId =
+                conflictRepository.insert(
+                    ConflictRecord(
+                        id = 0,
+                        pairId = pair.id,
+                        relativePath = "document.txt",
+                        localLastModifiedMs = 5_000L,
+                        remoteLastModifiedMs = remoteFile.lastModifiedMs ?: 0L,
+                        detectedAtMs = detectedAtMs,
+                    ),
+                )
+            conflictRepository.resolve(conflictId, ConflictRecord.RESOLUTION_KEEP_BOTH)
+
+            val result = buildEngine().runOnce(pair)
+
+            assertTrue("Expected Success, got: $result", result is SyncEngine.Result.Success)
+            val success = result as SyncEngine.Result.Success
+            // The resolved conflict counts as 1 applied op.
+            assertEquals("Resolved conflict should count as 1 applied op", 1, success.applied)
+            assertEquals("No new conflicts should be detected", 0, success.conflicts)
+
+            // Local: original file still has local content.
+            val localOriginal = localFileAccess.openRead("document.txt")?.readBytes()
+            assertNotNull("Original local file should still exist", localOriginal)
+            assertEquals(
+                "Original local file should still contain local content",
+                "local content",
+                localOriginal!!.toString(Charsets.UTF_8),
+            )
+
+            // Local: conflict copy exists with the remote content.
+            val copyPath = SyncEngine.conflictCopyPath("document.txt", detectedAtMs)
+            val localCopy = localFileAccess.openRead(copyPath)?.readBytes()
+            assertNotNull("Conflict copy should exist locally at $copyPath", localCopy)
+            assertEquals(
+                "Conflict copy should contain the remote content",
+                "remote content",
+                localCopy!!.toString(Charsets.UTF_8),
+            )
+
+            // Remote: original file should now contain the local version.
+            val remoteOriginalContent = fakeProvider.download(remoteFile.id).readBytes()
+            assertEquals(
+                "Remote original should be overwritten with local content",
+                "local content",
+                remoteOriginalContent.toString(Charsets.UTF_8),
+            )
+
+            // Remote: conflict copy should exist as a new file.
+            val remoteFiles = fakeProvider.list("remote-root").filter { !it.isFolder }
+            assertTrue(
+                "Remote should contain the conflict copy",
+                remoteFiles.any { it.name == copyPath },
+            )
+
+            // Conflict record should be deleted after successful resolution.
+            val remainingResolved = conflictRepository.getResolvedForPair(pair.id)
+            assertTrue("Conflict record should be removed after resolution", remainingResolved.isEmpty())
+        }
+
+    /**
+     * Modify-delete conflict resolved with KEEP_BOTH:
+     * - The remote file was deleted while the local file was modified.
+     * - KEEP_BOTH re-uploads the surviving local file to restore it on the remote.
+     */
+    @Test
+    fun `KEEP_BOTH resolution for modify-delete conflict re-uploads surviving local file`() =
+        runTest {
+            val detectedAtMs = CONFLICT_DETECTED_AT_MS
+            val localContent = "local modified content".toByteArray()
+
+            // Simulate a file that was previously synced (has a remoteId in the index)
+            // but since then the remote copy was deleted.
+            val deletedRemoteFile =
+                fakeProvider.uploadNew(
+                    parentId = "remote-root",
+                    name = "document.txt",
+                    content = localContent.inputStream(),
+                    size = localContent.size.toLong(),
+                    mimeType = "text/plain",
+                )
+            // Delete the remote file to simulate the modify-delete scenario.
+            fakeProvider.delete(deletedRemoteFile.id)
+
+            localFileAccess.put("document.txt", localContent)
+            inMemoryChildren.set(
+                "root",
+                listOf(
+                    RawDocChild(
+                        docId = "doc-document",
+                        name = "document.txt",
+                        mimeType = "text/plain",
+                        size = localContent.size.toLong(),
+                        lastModifiedMs = 5_000L,
+                    ),
+                ),
+            )
+
+            val pair = insertPair(conflictPolicy = ConflictPolicy.KEEP_BOTH)
+
+            // Seed the index with the stale remoteId (the remote was deleted after this was set).
+            localIndexDao.upsert(
+                LocalIndexEntity(
+                    pairId = pair.id,
+                    relativePath = "document.txt",
+                    sizeBytes = localContent.size.toLong(),
+                    mtimeMs = 5_000L,
+                    contentHash = null,
+                    remoteId = deletedRemoteFile.id,
+                    remoteSizeBytes = deletedRemoteFile.size,
+                    remoteMtimeMs = deletedRemoteFile.lastModifiedMs,
+                    remoteEtag = deletedRemoteFile.eTag,
+                ),
+            )
+
+            val conflictId =
+                conflictRepository.insert(
+                    ConflictRecord(
+                        id = 0,
+                        pairId = pair.id,
+                        relativePath = "document.txt",
+                        localLastModifiedMs = 5_000L,
+                        remoteLastModifiedMs = 0L, // remote was deleted
+                        detectedAtMs = detectedAtMs,
+                    ),
+                )
+            conflictRepository.resolve(conflictId, ConflictRecord.RESOLUTION_KEEP_BOTH)
+
+            val result = buildEngine().runOnce(pair)
+
+            assertTrue("Expected Success, got: $result", result is SyncEngine.Result.Success)
+            val success = result as SyncEngine.Result.Success
+            assertEquals("Resolved conflict should count as 1 applied op", 1, success.applied)
+            assertEquals("No new conflicts should be detected", 0, success.conflicts)
+
+            // Local file should still exist with the original content.
+            val localFile = localFileAccess.openRead("document.txt")?.readBytes()
+            assertNotNull("Local file should still exist", localFile)
+            assertEquals(
+                "Local file content should be unchanged",
+                "local modified content",
+                localFile!!.toString(Charsets.UTF_8),
+            )
+
+            // The local file should have been re-uploaded to remote.
+            val remoteFiles = fakeProvider.list("remote-root").filter { !it.isFolder }
+            assertEquals("Remote should have exactly one file (re-uploaded local)", 1, remoteFiles.size)
+            assertEquals("document.txt", remoteFiles.single().name)
+            val reuploadedContent = fakeProvider.download(remoteFiles.single().id).readBytes()
+            assertEquals(
+                "Re-uploaded remote file should contain the local content",
+                "local modified content",
+                reuploadedContent.toString(Charsets.UTF_8),
+            )
+
+            // Conflict record should be deleted.
+            val remainingResolved = conflictRepository.getResolvedForPair(pair.id)
+            assertTrue("Conflict record should be removed after resolution", remainingResolved.isEmpty())
+        }
+
+    // -------------------------------------------------------------------------
     // Nested download: remote files with hierarchical paths are downloaded
     // to the correct nested local path
     // -------------------------------------------------------------------------
@@ -1583,4 +1942,12 @@ class SyncEngineRealIntegrationTest {
             assertNotNull("File change should be in the snapshot", fileChange)
             assertFalse("File entry must have isFolder=false", fileChange!!.isFolder)
         }
+
+    companion object {
+        /**
+         * Fixed epoch-ms timestamp used for keep-both conflict detection in tests.
+         * Corresponds to 2023-11-14T22:13:20 UTC, producing a conflict-copy date label of "2023-11-14".
+         */
+        private const val CONFLICT_DETECTED_AT_MS = 1_700_000_000_000L
+    }
 }

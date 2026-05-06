@@ -44,6 +44,20 @@ class GoogleDriveRemoteEnumerator
         }
 
         /**
+         * Performs a full initial listing of [rootFolderId] by recursively walking the
+         * folder tree via [GoogleDriveRestClient.listAllDescendants], then fetches a fresh
+         * `startPageToken` for subsequent incremental polling.
+         *
+         * When [rootFolderId] is empty, falls back to the baseline [enumerate]
+         * (empty changes + fresh startPageToken).
+         */
+        override suspend fun enumerateFull(rootFolderId: String): RemoteSnapshot {
+            if (rootFolderId.isEmpty()) return enumerate(null, rootFolderId)
+            val token = provider.obtainAccessToken()
+            return enumerateAllWithToken(token, rootFolderId)
+        }
+
+        /**
          * Test seam: enumerate using a directly-supplied bearer token. Tests can
          * point [restClient] at a `MockWebServer` and exercise the full HTTP
          * round-trip without going through Google Identity.
@@ -81,6 +95,41 @@ class GoogleDriveRemoteEnumerator
             val pathCache = buildPathCache(changes, rootFolderId)
             val mapped = changes.mapNotNull { it.toRemoteChange(pathCache) }
             return RemoteSnapshot(changes = mapped, newDeltaToken = nextToken)
+        }
+
+        /**
+         * Test seam: perform a full initial listing using a directly-supplied bearer token.
+         * Calls [GoogleDriveRestClient.listAllDescendants] which recursively lists all
+         * non-folder files under [rootFolderId] with their relative paths.
+         */
+        internal suspend fun enumerateAllWithToken(
+            token: String,
+            rootFolderId: String,
+        ): RemoteSnapshot {
+            return try {
+                val (filesWithPaths, startPageToken) = restClient.listAllDescendants(token, rootFolderId)
+                val changes =
+                    filesWithPaths.mapNotNull { (file, relativePath) ->
+                        if (file.id.isEmpty()) return@mapNotNull null
+                        RemoteChange(
+                            relativePath = relativePath,
+                            type = RemoteChangeType.MODIFY,
+                            remoteId = file.id,
+                            sizeBytes = file.size?.toLongOrNull(),
+                            mtimeMs = file.modifiedTime?.let { parseIso8601(it) },
+                            etag = file.md5Checksum,
+                        )
+                    }
+                RemoteSnapshot(changes = changes, newDeltaToken = startPageToken)
+            } catch (e: DriveApiException) {
+                when (e.statusCode) {
+                    401 -> throw CloudProviderException.AuthenticationRequired(
+                        "Google Drive access token rejected (401). Please re-authenticate.",
+                        e,
+                    )
+                    else -> throw e
+                }
+            }
         }
     }
 

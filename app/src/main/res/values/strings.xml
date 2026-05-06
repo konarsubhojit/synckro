@@ -94,8 +94,15 @@
     <string name="direction_local_to_remote">Upload only (Local → Remote)</string>
     <string name="direction_remote_to_local">Download only (Remote → Local)</string>
     <string name="direction_bidirectional">Bidirectional</string>
-    <string name="direction_upload_delete_local">Upload and delete local after N days</string>
-    <string name="direction_download_delete_remote">Download and delete remote after N days</string>
+    <string name="direction_upload_delete_local">⚠ Upload + delete local after N days</string>
+    <string name="direction_download_delete_remote">⚠ Download + delete remote after N days</string>
+
+    <!-- Confirmation dialog shown when the user selects a destructive sync direction -->
+    <string name="pair_editor_destructive_mode_title">Enable automatic deletion?</string>
+    <string name="pair_editor_destructive_confirm_upload_delete">In this mode, local files that have been uploaded to the cloud will be permanently deleted from this device after the configured retention period. This action cannot be undone.\n\nAre you sure you want to enable automatic local deletion?</string>
+    <string name="pair_editor_destructive_confirm_download_delete">In this mode, remote files that have been downloaded to this device will be permanently deleted from the cloud after the configured retention period. This action cannot be undone.\n\nAre you sure you want to enable automatic remote deletion?</string>
+    <string name="pair_editor_destructive_confirm">Enable</string>
+    <string name="pair_editor_destructive_cancel">Cancel</string>
 
     <!-- Retention days configuration (shown for retention sync modes) -->
     <string name="pair_editor_retention_days">Delete after (days)</string>

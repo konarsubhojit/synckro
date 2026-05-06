@@ -25,6 +25,19 @@ enum class SyncDirection {
     DOWNLOAD_AND_DELETE_REMOTE_AFTER_N_DAYS,
 }
 
+/**
+ * Returns `true` when this direction involves automatic file deletion after a retention period.
+ *
+ * Both [SyncDirection.UPLOAD_AND_DELETE_LOCAL_AFTER_N_DAYS] and
+ * [SyncDirection.DOWNLOAD_AND_DELETE_REMOTE_AFTER_N_DAYS] are considered destructive because
+ * they can permanently remove files without direct user action. Use this property to gate
+ * confirmation dialogs, safety checks, and audit-log markers.
+ */
+val SyncDirection.isDestructive: Boolean
+    get() =
+        this == SyncDirection.UPLOAD_AND_DELETE_LOCAL_AFTER_N_DAYS ||
+            this == SyncDirection.DOWNLOAD_AND_DELETE_REMOTE_AFTER_N_DAYS
+
 /** How to resolve a file that was modified on both sides since the last sync. */
 enum class ConflictPolicy {
     NEWEST_WINS,
