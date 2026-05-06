@@ -234,7 +234,7 @@ class SyncEngine(
         // -----------------------------------------------------------------
         // Step 2 – Enumerate remote changes (delta since last token).
         // -----------------------------------------------------------------
-        val remoteSnapshot = remoteEnumerator.enumerate(pair.deltaToken)
+        val remoteSnapshot = remoteEnumerator.enumerate(pair.deltaToken, pair.remoteFolderId)
 
         // -----------------------------------------------------------------
         // Step 3 – Build inputs for SyncDiffer.
@@ -313,14 +313,15 @@ class SyncEngine(
                 RemoteChangeType.ADD, RemoteChangeType.MODIFY -> {
                     // Detect rename/move: look up the existing path by stable remote ID.
                     val existingPath = preScanIndexById[change.remoteId]?.relativePath
-                    if (existingPath != null && existingPath != change.relativePath) {
-                        // Item was renamed or moved — evict the old path from the snapshot.
-                        syntheticRemote.remove(existingPath)
-                    }
-                    val baseline = syntheticRemote[change.relativePath]
+                    val isRename = existingPath != null && existingPath != change.relativePath
+                    // For a rename, seed the baseline from the old path so that a partial
+                    // delta (missing size/mtime) does not lose the item entirely.
+                    val baseline = if (isRename) syntheticRemote[existingPath!!] else syntheticRemote[change.relativePath]
                     val resolvedSize = change.sizeBytes ?: baseline?.size
                     val resolvedMtime = change.mtimeMs ?: baseline?.lastModifiedMs
                     if (resolvedSize != null && resolvedMtime != null) {
+                        // Remove old path only after we know the new path can be inserted.
+                        if (isRename) syntheticRemote.remove(existingPath!!)
                         syntheticRemote[change.relativePath] =
                             FileSnapshot(
                                 relativePath = change.relativePath,
@@ -328,6 +329,11 @@ class SyncEngine(
                                 lastModifiedMs = resolvedMtime,
                                 hash = change.etag,
                             )
+                    } else if (isRename && baseline != null) {
+                        // Partial metadata on rename with no baseline fallback: copy the old
+                        // snapshot to the new path so the item isn't silently dropped.
+                        syntheticRemote.remove(existingPath!!)
+                        syntheticRemote[change.relativePath] = baseline.copy(relativePath = change.relativePath)
                     }
                     // If no size/mtime available (neither delta nor baseline), skip rather
                     // than inserting a FS(0, 0) stub that would trigger spurious ops.

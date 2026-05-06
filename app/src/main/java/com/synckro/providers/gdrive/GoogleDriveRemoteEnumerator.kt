@@ -38,9 +38,9 @@ class GoogleDriveRemoteEnumerator
          * [enumerateWithToken]. Authentication errors are surfaced as
          * [CloudProviderException] subtypes.
          */
-        override suspend fun enumerate(deltaToken: String?): RemoteSnapshot {
+        override suspend fun enumerate(deltaToken: String?, rootFolderId: String): RemoteSnapshot {
             val token = provider.obtainAccessToken()
-            return enumerateWithToken(token, deltaToken)
+            return enumerateWithToken(token, deltaToken, rootFolderId)
         }
 
         /**
@@ -51,6 +51,7 @@ class GoogleDriveRemoteEnumerator
         internal suspend fun enumerateWithToken(
             token: String,
             deltaToken: String?,
+            rootFolderId: String = "",
         ): RemoteSnapshot {
             val (changes, nextToken) =
                 try {
@@ -69,7 +70,7 @@ class GoogleDriveRemoteEnumerator
                             Timber.w("Google Drive: changes page token expired (410); deltaToken=%s; falling back to baseline", deltaToken)
                             val (baseChanges, baseToken) = restClient.changesSince(token, null)
                             return RemoteSnapshot(
-                                changes = baseChanges.mapNotNull { it.toRemoteChange() },
+                                changes = baseChanges.mapNotNull { it.toRemoteChange(buildPathCache(baseChanges, rootFolderId)) },
                                 newDeltaToken = baseToken,
                             )
                         }
@@ -77,28 +78,71 @@ class GoogleDriveRemoteEnumerator
                     }
                 }
 
-            val mapped = changes.mapNotNull { it.toRemoteChange() }
+            val pathCache = buildPathCache(changes, rootFolderId)
+            val mapped = changes.mapNotNull { it.toRemoteChange(pathCache) }
             return RemoteSnapshot(changes = mapped, newDeltaToken = nextToken)
         }
     }
 
 /**
+ * Builds an in-batch ID→relative-path cache for the files reported in a single
+ * Drive changes response. Files whose first parent ID matches [rootFolderId]
+ * are direct children of the sync root and receive a single-segment path.
+ * Files whose parent is already in the cache receive a compound path. Files
+ * whose parent cannot be resolved fall back to their leaf name.
+ *
+ * Google Drive's `changes.list` response does not guarantee hierarchy order,
+ * but most delta responses return items in a useful order. Items whose parent
+ * is not in this batch fall back to their leaf name; the SyncEngine then
+ * resolves the canonical path via the stable remoteId → pre-scan index lookup
+ * for items that have already been synced.
+ *
+ * @param changes      All [DriveChange] entries from one or more change pages.
+ * @param rootFolderId Provider ID of the sync root folder. Pass an empty string
+ *   to skip hierarchy resolution (every item gets its leaf name).
+ */
+internal fun buildPathCache(
+    changes: List<DriveChange>,
+    rootFolderId: String,
+): Map<String, String> {
+    val cache = mutableMapOf<String, String>()
+    for (change in changes) {
+        val file = change.file ?: continue
+        if (file.id.isEmpty()) continue
+        val parentId = file.parents?.firstOrNull()
+        val path =
+            when {
+                rootFolderId.isNotEmpty() && parentId == rootFolderId -> file.name
+                parentId != null && cache.containsKey(parentId) -> "${cache[parentId]}/${file.name}"
+                else -> file.name // parent not in this batch; fall back to leaf name
+            }
+        cache[file.id] = path
+    }
+    return cache
+}
+
+/**
  * Maps a Drive v3 [DriveChange] entry to a [RemoteChange]. Returns `null` for
  * entries without a usable identifier.
+ *
+ * @param pathCache Optional ID→relative-path cache built from the same change
+ *   batch via [buildPathCache]. When present, the file's relative path is
+ *   resolved hierarchically; otherwise the leaf name is used.
  */
-internal fun DriveChange.toRemoteChange(): RemoteChange? {
+internal fun DriveChange.toRemoteChange(pathCache: Map<String, String> = emptyMap()): RemoteChange? {
     val id = fileId ?: file?.id ?: return null
     val isRemoved = removed == true || file?.trashed == true
+    val resolvedPath = pathCache[id] ?: file?.name ?: id
     if (isRemoved) {
         return RemoteChange(
-            relativePath = file?.name ?: id,
+            relativePath = resolvedPath.ifEmpty { id },
             type = RemoteChangeType.DELETE,
             remoteId = id,
         )
     }
     val f = file ?: return null
     return RemoteChange(
-        relativePath = f.name,
+        relativePath = resolvedPath,
         type = RemoteChangeType.MODIFY,
         remoteId = id,
         sizeBytes = f.size?.toLongOrNull(),

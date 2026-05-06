@@ -25,7 +25,7 @@ class FakeRemoteEnumerator
     constructor(
         private val provider: FakeCloudProvider,
     ) : RemoteEnumerator {
-        override suspend fun enumerate(deltaToken: String?): RemoteSnapshot {
+        override suspend fun enumerate(deltaToken: String?, rootFolderId: String): RemoteSnapshot {
             val page = provider.changesSince(deltaToken)
             val mapped =
                 page.changes.mapNotNull { c ->
