@@ -37,9 +37,9 @@ class OneDriveRemoteEnumerator
          * [enumerateWithToken]. Authentication errors are surfaced as
          * [CloudProviderException] subtypes.
          */
-        override suspend fun enumerate(deltaToken: String?): RemoteSnapshot {
+        override suspend fun enumerate(deltaToken: String?, rootFolderId: String): RemoteSnapshot {
             val token = provider.obtainAccessToken()
-            return enumerateWithToken(token, deltaToken)
+            return enumerateWithToken(token, deltaToken, rootFolderId)
         }
 
         /**
@@ -50,6 +50,7 @@ class OneDriveRemoteEnumerator
         internal suspend fun enumerateWithToken(
             token: String,
             deltaToken: String?,
+            rootFolderId: String = "",
         ): RemoteSnapshot {
             val (items, nextDeltaLink) =
                 try {
@@ -68,7 +69,7 @@ class OneDriveRemoteEnumerator
                             Timber.w("OneDrive: delta link expired (410); deltaToken=%s; falling back to baseline", deltaToken)
                             val (baseItems, baseDeltaLink) = graphClient.changesSince(token, null)
                             return RemoteSnapshot(
-                                changes = baseItems.mapNotNull { it.toRemoteChange() },
+                                changes = baseItems.mapNotNull { it.toRemoteChange(buildPathCache(baseItems, rootFolderId)) },
                                 newDeltaToken = baseDeltaLink,
                             )
                         }
@@ -76,26 +77,66 @@ class OneDriveRemoteEnumerator
                     }
                 }
 
-            val changes = items.mapNotNull { it.toRemoteChange() }
+            val pathCache = buildPathCache(items, rootFolderId)
+            val changes = items.mapNotNull { it.toRemoteChange(pathCache) }
             return RemoteSnapshot(changes = changes, newDeltaToken = nextDeltaLink)
         }
     }
 
 /**
+ * Builds an in-batch ID→relative-path cache for the items returned by a single
+ * delta response. Items whose `parentReference.id` matches [rootFolderId] are
+ * direct children of the sync root and get a single-segment path. Items whose
+ * parent is already in the cache get a compound path. Items whose parent cannot
+ * be resolved fall back to their leaf name.
+ *
+ * OneDrive's delta API returns items in hierarchy order (parents before
+ * children) within a single page, so this linear pass is sufficient for items
+ * within the same batch.
+ *
+ * @param items       All [GraphDriveItem] entries from one or more delta pages.
+ * @param rootFolderId Provider ID of the sync root folder. Pass an empty string
+ *   to skip hierarchy resolution (every item gets its leaf name).
+ */
+internal fun buildPathCache(
+    items: List<GraphDriveItem>,
+    rootFolderId: String,
+): Map<String, String> {
+    val cache = mutableMapOf<String, String>()
+    for (item in items) {
+        if (item.id.isEmpty()) continue
+        val parentId = item.parentReference?.id
+        val path =
+            when {
+                rootFolderId.isNotEmpty() && parentId == rootFolderId -> item.name
+                parentId != null && cache.containsKey(parentId) -> "${cache[parentId]}/${item.name}"
+                else -> item.name // parent not in this batch; fall back to leaf name
+            }
+        cache[item.id] = path
+    }
+    return cache
+}
+
+/**
  * Maps a Graph API [GraphDriveItem] from a delta response to a [RemoteChange].
  * Returns `null` for items with no usable identifier.
+ *
+ * @param pathCache Optional ID→relative-path cache built from the same delta
+ *   batch via [buildPathCache]. When present, the item's relative path is
+ *   resolved hierarchically; otherwise the leaf name is used.
  */
-internal fun GraphDriveItem.toRemoteChange(): RemoteChange? {
+internal fun GraphDriveItem.toRemoteChange(pathCache: Map<String, String> = emptyMap()): RemoteChange? {
     if (id.isEmpty()) return null
+    val resolvedPath = pathCache[id] ?: name.ifEmpty { id }
     return if (deleted != null) {
         RemoteChange(
-            relativePath = name.ifEmpty { id },
+            relativePath = resolvedPath.ifEmpty { id },
             type = RemoteChangeType.DELETE,
             remoteId = id,
         )
     } else {
         RemoteChange(
-            relativePath = name,
+            relativePath = resolvedPath,
             type = RemoteChangeType.MODIFY,
             remoteId = id,
             sizeBytes = size,

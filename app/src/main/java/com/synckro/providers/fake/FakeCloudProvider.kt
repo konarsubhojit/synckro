@@ -233,6 +233,33 @@ class FakeCloudProvider : CloudProvider {
         }
 
     /**
+     * Resolves the relative path of the item with [id] by traversing the parent chain.
+     *
+     * Walks up through the [store] from [id] to the first ancestor whose ID is not in
+     * the store (i.e., the sync root or any externally-defined parent). Returns the
+     * collected name segments joined by `/`.
+     *
+     * For a file directly under "remote-root" (which is not in the store):
+     * `resolvePath("file-id")` → `"file.txt"`.
+     *
+     * For a file at `docs/subdir/report.pdf`:
+     * `resolvePath("report-id")` → `"docs/subdir/report.pdf"`.
+     *
+     * @param id The provider-assigned ID of the item to resolve.
+     * @return The slash-joined relative path, or an empty string if [id] is not in the store.
+     */
+    fun resolvePath(id: String): String {
+        val segments = mutableListOf<String>()
+        var currentId: String? = id
+        while (currentId != null) {
+            val record = store[currentId] ?: break
+            segments.add(0, record.meta.name)
+            currentId = record.meta.parentId
+        }
+        return segments.joinToString("/")
+    }
+
+    /**
      * Produces a page of recorded changes starting from the provided change token.
      *
      * If `token` is null, returns an initial (empty) page with `nextToken` set to the current change log size

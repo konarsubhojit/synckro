@@ -388,7 +388,7 @@ class SyncEngineRealIntegrationTest {
             // A broken RemoteEnumerator that throws CancellationException
             val cancellingEnumerator =
                 object : RemoteEnumerator {
-                    override suspend fun enumerate(deltaToken: String?): RemoteSnapshot = throw kotlinx.coroutines.CancellationException("test cancellation")
+                    override suspend fun enumerate(deltaToken: String?, rootFolderId: String): RemoteSnapshot = throw kotlinx.coroutines.CancellationException("test cancellation")
                 }
 
             val engine =
@@ -485,7 +485,7 @@ class SyncEngineRealIntegrationTest {
             // interactive user action and is therefore mapped to Terminal.
             val failingEnumerator =
                 object : RemoteEnumerator {
-                    override suspend fun enumerate(deltaToken: String?): RemoteSnapshot = throw CloudProviderException.AuthenticationFailed(
+                    override suspend fun enumerate(deltaToken: String?, rootFolderId: String): RemoteSnapshot = throw CloudProviderException.AuthenticationFailed(
                         "Token refresh failed (transient network error)",
                     )
                 }
@@ -517,7 +517,7 @@ class SyncEngineRealIntegrationTest {
 
             val failingEnumerator =
                 object : RemoteEnumerator {
-                    override suspend fun enumerate(deltaToken: String?): RemoteSnapshot = throw CloudProviderException.AuthenticationRequired(
+                    override suspend fun enumerate(deltaToken: String?, rootFolderId: String): RemoteSnapshot = throw CloudProviderException.AuthenticationRequired(
                         "Access token expired — interactive sign-in required",
                     )
                 }
@@ -553,7 +553,7 @@ class SyncEngineRealIntegrationTest {
 
             val failingEnumerator =
                 object : RemoteEnumerator {
-                    override suspend fun enumerate(deltaToken: String?): RemoteSnapshot = throw CloudProviderException.NotConfigured("Client ID not configured")
+                    override suspend fun enumerate(deltaToken: String?, rootFolderId: String): RemoteSnapshot = throw CloudProviderException.NotConfigured("Client ID not configured")
                 }
 
             val engine =
@@ -639,7 +639,7 @@ class SyncEngineRealIntegrationTest {
             // with different size/mtime from the local file, so SyncDiffer emits a Conflict op.
             val conflictEnumerator =
                 object : RemoteEnumerator {
-                    override suspend fun enumerate(deltaToken: String?): RemoteSnapshot =
+                    override suspend fun enumerate(deltaToken: String?, rootFolderId: String): RemoteSnapshot =
                         RemoteSnapshot(
                             changes =
                                 listOf(
@@ -799,7 +799,7 @@ class SyncEngineRealIntegrationTest {
             // SyncOpApplier.applyUpdateLocal can call provider.download(id).
             val conflictEnumerator =
                 object : RemoteEnumerator {
-                    override suspend fun enumerate(deltaToken: String?): RemoteSnapshot =
+                    override suspend fun enumerate(deltaToken: String?, rootFolderId: String): RemoteSnapshot =
                         RemoteSnapshot(
                             changes =
                                 listOf(
@@ -892,5 +892,402 @@ class SyncEngineRealIntegrationTest {
                 0,
                 (result as SyncEngine.Result.Success).applied,
             )
+        }
+
+    // -------------------------------------------------------------------------
+    // Nested upload: local files in sub-folders are uploaded with full path
+    // -------------------------------------------------------------------------
+
+    @Test
+    fun `runReal uploads nested local file and creates remote folder hierarchy`() =
+        runTest {
+            val fileContent = "nested content".toByteArray()
+            localFileAccess.put("docs/subdir/report.txt", fileContent)
+            inMemoryChildren.set(
+                "root",
+                listOf(
+                    RawDocChild(
+                        docId = "doc-docs",
+                        name = "docs",
+                        mimeType = "vnd.android.document/directory",
+                        size = 0L,
+                        lastModifiedMs = 1_000L,
+                    ),
+                ),
+            )
+            inMemoryChildren.set(
+                "doc-docs",
+                listOf(
+                    RawDocChild(
+                        docId = "doc-subdir",
+                        name = "subdir",
+                        mimeType = "vnd.android.document/directory",
+                        size = 0L,
+                        lastModifiedMs = 1_000L,
+                    ),
+                ),
+            )
+            inMemoryChildren.set(
+                "doc-subdir",
+                listOf(
+                    RawDocChild(
+                        docId = "doc-report",
+                        name = "report.txt",
+                        mimeType = "text/plain",
+                        size = fileContent.size.toLong(),
+                        lastModifiedMs = 5_000L,
+                    ),
+                ),
+            )
+
+            val pair = insertPair()
+            val eng = buildEngine()
+            val result = eng.runOnce(pair)
+
+            assertTrue("Expected Success, got: $result", result is SyncEngine.Result.Success)
+            assertEquals(
+                "Nested file should be uploaded",
+                1,
+                (result as SyncEngine.Result.Success).applied,
+            )
+
+            // Verify remote structure: remote-root → docs → subdir → report.txt
+            val rootChildren = fakeProvider.list("remote-root")
+            val docsFolder = rootChildren.singleOrNull { it.isFolder && it.name == "docs" }
+            assertNotNull("docs folder should exist under remote root", docsFolder)
+            val docsChildren = fakeProvider.list(docsFolder!!.id)
+            val subdirFolder = docsChildren.singleOrNull { it.isFolder && it.name == "subdir" }
+            assertNotNull("subdir folder should exist under docs", subdirFolder)
+            val subdirChildren = fakeProvider.list(subdirFolder!!.id)
+            assertEquals(1, subdirChildren.size)
+            assertEquals("report.txt", subdirChildren.single().name)
+        }
+
+    @Test
+    fun `runReal nested upload reuses existing remote folder on second sync`() =
+        runTest {
+            val fileContent = "report".toByteArray()
+            localFileAccess.put("docs/report.txt", fileContent)
+            inMemoryChildren.set(
+                "root",
+                listOf(
+                    RawDocChild(
+                        docId = "doc-docs",
+                        name = "docs",
+                        mimeType = "vnd.android.document/directory",
+                        size = 0L,
+                        lastModifiedMs = 1_000L,
+                    ),
+                ),
+            )
+            inMemoryChildren.set(
+                "doc-docs",
+                listOf(
+                    RawDocChild(
+                        docId = "doc-report",
+                        name = "report.txt",
+                        mimeType = "text/plain",
+                        size = fileContent.size.toLong(),
+                        lastModifiedMs = 5_000L,
+                    ),
+                ),
+            )
+
+            val pair = insertPair()
+            val eng = buildEngine()
+            val firstResult = eng.runOnce(pair)
+            assertTrue("First run should succeed", firstResult is SyncEngine.Result.Success)
+            assertEquals(1, (firstResult as SyncEngine.Result.Success).applied)
+
+            // Check exactly one "docs" folder under the remote root.
+            val docsCount = fakeProvider.list("remote-root").count { it.isFolder && it.name == "docs" }
+            assertEquals("Exactly one docs folder after first upload", 1, docsCount)
+
+            // Second run with stored token: nothing has changed, should be a no-op.
+            val storedToken = syncPairDao.getById(pair.id)!!.lastDeltaToken!!
+            val pairWithToken = pair.copy(deltaToken = storedToken)
+            val secondResult = eng.runOnce(pairWithToken)
+
+            assertTrue("Second run should succeed", secondResult is SyncEngine.Result.Success)
+            assertEquals("Second run should be a no-op", 0, (secondResult as SyncEngine.Result.Success).applied)
+            // Still exactly one "docs" folder — no duplicate created.
+            val docsCountAfter = fakeProvider.list("remote-root").count { it.isFolder && it.name == "docs" }
+            assertEquals("Should not create a duplicate docs folder on second run", 1, docsCountAfter)
+        }
+
+    // -------------------------------------------------------------------------
+    // Remote delete: stable remote ID lookup via pre-scan index
+    // -------------------------------------------------------------------------
+
+    @Test
+    fun `runReal deletes local file when remote delete arrives via stable remote ID`() =
+        runTest {
+            // First run: upload a local file so it gets a remoteId in the local index.
+            val fileContent = "delete me".toByteArray()
+            localFileAccess.put("todelete.txt", fileContent)
+            inMemoryChildren.set(
+                "root",
+                listOf(
+                    RawDocChild(
+                        docId = "doc-del",
+                        name = "todelete.txt",
+                        mimeType = "text/plain",
+                        size = fileContent.size.toLong(),
+                        lastModifiedMs = 5_000L,
+                    ),
+                ),
+            )
+            val pair = insertPair()
+            val eng = buildEngine()
+            val firstResult = eng.runOnce(pair)
+            assertTrue("First run should succeed", firstResult is SyncEngine.Result.Success)
+            assertEquals(1, (firstResult as SyncEngine.Result.Success).applied)
+
+            // Retrieve the stable token and the remoteId assigned during upload.
+            val storedToken = syncPairDao.getById(pair.id)!!.lastDeltaToken!!
+            val uploadedFile = fakeProvider.list("remote-root").single { it.name == "todelete.txt" }
+
+            // Delete the file on the remote only. The local tree is intentionally left
+            // unchanged so that SyncDiffer sees "remote deleted, local unchanged" and
+            // produces DeleteLocal("todelete.txt").
+            fakeProvider.delete(uploadedFile.id)
+            // inMemoryChildren still has "todelete.txt" — local file is still present.
+
+            // FakeRemoteEnumerator emits DELETE with remoteId = uploadedFile.id and
+            // relativePath = uploadedFile.id (item is gone from the store).
+            // SyncEngine resolves "todelete.txt" from the pre-scan index via remoteId.
+            val pairWithToken = pair.copy(deltaToken = storedToken)
+            val secondResult = eng.runOnce(pairWithToken)
+
+            assertTrue("Second run should succeed", secondResult is SyncEngine.Result.Success)
+            assertEquals(
+                "DeleteLocal op should be applied",
+                1,
+                (secondResult as SyncEngine.Result.Success).applied,
+            )
+        }
+
+    // -------------------------------------------------------------------------
+    // Remote rename/move: old path evicted from synthetic remote, new name downloaded
+    // -------------------------------------------------------------------------
+
+    @Test
+    fun `runReal handles remote rename by evicting old path and downloading new name`() =
+        runTest {
+            // First run: upload "original.txt" from local so it is indexed with a remoteId.
+            val fileContent = "rename me".toByteArray()
+            localFileAccess.put("original.txt", fileContent)
+            inMemoryChildren.set(
+                "root",
+                listOf(
+                    RawDocChild(
+                        docId = "doc-orig",
+                        name = "original.txt",
+                        mimeType = "text/plain",
+                        size = fileContent.size.toLong(),
+                        lastModifiedMs = 5_000L,
+                    ),
+                ),
+            )
+
+            val pair = insertPair()
+            val eng = buildEngine()
+            val firstResult = eng.runOnce(pair)
+            assertTrue("First run should succeed", firstResult is SyncEngine.Result.Success)
+            assertEquals(1, (firstResult as SyncEngine.Result.Success).applied)
+
+            val storedToken = syncPairDao.getById(pair.id)!!.lastDeltaToken!!
+            // Retrieve the remoteId that was assigned during upload.
+            val originalRemoteFile = fakeProvider.list("remote-root").single { it.name == "original.txt" }
+
+            // Simulate a rename on the remote: delete the old item and upload the new name.
+            fakeProvider.delete(originalRemoteFile.id)
+            val renamedFile =
+                fakeProvider.uploadNew(
+                    parentId = "remote-root",
+                    name = "renamed.txt",
+                    content = fileContent.inputStream(),
+                    size = fileContent.size.toLong(),
+                    mimeType = "text/plain",
+                )
+
+            // Emit a delta that models a rename: DELETE the old stable ID + MODIFY
+            // the new file under the new name. The local tree still has "original.txt".
+            val renameEnumerator =
+                object : RemoteEnumerator {
+                    override suspend fun enumerate(deltaToken: String?, rootFolderId: String): RemoteSnapshot =
+                        RemoteSnapshot(
+                            changes =
+                                listOf(
+                                    // DELETE carries the old stable ID so SyncEngine can
+                                    // look up "original.txt" via the pre-scan index.
+                                    RemoteChange(
+                                        relativePath = originalRemoteFile.id,
+                                        type = RemoteChangeType.DELETE,
+                                        remoteId = originalRemoteFile.id,
+                                    ),
+                                    // MODIFY carries the new file's ID and new path.
+                                    RemoteChange(
+                                        relativePath = "renamed.txt",
+                                        type = RemoteChangeType.MODIFY,
+                                        remoteId = renamedFile.id,
+                                        sizeBytes = fileContent.size.toLong(),
+                                        mtimeMs = 6_000L,
+                                        etag = renamedFile.eTag,
+                                    ),
+                                ),
+                            newDeltaToken = "3",
+                        )
+                }
+
+            val renameEngine =
+                SyncEngine(
+                    conflictRepository = conflictRepository,
+                    providers = mapOf(CloudProviderType.ONEDRIVE to fakeProvider),
+                    localFsEnumerator = localFsEnumerator,
+                    remoteEnumerators = mapOf(CloudProviderType.ONEDRIVE to renameEnumerator),
+                    syncPairDao = syncPairDao,
+                    localIndexDao = localIndexDao,
+                    eventRepository = eventRepository,
+                    localFileAccess = { _ -> localFileAccess },
+                )
+            val renameResult = renameEngine.runOnce(pair.copy(deltaToken = storedToken))
+
+            assertTrue("Rename run should succeed", renameResult is SyncEngine.Result.Success)
+            // Expect 2 ops: DeleteLocal("original.txt") + DownloadNew("renamed.txt").
+            assertEquals(
+                "Rename should produce DeleteLocal + DownloadNew (2 ops total)",
+                2,
+                (renameResult as SyncEngine.Result.Success).applied,
+            )
+        }
+
+    @Test
+    fun `runReal handles rename via same stable remoteId with different relativePath`() =
+        runTest {
+            // First run: upload "original.txt" from local so it is indexed with a known remoteId.
+            val fileContent = "stable rename".toByteArray()
+            localFileAccess.put("original.txt", fileContent)
+            inMemoryChildren.set(
+                "root",
+                listOf(
+                    RawDocChild(
+                        docId = "doc-orig",
+                        name = "original.txt",
+                        mimeType = "text/plain",
+                        size = fileContent.size.toLong(),
+                        lastModifiedMs = 5_000L,
+                    ),
+                ),
+            )
+            val pair = insertPair()
+            val eng = buildEngine()
+            val firstResult = eng.runOnce(pair)
+            assertTrue("First run should succeed", firstResult is SyncEngine.Result.Success)
+            assertEquals(1, (firstResult as SyncEngine.Result.Success).applied)
+
+            val storedToken = syncPairDao.getById(pair.id)!!.lastDeltaToken!!
+            val originalRemoteFile = fakeProvider.list("remote-root").single { it.name == "original.txt" }
+
+            // Simulate a provider-level rename: emit MODIFY with the SAME stable remoteId
+            // but a different relativePath ("renamed.txt"). This exercises the rename-by-stable-ID
+            // detection in SyncEngine — the old path is evicted from syntheticRemote and the new
+            // path is inserted, causing SyncDiffer to produce DeleteLocal + DownloadNew.
+            //
+            // Unlike a real rename (where the file is moved on the server), for the FakeProvider
+            // we keep the original file in place so download succeeds via originalRemoteFile.id.
+            // The stable-ID contract is: the provider signals "this ID is now at this new path",
+            // and the sync engine evicts the old path and downloads to the new one.
+            val sameIdRenameEnumerator =
+                object : RemoteEnumerator {
+                    override suspend fun enumerate(deltaToken: String?, rootFolderId: String): RemoteSnapshot =
+                        RemoteSnapshot(
+                            changes =
+                                listOf(
+                                    // Same remoteId as the original upload, but new relativePath.
+                                    // This is the canonical stable-ID rename signal.
+                                    RemoteChange(
+                                        relativePath = "renamed.txt",
+                                        type = RemoteChangeType.MODIFY,
+                                        remoteId = originalRemoteFile.id,
+                                        sizeBytes = fileContent.size.toLong(),
+                                        mtimeMs = 6_000L,
+                                        etag = originalRemoteFile.eTag,
+                                    ),
+                                ),
+                            newDeltaToken = "2",
+                        )
+                }
+
+            val renameEngine =
+                SyncEngine(
+                    conflictRepository = conflictRepository,
+                    providers = mapOf(CloudProviderType.ONEDRIVE to fakeProvider),
+                    localFsEnumerator = localFsEnumerator,
+                    remoteEnumerators = mapOf(CloudProviderType.ONEDRIVE to sameIdRenameEnumerator),
+                    syncPairDao = syncPairDao,
+                    localIndexDao = localIndexDao,
+                    eventRepository = eventRepository,
+                    localFileAccess = { _ -> localFileAccess },
+                )
+            val renameResult = renameEngine.runOnce(pair.copy(deltaToken = storedToken))
+
+            assertTrue("Rename run should succeed", renameResult is SyncEngine.Result.Success)
+            // SyncDiffer sees: "original.txt" absent from syntheticRemote → DeleteLocal
+            //                  "renamed.txt" present in syntheticRemote, absent locally → DownloadNew
+            assertEquals(
+                "Same-stable-ID rename should produce DeleteLocal + DownloadNew (2 ops)",
+                2,
+                (renameResult as SyncEngine.Result.Success).applied,
+            )
+        }
+
+    // -------------------------------------------------------------------------
+    // Nested download: remote files with hierarchical paths are downloaded
+    // to the correct nested local path
+    // -------------------------------------------------------------------------
+
+    @Test
+    fun `runReal downloads nested remote file to correct local path`() =
+        runTest {
+            val pair = insertPair()
+            val eng = buildEngine()
+
+            // Baseline run (deltaToken = null → empty change list, empty remote).
+            val baselineResult = eng.runOnce(pair)
+            assertTrue("Baseline should succeed", baselineResult is SyncEngine.Result.Success)
+            assertEquals(0, (baselineResult as SyncEngine.Result.Success).applied)
+            val storedToken = syncPairDao.getById(pair.id)!!.lastDeltaToken!!
+
+            // Create the nested remote file AFTER the baseline so FakeRemoteEnumerator
+            // includes it in the next delta (changes since storedToken).
+            val docsFolder = fakeProvider.createFolder("remote-root", "docs")
+            val subdirFolder = fakeProvider.createFolder(docsFolder.id, "subdir")
+            val remoteContent = "nested remote content".toByteArray()
+            val remoteFile =
+                fakeProvider.uploadNew(
+                    parentId = subdirFolder.id,
+                    name = "notes.txt",
+                    content = remoteContent.inputStream(),
+                    size = remoteContent.size.toLong(),
+                    mimeType = "text/plain",
+                )
+
+            // Delta run: FakeRemoteEnumerator emits MODIFY changes for docs, subdir, notes.txt.
+            // FakeCloudProvider.resolvePath resolves "docs/subdir/notes.txt" for notes.txt.
+            // Local tree is empty — SyncDiffer produces DownloadNew("docs/subdir/notes.txt").
+            val deltaResult = eng.runOnce(pair.copy(deltaToken = storedToken))
+
+            assertTrue("Delta run should succeed", deltaResult is SyncEngine.Result.Success)
+            assertTrue(
+                "At least one op should be applied (nested download)",
+                (deltaResult as SyncEngine.Result.Success).applied >= 1,
+            )
+
+            // The DownloadNew op must write to the correct nested local path.
+            val localIndex = localIndexDao.getForPair(pair.id)
+            val indexEntry = localIndex.find { it.relativePath == "docs/subdir/notes.txt" }
+            assertNotNull("Local index should contain 'docs/subdir/notes.txt'", indexEntry)
+            assertEquals(remoteFile.id, indexEntry!!.remoteId)
         }
 }

@@ -108,7 +108,9 @@ class OneDriveRemoteEnumeratorTest {
                     ),
             )
 
-            val snapshot = enumerator.enumerateWithToken(token, deltaToken = deltaLinkUrl)
+            // Pass rootFolderId = "root-id" so that file-1 (with parentReference.id = "root-id")
+            // resolves to the flat path "notes.txt".
+            val snapshot = enumerator.enumerateWithToken(token, deltaToken = deltaLinkUrl, rootFolderId = "root-id")
 
             assertEquals(2, snapshot.changes.size)
             val modify = snapshot.changes[0]
@@ -128,6 +130,53 @@ class OneDriveRemoteEnumeratorTest {
             assertEquals("old.txt", deleted.relativePath)
 
             assertEquals("https://graph.example.com/delta-link-2", snapshot.newDeltaToken)
+        }
+
+    @Test
+    fun `enumerate resolves nested path from parentReference when rootFolderId is provided`() =
+        runTest {
+            val deltaLinkUrl = server.url("/me/drive/root/delta?skiptoken=nested").toString()
+            server.enqueue(
+                MockResponse()
+                    .setResponseCode(200)
+                    .setBody(
+                        """
+                        {
+                          "value": [
+                            {
+                              "id": "folder-docs",
+                              "name": "docs",
+                              "parentReference": {"id": "sync-root-id"},
+                              "folder": {}
+                            },
+                            {
+                              "id": "file-report",
+                              "name": "report.txt",
+                              "parentReference": {"id": "folder-docs"},
+                              "file": {"mimeType": "text/plain"},
+                              "size": 512,
+                              "lastModifiedDateTime": "2024-05-01T09:00:00Z",
+                              "eTag": "\"etag-report\""
+                            }
+                          ],
+                          "@odata.deltaLink": "https://graph.example.com/delta-link-nested"
+                        }
+                        """.trimIndent(),
+                    ),
+            )
+
+            val snapshot = enumerator.enumerateWithToken(token, deltaToken = deltaLinkUrl, rootFolderId = "sync-root-id")
+
+            assertEquals(2, snapshot.changes.size)
+            val folderChange = snapshot.changes[0]
+            assertEquals("folder-docs", folderChange.remoteId)
+            // "docs" folder is a direct child of sync root → path = "docs"
+            assertEquals("docs", folderChange.relativePath)
+
+            val fileChange = snapshot.changes[1]
+            assertEquals("file-report", fileChange.remoteId)
+            // "report.txt" is under "docs" → full path = "docs/report.txt"
+            assertEquals("docs/report.txt", fileChange.relativePath)
         }
 
     @Test

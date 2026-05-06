@@ -81,6 +81,13 @@ interface RemoteEnumerator {
      *
      * @param deltaToken Token returned by a previous call, or `null` to
      *   establish a baseline without replaying history.
+     * @param rootFolderId The provider-specific ID of the sync root folder.
+     *   Implementations use this to resolve canonical relative paths for items
+     *   encountered in the delta response by walking the `parentReference` chain
+     *   against items in the same batch. Pass an empty string when the root
+     *   folder context is not available (e.g. in test doubles that supply a fixed
+     *   snapshot); implementations must default to their best-effort leaf-name
+     *   strategy in that case.
      */
-    suspend fun enumerate(deltaToken: String?): RemoteSnapshot
+    suspend fun enumerate(deltaToken: String?, rootFolderId: String = ""): RemoteSnapshot
 }

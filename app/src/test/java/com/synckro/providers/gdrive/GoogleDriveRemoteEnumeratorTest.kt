@@ -113,7 +113,9 @@ class GoogleDriveRemoteEnumeratorTest {
                     ),
             )
 
-            val snapshot = enumerator.enumerateWithToken(token, deltaToken = "token-1")
+            // Pass rootFolderId = "parent-id" so that file-1 (whose parent is "parent-id")
+            // resolves to the flat path "notes.txt".
+            val snapshot = enumerator.enumerateWithToken(token, deltaToken = "token-1", rootFolderId = "parent-id")
 
             assertEquals(3, snapshot.changes.size)
 
@@ -138,6 +140,60 @@ class GoogleDriveRemoteEnumeratorTest {
             assertEquals("old.txt", trashed.relativePath)
 
             assertEquals("token-2", snapshot.newDeltaToken)
+        }
+
+    @Test
+    fun `enumerate resolves nested path from parents when rootFolderId is provided`() =
+        runTest {
+            server.enqueue(
+                MockResponse()
+                    .setResponseCode(200)
+                    .setBody(
+                        """
+                        {
+                          "changes": [
+                            {
+                              "fileId": "folder-docs",
+                              "removed": false,
+                              "file": {
+                                "id": "folder-docs",
+                                "name": "docs",
+                                "parents": ["sync-root-id"],
+                                "mimeType": "application/vnd.google-apps.folder"
+                              }
+                            },
+                            {
+                              "fileId": "file-report",
+                              "removed": false,
+                              "file": {
+                                "id": "file-report",
+                                "name": "report.txt",
+                                "parents": ["folder-docs"],
+                                "mimeType": "text/plain",
+                                "size": "256",
+                                "modifiedTime": "2024-05-01T10:00:00Z",
+                                "md5Checksum": "md5-report"
+                              }
+                            }
+                          ],
+                          "newStartPageToken": "token-nested"
+                        }
+                        """.trimIndent(),
+                    ),
+            )
+
+            val snapshot = enumerator.enumerateWithToken(token, deltaToken = "token-1", rootFolderId = "sync-root-id")
+
+            assertEquals(2, snapshot.changes.size)
+            val folderChange = snapshot.changes[0]
+            assertEquals("folder-docs", folderChange.remoteId)
+            // "docs" folder is a direct child of sync root → path = "docs"
+            assertEquals("docs", folderChange.relativePath)
+
+            val fileChange = snapshot.changes[1]
+            assertEquals("file-report", fileChange.remoteId)
+            // "report.txt" is under "docs" → full path = "docs/report.txt"
+            assertEquals("docs/report.txt", fileChange.relativePath)
         }
 
     @Test
