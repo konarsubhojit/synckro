@@ -329,7 +329,15 @@ class SyncEngine(
         // synthetic remote and add the new one so SyncDiffer sees a delete of
         // the old path and an add of the new one.
         for (change in remoteSnapshot.changes) {
-            if (!isInScope(change.relativePath)) continue
+            // Use the canonical path from the pre-scan index (resolved via the
+            // stable remote ID) when available, because change.relativePath is
+            // "best-effort" and may fall back to a leaf name when the provider
+            // cannot resolve hierarchy in a delta batch.  Without this, nested
+            // items could be misclassified as root-level when excludeSubfolders
+            // is enabled (the path.contains('/') check would not fire).
+            val canonicalPath = preScanIndexById[change.remoteId]?.relativePath
+                ?: change.relativePath
+            if (!isInScope(canonicalPath)) continue
             when (change.type) {
                 RemoteChangeType.ADD, RemoteChangeType.MODIFY -> {
                     // Detect rename/move: look up the existing path by stable remote ID.
