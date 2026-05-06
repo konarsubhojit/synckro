@@ -84,6 +84,12 @@
     <string name="direction_upload_delete_local">Upload and delete local after N days</string>
     <string name="direction_download_delete_remote">Download and delete remote after N days</string>
 
+    <!-- Retention days configuration (shown for retention sync modes) -->
+    <string name="pair_editor_retention_days">Delete after (days)</string>
+    <string name="pair_editor_retention_days_hint">Leave blank to disable automatic deletion</string>
+    <string name="pair_editor_retention_days_info_upload">Local files are deleted based on their last-modified time, only after they have been safely uploaded to the cloud.</string>
+    <string name="pair_editor_retention_days_info_download">Remote files are deleted based on their last-modified time, only after they have been safely downloaded to this device.</string>
+
     <!-- Pick local folder (SAF tree-URI picker) -->
     <string name="pick_folder_title">Pick local folder</string>
     <string name="pick_folder_body">Select the folder on your device that you want to keep in sync. Both internal storage and SD card folders are supported.</string>

@@ -63,6 +63,13 @@ class PairEditorViewModel
             val includeGlobsText: String = "",
             /** Newline-separated glob patterns. */
             val excludeGlobsText: String = "",
+            /**
+             * Text representation of the retention period in days. Only meaningful
+             * when [direction] is [SyncDirection.UPLOAD_AND_DELETE_LOCAL_AFTER_N_DAYS]
+             * or [SyncDirection.DOWNLOAD_AND_DELETE_REMOTE_AFTER_N_DAYS].
+             * Empty string means no automatic deletion (null retention).
+             */
+            val retentionDaysText: String = "",
             val isSaving: Boolean = false,
             val saveError: String? = null,
         )
@@ -120,6 +127,7 @@ class PairEditorViewModel
                             scheduleIntervalMinutes = entity.scheduleIntervalMinutes,
                             includeGlobsText = entity.includeGlobs.joinToString("\n"),
                             excludeGlobsText = entity.excludeGlobs.joinToString("\n"),
+                            retentionDaysText = entity.retentionDays?.toString() ?: "",
                         )
                     }
                 } else {
@@ -178,6 +186,8 @@ class PairEditorViewModel
 
         fun onExcludeGlobsChange(value: String) = _state.update { it.copy(excludeGlobsText = value) }
 
+        fun onRetentionDaysChange(value: String) = _state.update { it.copy(retentionDaysText = value) }
+
         /**
          * Validates and persists the current form state. Calls [onSaved] with the
          * persisted row ID on success, or sets [UiState.saveError] on failure.
@@ -219,6 +229,7 @@ class PairEditorViewModel
                                     .split('\n')
                                     .map { it.trim() }
                                     .filter { it.isNotBlank() },
+                            retentionDays = s.retentionDaysText.trim().toIntOrNull(),
                         )
                     val savedId = syncPairRepository.upsert(pair)
                     syncScheduler.schedulePeriodic(pair.copy(id = savedId), pair.scheduleIntervalMinutes)
