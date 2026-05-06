@@ -31,6 +31,7 @@ import com.synckro.providers.fake.FakeRemoteEnumerator
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -1580,6 +1581,6 @@ class SyncEngineRealIntegrationTest {
 
             val fileChange = snapshot.changes.find { it.relativePath == "test-file.txt" }
             assertNotNull("File change should be in the snapshot", fileChange)
-            assertTrue("File entry must have isFolder=false", !fileChange!!.isFolder)
+            assertFalse("File entry must have isFolder=false", fileChange!!.isFolder)
         }
 }

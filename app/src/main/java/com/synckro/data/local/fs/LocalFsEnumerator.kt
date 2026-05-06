@@ -184,9 +184,8 @@ class LocalFsEnumerator internal constructor(
                     if (prefix.isEmpty()) child.name else "$prefix/${child.name}"
 
                 if (child.mimeType == DocumentsContract.Document.MIME_TYPE_DIR) {
-                    // When excludeSubfolders is enabled, skip any directory that is
-                    // not the root (prefix is non-empty means we are already inside a subdir,
-                    // and prefix is empty + dir means this is a root-level subdir to skip).
+                    // When excludeSubfolders is enabled, skip traversing into any
+                    // subdirectories so only root-level files are enumerated.
                     if (!excludeSubfolders) {
                         queue.add(child.docId to relativePath)
                     }
