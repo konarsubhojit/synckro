@@ -493,6 +493,23 @@ class SyncScheduler(
         workManager.cancelUniqueWork(SyncWorker.uniqueName(pairId))
     }
 
+    /**
+     * Schedules or cancels periodic sync work for [pair] depending on [SyncPair.autoSyncEnabled].
+     *
+     * When [SyncPair.autoSyncEnabled] is `true` this delegates to [schedulePeriodic] with the
+     * pair's stored [SyncPair.scheduleIntervalMinutes].  When `false` any existing periodic job
+     * is cancelled so the pair no longer runs automatically; manual "Sync now" is unaffected.
+     *
+     * @param pair The SyncPair whose periodic work should be scheduled or cancelled.
+     */
+    fun scheduleOrCancel(pair: SyncPair) {
+        if (pair.autoSyncEnabled) {
+            schedulePeriodic(pair, pair.scheduleIntervalMinutes)
+        } else {
+            cancel(pair.id)
+        }
+    }
+
     companion object {
         const val MIN_PERIODIC_INTERVAL_MINUTES: Long = 15
     }
