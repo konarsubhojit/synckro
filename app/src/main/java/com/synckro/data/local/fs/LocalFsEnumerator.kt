@@ -329,7 +329,7 @@ class LocalFsEnumerator internal constructor(
          */
         internal fun sha256Hex(stream: InputStream): String {
             val digest = MessageDigest.getInstance("SHA-256")
-            val buffer = ByteArray(8 * 1024)
+            val buffer = ByteArray(128 * 1024)
             var read = stream.read(buffer)
             while (read != -1) {
                 digest.update(buffer, 0, read)
