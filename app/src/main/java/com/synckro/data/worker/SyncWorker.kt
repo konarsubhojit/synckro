@@ -423,6 +423,14 @@ class SyncWorker
              * @return The unique work name for the given pair id (format: "synckro-sync-<pairId>").
              */
             fun uniqueName(pairId: Long): String = "synckro-sync-$pairId"
+
+            /**
+             * Produces the unique WorkManager name for a one-shot "sync now" job for a SyncPair.
+             *
+             * @param pairId The SyncPair's id.
+             * @return The unique work name for the one-shot job (format: "syncnow-<pairId>").
+             */
+            fun syncNowUniqueName(pairId: Long): String = "syncnow-$pairId"
         }
     }
 
@@ -485,12 +493,16 @@ class SyncScheduler(
     }
 
     /**
-     * Cancels any scheduled periodic sync work for the SyncPair with the given id.
+     * Cancels any scheduled sync work for the SyncPair with the given id.
      *
-     * @param pairId The id of the SyncPair whose periodic WorkManager job will be canceled.
+     * This cancels both the periodic sync job and any pending one-shot "sync now" job,
+     * ensuring no background work for the pair can start after this call returns.
+     *
+     * @param pairId The id of the SyncPair whose WorkManager jobs will be canceled.
      */
     fun cancel(pairId: Long) {
         workManager.cancelUniqueWork(SyncWorker.uniqueName(pairId))
+        workManager.cancelUniqueWork(SyncWorker.syncNowUniqueName(pairId))
     }
 
     /**

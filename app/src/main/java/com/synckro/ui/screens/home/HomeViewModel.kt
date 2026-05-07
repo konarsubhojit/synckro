@@ -9,6 +9,7 @@ import androidx.work.WorkManager
 import androidx.work.workDataOf
 import com.synckro.data.repository.ConflictRepository
 import com.synckro.data.repository.SyncPairRepository
+import com.synckro.data.worker.SyncScheduler
 import com.synckro.data.worker.SyncWorker
 import com.synckro.domain.model.SyncPair
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -33,6 +34,7 @@ class HomeViewModel
         private val syncPairRepository: SyncPairRepository,
         private val conflictRepository: ConflictRepository,
         private val workManager: WorkManager,
+        private val syncScheduler: SyncScheduler,
     ) : ViewModel() {
         data class UiState(
             val pairs: List<SyncPair> = emptyList(),
@@ -53,9 +55,11 @@ class HomeViewModel
                 initialValue = UiState(),
             )
 
-        /** Permanently removes the sync pair with [id] from the database. */
+        /** Permanently removes the sync pair with [id] from the database and cancels any
+         *  associated background sync jobs (both periodic and one-shot). */
         fun delete(id: Long) {
             Timber.i("HomeViewModel.delete(id=$id)")
+            syncScheduler.cancel(id)
             viewModelScope.launch { syncPairRepository.delete(id) }
         }
 
@@ -70,7 +74,7 @@ class HomeViewModel
                     .setInputData(workDataOf(SyncWorker.KEY_PAIR_ID to pair.id))
                     .build()
             workManager.enqueueUniqueWork(
-                "syncnow-${pair.id}",
+                SyncWorker.syncNowUniqueName(pair.id),
                 ExistingWorkPolicy.KEEP,
                 req,
             )
