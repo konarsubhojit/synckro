@@ -4,6 +4,7 @@ import android.content.ContentResolver
 import android.content.Intent
 import com.synckro.data.local.dao.SyncPairDao
 import com.synckro.data.local.entity.SyncPairEntity
+import com.synckro.data.local.entity.toDomain
 import com.synckro.domain.model.SyncPair
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -109,31 +110,6 @@ class SyncPairRepository
             return entities.map { it.toDomain(needsReLink = it.localTreeUri !in granted) }
         }
     }
-
-private fun SyncPairEntity.toDomain(needsReLink: Boolean): SyncPair =
-    SyncPair(
-        id = id,
-        displayName = displayName,
-        localTreeUri = localTreeUri,
-        provider = provider,
-        remoteFolderId = remoteFolderId,
-        direction = direction,
-        conflictPolicy = conflictPolicy,
-        includeGlobs = includeGlobs.split('\n').filter { it.isNotBlank() },
-        excludeGlobs = excludeGlobs.split('\n').filter { it.isNotBlank() },
-        wifiOnly = wifiOnly,
-        requiresCharging = requiresCharging,
-        autoSyncEnabled = autoSyncEnabled,
-        scheduleIntervalMinutes = scheduleIntervalMinutes,
-        needsReLink = needsReLink,
-        lastSyncAtMs = lastSyncAtMs,
-        lastSyncResult = lastSyncResult,
-        deltaToken = lastDeltaToken,
-        lastFullScanAtMs = lastFullScanAtMs,
-        retentionDays = retentionDays,
-        excludeSubfolders = excludeSubfolders,
-        excludeEmptyFolders = excludeEmptyFolders,
-    )
 
 private fun SyncPair.toEntity(): SyncPairEntity =
     SyncPairEntity(
