@@ -98,11 +98,22 @@ class SyncEngine(
          *   `NotConfigured`). The Accounts screen uses this to show a "Re-authenticate"
          *   CTA, and [SyncWorker] uses it to
          *   persist a distinct `lastSyncResult` and emit ERROR events tagged `auth`.
+         * @param needsReLink  True when the failure is caused by a lost SAF permission
+         *   (e.g. [com.synckro.data.local.fs.LocalStorageException]). The sync pair list
+         *   uses this to show a "Re-link local folder" CTA. Mutually exclusive with
+         *   [needsReauth] — at most one should be true at a time.
          */
         data class Terminal(
             val reason: String,
             val needsReauth: Boolean = false,
+            val needsReLink: Boolean = false,
         ) : Result {
+            init {
+                require(!(needsReauth && needsReLink)) {
+                    "needsReauth and needsReLink are mutually exclusive"
+                }
+            }
+
             override val applied: Int = 0
             override val conflicts: Int = 0
         }

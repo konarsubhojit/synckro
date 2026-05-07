@@ -77,6 +77,9 @@ internal class DefaultFsAccess(
  *   files reuse the cached hash with zero I/O cost.
  * - Files that cannot be read (stream open fails) are skipped and a WARN log is
  *   emitted; the file still appears in the snapshot with `contentHash = null`.
+ * - If a directory cannot be queried (e.g. SAF permission revoked), a
+ *   [LocalStorageException] is thrown so the sync can abort safely rather than
+ *   treating the unreadable subtree as empty.
  * - Atomically reconciles the `local_index` table: upserts changed entries and
  *   deletes stale ones in a single Room transaction.
  *
@@ -176,7 +179,10 @@ class LocalFsEnumerator internal constructor(
                         "LocalFsEnumerator: failed to list children of docId='%s'",
                         parentDocId,
                     )
-                    continue
+                    throw LocalStorageException(
+                        "SAF permission denied or storage unavailable for docId='$parentDocId'",
+                        e,
+                    )
                 }
 
             for (child in children) {

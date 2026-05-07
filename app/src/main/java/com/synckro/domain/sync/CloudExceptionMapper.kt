@@ -1,5 +1,6 @@
 package com.synckro.domain.sync
 
+import com.synckro.data.local.fs.LocalStorageException
 import com.synckro.domain.provider.CloudProviderException
 import kotlinx.coroutines.CancellationException
 
@@ -17,12 +18,17 @@ import kotlinx.coroutines.CancellationException
  * | [CloudProviderException.NotConfigured]      | `Terminal(needsReauth = true)`          | Missing client ID / redirect URI. Surface the same "Re-authenticate" CTA so the user lands on the Accounts screen and sees the configuration error. |
  * | [CloudProviderException.AuthenticationFailed]| `Retriable`                             | Network blip during token refresh, transient MSAL/IDS error. WorkManager backoff is the right answer. |
  * | [CloudProviderException.RateLimited]        | `Retriable` (Retry-After honoured)      | Server-driven backoff — the engine and WorkManager will respect [CloudProviderException.RateLimited.retryAfterMs] separately. |
+ * | [LocalStorageException]                     | `Terminal(needsReLink = true)`          | SAF permission revoked or storage unavailable. Retrying will never recover without the user re-granting access. |
  * | [CancellationException]                     | rethrown                                | Cooperative cancellation must propagate; never swallow it. |
  * | Any other [Throwable]                       | `Retriable`                             | Unknown errors are assumed transient — better than a Terminal that silently disables the pair. |
  *
  * Authentication-terminal results carry [SyncEngine.Result.Terminal.needsReauth]=true
  * so the worker can persist a distinct outcome and the Accounts screen can show a
  * "Re-authenticate" CTA for the affected provider.
+ *
+ * Re-link-terminal results carry [SyncEngine.Result.Terminal.needsReLink]=true
+ * so the worker can persist a distinct outcome and the pair list can show a
+ * "Re-link local folder" CTA.
  */
 object CloudExceptionMapper {
     /**
@@ -50,6 +56,11 @@ object CloudExceptionMapper {
             is CloudProviderException.RateLimited ->
                 SyncEngine.Result.Retriable(
                     reason = t.message ?: "Rate limited (retry in ${t.retryAfterMs} ms)",
+                )
+            is LocalStorageException ->
+                SyncEngine.Result.Terminal(
+                    reason = t.message ?: "Local storage permission revoked",
+                    needsReLink = true,
                 )
             else ->
                 SyncEngine.Result.Retriable(

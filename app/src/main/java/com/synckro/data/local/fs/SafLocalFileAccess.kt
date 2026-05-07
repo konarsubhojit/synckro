@@ -165,13 +165,19 @@ internal class SafLocalFileAccess(
 
     /**
      * Returns the direct children of [parentDocId] within [treeUri].
-     * Returns an empty list if the query fails (e.g. permission revoked).
+     *
+     * @throws LocalStorageException if the SAF query fails (e.g. permission revoked or
+     *   storage temporarily unavailable). Callers must not treat this as an empty
+     *   directory — the failure must propagate so the sync can abort safely.
      */
     private fun listChildren(parentDocId: String): List<RawDocChild> =
         try {
             childrenQuery(resolver, treeUri, parentDocId)
         } catch (e: Exception) {
             Timber.w(e, "SafLocalFileAccess: failed to list children of '%s'", parentDocId)
-            emptyList()
+            throw LocalStorageException(
+                "SAF permission denied or storage unavailable for document '$parentDocId'",
+                e,
+            )
         }
 }
