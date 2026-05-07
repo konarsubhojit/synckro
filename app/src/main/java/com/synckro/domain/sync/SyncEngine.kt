@@ -460,9 +460,20 @@ class SyncEngine(
             runCatching { conflictRepository.getResolvedForPair(pair.id) }
                 .onFailure { Timber.w(it, "SyncEngine: could not read resolved conflicts for pair %d", pair.id) }
                 .getOrDefault(emptyList())
+        // Materialise the local index once so each conflict resolution does an O(1)
+        // map lookup instead of an O(N) full-table scan.  See issue #90.
+        val resolutionIndexByPath: Map<String, LocalIndexEntity> =
+            if (resolved.isEmpty()) {
+                emptyMap()
+            } else {
+                runCatching { indexDao.getForPair(pair.id) }
+                    .onFailure { Timber.w(it, "SyncEngine: could not read local index for pair %d", pair.id) }
+                    .getOrDefault(emptyList())
+                    .associateBy { it.relativePath }
+            }
         for (conflict in resolved) {
             try {
-                applyRealResolution(conflict, pair, applier, provider, fileAccess, indexDao, evtRepo)
+                applyRealResolution(conflict, pair, applier, provider, fileAccess, resolutionIndexByPath, evtRepo)
                 conflictRepository.delete(conflict.id)
                 appliedResolutions++
             } catch (c: CancellationException) {
@@ -546,6 +557,9 @@ class SyncEngine(
      *
      * @param applier The [SyncOpApplier] instance shared for the entire sync run; reused here
      *   to avoid redundant instantiation for each conflict resolution.
+     * @param indexByPath Pre-materialised snapshot of the local index for [pair], keyed by
+     *   relative path. Built once by the caller so each conflict resolution does an O(1)
+     *   map lookup instead of an O(N) full-table scan (issue #90).
      */
     private suspend fun applyRealResolution(
         conflict: ConflictRecord,
@@ -553,7 +567,7 @@ class SyncEngine(
         applier: SyncOpApplier,
         provider: CloudProvider,
         fileAccess: LocalFileAccess,
-        indexDao: LocalIndexDao,
+        indexByPath: Map<String, LocalIndexEntity>,
         evtRepo: SyncEventRepository,
     ) {
         Timber.i(
@@ -570,9 +584,7 @@ class SyncEngine(
                     localIndexByPath = emptyMap(),
                 )
             ConflictRecord.RESOLUTION_KEEP_REMOTE -> {
-                val indexEntry =
-                    indexDao.getForPair(pair.id)
-                        .firstOrNull { it.relativePath == conflict.relativePath }
+                val indexEntry = indexByPath[conflict.relativePath]
                 if (indexEntry?.remoteId != null) {
                     val remoteFile =
                         RemoteFile(
@@ -599,9 +611,7 @@ class SyncEngine(
                 }
             }
             ConflictRecord.RESOLUTION_KEEP_BOTH -> {
-                val indexEntry =
-                    indexDao.getForPair(pair.id)
-                        .firstOrNull { it.relativePath == conflict.relativePath }
+                val indexEntry = indexByPath[conflict.relativePath]
                 if (indexEntry?.remoteId != null) {
                     // Both-modified conflict: preserve both versions.
                     // Attempt to download the remote content to create a conflict copy.

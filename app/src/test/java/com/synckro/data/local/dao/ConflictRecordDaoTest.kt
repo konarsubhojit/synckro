@@ -177,4 +177,20 @@ class ConflictRecordDaoTest {
             assertEquals("newer.txt", records[0].relativePath)
             assertEquals("older.txt", records[1].relativePath)
         }
+
+    @Test
+    fun `observeUnresolvedCount counts only pending conflicts`() =
+        runTest {
+            val pairId = insertPair()
+            assertEquals(0, conflictDao.observeUnresolvedCount().first())
+
+            val a = conflictDao.insert(buildConflict(pairId, "a.txt"))
+            conflictDao.insert(buildConflict(pairId, "b.txt"))
+            conflictDao.insert(buildConflict(pairId, "c.txt"))
+            assertEquals(3, conflictDao.observeUnresolvedCount().first())
+
+            // Resolved records must NOT be counted as pending.
+            conflictDao.resolve(a, ConflictRecord.RESOLUTION_KEEP_LOCAL)
+            assertEquals(2, conflictDao.observeUnresolvedCount().first())
+        }
 }
