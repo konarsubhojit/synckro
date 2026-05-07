@@ -3,6 +3,7 @@ package com.synckro.ui.screens.home
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import androidx.work.ExistingWorkPolicy
+import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequest
 import androidx.work.WorkManager
 import com.synckro.data.repository.ConflictRepository
@@ -14,6 +15,7 @@ import com.synckro.domain.model.SyncPair
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.slot
 import io.mockk.verify
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -73,6 +75,8 @@ class HomeViewModelTest {
     private fun pair(
         id: Long,
         name: String = "Pair $id",
+        wifiOnly: Boolean = true,
+        requiresCharging: Boolean = false,
     ) = SyncPair(
         id = id,
         displayName = name,
@@ -81,6 +85,8 @@ class HomeViewModelTest {
         remoteFolderId = "root",
         direction = SyncDirection.BIDIRECTIONAL,
         conflictPolicy = ConflictPolicy.NEWEST_WINS,
+        wifiOnly = wifiOnly,
+        requiresCharging = requiresCharging,
     )
 
     // -------------------------------------------------------------------------
@@ -165,5 +171,83 @@ class HomeViewModelTest {
 
         verify { mockWorkManager.enqueueUniqueWork("syncnow-1", any(), any<OneTimeWorkRequest>()) }
         verify { mockWorkManager.enqueueUniqueWork("syncnow-2", any(), any<OneTimeWorkRequest>()) }
+    }
+
+    @Test
+    fun `syncNow wifiOnly true applies UNMETERED network constraint`() {
+        val vm = createVm()
+        val reqSlot = slot<OneTimeWorkRequest>()
+        every { mockWorkManager.enqueueUniqueWork(any(), any(), capture(reqSlot)) } returns mockk(relaxed = true)
+
+        vm.syncNow(pair(1L, wifiOnly = true))
+
+        assertEquals(NetworkType.UNMETERED, reqSlot.captured.workSpec.constraints.requiredNetworkType)
+    }
+
+    @Test
+    fun `syncNow wifiOnly false applies CONNECTED network constraint`() {
+        val vm = createVm()
+        val reqSlot = slot<OneTimeWorkRequest>()
+        every { mockWorkManager.enqueueUniqueWork(any(), any(), capture(reqSlot)) } returns mockk(relaxed = true)
+
+        vm.syncNow(pair(1L, wifiOnly = false))
+
+        assertEquals(NetworkType.CONNECTED, reqSlot.captured.workSpec.constraints.requiredNetworkType)
+    }
+
+    @Test
+    fun `syncNow requiresCharging true applies charging constraint`() {
+        val vm = createVm()
+        val reqSlot = slot<OneTimeWorkRequest>()
+        every { mockWorkManager.enqueueUniqueWork(any(), any(), capture(reqSlot)) } returns mockk(relaxed = true)
+
+        vm.syncNow(pair(1L, requiresCharging = true))
+
+        assertTrue(
+            "Expected requiresCharging constraint",
+            reqSlot.captured.workSpec.constraints.requiresCharging(),
+        )
+    }
+
+    @Test
+    fun `syncNow requiresCharging false does not require charging`() {
+        val vm = createVm()
+        val reqSlot = slot<OneTimeWorkRequest>()
+        every { mockWorkManager.enqueueUniqueWork(any(), any(), capture(reqSlot)) } returns mockk(relaxed = true)
+
+        vm.syncNow(pair(1L, requiresCharging = false))
+
+        assertFalse(
+            "Expected no requiresCharging constraint",
+            reqSlot.captured.workSpec.constraints.requiresCharging(),
+        )
+    }
+
+    @Test
+    fun `syncNow always applies battery-not-low constraint`() {
+        val vm = createVm()
+        val reqSlot = slot<OneTimeWorkRequest>()
+        every { mockWorkManager.enqueueUniqueWork(any(), any(), capture(reqSlot)) } returns mockk(relaxed = true)
+
+        vm.syncNow(pair(1L))
+
+        assertTrue(
+            "battery-not-low must always be set",
+            reqSlot.captured.workSpec.constraints.requiresBatteryNotLow(),
+        )
+    }
+
+    @Test
+    fun `syncNow always applies storage-not-low constraint`() {
+        val vm = createVm()
+        val reqSlot = slot<OneTimeWorkRequest>()
+        every { mockWorkManager.enqueueUniqueWork(any(), any(), capture(reqSlot)) } returns mockk(relaxed = true)
+
+        vm.syncNow(pair(1L))
+
+        assertTrue(
+            "storage-not-low must always be set",
+            reqSlot.captured.workSpec.constraints.requiresStorageNotLow(),
+        )
     }
 }
