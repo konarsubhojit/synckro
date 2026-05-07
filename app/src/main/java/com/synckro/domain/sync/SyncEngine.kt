@@ -228,6 +228,17 @@ class SyncEngine(
         // -----------------------------------------------------------------
         val treeUri = Uri.parse(pair.localTreeUri)
         val fileAccess = fileAccessFactory(treeUri)
+        // Create a single SyncOpApplier for the entire sync run so that both
+        // conflict-resolution (Step 5) and regular op application (Step 6) share
+        // the same instance, avoiding redundant instantiation.
+        val applier =
+            SyncOpApplier(
+                provider = provider,
+                localIndexDao = indexDao,
+                conflictRepository = conflictRepository,
+                eventRepository = evtRepo,
+                localFileAccess = fileAccess,
+            )
         val localEnum =
             fsEnumerator.enumerate(
                 pairId = pair.id,
@@ -427,7 +438,7 @@ class SyncEngine(
                 .getOrDefault(emptyList())
         for (conflict in resolved) {
             try {
-                applyRealResolution(conflict, pair, provider, fileAccess, indexDao, evtRepo)
+                applyRealResolution(conflict, pair, applier, provider, fileAccess, indexDao, evtRepo)
                 conflictRepository.delete(conflict.id)
                 appliedResolutions++
             } catch (c: CancellationException) {
@@ -464,14 +475,6 @@ class SyncEngine(
                 }
                 .toMap()
 
-        val applier =
-            SyncOpApplier(
-                provider = provider,
-                localIndexDao = indexDao,
-                conflictRepository = conflictRepository,
-                eventRepository = evtRepo,
-                localFileAccess = fileAccess,
-            )
         val applyResult =
             applier.apply(
                 ops = ops,
@@ -516,10 +519,14 @@ class SyncEngine(
      *     original with the local content so both versions are accessible.
      *   - *Modify-delete* (remote was deleted): re-uploads the surviving local file.
      * - null / unknown: logged as a warning, treated as no-op.
+     *
+     * @param applier The [SyncOpApplier] instance shared for the entire sync run; reused here
+     *   to avoid redundant instantiation for each conflict resolution.
      */
     private suspend fun applyRealResolution(
         conflict: ConflictRecord,
         pair: SyncPair,
+        applier: SyncOpApplier,
         provider: CloudProvider,
         fileAccess: LocalFileAccess,
         indexDao: LocalIndexDao,
@@ -530,15 +537,6 @@ class SyncEngine(
             conflict.resolution,
             conflict.relativePath,
         )
-        // Delegate to SyncOpApplier to reuse retry / index-update logic.
-        val applier =
-            SyncOpApplier(
-                provider = provider,
-                localIndexDao = indexDao,
-                conflictRepository = conflictRepository,
-                eventRepository = evtRepo,
-                localFileAccess = fileAccess,
-            )
         when (conflict.resolution) {
             ConflictRecord.RESOLUTION_KEEP_LOCAL ->
                 applier.apply(
