@@ -254,22 +254,36 @@ class SyncWorker
                                 }
                             }
                             is SyncEngine.Result.Terminal -> {
-                                // Misconfigured pair (e.g. revoked auth, unsupported provider).
-                                // Don't retry forever — cancel the periodic chain so the
-                                // user can re-authenticate / reconfigure the pair.
+                                // Misconfigured pair (e.g. revoked auth, unsupported provider,
+                                // or revoked SAF permission). Don't retry forever — cancel the
+                                // periodic chain so the user can re-authenticate / re-link /
+                                // reconfigure the pair.
                                 Timber.w("Terminal sync failure for pair %d: %s", pairId, r.reason)
-                                val outcome = if (r.needsReauth) RESULT_NEEDS_REAUTH else RESULT_FAILURE
+                                val outcome =
+                                    when {
+                                        r.needsReauth -> RESULT_NEEDS_REAUTH
+                                        r.needsReLink -> RESULT_NEEDS_RELINK
+                                        else -> RESULT_FAILURE
+                                    }
                                 syncPairDao.updateLastSyncResult(pairId, System.currentTimeMillis(), outcome)
-                                if (r.needsReauth) {
-                                    // Tag `auth` so the user can filter/copy these from LogsScreen.
-                                    syncEventRepository.log(
-                                        pairId,
-                                        SyncEventLevel.ERROR,
-                                        LOG_TAG_AUTH,
-                                        "Re-authentication required: ${r.reason}",
-                                    )
-                                } else {
-                                    syncEventRepository.log(pairId, SyncEventLevel.ERROR, LOG_TAG, "Sync failed (terminal): ${r.reason}")
+                                when {
+                                    r.needsReauth ->
+                                        // Tag `auth` so the user can filter/copy these from LogsScreen.
+                                        syncEventRepository.log(
+                                            pairId,
+                                            SyncEventLevel.ERROR,
+                                            LOG_TAG_AUTH,
+                                            "Re-authentication required: ${r.reason}",
+                                        )
+                                    r.needsReLink ->
+                                        syncEventRepository.log(
+                                            pairId,
+                                            SyncEventLevel.ERROR,
+                                            LOG_TAG,
+                                            "Local folder access lost, re-link required: ${r.reason}",
+                                        )
+                                    else ->
+                                        syncEventRepository.log(pairId, SyncEventLevel.ERROR, LOG_TAG, "Sync failed (terminal): ${r.reason}")
                                 }
                                 WorkManager.getInstance(applicationContext).cancelUniqueWork(uniqueName(pairId))
                                 Result.failure()
@@ -456,6 +470,14 @@ class SyncWorker
              * this to decide whether to show a "Re-authenticate" CTA on the provider card.
              */
             const val RESULT_NEEDS_REAUTH = "NEEDS_REAUTH"
+
+            /**
+             * Outcome string written when the engine returns a [SyncEngine.Result.Terminal]
+             * with `needsReLink = true` (SAF permission for the local folder was revoked or
+             * the storage became unavailable). The sync pair list reads this to show a
+             * "Re-link local folder" CTA on the affected pair.
+             */
+            const val RESULT_NEEDS_RELINK = "NEEDS_RELINK"
 
             /** Tag used for [SyncEventRepository] log entries written by this worker. */
             private const val LOG_TAG = "SyncWorker"

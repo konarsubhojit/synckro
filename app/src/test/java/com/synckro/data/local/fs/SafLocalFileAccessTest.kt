@@ -10,6 +10,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -159,5 +160,55 @@ class SafLocalFileAccessTest {
         val access = accessWith(mapOf("root" to emptyList()))
 
         assertFalse(access.delete("no/such/file.txt"))
+    }
+
+    // -------------------------------------------------------------------------
+    // SAF permission / query failure → LocalStorageException
+    // -------------------------------------------------------------------------
+
+    /**
+     * Builds a [SafLocalFileAccess] whose [DocumentChildrenQuery] throws the
+     * provided [cause] for every call, simulating a revoked SAF permission.
+     */
+    private fun accessWithThrowingQuery(cause: Exception): SafLocalFileAccess {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val throwingQuery = DocumentChildrenQuery { _, _, _ -> throw cause }
+        return SafLocalFileAccess(context.contentResolver, treeUri, throwingQuery)
+    }
+
+    @Test
+    fun `openRead throws LocalStorageException when query fails`() {
+        val access = accessWithThrowingQuery(SecurityException("Permission denied"))
+
+        try {
+            access.openRead("any.txt")
+            error("Expected LocalStorageException")
+        } catch (e: LocalStorageException) {
+            assertTrue("cause must be the original SecurityException", e.cause is SecurityException)
+        }
+    }
+
+    @Test
+    fun `stat throws LocalStorageException when query fails`() {
+        val access = accessWithThrowingQuery(SecurityException("Permission denied"))
+
+        try {
+            access.stat("any.txt")
+            error("Expected LocalStorageException")
+        } catch (e: LocalStorageException) {
+            assertTrue("cause must be the original SecurityException", e.cause is SecurityException)
+        }
+    }
+
+    @Test
+    fun `delete throws LocalStorageException when query fails`() {
+        val access = accessWithThrowingQuery(SecurityException("Permission denied"))
+
+        try {
+            access.delete("any.txt")
+            error("Expected LocalStorageException")
+        } catch (e: LocalStorageException) {
+            assertTrue("cause must be the original SecurityException", e.cause is SecurityException)
+        }
     }
 }

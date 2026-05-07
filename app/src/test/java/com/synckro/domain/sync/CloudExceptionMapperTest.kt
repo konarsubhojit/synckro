@@ -1,5 +1,6 @@
 package com.synckro.domain.sync
 
+import com.synckro.data.local.fs.LocalStorageException
 import com.synckro.domain.provider.CloudProviderException
 import kotlinx.coroutines.CancellationException
 import org.junit.Assert.assertEquals
@@ -148,5 +149,33 @@ class CloudExceptionMapperTest {
         // when it returns Terminal directly (e.g. unsupported provider).
         val terminal = SyncEngine.Result.Terminal("Unsupported provider: ONEDRIVE")
         assertFalse(terminal.needsReauth)
+    }
+
+    @Test
+    fun `LocalStorageException maps to Terminal with needsReLink=true`() {
+        val ex = LocalStorageException("SAF permission denied for docId='root'", SecurityException("revoked"))
+
+        val result = CloudExceptionMapper.toResult(ex) as SyncEngine.Result.Terminal
+
+        assertTrue("needsReLink must be true for SAF permission failures", result.needsReLink)
+        assertFalse("needsReauth must not be set for SAF failures", result.needsReauth)
+        assertEquals("SAF permission denied for docId='root'", result.reason)
+    }
+
+    @Test
+    fun `LocalStorageException with null message falls back to a non-blank reason`() {
+        val ex = LocalStorageException("Local storage permission revoked")
+
+        val result = CloudExceptionMapper.toResult(ex) as SyncEngine.Result.Terminal
+
+        assertTrue("needsReLink must be true", result.needsReLink)
+        assertTrue("reason must be non-blank", result.reason.isNotBlank())
+        assertFalse("reason must not contain literal 'null'", result.reason.contains("null"))
+    }
+
+    @Test
+    fun `Terminal default needsReLink is false (generic terminal failures)`() {
+        val terminal = SyncEngine.Result.Terminal("Unsupported provider: ONEDRIVE")
+        assertFalse(terminal.needsReLink)
     }
 }

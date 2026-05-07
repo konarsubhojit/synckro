@@ -1065,4 +1065,72 @@ class LocalFsEnumeratorTest {
         val hash2 = LocalFsEnumerator.sha256Hex("content B".toByteArray().inputStream())
         assertTrue("different content must yield different hashes", hash1 != hash2)
     }
+
+    // -------------------------------------------------------------------------
+    // SAF permission / query failure → LocalStorageException
+    // -------------------------------------------------------------------------
+
+    @Test
+    fun `enumerate throws LocalStorageException when root folder query fails`() =
+        runTest {
+            val pairId = insertPair()
+            val cause = SecurityException("Permission denied")
+
+            // Query always throws for any docId.
+            val throwingQuery = DocumentChildrenQuery { _, _, _ -> throw cause }
+            val context = ApplicationProvider.getApplicationContext<Context>()
+            val enumerator =
+                LocalFsEnumerator(
+                    resolver = context.contentResolver,
+                    localIndexDao = localIndexDao,
+                    childrenQuery = throwingQuery,
+                    fsAccess = FakeFsAccess(),
+                )
+
+            try {
+                enumerator.enumerate(pairId, treeUri)
+                error("Expected LocalStorageException to be thrown")
+            } catch (e: LocalStorageException) {
+                // Expected: root folder query failure must propagate as LocalStorageException.
+                assertTrue("cause must be the original SecurityException", e.cause is SecurityException)
+            }
+        }
+
+    @Test
+    fun `enumerate throws LocalStorageException when a subdirectory query fails`() =
+        runTest {
+            val pairId = insertPair()
+            val cause = IllegalStateException("Cursor closed unexpectedly")
+
+            // Root query succeeds; the "sub" directory query throws.
+            val fakeRootChildren =
+                listOf(
+                    file("root.txt"),
+                    dir("sub", docId = "sub"),
+                )
+            val throwingQuery =
+                DocumentChildrenQuery { _, _, parentDocId ->
+                    when (parentDocId) {
+                        "root" -> fakeRootChildren
+                        else -> throw cause
+                    }
+                }
+            val context = ApplicationProvider.getApplicationContext<Context>()
+            val enumerator =
+                LocalFsEnumerator(
+                    resolver = context.contentResolver,
+                    localIndexDao = localIndexDao,
+                    childrenQuery = throwingQuery,
+                    fsAccess = FakeFsAccess(),
+                )
+
+            try {
+                enumerator.enumerate(pairId, treeUri)
+                error("Expected LocalStorageException to be thrown")
+            } catch (e: LocalStorageException) {
+                // Expected: subtree query failure must propagate — the sync must not
+                // silently treat the failed subtree as an empty folder.
+                assertTrue("cause must be the original IllegalStateException", e.cause is IllegalStateException)
+            }
+        }
 }
