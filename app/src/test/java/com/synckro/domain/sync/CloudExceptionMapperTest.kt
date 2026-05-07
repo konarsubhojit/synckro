@@ -178,4 +178,18 @@ class CloudExceptionMapperTest {
         val terminal = SyncEngine.Result.Terminal("Unsupported provider: ONEDRIVE")
         assertFalse(terminal.needsReLink)
     }
+
+    @Test
+    fun `Terminal rejects needsReauth and needsReLink both true`() {
+        try {
+            SyncEngine.Result.Terminal(
+                reason = "impossible",
+                needsReauth = true,
+                needsReLink = true,
+            )
+            fail("Expected IllegalArgumentException when both needsReauth and needsReLink are true")
+        } catch (expected: IllegalArgumentException) {
+            // good — the init block enforces mutual exclusivity
+        }
+    }
 }

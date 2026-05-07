@@ -108,6 +108,12 @@ class SyncEngine(
             val needsReauth: Boolean = false,
             val needsReLink: Boolean = false,
         ) : Result {
+            init {
+                require(!(needsReauth && needsReLink)) {
+                    "needsReauth and needsReLink are mutually exclusive"
+                }
+            }
+
             override val applied: Int = 0
             override val conflicts: Int = 0
         }
