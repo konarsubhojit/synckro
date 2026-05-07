@@ -3,7 +3,9 @@ package com.synckro.ui.screens.home
 import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.work.Constraints
 import androidx.work.ExistingWorkPolicy
+import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.workDataOf
@@ -62,11 +64,23 @@ class HomeViewModel
         /**
          * Enqueues a one-shot [SyncWorker] for [pair]. Any in-flight one-shot run for
          * the same pair is kept so the user never interrupts an ongoing sync.
+         *
+         * Constraints from the pair's settings are applied so the user's preferences
+         * (Wi-Fi only, requires charging) are respected even for manual syncs.
          */
         fun syncNow(pair: SyncPair) {
             Timber.i("HomeViewModel.syncNow(id=${pair.id})")
+            val constraints =
+                Constraints
+                    .Builder()
+                    .setRequiredNetworkType(if (pair.wifiOnly) NetworkType.UNMETERED else NetworkType.CONNECTED)
+                    .setRequiresCharging(pair.requiresCharging)
+                    .setRequiresBatteryNotLow(true)
+                    .setRequiresStorageNotLow(true)
+                    .build()
             val req =
                 OneTimeWorkRequestBuilder<SyncWorker>()
+                    .setConstraints(constraints)
                     .setInputData(workDataOf(SyncWorker.KEY_PAIR_ID to pair.id))
                     .build()
             workManager.enqueueUniqueWork(
