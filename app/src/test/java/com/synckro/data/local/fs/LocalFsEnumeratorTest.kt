@@ -20,6 +20,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -1089,7 +1090,7 @@ class LocalFsEnumeratorTest {
 
             try {
                 enumerator.enumerate(pairId, treeUri)
-                error("Expected LocalStorageException to be thrown")
+                fail("Expected LocalStorageException to be thrown")
             } catch (e: LocalStorageException) {
                 // Expected: root folder query failure must propagate as LocalStorageException.
                 assertTrue("cause must be the original SecurityException", e.cause is SecurityException)
@@ -1126,7 +1127,7 @@ class LocalFsEnumeratorTest {
 
             try {
                 enumerator.enumerate(pairId, treeUri)
-                error("Expected LocalStorageException to be thrown")
+                fail("Expected LocalStorageException to be thrown")
             } catch (e: LocalStorageException) {
                 // Expected: subtree query failure must propagate — the sync must not
                 // silently treat the failed subtree as an empty folder.
