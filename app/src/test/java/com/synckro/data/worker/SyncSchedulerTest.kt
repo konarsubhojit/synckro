@@ -11,6 +11,8 @@ import com.synckro.domain.model.CloudProviderType
 import com.synckro.domain.model.ConflictPolicy
 import com.synckro.domain.model.SyncDirection
 import com.synckro.domain.model.SyncPair
+import io.mockk.mockk
+import io.mockk.verify
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -214,6 +216,19 @@ class SyncSchedulerTest {
             "After cancel the work should be CANCELLED or absent",
             infos.isEmpty() || infos.all { it.state == WorkInfo.State.CANCELLED },
         )
+    }
+
+    @Test
+    fun `cancel calls cancelUniqueWork for both periodic and syncnow unique names`() {
+        // Use a mock WorkManager to directly verify that cancel() invokes cancelUniqueWork
+        // for both the periodic work name and the one-shot "sync now" work name.
+        val mockWm = mockk<WorkManager>(relaxed = true)
+        val testScheduler = SyncScheduler(mockWm)
+
+        testScheduler.cancel(42L)
+
+        verify { mockWm.cancelUniqueWork(SyncWorker.uniqueName(42L)) }
+        verify { mockWm.cancelUniqueWork(SyncWorker.syncNowUniqueName(42L)) }
     }
 
     // -------------------------------------------------------------------------

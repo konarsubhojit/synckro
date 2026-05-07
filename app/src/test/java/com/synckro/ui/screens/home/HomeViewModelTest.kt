@@ -8,6 +8,8 @@ import androidx.work.OneTimeWorkRequest
 import androidx.work.WorkManager
 import com.synckro.data.repository.ConflictRepository
 import com.synckro.data.repository.SyncPairRepository
+import com.synckro.data.worker.SyncScheduler
+import com.synckro.data.worker.SyncWorker
 import com.synckro.domain.model.CloudProviderType
 import com.synckro.domain.model.ConflictPolicy
 import com.synckro.domain.model.SyncDirection
@@ -45,6 +47,7 @@ class HomeViewModelTest {
     private lateinit var mockRepo: SyncPairRepository
     private lateinit var mockConflictRepo: ConflictRepository
     private lateinit var mockWorkManager: WorkManager
+    private lateinit var mockScheduler: SyncScheduler
     private lateinit var context: Context
     private val pairsFlow = MutableStateFlow<List<SyncPair>>(emptyList())
 
@@ -54,6 +57,7 @@ class HomeViewModelTest {
         mockRepo = mockk(relaxed = true)
         mockConflictRepo = mockk(relaxed = true)
         mockWorkManager = mockk(relaxed = true)
+        mockScheduler = mockk(relaxed = true)
         context = ApplicationProvider.getApplicationContext()
         every { mockRepo.observeAll(any()) } returns pairsFlow
         every { mockConflictRepo.observeUnresolved() } returns MutableStateFlow(emptyList())
@@ -70,6 +74,7 @@ class HomeViewModelTest {
             syncPairRepository = mockRepo,
             conflictRepository = mockConflictRepo,
             workManager = mockWorkManager,
+            syncScheduler = mockScheduler,
         )
 
     private fun pair(
@@ -149,6 +154,30 @@ class HomeViewModelTest {
             coVerify { mockRepo.delete(42L) }
         }
 
+    @Test
+    fun `delete cancels WorkManager jobs via SyncScheduler`() =
+        runTest {
+            val vm = createVm()
+            vm.delete(42L)
+            advanceUntilIdle()
+
+            verify { mockScheduler.cancel(42L) }
+        }
+
+    @Test
+    fun `delete cancels jobs before removing from repository`() =
+        runTest {
+            val cancelOrder = mutableListOf<String>()
+            every { mockScheduler.cancel(any()) } answers { cancelOrder.add("cancel") }
+            io.mockk.coEvery { mockRepo.delete(any()) } coAnswers { cancelOrder.add("delete") }
+
+            val vm = createVm()
+            vm.delete(7L)
+            advanceUntilIdle()
+
+            assertEquals(listOf("cancel", "delete"), cancelOrder)
+        }
+
     // -------------------------------------------------------------------------
     // Sync now
     // -------------------------------------------------------------------------
@@ -160,7 +189,7 @@ class HomeViewModelTest {
 
         vm.syncNow(testPair)
 
-        verify { mockWorkManager.enqueueUniqueWork("syncnow-5", ExistingWorkPolicy.KEEP, any<OneTimeWorkRequest>()) }
+        verify { mockWorkManager.enqueueUniqueWork(SyncWorker.syncNowUniqueName(5L), ExistingWorkPolicy.KEEP, any<OneTimeWorkRequest>()) }
     }
 
     @Test
@@ -169,8 +198,8 @@ class HomeViewModelTest {
         vm.syncNow(pair(1L))
         vm.syncNow(pair(2L))
 
-        verify { mockWorkManager.enqueueUniqueWork("syncnow-1", any(), any<OneTimeWorkRequest>()) }
-        verify { mockWorkManager.enqueueUniqueWork("syncnow-2", any(), any<OneTimeWorkRequest>()) }
+        verify { mockWorkManager.enqueueUniqueWork(SyncWorker.syncNowUniqueName(1L), any(), any<OneTimeWorkRequest>()) }
+        verify { mockWorkManager.enqueueUniqueWork(SyncWorker.syncNowUniqueName(2L), any(), any<OneTimeWorkRequest>()) }
     }
 
     @Test
