@@ -34,6 +34,8 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNotSame
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -993,6 +995,20 @@ class SyncEngineRealIntegrationTest {
     // -------------------------------------------------------------------------
     // Include-glob scope filtering
     // -------------------------------------------------------------------------
+
+    @Test
+    fun `scopeFiltersFor caches compiled globs per config`() =
+        runTest {
+            val engine = buildEngine()
+            val pair = insertPair()
+
+            val cachedOnce = engine.scopeFiltersFor(pair.copy(includeGlobs = listOf("*.kt"), excludeGlobs = listOf("build/**")))
+            val cachedTwice = engine.scopeFiltersFor(pair.copy(includeGlobs = listOf("*.kt"), excludeGlobs = listOf("build/**")))
+            val changedConfig = engine.scopeFiltersFor(pair.copy(includeGlobs = listOf("*.txt"), excludeGlobs = listOf("build/**")))
+
+            assertSame(cachedOnce, cachedTwice)
+            assertNotSame(cachedOnce, changedConfig)
+        }
 
     @Test
     fun `previously-synced file outside includeGlobs does not generate DeleteRemote`() =
