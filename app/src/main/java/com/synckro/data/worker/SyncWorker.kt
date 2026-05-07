@@ -18,6 +18,7 @@ import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import com.synckro.R
 import com.synckro.data.local.dao.SyncPairDao
+import com.synckro.data.local.entity.toDomain
 import com.synckro.data.repository.SyncEventRepository
 import com.synckro.domain.model.SyncEventLevel
 import com.synckro.domain.model.SyncPair
@@ -111,21 +112,7 @@ class SyncWorker
                 WorkManager.getInstance(applicationContext).cancelUniqueWork(uniqueName(pairId))
                 return Result.success()
             }
-            val pair =
-                SyncPair(
-                    id = entity.id,
-                    displayName = entity.displayName,
-                    localTreeUri = entity.localTreeUri,
-                    provider = entity.provider,
-                    remoteFolderId = entity.remoteFolderId,
-                    direction = entity.direction,
-                    conflictPolicy = entity.conflictPolicy,
-                    includeGlobs = entity.includeGlobs.split('\n').filter { it.isNotBlank() },
-                    excludeGlobs = entity.excludeGlobs.split('\n').filter { it.isNotBlank() },
-                    wifiOnly = entity.wifiOnly,
-                    requiresCharging = entity.requiresCharging,
-                    scheduleIntervalMinutes = entity.scheduleIntervalMinutes,
-                )
+            val pair = entity.toDomain()
 
             syncEventRepository.log(
                 pairId,
