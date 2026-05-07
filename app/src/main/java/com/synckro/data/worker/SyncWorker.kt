@@ -1,8 +1,10 @@
 package com.synckro.data.worker
 
+import android.Manifest
 import android.app.Notification
 import android.app.NotificationManager
 import android.content.Context
+import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.os.Build
 import androidx.core.app.NotificationCompat
@@ -194,10 +196,17 @@ class SyncWorker
                         }
                     }
                     if (promotedToForeground.get()) {
-                        notificationManager.notify(
-                            notificationId,
-                            buildProgressNotification(pair.displayName, progress),
-                        )
+                        if (canPostNotifications(applicationContext)) {
+                            notificationManager.notify(
+                                notificationId,
+                                buildProgressNotification(pair.displayName, progress),
+                            )
+                        } else {
+                            Timber.d(
+                                "SyncWorker: POST_NOTIFICATIONS not granted; progress update skipped for pair %d.",
+                                pairId,
+                            )
+                        }
                     }
                 }
 
@@ -495,6 +504,23 @@ class SyncWorker
              * @return The unique work name for the one-shot job (format: "syncnow-<pairId>").
              */
             fun syncNowUniqueName(pairId: Long): String = "syncnow-$pairId"
+
+            /**
+             * Returns `true` if the app is allowed to post notifications.
+             *
+             * On API < 33 (Android 13 / TIRAMISU) the `POST_NOTIFICATIONS` permission is not
+             * a runtime permission, so notifications are always permitted.  On API 33+ the
+             * user must explicitly grant the permission at runtime; this method returns `false`
+             * when it has not been granted so callers can skip notification updates and avoid
+             * a potential [SecurityException].
+             */
+            internal fun canPostNotifications(context: Context): Boolean =
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) ==
+                        PackageManager.PERMISSION_GRANTED
+                } else {
+                    true
+                }
         }
     }
 
