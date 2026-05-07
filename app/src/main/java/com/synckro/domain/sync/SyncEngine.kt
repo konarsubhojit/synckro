@@ -23,6 +23,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Orchestrates a single sync run for a [SyncPair].
@@ -60,6 +61,8 @@ class SyncEngine(
     private val eventRepository: SyncEventRepository? = null,
     private val localFileAccess: ((Uri) -> LocalFileAccess)? = null,
 ) {
+    private val scopeFilterCache = ConcurrentHashMap<ScopeFilterCacheKey, ScopeFilters>()
+
     /**
      * Outcome of a single [runOnce]. [Success] and [PartialFailure] both mean
      * WorkManager should treat the run as complete; [Retriable] should be
@@ -192,6 +195,20 @@ class SyncEngine(
         }
     }
 
+    internal fun scopeFiltersFor(pair: SyncPair): ScopeFilters =
+        scopeFilterCache.computeIfAbsent(
+            ScopeFilterCacheKey(
+                includeGlobs = pair.includeGlobs.toList(),
+                excludeGlobs = pair.excludeGlobs.toList(),
+            ),
+        ) { key ->
+            ScopeFilters(
+                includeGlobs = key.includeGlobs.mapNotNull { runCatching { LocalFsEnumerator.globToRegex(it) }.getOrNull() },
+                excludeGlobs = key.excludeGlobs.mapNotNull { runCatching { LocalFsEnumerator.globToRegex(it) }.getOrNull() },
+                includeFilterActive = key.includeGlobs.isNotEmpty(),
+            )
+        }
+
     private suspend fun runRealImpl(
         pair: SyncPair,
         provider: CloudProvider,
@@ -316,15 +333,11 @@ class SyncEngine(
         // deletion and emit a DeleteRemote — causing data loss from what is
         // effectively a configuration change.
         // -----------------------------------------------------------------
-        val scopeIncludeGlobs =
-            pair.includeGlobs.mapNotNull { runCatching { LocalFsEnumerator.globToRegex(it) }.getOrNull() }
-        val scopeExcludeGlobs =
-            pair.excludeGlobs.mapNotNull { runCatching { LocalFsEnumerator.globToRegex(it) }.getOrNull() }
-        val includeFilterActive = pair.includeGlobs.isNotEmpty()
+        val scopeFilters = scopeFiltersFor(pair)
 
         fun isInScope(path: String): Boolean {
-            if (scopeExcludeGlobs.any { it.matches(path) }) return false
-            if (includeFilterActive && scopeIncludeGlobs.none { it.matches(path) }) return false
+            if (scopeFilters.excludeGlobs.any { it.matches(path) }) return false
+            if (scopeFilters.includeFilterActive && scopeFilters.includeGlobs.none { it.matches(path) }) return false
             // When excludeSubfolders is enabled, only root-level paths (no '/' separator)
             // are in scope.  This mirrors the LocalFsEnumerator's BFS behaviour where
             // sub-directories are not traversed.
@@ -771,6 +784,17 @@ class SyncEngine(
     }
 
     companion object {
+        internal data class ScopeFilterCacheKey(
+            val includeGlobs: List<String>,
+            val excludeGlobs: List<String>,
+        )
+
+        internal data class ScopeFilters(
+            val includeGlobs: List<Regex>,
+            val excludeGlobs: List<Regex>,
+            val includeFilterActive: Boolean,
+        )
+
         /**
          * Maps a [LocalIndexEntity] row to the [FileIndexEntry] domain model consumed by
          * [SyncDiffer.diff]. Remote metadata columns populate the remote-side fields;
