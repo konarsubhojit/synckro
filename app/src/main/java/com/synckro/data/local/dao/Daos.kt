@@ -344,6 +344,17 @@ interface ConflictRecordDao {
     @Query("SELECT * FROM conflict_record WHERE resolution IS NULL ORDER BY detectedAtMs DESC")
     fun observeUnresolved(): Flow<List<ConflictRecordEntity>>
 
+    /**
+     * Observes the number of unresolved (pending) conflict records across all pairs.
+     *
+     * Prefer this over `observeUnresolved().map { it.size }` when only the count is
+     * needed: Room evaluates `COUNT(*)` directly in SQL without materialising every
+     * row into a [ConflictRecordEntity], which keeps Home-screen aggregation cheap
+     * even when the conflict table grows large.
+     */
+    @Query("SELECT COUNT(*) FROM conflict_record WHERE resolution IS NULL")
+    fun observeUnresolvedCount(): Flow<Int>
+
     /** Observes all conflict records (resolved and unresolved) for a specific pair. */
     @Query("SELECT * FROM conflict_record WHERE pairId = :pairId ORDER BY detectedAtMs DESC")
     fun observeForPair(pairId: Long): Flow<List<ConflictRecordEntity>>

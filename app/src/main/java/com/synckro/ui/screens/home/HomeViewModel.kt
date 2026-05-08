@@ -48,9 +48,9 @@ class HomeViewModel
         val state: StateFlow<UiState> =
             combine(
                 syncPairRepository.observeAll(context.contentResolver),
-                conflictRepository.observeUnresolved(),
-            ) { pairs, conflicts ->
-                UiState(pairs = pairs, isLoading = false, pendingConflictCount = conflicts.size)
+                conflictRepository.observeUnresolvedCount(),
+            ) { pairs, conflictCount ->
+                UiState(pairs = pairs, isLoading = false, pendingConflictCount = conflictCount)
             }.stateIn(
                 scope = viewModelScope,
                 started = SharingStarted.WhileSubscribed(5_000),

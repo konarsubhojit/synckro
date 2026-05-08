@@ -60,7 +60,7 @@ class HomeViewModelTest {
         mockScheduler = mockk(relaxed = true)
         context = ApplicationProvider.getApplicationContext()
         every { mockRepo.observeAll(any()) } returns pairsFlow
-        every { mockConflictRepo.observeUnresolved() } returns MutableStateFlow(emptyList())
+        every { mockConflictRepo.observeUnresolvedCount() } returns MutableStateFlow(0)
     }
 
     @After

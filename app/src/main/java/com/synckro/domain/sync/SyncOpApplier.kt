@@ -667,6 +667,17 @@ class SyncOpApplier(
     // -------------------------------------------------------------------------
 
     /**
+     * Per-run cache of resolved remote folder IDs, keyed by `(parentId, folderName)`.
+     *
+     * Populated by [ensureRemoteFolderPath] from the results of `provider.list()`
+     * and `provider.createFolder()`. Lives for the lifetime of this applier
+     * instance, which corresponds to a single sync run, so identical nested
+     * upload prefixes (e.g. `docs/project/...`) only pay for one provider list
+     * per parent. See issue #103.
+     */
+    private val folderIdCache: MutableMap<Pair<String, String>, String> = mutableMapOf()
+
+    /**
      * Walks [segments] under [rootId], creating any missing intermediate folders
      * via [provider.createFolder]. If a folder with the given name already exists
      * as a direct child of the current parent it is reused without creating a
@@ -676,11 +687,14 @@ class SyncOpApplier(
      * that the file should be uploaded into). If [segments] is empty [rootId] is
      * returned immediately with no provider calls.
      *
-     * **Performance note**: each path segment requires one `provider.list()` call
-     * to detect whether the folder already exists. For typical sync payloads with
-     * shallow nesting (1–2 levels) this is acceptable. Deeper hierarchies or
-     * bulk operations could benefit from a per-run folder-ID cache, which can be
-     * added if profiling shows it to be a bottleneck.
+     * **Performance**: results are memoised in [folderIdCache] for the lifetime
+     * of this [SyncOpApplier] instance (one sync run). The first traversal of a
+     * given parent issues a single `provider.list()` call and caches *all* of
+     * its child folders, so subsequent uploads sharing the same prefix
+     * (e.g. `docs/project/...`) hit the cache without further network round
+     * trips. New folders created via `provider.createFolder` are also added to
+     * the cache so a later upload to the same path finds them immediately.
+     * See issue #103.
      *
      * @param rootId   The provider ID of the starting folder (e.g. [SyncPair.remoteFolderId]).
      * @param segments Path components to traverse/create, in order (e.g. `["docs", "subdir"]`).
@@ -692,9 +706,27 @@ class SyncOpApplier(
     ): String {
         var currentId = rootId
         for (segment in segments) {
-            val children = provider.list(currentId)
-            val existing = children.find { it.isFolder && it.name == segment }
-            currentId = existing?.id ?: provider.createFolder(currentId, segment).id
+            val cacheKey = currentId to segment
+            val cached = folderIdCache[cacheKey]
+            currentId =
+                if (cached != null) {
+                    cached
+                } else {
+                    val children = provider.list(currentId)
+                    // Cache every child folder of currentId so siblings of `segment`
+                    // also benefit from this single list() call on later iterations.
+                    for (child in children) {
+                        if (child.isFolder) {
+                            folderIdCache[currentId to child.name] = child.id
+                        }
+                    }
+                    val existingId = folderIdCache[cacheKey]
+                    val resolvedId = existingId ?: provider.createFolder(currentId, segment).id
+                    if (existingId == null) {
+                        folderIdCache[cacheKey] = resolvedId
+                    }
+                    resolvedId
+                }
         }
         return currentId
     }

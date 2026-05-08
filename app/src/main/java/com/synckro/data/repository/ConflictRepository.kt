@@ -20,6 +20,14 @@ class ConflictRepository
         /** Observes all unresolved (pending) conflict records across all pairs, newest first. */
         fun observeUnresolved(): Flow<List<ConflictRecord>> = dao.observeUnresolved().map { list -> list.map { it.toDomain() } }
 
+        /**
+         * Observes the number of unresolved (pending) conflicts across all pairs.
+         *
+         * Prefer this over [observeUnresolved] when the UI only needs the count;
+         * the DAO uses `SELECT COUNT(*)` so no entity rows are materialised.
+         */
+        fun observeUnresolvedCount(): Flow<Int> = dao.observeUnresolvedCount()
+
         /** Observes all conflict records (resolved and pending) for a specific pair. */
         fun observeForPair(pairId: Long): Flow<List<ConflictRecord>> = dao.observeForPair(pairId).map { list -> list.map { it.toDomain() } }
 

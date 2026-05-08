@@ -66,7 +66,7 @@ fun LogsScreen(
     val dateFormat = remember { SimpleDateFormat("MM-dd HH:mm:ss.SSS", Locale.US) }
 
     val buildLogText: () -> String = {
-        state.events.joinToString("\n") { it.toLogLine(dateFormat) }
+        buildLogExportText(state.events, dateFormat)
     }
 
     Scaffold(
@@ -208,4 +208,37 @@ private fun LogEntryRow(
 private fun SyncEvent.toLogLine(dateFormat: SimpleDateFormat): String {
     val ts = dateFormat.format(Date(timestampMs))
     return "$ts ${level.name.padEnd(5)} [$tag] $message"
+}
+
+/**
+ * Maximum number of log entries to include in copy / share output.
+ *
+ * Building one giant string for many thousands of entries can cause UI jank,
+ * out-of-memory errors, or ANRs (issue #93). When the event count exceeds
+ * this cap, only the most recent entries are exported and the truncation is
+ * indicated with a leading `… N earlier entries omitted …` line.
+ */
+internal const val MAX_COPY_SHARE_ENTRIES: Int = 1_000
+
+/**
+ * Builds the plain-text log payload used by the copy and share actions.
+ *
+ * Limits the output to the most recent [MAX_COPY_SHARE_ENTRIES] events. When
+ * truncation occurs, the first line of the result describes how many earlier
+ * entries were omitted.
+ */
+internal fun buildLogExportText(
+    events: List<SyncEvent>,
+    dateFormat: SimpleDateFormat,
+): String {
+    val total = events.size
+    if (total <= MAX_COPY_SHARE_ENTRIES) {
+        return events.joinToString("\n") { it.toLogLine(dateFormat) }
+    }
+    val omitted = total - MAX_COPY_SHARE_ENTRIES
+    val recent = events.subList(total - MAX_COPY_SHARE_ENTRIES, total)
+    return buildString {
+        append("… $omitted earlier entries omitted (showing most recent $MAX_COPY_SHARE_ENTRIES)\n")
+        recent.joinTo(this, separator = "\n") { it.toLogLine(dateFormat) }
+    }
 }

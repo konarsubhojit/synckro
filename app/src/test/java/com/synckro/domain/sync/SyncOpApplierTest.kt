@@ -17,6 +17,7 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
 import io.mockk.slot
+import io.mockk.spyk
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -326,6 +327,77 @@ class SyncOpApplierTest {
             val uploaded = rootChildren.single()
             assertEquals("flat.txt", uploaded.name)
             assertFalse(uploaded.isFolder)
+        }
+
+    @Test
+    fun `repeated nested uploads share a per-run folder lookup cache`() =
+        runTest {
+            // Issue #103: ensureRemoteFolderPath should not call provider.list()
+            // for every upload that shares the same nested prefix.
+            val spied = spyk(FakeCloudProvider())
+            fakeProvider = spied
+            localFs.put("docs/project/a.txt", "a".toByteArray())
+            localFs.put("docs/project/b.txt", "b".toByteArray())
+            localFs.put("docs/project/c.txt", "c".toByteArray())
+
+            val result =
+                buildApplier().apply(
+                    ops =
+                        listOf(
+                            SyncOp.UploadNew("docs/project/a.txt"),
+                            SyncOp.UploadNew("docs/project/b.txt"),
+                            SyncOp.UploadNew("docs/project/c.txt"),
+                        ),
+                    pair = pair(),
+                    remoteFilesByPath = emptyMap(),
+                    localIndexByPath = emptyMap(),
+                )
+
+            assertEquals(3, result.applied)
+            assertTrue(result.errors.isEmpty())
+            // Without caching, each of 3 uploads would walk 2 segments
+            // ("docs", "project") and call list() once per segment = 6 calls.
+            // With per-run caching, the first upload pays for both list() calls
+            // (one per segment) and the next two uploads hit the cache only.
+            coVerify(exactly = 2) { spied.list(any()) }
+
+            // Sanity: all three files end up in the same docs/project folder.
+            val docsFolder = spied.list("root").single { it.isFolder && it.name == "docs" }
+            val projectFolder = spied.list(docsFolder.id).single { it.isFolder && it.name == "project" }
+            val projectChildren = spied.list(projectFolder.id).map { it.name }.sorted()
+            assertEquals(listOf("a.txt", "b.txt", "c.txt"), projectChildren)
+        }
+
+    @Test
+    fun `folder cache reuses freshly created folders without re-listing`() =
+        runTest {
+            // When ensureRemoteFolderPath has to create a new folder, that newly
+            // created folder must be remembered so a later upload to the same
+            // path reuses it instead of issuing another list/createFolder pair.
+            val spied = spyk(FakeCloudProvider())
+            fakeProvider = spied
+            localFs.put("new/sub/first.txt", "x".toByteArray())
+            localFs.put("new/sub/second.txt", "y".toByteArray())
+
+            val result =
+                buildApplier().apply(
+                    ops =
+                        listOf(
+                            SyncOp.UploadNew("new/sub/first.txt"),
+                            SyncOp.UploadNew("new/sub/second.txt"),
+                        ),
+                    pair = pair(),
+                    remoteFilesByPath = emptyMap(),
+                    localIndexByPath = emptyMap(),
+                )
+
+            assertEquals(2, result.applied)
+            // Only the first upload should walk + list (2 segments → 2 list calls).
+            coVerify(exactly = 2) { spied.list(any()) }
+            // The "sub" folder must be created exactly once even though two files
+            // target it.
+            coVerify(exactly = 1) { spied.createFolder(any(), "sub") }
+            coVerify(exactly = 1) { spied.createFolder(any(), "new") }
         }
 
     // =========================================================================
