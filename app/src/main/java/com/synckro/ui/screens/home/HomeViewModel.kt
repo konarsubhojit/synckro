@@ -120,11 +120,16 @@ class HomeViewModel
          */
         fun requestDelete(pair: SyncPair) {
             Timber.i("HomeViewModel.requestDelete(id=${pair.id})")
-            // Commit any prior pending delete that is still in its undo window so we
-            // don't accidentally drop the user's previous intent.
+            // Always cancel any in-flight commit timer first so we never have two
+            // racing jobs — including when the same pair is deleted again during
+            // its own undo window (the old job's deadline would otherwise commit
+            // earlier than the user's new undo window expects).
+            pendingDeleteJob?.cancel()
+            pendingDeleteJob = null
+            // If a different pair was waiting to commit, flush it now so we don't
+            // drop the user's previous intent.
             val prior = pendingDeleteState.value
             if (prior != null && prior.pair.id != pair.id) {
-                pendingDeleteJob?.cancel()
                 commitDeleteInternal(prior.pair.id)
             }
             hiddenIds.update { it + pair.id }
@@ -218,14 +223,15 @@ class HomeViewModel
                                 infos.isNotEmpty() && infos.all { it.state.isFinished }
                             }
                     }
-                if (result.isSuccess) {
-                    syncingIds.update { it - pair.id }
-                } else {
-                    // Keep the pair in syncingIds when the watcher can't observe the worker —
-                    // optimistically clearing it would falsely indicate the run is done.
-                    // The foreground notification will still appear and the user can retry.
+                if (result.isFailure) {
                     Timber.w(result.exceptionOrNull(), "syncNow watcher failed for pair=${pair.id}")
                 }
+                // Always clear the syncing flag — leaving it set on watcher failure
+                // would disable the Sync now button indefinitely with no way to retry.
+                // If the worker is still running, the foreground notification keeps
+                // the user informed; tapping Sync now again is a safe no-op because
+                // ExistingWorkPolicy.KEEP preserves the in-flight job.
+                syncingIds.update { it - pair.id }
             }
         }
 

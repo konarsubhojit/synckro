@@ -218,4 +218,5 @@
     <string name="pair_editor_section_schedule">Schedule</string>
     <string name="pair_editor_section_filters">Filters</string>
     <string name="pair_editor_save_failed_banner">Couldn\u0027t save: %1$s</string>
+    <string name="pair_editor_save_failed_banner_dismiss">Dismiss</string>
 </resources>

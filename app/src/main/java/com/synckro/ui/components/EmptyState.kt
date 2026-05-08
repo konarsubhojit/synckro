@@ -3,7 +3,6 @@ package com.synckro.ui.components
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -24,6 +23,11 @@ import androidx.compose.ui.unit.dp
  * the conflict inbox, and the logs viewer. Pairs a short headline with optional
  * supporting text, an illustrative icon, and an optional primary action button.
  *
+ * The composable does NOT apply [fillMaxSize] to the outer [Box] — callers are
+ * responsible for sizing it via [modifier] so it remains usable inside cards or
+ * other constrained layouts. For full-screen empty states pass
+ * `Modifier.fillMaxSize()`.
+ *
  * @param title Headline describing the empty state.
  * @param body Optional secondary text providing context about why the state is empty.
  * @param icon Optional decorative icon shown above the title.
@@ -41,7 +45,7 @@ fun EmptyState(
     modifier: Modifier = Modifier,
 ) {
     Box(
-        modifier = modifier.fillMaxSize(),
+        modifier = modifier,
         contentAlignment = Alignment.Center,
     ) {
         Column(

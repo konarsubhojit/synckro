@@ -47,6 +47,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -69,9 +71,9 @@ fun HomeScreen(
     val snackbarHostState = remember { SnackbarHostState() }
 
     // Surface a snackbar with an Undo action when a delete is pending. The VM
-    // commits the delete on its own UNDO_WINDOW_MS timer; if the user dismisses
-    // the snackbar by tapping its action we cancel the pending delete, otherwise
-    // we let the VM finalize promptly so it doesn't linger past the snackbar.
+    // commits the delete on its own UNDO_WINDOW_MS timer, so this composable's
+    // job is purely to react to the user's action: tapping Undo cancels the
+    // pending delete; otherwise we leave the VM timer to commit on schedule.
     val pendingDelete = state.pendingDelete
     val undoLabel = stringResource(R.string.home_delete_undo_action)
     val undoMessageFmt = stringResource(R.string.home_delete_undo_message_format)
@@ -83,10 +85,12 @@ fun HomeScreen(
             duration = SnackbarDuration.Short,
             withDismissAction = true,
         )
-        when (result) {
-            SnackbarResult.ActionPerformed -> viewModel.undoDelete()
-            SnackbarResult.Dismissed -> viewModel.finalizePendingDelete()
+        if (result == SnackbarResult.ActionPerformed) {
+            viewModel.undoDelete()
         }
+        // On Dismissed (timeout / dismiss icon) we deliberately do nothing — the
+        // VM's pendingDeleteJob will commit at UNDO_WINDOW_MS, preserving the
+        // intended grace period rather than shortening it to the snackbar duration.
     }
 
     Scaffold(
@@ -284,8 +288,11 @@ private fun SyncPairRow(
                 // was registered (without waiting for the foreground notification).
                 IconButton(onClick = onSyncNow, enabled = !isSyncing) {
                     if (isSyncing) {
+                        val inProgressLabel = stringResource(R.string.sync_now_in_progress)
                         CircularProgressIndicator(
-                            modifier = Modifier.size(20.dp),
+                            modifier = Modifier
+                                .size(20.dp)
+                                .semantics { contentDescription = inProgressLabel },
                             strokeWidth = 2.dp,
                         )
                     } else {

@@ -103,7 +103,28 @@ class PairEditorViewModel
              */
             val retentionDaysText: String = "",
             val isSaving: Boolean = false,
+            /**
+             * Persistent error message shown as an inline banner on the editor.
+             * Set by [save] when validation or persistence fails; cleared when the
+             * user dismisses it via [clearSaveError] or starts editing the
+             * relevant field. Distinct from [saveErrorEvent] which drives the
+             * one-shot snackbar.
+             */
             val saveError: String? = null,
+            /**
+             * Monotonically increasing counter used as a one-shot trigger for the
+             * "save failed" snackbar. The screen observes this in a
+             * [androidx.compose.runtime.LaunchedEffect] keyed on the value;
+             * clearing [saveError] does not retract the snackbar.
+             */
+            val saveErrorEvent: Long = 0L,
+            /**
+             * True when the user attempted to save with a blank display name.
+             * Drives the [OutlinedTextField]'s `isError` + supporting text and is
+             * independent of [saveError] so non-validation save failures do not
+             * incorrectly mark this field as invalid.
+             */
+            val nameRequiredError: Boolean = false,
             /**
              * Non-null when the user has selected a destructive sync direction that
              * requires an explicit confirmation before being applied. The screen
@@ -216,7 +237,15 @@ class PairEditorViewModel
             _state.update { it.copy(localTreeUri = uri) }
         }
 
-        fun onDisplayNameChange(value: String) = _state.update { it.copy(displayName = value) }
+        fun onDisplayNameChange(value: String) =
+            _state.update {
+                // Clear the name-required validation flag as soon as the user types
+                // something so the inline error doesn't linger past the fix.
+                it.copy(
+                    displayName = value,
+                    nameRequiredError = if (value.isBlank()) it.nameRequiredError else false,
+                )
+            }
 
         /**
          * Called by the navigation layer when [PickRemoteFolderScreen] has returned a confirmed
@@ -289,24 +318,54 @@ class PairEditorViewModel
         /**
          * Validates and persists the current form state. Calls [onSaved] with the
          * persisted row ID on success, or sets [UiState.saveError] on failure.
+         *
+         * Validation errors set [UiState.saveError] (banner) **and** bump
+         * [UiState.saveErrorEvent] so the screen can show a one-shot snackbar
+         * without coupling the snackbar lifecycle to the persistent banner.
+         * Field-specific errors (currently only the display name) also flip
+         * dedicated flags such as [UiState.nameRequiredError] so the
+         * `OutlinedTextField` can render its own inline error independently of
+         * what the banner is showing.
          */
         fun save(onSaved: (Long) -> Unit) {
             val s = _state.value
             if (s.displayName.isBlank()) {
-                _state.update { it.copy(saveError = strings.getString(R.string.pair_editor_error_name_required)) }
+                _state.update {
+                    it.copy(
+                        saveError = strings.getString(R.string.pair_editor_error_name_required),
+                        saveErrorEvent = it.saveErrorEvent + 1L,
+                        nameRequiredError = true,
+                    )
+                }
                 return
             }
             if (s.localTreeUri.isBlank()) {
-                _state.update { it.copy(saveError = strings.getString(R.string.pair_editor_error_folder_required)) }
+                _state.update {
+                    it.copy(
+                        saveError = strings.getString(R.string.pair_editor_error_folder_required),
+                        saveErrorEvent = it.saveErrorEvent + 1L,
+                    )
+                }
                 return
             }
             val retentionDaysText = s.retentionDaysText.trim()
             val retentionDays = retentionDaysText.takeIf { it.isNotBlank() }?.toIntOrNull()
             if (retentionDaysText.isNotBlank() && (retentionDays == null || retentionDays !in 0..MAX_RETENTION_DAYS)) {
-                _state.update { it.copy(saveError = strings.getString(R.string.pair_editor_retention_days_error)) }
+                _state.update {
+                    it.copy(
+                        saveError = strings.getString(R.string.pair_editor_retention_days_error),
+                        saveErrorEvent = it.saveErrorEvent + 1L,
+                    )
+                }
                 return
             }
-            _state.update { it.copy(isSaving = true, saveError = null) }
+            _state.update {
+                it.copy(
+                    isSaving = true,
+                    saveError = null,
+                    nameRequiredError = false,
+                )
+            }
             viewModelScope.launch {
                 runCatching {
                     val pair =
@@ -352,12 +411,15 @@ class PairEditorViewModel
                         it.copy(
                             isSaving = false,
                             saveError = t.message ?: strings.getString(R.string.pair_editor_error_save_failed),
+                            saveErrorEvent = it.saveErrorEvent + 1L,
                         )
                     }
                 }
             }
         }
 
+        /** Clears the persistent inline error banner. The transient snackbar is
+         *  driven by [UiState.saveErrorEvent] and is unaffected by this call. */
         fun clearSaveError() = _state.update { it.copy(saveError = null) }
 
         companion object {

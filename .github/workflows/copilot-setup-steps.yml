@@ -1,0 +1,88 @@
+name: "Copilot Setup Steps"
+
+# Re-run automatically when the setup steps file itself changes so changes are
+# easy to validate, and allow manual runs from the Actions tab.
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/copilot-setup-steps.yml
+  pull_request:
+    paths:
+      - .github/workflows/copilot-setup-steps.yml
+
+jobs:
+  # The job MUST be called `copilot-setup-steps` or it will not be picked up by Copilot.
+  copilot-setup-steps:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    env:
+      ANDROID_SDK_ROOT: ${{ github.workspace }}/.android-sdk
+      ANDROID_API_LEVEL: '34'
+      ANDROID_BUILD_TOOLS_VERSION: '34.0.0'
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Validate Gradle wrapper
+        uses: gradle/actions/wrapper-validation@v4
+
+      # gradle/actions/setup-gradle handles ~/.gradle/caches and ~/.gradle/wrapper
+      # with built-in cache key + fallback restore keys derived from the wrapper
+      # and build scripts, so subsequent agent runs reuse downloaded dependencies
+      # and the configuration cache.
+      - name: Set up Gradle (with build cache + restore keys)
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          # Allow this workflow to populate the cache so later agent runs hit it.
+          cache-read-only: false
+          gradle-home-cache-cleanup: true
+
+      # Explicit cache for the Gradle dependency caches with hierarchical
+      # restore-keys. This complements setup-gradle by giving us a long-lived
+      # fallback that survives small build-script changes — e.g. when only one
+      # module's lockfile changed, the previous full cache is still partially
+      # reused.
+      - name: Cache Gradle dependency caches
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches/modules-2
+            ~/.gradle/caches/jars-9
+            ~/.gradle/caches/transforms-4
+          key: ${{ runner.os }}-gradle-deps-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties', 'gradle/libs.versions.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-deps-
+
+      - name: Cache Android SDK
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.ANDROID_SDK_ROOT }}
+          key: ${{ runner.os }}-android-sdk-${{ env.ANDROID_API_LEVEL }}-build-tools-${{ env.ANDROID_BUILD_TOOLS_VERSION }}-v1
+          restore-keys: |
+            ${{ runner.os }}-android-sdk-${{ env.ANDROID_API_LEVEL }}-build-tools-${{ env.ANDROID_BUILD_TOOLS_VERSION }}-
+            ${{ runner.os }}-android-sdk-${{ env.ANDROID_API_LEVEL }}-
+            ${{ runner.os }}-android-sdk-
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: >
+            platform-tools
+            platforms;android-${{ env.ANDROID_API_LEVEL }}
+            build-tools;${{ env.ANDROID_BUILD_TOOLS_VERSION }}
+
+      # Pre-warm the build so dependencies, KSP processors, and Hilt code-gen
+      # are downloaded/compiled and cached before the agent starts work. This
+      # measurably reduces first-build time during the agent run.
+      - name: Pre-warm Gradle dependency cache
+        run: ./gradlew --no-daemon help :app:dependencies --quiet || true

@@ -21,8 +21,11 @@ import io.mockk.slot
 import io.mockk.verify
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -62,6 +65,11 @@ class HomeViewModelTest {
         context = ApplicationProvider.getApplicationContext()
         every { mockRepo.observeAll(any()) } returns pairsFlow
         every { mockConflictRepo.observeUnresolvedCount() } returns MutableStateFlow(0)
+        // Default WorkManager flow that never emits — keeps the syncNow watcher
+        // suspended unless a specific test overrides this. Tests that exercise the
+        // watcher's failure path should override with a flow that throws.
+        every { mockWorkManager.getWorkInfosForUniqueWorkFlow(any<String>()) } returns
+            flow { awaitCancellation() }
     }
 
     @After
@@ -293,7 +301,10 @@ class HomeViewModelTest {
             advanceUntilIdle()
 
             vm.syncNow(pair(7L))
-            advanceUntilIdle()
+            // Use runCurrent so the watcher coroutine does NOT drain — otherwise
+            // the mocked WorkManager returns an empty flow that completes
+            // immediately and the watcher would clear the syncing flag.
+            runCurrent()
 
             assertTrue(7L in vm.state.value.syncingPairIds)
             collectJob.cancel()
@@ -308,10 +319,30 @@ class HomeViewModelTest {
 
             vm.syncNow(pair(1L))
             vm.syncNow(pair(2L))
-            advanceUntilIdle()
+            runCurrent()
 
             assertTrue(1L in vm.state.value.syncingPairIds)
             assertTrue(2L in vm.state.value.syncingPairIds)
+            collectJob.cancel()
+        }
+
+    @Test
+    fun `syncNow clears syncing flag when watcher fails`() =
+        runTest {
+            // Override the default suspending flow with one that emits nothing and
+            // completes — `first { }` then throws NoSuchElementException, which
+            // used to leave the flag set and disable Sync now indefinitely.
+            every { mockWorkManager.getWorkInfosForUniqueWorkFlow(any<String>()) } returns
+                emptyFlow()
+
+            val vm = createVm()
+            val collectJob = launch { vm.state.collect {} }
+            advanceUntilIdle()
+
+            vm.syncNow(pair(3L))
+            advanceUntilIdle()
+
+            assertFalse(3L in vm.state.value.syncingPairIds)
             collectJob.cancel()
         }
 
@@ -436,6 +467,38 @@ class HomeViewModelTest {
             // Pair 2 is the new pending one and shouldn't be committed yet.
             io.mockk.verify(exactly = 0) { mockScheduler.cancel(2L) }
             assertEquals(2L, vm.state.value.pendingDelete?.pair?.id)
+            collectJob.cancel()
+        }
+
+    @Test
+    fun `re-requesting delete for the same pair restarts the undo window`() =
+        runTest {
+            pairsFlow.value = listOf(pair(1L))
+            val vm = createVm()
+            val collectJob = launch { vm.state.collect {} }
+            advanceUntilIdle()
+
+            vm.requestDelete(pair(1L))
+            runCurrent()
+
+            // Advance partway into the original window, then re-request the same pair.
+            // The original timer must be cancelled so it cannot fire at its earlier
+            // deadline once the new window's commit fires.
+            testDispatcher.scheduler.advanceTimeBy(HomeViewModel.UNDO_WINDOW_MS - 100L)
+            vm.requestDelete(pair(1L))
+            runCurrent()
+
+            // Past the original deadline but well before the new one — no commit yet.
+            testDispatcher.scheduler.advanceTimeBy(200L)
+            runCurrent()
+            coVerify(exactly = 0) { mockRepo.delete(1L) }
+            io.mockk.verify(exactly = 0) { mockScheduler.cancel(1L) }
+            assertEquals(1L, vm.state.value.pendingDelete?.pair?.id)
+
+            // Now drain the new window — exactly one commit should fire.
+            advanceUntilIdle()
+            coVerify(exactly = 1) { mockRepo.delete(1L) }
+            io.mockk.verify(exactly = 1) { mockScheduler.cancel(1L) }
             collectJob.cancel()
         }
 }

@@ -88,10 +88,14 @@ fun PairEditorScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val context = LocalContext.current
 
-    LaunchedEffect(state.saveError) {
+    // Drive the transient "save failed" snackbar from the one-shot
+    // [saveErrorEvent] counter so dismissing it does NOT also clear the
+    // persistent banner. The banner remains visible until the user fixes the
+    // problem or explicitly dismisses it.
+    LaunchedEffect(state.saveErrorEvent) {
+        if (state.saveErrorEvent == 0L) return@LaunchedEffect
         val err = state.saveError ?: return@LaunchedEffect
         snackbarHostState.showSnackbar(err)
-        viewModel.clearSaveError()
     }
 
     // Confirmation dialog shown when the user selects a destructive sync direction.
@@ -165,6 +169,8 @@ fun PairEditorScreen(
             ) {
                 // Persistent error banner — complements the transient snackbar so a
                 // long form's save failure isn't easy to miss after scrolling.
+                // Driven by [saveError] which is independent of the snackbar event,
+                // so the banner stays visible until the user dismisses or resolves it.
                 state.saveError?.let { err ->
                     androidx.compose.material3.Card(
                         modifier = Modifier.fillMaxWidth(),
@@ -173,21 +179,28 @@ fun PairEditorScreen(
                             contentColor = MaterialTheme.colorScheme.onErrorContainer,
                         ),
                     ) {
-                        Text(
-                            text = stringResource(R.string.pair_editor_save_failed_banner, err),
-                            style = MaterialTheme.typography.bodyMedium,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(12.dp),
-                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = stringResource(R.string.pair_editor_save_failed_banner, err),
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.weight(1f),
+                            )
+                            TextButton(onClick = { viewModel.clearSaveError() }) {
+                                Text(stringResource(R.string.pair_editor_save_failed_banner_dismiss))
+                            }
+                        }
                     }
                 }
 
                 // ── Folders ─────────────────────────────────────────────────────
                 SectionHeader(text = stringResource(R.string.pair_editor_section_folders))
 
-                // Display name (required)
-                val displayNameInvalid = state.displayName.isBlank() && state.saveError != null
+                // Display name (required) — uses a dedicated validation flag so the
+                // field's inline error is independent of unrelated save failures.
+                val displayNameInvalid = state.nameRequiredError
                 OutlinedTextField(
                     value = state.displayName,
                     onValueChange = viewModel::onDisplayNameChange,
