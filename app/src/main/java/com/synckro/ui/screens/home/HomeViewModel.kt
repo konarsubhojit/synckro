@@ -16,10 +16,15 @@ import com.synckro.data.worker.SyncWorker
 import com.synckro.domain.model.SyncPair
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import javax.inject.Inject
@@ -38,27 +43,65 @@ class HomeViewModel
         private val workManager: WorkManager,
         private val syncScheduler: SyncScheduler,
     ) : ViewModel() {
+        /**
+         * Soft-deleted pair waiting for the undo grace window to expire. Surfaced via
+         * [UiState.pendingDelete] so the home screen can render an "undo" snackbar
+         * (Material 3 snackbar pattern).
+         */
+        data class PendingDelete(val pair: SyncPair)
+
         data class UiState(
             val pairs: List<SyncPair> = emptyList(),
             val isLoading: Boolean = true,
             /** Number of pending (unresolved) conflicts across all pairs. */
             val pendingConflictCount: Int = 0,
+            /** IDs of pairs that currently have an in-flight one-shot "sync now" job. */
+            val syncingPairIds: Set<Long> = emptySet(),
+            /** Non-null while a soft-deleted pair is still within the undo window. */
+            val pendingDelete: PendingDelete? = null,
         )
+
+        /** Pair IDs that have an active "sync now" run; updated optimistically. */
+        private val syncingIds = MutableStateFlow<Set<Long>>(emptySet())
+
+        /** Pair IDs hidden from the visible list because they are pending soft-deletion. */
+        private val hiddenIds = MutableStateFlow<Set<Long>>(emptySet())
+
+        /** Currently pending soft-delete (if any). */
+        private val pendingDeleteState = MutableStateFlow<PendingDelete?>(null)
+
+        /** Coroutine that commits the pending soft-delete after [UNDO_WINDOW_MS]. */
+        private var pendingDeleteJob: Job? = null
 
         val state: StateFlow<UiState> =
             combine(
                 syncPairRepository.observeAll(context.contentResolver),
                 conflictRepository.observeUnresolvedCount(),
-            ) { pairs, conflictCount ->
-                UiState(pairs = pairs, isLoading = false, pendingConflictCount = conflictCount)
+                syncingIds,
+                hiddenIds,
+                pendingDeleteState,
+            ) { pairs, conflictCount, syncing, hidden, pending ->
+                UiState(
+                    pairs = pairs.filter { it.id !in hidden },
+                    isLoading = false,
+                    pendingConflictCount = conflictCount,
+                    syncingPairIds = syncing,
+                    pendingDelete = pending,
+                )
             }.stateIn(
                 scope = viewModelScope,
                 started = SharingStarted.WhileSubscribed(5_000),
                 initialValue = UiState(),
             )
 
-        /** Permanently removes the sync pair with [id] from the database and cancels any
-         *  associated background sync jobs (both periodic and one-shot). */
+        /**
+         * Permanently removes the sync pair with [id] from the database and cancels any
+         * associated background sync jobs (both periodic and one-shot).
+         *
+         * Prefer [requestDelete] for user-initiated deletions so the user has a chance
+         * to undo via a snackbar. This method is kept for callers that need an
+         * immediate, non-undoable removal.
+         */
         fun delete(id: Long) {
             Timber.i("HomeViewModel.delete(id=$id)")
             syncScheduler.cancel(id)
@@ -66,8 +109,76 @@ class HomeViewModel
         }
 
         /**
+         * Soft-deletes [pair] with an undo grace period of [UNDO_WINDOW_MS] ms. The
+         * pair is hidden from the UI immediately so the list reflects the change, and
+         * the [UiState.pendingDelete] field is set so the screen can surface an undo
+         * snackbar. If the user taps undo within the window, [undoDelete] reverses
+         * the action; otherwise the deletion commits exactly as in [delete].
+         *
+         * If a previous undo is still pending when this is called, that previous
+         * pending delete is committed immediately to avoid losing the prior intent.
+         */
+        fun requestDelete(pair: SyncPair) {
+            Timber.i("HomeViewModel.requestDelete(id=${pair.id})")
+            // Commit any prior pending delete that is still in its undo window so we
+            // don't accidentally drop the user's previous intent.
+            val prior = pendingDeleteState.value
+            if (prior != null && prior.pair.id != pair.id) {
+                pendingDeleteJob?.cancel()
+                commitDeleteInternal(prior.pair.id)
+            }
+            hiddenIds.update { it + pair.id }
+            pendingDeleteState.value = PendingDelete(pair)
+            pendingDeleteJob =
+                viewModelScope.launch {
+                    delay(UNDO_WINDOW_MS)
+                    val current = pendingDeleteState.value
+                    if (current?.pair?.id == pair.id) {
+                        pendingDeleteState.value = null
+                        commitDeleteInternal(pair.id)
+                    }
+                }
+        }
+
+        /**
+         * Cancels the pending soft-delete (if any) and restores the pair to the visible
+         * list. Safe to call when no delete is pending — it becomes a no-op.
+         */
+        fun undoDelete() {
+            val pending = pendingDeleteState.value ?: return
+            Timber.i("HomeViewModel.undoDelete(id=${pending.pair.id})")
+            pendingDeleteJob?.cancel()
+            pendingDeleteJob = null
+            pendingDeleteState.value = null
+            hiddenIds.update { it - pending.pair.id }
+        }
+
+        /**
+         * Forces the currently-pending soft-delete to commit immediately instead of
+         * waiting for [UNDO_WINDOW_MS]. The home screen calls this when the snackbar
+         * is dismissed by user action so no stale "pending" state lingers in the VM.
+         */
+        fun finalizePendingDelete() {
+            val pending = pendingDeleteState.value ?: return
+            pendingDeleteJob?.cancel()
+            pendingDeleteJob = null
+            pendingDeleteState.value = null
+            commitDeleteInternal(pending.pair.id)
+        }
+
+        private fun commitDeleteInternal(id: Long) {
+            syncScheduler.cancel(id)
+            viewModelScope.launch { syncPairRepository.delete(id) }
+        }
+
+        /**
          * Enqueues a one-shot [SyncWorker] for [pair]. Any in-flight one-shot run for
          * the same pair is kept so the user never interrupts an ongoing sync.
+         *
+         * The pair's id is added to [UiState.syncingPairIds] immediately so the UI
+         * can render a spinner without waiting up to ~30s for the foreground
+         * notification. A background coroutine watches the worker and clears the id
+         * when the job reaches a finished state.
          *
          * Constraints from the pair's settings are applied so the user's preferences
          * (Wi-Fi only, requires charging) are respected even for manual syncs.
@@ -87,10 +198,44 @@ class HomeViewModel
                     .setConstraints(constraints)
                     .setInputData(workDataOf(SyncWorker.KEY_PAIR_ID to pair.id))
                     .build()
+            // Optimistically mark the pair as syncing so the home row shows a spinner
+            // immediately; the watcher coroutine below clears it once the worker is
+            // in a finished state.
+            syncingIds.update { it + pair.id }
             workManager.enqueueUniqueWork(
                 SyncWorker.syncNowUniqueName(pair.id),
                 ExistingWorkPolicy.KEEP,
                 req,
             )
+            viewModelScope.launch {
+                val result =
+                    runCatching {
+                        workManager
+                            .getWorkInfosForUniqueWorkFlow(SyncWorker.syncNowUniqueName(pair.id))
+                            .first { infos ->
+                                // Wait until WorkManager has a record for this work and all
+                                // entries report a finished state (SUCCEEDED/FAILED/CANCELLED).
+                                infos.isNotEmpty() && infos.all { it.state.isFinished }
+                            }
+                    }
+                if (result.isSuccess) {
+                    syncingIds.update { it - pair.id }
+                } else {
+                    // Keep the pair in syncingIds when the watcher can't observe the worker —
+                    // optimistically clearing it would falsely indicate the run is done.
+                    // The foreground notification will still appear and the user can retry.
+                    Timber.w(result.exceptionOrNull(), "syncNow watcher failed for pair=${pair.id}")
+                }
+            }
+        }
+
+        companion object {
+            /**
+             * Length of the undo grace window for soft-deleted sync pairs, in
+             * milliseconds. Slightly longer than the Material 3 short snackbar
+             * duration (~4s) so the snackbar disappears before the commit fires
+             * but the user still has time to react.
+             */
+            const val UNDO_WINDOW_MS: Long = 5_000L
         }
     }

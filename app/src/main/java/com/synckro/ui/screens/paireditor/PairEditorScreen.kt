@@ -54,6 +54,7 @@ import com.synckro.R
 import com.synckro.domain.model.CloudProviderType
 import com.synckro.domain.model.ConflictPolicy
 import com.synckro.domain.model.SyncDirection
+import com.synckro.ui.components.LoadingState
 
 /**
  * Screen for creating or editing a [SyncPair]. The title and save-button label
@@ -146,16 +147,12 @@ fun PairEditorScreen(
         snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { padding ->
         if (state.isLoading) {
-            Column(
-                modifier =
-                    Modifier
-                        .fillMaxSize()
-                        .padding(padding),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center,
-            ) {
-                CircularProgressIndicator()
-            }
+            LoadingState(
+                message = stringResource(R.string.loading_pair_settings),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding),
+            )
         } else {
             Column(
                 modifier =
@@ -166,12 +163,44 @@ fun PairEditorScreen(
                         .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                // Display name
+                // Persistent error banner — complements the transient snackbar so a
+                // long form's save failure isn't easy to miss after scrolling.
+                state.saveError?.let { err ->
+                    androidx.compose.material3.Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = androidx.compose.material3.CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.errorContainer,
+                            contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                        ),
+                    ) {
+                        Text(
+                            text = stringResource(R.string.pair_editor_save_failed_banner, err),
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                        )
+                    }
+                }
+
+                // ── Folders ─────────────────────────────────────────────────────
+                SectionHeader(text = stringResource(R.string.pair_editor_section_folders))
+
+                // Display name (required)
+                val displayNameInvalid = state.displayName.isBlank() && state.saveError != null
                 OutlinedTextField(
                     value = state.displayName,
                     onValueChange = viewModel::onDisplayNameChange,
                     label = { Text(stringResource(R.string.pair_editor_display_name)) },
                     singleLine = true,
+                    isError = displayNameInvalid,
+                    supportingText = if (displayNameInvalid) {
+                        {
+                            Text(stringResource(R.string.pair_editor_error_name_required))
+                        }
+                    } else {
+                        null
+                    },
                     modifier = Modifier.fillMaxWidth(),
                 )
 
@@ -236,6 +265,8 @@ fun PairEditorScreen(
                 )
 
                 // Conflict policy selector
+                SectionHeader(text = stringResource(R.string.pair_editor_section_behavior))
+
                 ConflictPolicyDropdown(
                     selected = state.conflictPolicy,
                     onSelect = viewModel::onConflictPolicyChange,
@@ -329,6 +360,8 @@ fun PairEditorScreen(
                 }
 
                 // Auto-sync toggle
+                SectionHeader(text = stringResource(R.string.pair_editor_section_schedule))
+
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -377,6 +410,8 @@ fun PairEditorScreen(
                 }
 
                 // Exclude subfolders toggle
+                SectionHeader(text = stringResource(R.string.pair_editor_section_filters))
+
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -662,3 +697,19 @@ private fun schedulePresetLabel(preset: SyncSchedulePreset): String =
         SyncSchedulePreset.DAILY -> stringResource(R.string.pair_editor_schedule_daily)
         SyncSchedulePreset.CUSTOM -> stringResource(R.string.pair_editor_schedule_custom)
     }
+
+/**
+ * Visual section divider for the pair editor form. Groups related fields together
+ * so the long form has clear information architecture (folders, behavior, schedule, filters).
+ */
+@Composable
+private fun SectionHeader(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.titleSmall,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 4.dp),
+    )
+}

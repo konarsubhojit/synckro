@@ -27,6 +27,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
@@ -279,4 +280,162 @@ class HomeViewModelTest {
             reqSlot.captured.workSpec.constraints.requiresStorageNotLow(),
         )
     }
+
+    // -------------------------------------------------------------------------
+    // Sync now visual feedback (#98)
+    // -------------------------------------------------------------------------
+
+    @Test
+    fun `syncNow immediately marks pair as syncing in state`() =
+        runTest {
+            val vm = createVm()
+            val collectJob = launch { vm.state.collect {} }
+            advanceUntilIdle()
+
+            vm.syncNow(pair(7L))
+            advanceUntilIdle()
+
+            assertTrue(7L in vm.state.value.syncingPairIds)
+            collectJob.cancel()
+        }
+
+    @Test
+    fun `syncNow tracks multiple pairs independently`() =
+        runTest {
+            val vm = createVm()
+            val collectJob = launch { vm.state.collect {} }
+            advanceUntilIdle()
+
+            vm.syncNow(pair(1L))
+            vm.syncNow(pair(2L))
+            advanceUntilIdle()
+
+            assertTrue(1L in vm.state.value.syncingPairIds)
+            assertTrue(2L in vm.state.value.syncingPairIds)
+            collectJob.cancel()
+        }
+
+    // -------------------------------------------------------------------------
+    // Undo delete (#99)
+    // -------------------------------------------------------------------------
+
+    @Test
+    fun `requestDelete hides the pair from state immediately`() =
+        runTest {
+            pairsFlow.value = listOf(pair(1L), pair(2L))
+            val vm = createVm()
+            val collectJob = launch { vm.state.collect {} }
+            advanceUntilIdle()
+            assertEquals(2, vm.state.value.pairs.size)
+
+            vm.requestDelete(pair(1L))
+            // Use runCurrent so the VM's UNDO_WINDOW_MS delay does NOT elapse
+            // and the pendingDelete state remains observable.
+            runCurrent()
+
+            assertEquals(1, vm.state.value.pairs.size)
+            assertEquals(2L, vm.state.value.pairs[0].id)
+            assertEquals(1L, vm.state.value.pendingDelete?.pair?.id)
+            collectJob.cancel()
+        }
+
+    @Test
+    fun `requestDelete does not call repository delete during undo window`() =
+        runTest {
+            pairsFlow.value = listOf(pair(1L))
+            val vm = createVm()
+            val collectJob = launch { vm.state.collect {} }
+            advanceUntilIdle()
+
+            vm.requestDelete(pair(1L))
+            runCurrent()
+
+            coVerify(exactly = 0) { mockRepo.delete(1L) }
+            io.mockk.verify(exactly = 0) { mockScheduler.cancel(1L) }
+            collectJob.cancel()
+        }
+
+    @Test
+    fun `requestDelete commits delete after the undo window expires`() =
+        runTest {
+            pairsFlow.value = listOf(pair(1L))
+            val vm = createVm()
+            val collectJob = launch { vm.state.collect {} }
+            advanceUntilIdle()
+
+            vm.requestDelete(pair(1L))
+            // Let everything (including the UNDO_WINDOW_MS delay) drain.
+            advanceUntilIdle()
+
+            io.mockk.verify { mockScheduler.cancel(1L) }
+            coVerify { mockRepo.delete(1L) }
+            assertEquals(null, vm.state.value.pendingDelete)
+            collectJob.cancel()
+        }
+
+    @Test
+    fun `undoDelete restores the pair and prevents commit`() =
+        runTest {
+            pairsFlow.value = listOf(pair(1L))
+            val vm = createVm()
+            val collectJob = launch { vm.state.collect {} }
+            advanceUntilIdle()
+
+            vm.requestDelete(pair(1L))
+            // Don't advance past the undo window so the pending delete is still alive.
+            runCurrent()
+            assertEquals(0, vm.state.value.pairs.size)
+
+            vm.undoDelete()
+            advanceUntilIdle()
+
+            assertEquals(1, vm.state.value.pairs.size)
+            assertEquals(null, vm.state.value.pendingDelete)
+            // No commit fires because we cancelled the timer before it elapsed.
+            coVerify(exactly = 0) { mockRepo.delete(1L) }
+            io.mockk.verify(exactly = 0) { mockScheduler.cancel(1L) }
+            collectJob.cancel()
+        }
+
+    @Test
+    fun `finalizePendingDelete commits immediately`() =
+        runTest {
+            pairsFlow.value = listOf(pair(1L))
+            val vm = createVm()
+            val collectJob = launch { vm.state.collect {} }
+            advanceUntilIdle()
+
+            vm.requestDelete(pair(1L))
+            runCurrent()
+
+            vm.finalizePendingDelete()
+            advanceUntilIdle()
+
+            io.mockk.verify { mockScheduler.cancel(1L) }
+            coVerify { mockRepo.delete(1L) }
+            assertEquals(null, vm.state.value.pendingDelete)
+            collectJob.cancel()
+        }
+
+    @Test
+    fun `requesting a second delete commits the first pending one immediately`() =
+        runTest {
+            pairsFlow.value = listOf(pair(1L), pair(2L))
+            val vm = createVm()
+            val collectJob = launch { vm.state.collect {} }
+            advanceUntilIdle()
+
+            vm.requestDelete(pair(1L))
+            runCurrent()
+            vm.requestDelete(pair(2L))
+            runCurrent()
+
+            // Pair 1's delete should have been flushed when pair 2 was queued.
+            io.mockk.verify { mockScheduler.cancel(1L) }
+            coVerify { mockRepo.delete(1L) }
+            // Pair 2 is the new pending one and shouldn't be committed yet.
+            io.mockk.verify(exactly = 0) { mockScheduler.cancel(2L) }
+            assertEquals(2L, vm.state.value.pendingDelete?.pair?.id)
+            collectJob.cancel()
+        }
 }
