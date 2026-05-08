@@ -21,6 +21,7 @@ import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -120,6 +121,69 @@ class PairEditorViewModelTest {
 
     // -------------------------------------------------------------------------
     // Save validation
+    // -------------------------------------------------------------------------
+
+    @Test
+    fun `save with blank displayName sets nameRequiredError and bumps event`() =
+        runTest {
+            val vm = createVm()
+            val initialEvent = vm.state.value.saveErrorEvent
+            vm.onDisplayNameChange("   ")
+            vm.save { }
+            advanceUntilIdle()
+
+            assertTrue("name-required flag must be set", vm.state.value.nameRequiredError)
+            assertTrue(
+                "saveErrorEvent must be bumped for the snackbar trigger",
+                vm.state.value.saveErrorEvent > initialEvent,
+            )
+        }
+
+    @Test
+    fun `name-required flag clears when user types a non-blank name`() =
+        runTest {
+            val vm = createVm()
+            vm.save { } // trigger blank-name validation
+            advanceUntilIdle()
+            assertTrue(vm.state.value.nameRequiredError)
+
+            vm.onDisplayNameChange("My pair")
+            assertFalse(vm.state.value.nameRequiredError)
+        }
+
+    @Test
+    fun `non-name save errors do not set nameRequiredError`() =
+        runTest {
+            val vm = createVm()
+            vm.onDisplayNameChange("Test Pair") // valid name
+            // localTreeUri is blank — folder validation will fail.
+            vm.save { }
+            advanceUntilIdle()
+
+            assertNotNull("a save error must be set", vm.state.value.saveError)
+            assertFalse(
+                "nameRequiredError must NOT be set for non-name failures",
+                vm.state.value.nameRequiredError,
+            )
+        }
+
+    @Test
+    fun `clearSaveError leaves saveErrorEvent unchanged so snackbar history is preserved`() =
+        runTest {
+            val vm = createVm()
+            vm.save { }
+            advanceUntilIdle()
+            val event = vm.state.value.saveErrorEvent
+            assertNotNull(vm.state.value.saveError)
+
+            vm.clearSaveError()
+            assertNull(vm.state.value.saveError)
+            // The one-shot snackbar event must NOT be reset by dismissing the banner.
+            assertEquals(event, vm.state.value.saveErrorEvent)
+        }
+
+    // -------------------------------------------------------------------------
+    // Original save-validation tests (preserved for backward compat)
     // -------------------------------------------------------------------------
 
     @Test

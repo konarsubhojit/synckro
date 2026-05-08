@@ -5,7 +5,6 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -47,6 +46,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.synckro.R
 import com.synckro.domain.model.SyncEvent
 import com.synckro.domain.model.SyncEventLevel
+import com.synckro.ui.components.EmptyState
+import androidx.compose.material.icons.filled.History
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -126,19 +127,16 @@ fun LogsScreen(
         snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { padding ->
         if (!state.isLoading && state.events.isEmpty()) {
-            Box(
-                modifier =
-                    Modifier
-                        .fillMaxSize()
-                        .padding(padding)
-                        .padding(24.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = stringResource(R.string.logs_empty),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+            EmptyState(
+                title = stringResource(R.string.logs_empty_title),
+                body = stringResource(R.string.logs_empty_body),
+                icon = Icons.Filled.History,
+                primaryActionLabel = stringResource(R.string.logs_empty_cta),
+                onPrimaryAction = onBack,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding),
+            )
         } else {
             LazyColumn(
                 modifier =

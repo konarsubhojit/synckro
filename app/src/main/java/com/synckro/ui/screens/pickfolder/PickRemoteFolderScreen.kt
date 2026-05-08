@@ -18,7 +18,6 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.NavigateNext
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -41,6 +40,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.synckro.R
 import com.synckro.domain.provider.RemoteFile
+import com.synckro.ui.components.LoadingState
 
 /**
  * Screen that lets the user browse through a cloud provider's folder hierarchy
@@ -103,8 +103,8 @@ fun PickRemoteFolderScreen(
             Box(modifier = Modifier.weight(1f)) {
                 when {
                     state.isLoading -> {
-                        CircularProgressIndicator(
-                            modifier = Modifier.align(Alignment.Center),
+                        LoadingState(
+                            message = stringResource(R.string.loading_folders),
                         )
                     }
                     state.error != null -> {

@@ -21,12 +21,16 @@ import io.mockk.slot
 import io.mockk.verify
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
@@ -61,6 +65,11 @@ class HomeViewModelTest {
         context = ApplicationProvider.getApplicationContext()
         every { mockRepo.observeAll(any()) } returns pairsFlow
         every { mockConflictRepo.observeUnresolvedCount() } returns MutableStateFlow(0)
+        // Default WorkManager flow that never emits — keeps the syncNow watcher
+        // suspended unless a specific test overrides this. Tests that exercise the
+        // watcher's failure path should override with a flow that throws.
+        every { mockWorkManager.getWorkInfosForUniqueWorkFlow(any<String>()) } returns
+            flow { awaitCancellation() }
     }
 
     @After
@@ -279,4 +288,217 @@ class HomeViewModelTest {
             reqSlot.captured.workSpec.constraints.requiresStorageNotLow(),
         )
     }
+
+    // -------------------------------------------------------------------------
+    // Sync now visual feedback (#98)
+    // -------------------------------------------------------------------------
+
+    @Test
+    fun `syncNow immediately marks pair as syncing in state`() =
+        runTest {
+            val vm = createVm()
+            val collectJob = launch { vm.state.collect {} }
+            advanceUntilIdle()
+
+            vm.syncNow(pair(7L))
+            // Use runCurrent so the watcher coroutine does NOT drain — otherwise
+            // the mocked WorkManager returns an empty flow that completes
+            // immediately and the watcher would clear the syncing flag.
+            runCurrent()
+
+            assertTrue(7L in vm.state.value.syncingPairIds)
+            collectJob.cancel()
+        }
+
+    @Test
+    fun `syncNow tracks multiple pairs independently`() =
+        runTest {
+            val vm = createVm()
+            val collectJob = launch { vm.state.collect {} }
+            advanceUntilIdle()
+
+            vm.syncNow(pair(1L))
+            vm.syncNow(pair(2L))
+            runCurrent()
+
+            assertTrue(1L in vm.state.value.syncingPairIds)
+            assertTrue(2L in vm.state.value.syncingPairIds)
+            collectJob.cancel()
+        }
+
+    @Test
+    fun `syncNow clears syncing flag when watcher fails`() =
+        runTest {
+            // Override the default suspending flow with one that emits nothing and
+            // completes — `first { }` then throws NoSuchElementException, which
+            // used to leave the flag set and disable Sync now indefinitely.
+            every { mockWorkManager.getWorkInfosForUniqueWorkFlow(any<String>()) } returns
+                emptyFlow()
+
+            val vm = createVm()
+            val collectJob = launch { vm.state.collect {} }
+            advanceUntilIdle()
+
+            vm.syncNow(pair(3L))
+            advanceUntilIdle()
+
+            assertFalse(3L in vm.state.value.syncingPairIds)
+            collectJob.cancel()
+        }
+
+    // -------------------------------------------------------------------------
+    // Undo delete (#99)
+    // -------------------------------------------------------------------------
+
+    @Test
+    fun `requestDelete hides the pair from state immediately`() =
+        runTest {
+            pairsFlow.value = listOf(pair(1L), pair(2L))
+            val vm = createVm()
+            val collectJob = launch { vm.state.collect {} }
+            advanceUntilIdle()
+            assertEquals(2, vm.state.value.pairs.size)
+
+            vm.requestDelete(pair(1L))
+            // Use runCurrent so the VM's UNDO_WINDOW_MS delay does NOT elapse
+            // and the pendingDelete state remains observable.
+            runCurrent()
+
+            assertEquals(1, vm.state.value.pairs.size)
+            assertEquals(2L, vm.state.value.pairs[0].id)
+            assertEquals(1L, vm.state.value.pendingDelete?.pair?.id)
+            collectJob.cancel()
+        }
+
+    @Test
+    fun `requestDelete does not call repository delete during undo window`() =
+        runTest {
+            pairsFlow.value = listOf(pair(1L))
+            val vm = createVm()
+            val collectJob = launch { vm.state.collect {} }
+            advanceUntilIdle()
+
+            vm.requestDelete(pair(1L))
+            runCurrent()
+
+            coVerify(exactly = 0) { mockRepo.delete(1L) }
+            io.mockk.verify(exactly = 0) { mockScheduler.cancel(1L) }
+            collectJob.cancel()
+        }
+
+    @Test
+    fun `requestDelete commits delete after the undo window expires`() =
+        runTest {
+            pairsFlow.value = listOf(pair(1L))
+            val vm = createVm()
+            val collectJob = launch { vm.state.collect {} }
+            advanceUntilIdle()
+
+            vm.requestDelete(pair(1L))
+            // Let everything (including the UNDO_WINDOW_MS delay) drain.
+            advanceUntilIdle()
+
+            io.mockk.verify { mockScheduler.cancel(1L) }
+            coVerify { mockRepo.delete(1L) }
+            assertEquals(null, vm.state.value.pendingDelete)
+            collectJob.cancel()
+        }
+
+    @Test
+    fun `undoDelete restores the pair and prevents commit`() =
+        runTest {
+            pairsFlow.value = listOf(pair(1L))
+            val vm = createVm()
+            val collectJob = launch { vm.state.collect {} }
+            advanceUntilIdle()
+
+            vm.requestDelete(pair(1L))
+            // Don't advance past the undo window so the pending delete is still alive.
+            runCurrent()
+            assertEquals(0, vm.state.value.pairs.size)
+
+            vm.undoDelete()
+            advanceUntilIdle()
+
+            assertEquals(1, vm.state.value.pairs.size)
+            assertEquals(null, vm.state.value.pendingDelete)
+            // No commit fires because we cancelled the timer before it elapsed.
+            coVerify(exactly = 0) { mockRepo.delete(1L) }
+            io.mockk.verify(exactly = 0) { mockScheduler.cancel(1L) }
+            collectJob.cancel()
+        }
+
+    @Test
+    fun `finalizePendingDelete commits immediately`() =
+        runTest {
+            pairsFlow.value = listOf(pair(1L))
+            val vm = createVm()
+            val collectJob = launch { vm.state.collect {} }
+            advanceUntilIdle()
+
+            vm.requestDelete(pair(1L))
+            runCurrent()
+
+            vm.finalizePendingDelete()
+            advanceUntilIdle()
+
+            io.mockk.verify { mockScheduler.cancel(1L) }
+            coVerify { mockRepo.delete(1L) }
+            assertEquals(null, vm.state.value.pendingDelete)
+            collectJob.cancel()
+        }
+
+    @Test
+    fun `requesting a second delete commits the first pending one immediately`() =
+        runTest {
+            pairsFlow.value = listOf(pair(1L), pair(2L))
+            val vm = createVm()
+            val collectJob = launch { vm.state.collect {} }
+            advanceUntilIdle()
+
+            vm.requestDelete(pair(1L))
+            runCurrent()
+            vm.requestDelete(pair(2L))
+            runCurrent()
+
+            // Pair 1's delete should have been flushed when pair 2 was queued.
+            io.mockk.verify { mockScheduler.cancel(1L) }
+            coVerify { mockRepo.delete(1L) }
+            // Pair 2 is the new pending one and shouldn't be committed yet.
+            io.mockk.verify(exactly = 0) { mockScheduler.cancel(2L) }
+            assertEquals(2L, vm.state.value.pendingDelete?.pair?.id)
+            collectJob.cancel()
+        }
+
+    @Test
+    fun `re-requesting delete for the same pair restarts the undo window`() =
+        runTest {
+            pairsFlow.value = listOf(pair(1L))
+            val vm = createVm()
+            val collectJob = launch { vm.state.collect {} }
+            advanceUntilIdle()
+
+            vm.requestDelete(pair(1L))
+            runCurrent()
+
+            // Advance partway into the original window, then re-request the same pair.
+            // The original timer must be cancelled so it cannot fire at its earlier
+            // deadline once the new window's commit fires.
+            testDispatcher.scheduler.advanceTimeBy(HomeViewModel.UNDO_WINDOW_MS - 100L)
+            vm.requestDelete(pair(1L))
+            runCurrent()
+
+            // Past the original deadline but well before the new one — no commit yet.
+            testDispatcher.scheduler.advanceTimeBy(200L)
+            runCurrent()
+            coVerify(exactly = 0) { mockRepo.delete(1L) }
+            io.mockk.verify(exactly = 0) { mockScheduler.cancel(1L) }
+            assertEquals(1L, vm.state.value.pendingDelete?.pair?.id)
+
+            // Now drain the new window — exactly one commit should fire.
+            advanceUntilIdle()
+            coVerify(exactly = 1) { mockRepo.delete(1L) }
+            io.mockk.verify(exactly = 1) { mockScheduler.cancel(1L) }
+            collectJob.cancel()
+        }
 }

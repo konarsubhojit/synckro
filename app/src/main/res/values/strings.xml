@@ -188,4 +188,35 @@
     <string name="logs_share">Share log</string>
     <string name="logs_share_subject">Synckro sync log</string>
     <string name="logs_share_chooser">Share log via…</string>
+
+    <!-- Loading-state contextual labels (paired with a CircularProgressIndicator) -->
+    <string name="loading_folders">Loading folders…</string>
+    <string name="loading_pair_settings">Loading pair settings…</string>
+    <string name="loading_conflicts">Loading conflicts…</string>
+
+    <!-- Empty states with primary CTAs -->
+    <string name="home_empty_title">No sync pairs yet</string>
+    <string name="home_empty_body">Create a sync pair to keep a folder on this device in sync with a cloud account.</string>
+    <string name="home_empty_cta">Create your first sync pair</string>
+    <string name="logs_empty_title">No log entries yet</string>
+    <string name="logs_empty_body">Run a sync from the home screen to see events here.</string>
+    <string name="logs_empty_cta">Back to home</string>
+    <string name="conflict_inbox_empty_title">All caught up</string>
+    <string name="conflict_inbox_empty_body">No conflicts to resolve. Synckro will list any new ones here as soon as it detects them.</string>
+    <string name="conflict_inbox_empty_cta">Back to home</string>
+
+    <!-- Sync now visual feedback (#98) -->
+    <string name="sync_now_in_progress">Sync running</string>
+
+    <!-- Undo delete (#99) -->
+    <string name="home_delete_undo_message_format">Deleted "%1$s"</string>
+    <string name="home_delete_undo_action">Undo</string>
+
+    <!-- Pair editor section headers and inline validation (#105) -->
+    <string name="pair_editor_section_folders">Folders</string>
+    <string name="pair_editor_section_behavior">Sync behavior</string>
+    <string name="pair_editor_section_schedule">Schedule</string>
+    <string name="pair_editor_section_filters">Filters</string>
+    <string name="pair_editor_save_failed_banner">Couldn\u0027t save: %1$s</string>
+    <string name="pair_editor_save_failed_banner_dismiss">Dismiss</string>
 </resources>
