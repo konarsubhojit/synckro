@@ -122,6 +122,7 @@ class SyncWorker
                 LOG_TAG,
                 "Sync started for \"${pair.displayName}\" (attempt ${runAttemptCount + 1})",
             )
+            Timber.i("SyncWorker.doWork: start pairId=%d attempt=%d", pairId, runAttemptCount + 1)
 
             val notificationId = NOTIFICATION_ID_BASE + (pairId and 0xFFFFL).toInt()
             val notificationManager =
@@ -221,6 +222,7 @@ class SyncWorker
                                     LOG_TAG,
                                     "Sync succeeded: ${r.applied} applied, ${r.conflicts} conflicts",
                                 )
+                                Timber.i("SyncWorker.doWork: success pairId=%d applied=%d conflicts=%d", pairId, r.applied, r.conflicts)
                                 Result.success()
                             }
                             is SyncEngine.Result.PartialFailure -> {

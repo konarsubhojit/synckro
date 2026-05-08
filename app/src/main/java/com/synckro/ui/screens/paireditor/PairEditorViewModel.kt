@@ -348,6 +348,15 @@ class PairEditorViewModel
                 }
                 return
             }
+            if (s.remoteFolderId.isBlank()) {
+                _state.update {
+                    it.copy(
+                        saveError = strings.getString(R.string.pair_editor_error_remote_folder_required),
+                        saveErrorEvent = it.saveErrorEvent + 1L,
+                    )
+                }
+                return
+            }
             val retentionDaysText = s.retentionDaysText.trim()
             val retentionDays = retentionDaysText.takeIf { it.isNotBlank() }?.toIntOrNull()
             if (retentionDaysText.isNotBlank() && (retentionDays == null || retentionDays !in 0..MAX_RETENTION_DAYS)) {
