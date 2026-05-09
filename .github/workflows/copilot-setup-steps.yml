@@ -66,11 +66,11 @@ jobs:
       - name: Cache Android SDK
         uses: actions/cache@v4
         with:
-          path: ${{ env.ANDROID_SDK_ROOT }}
-          key: ${{ runner.os }}-android-sdk-${{ env.ANDROID_API_LEVEL }}-build-tools-${{ env.ANDROID_BUILD_TOOLS_VERSION }}-v1
+          path: .android-sdk
+          key: ${{ runner.os }}-android-sdk-34-build-tools-34.0.0-v1
           restore-keys: |
-            ${{ runner.os }}-android-sdk-${{ env.ANDROID_API_LEVEL }}-build-tools-${{ env.ANDROID_BUILD_TOOLS_VERSION }}-
-            ${{ runner.os }}-android-sdk-${{ env.ANDROID_API_LEVEL }}-
+            ${{ runner.os }}-android-sdk-34-build-tools-34.0.0-
+            ${{ runner.os }}-android-sdk-34-
             ${{ runner.os }}-android-sdk-
 
       - name: Set up Android SDK
@@ -78,8 +78,8 @@ jobs:
         with:
           packages: >
             platform-tools
-            platforms;android-${{ env.ANDROID_API_LEVEL }}
-            build-tools;${{ env.ANDROID_BUILD_TOOLS_VERSION }}
+            platforms;android-34
+            build-tools;34.0.0
 
       # Pre-warm the build so dependencies, KSP processors, and Hilt code-gen
       # are downloaded/compiled and cached before the agent starts work. This

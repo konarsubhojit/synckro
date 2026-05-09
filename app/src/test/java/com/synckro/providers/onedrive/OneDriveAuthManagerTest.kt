@@ -8,6 +8,7 @@ import com.synckro.domain.auth.AuthUiHost
 import com.synckro.domain.model.CloudProviderType
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -102,6 +103,26 @@ class OneDriveAuthManagerTest {
                     redirectUri = "msauth://com.synckro.debug/DtQuXuc=",
                 )
             assertTrue(mgr.isConfigured())
+        }
+
+    @Test
+    fun `runtime scopes omit offline access for consumer compatibility`() =
+        runTest {
+            val mgr =
+                OneDriveAuthManager.forTest(
+                    context,
+                    clientId = "aaaabbbb-cccc-dddd-eeee-ffffffffffff",
+                    redirectUri = "msauth://com.synckro.debug/DtQuXuc=",
+                )
+
+            @Suppress("UNCHECKED_CAST")
+            val scopes =
+                OneDriveAuthManager::class.java
+                    .getDeclaredField("scopes")
+                    .apply { isAccessible = true }
+                    .get(mgr) as List<String>
+
+            assertEquals(listOf("Files.ReadWrite", "User.Read"), scopes)
         }
 
     // -------------------------------------------------------------------------
