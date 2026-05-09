@@ -331,7 +331,7 @@ call fails and `isConfigured()` returns `false`, causing the app to show a
 3. The system browser opens and loads the Microsoft login page.
 4. Sign in with a personal Microsoft account or a work/school account.
 5. The consent screen lists the requested permissions
-   (`Files.ReadWrite`, `User.Read`, `offline_access`). Tap **Accept**.
+   (`Files.ReadWrite`, `User.Read`). Tap **Accept**.
 6. The browser redirects back to the app via the `msauth://` URI.
 7. Sign-in completes. The **Accounts** screen now shows your Microsoft account
    row with your email address.

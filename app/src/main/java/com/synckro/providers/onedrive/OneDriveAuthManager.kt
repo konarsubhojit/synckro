@@ -109,10 +109,15 @@ class OneDriveAuthManager private constructor(
     /** Returns the persisted account hint, or null if none is stored. */
     fun getAccountHint(): String? = encryptedPrefs?.getString(KEY_ACCOUNT_HINT, null)
 
+    /**
+     * `offline_access` is intentionally omitted here because it is an OIDC
+     * scope, not a Microsoft Graph resource scope. The consumer / MSA endpoint
+     * rejects it when MSAL prefixes Graph scopes with the resource URI, while
+     * refresh tokens are still issued automatically for public clients.
+     */
     private val scopes =
         listOf(
             "Files.ReadWrite",
-            "offline_access",
             "User.Read",
         )
 
