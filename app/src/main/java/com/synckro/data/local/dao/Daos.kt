@@ -45,6 +45,15 @@ interface AccountDao {
     suspend fun getByProvider(providerType: CloudProviderType): List<AccountEntity>
 
     /**
+     * Observes all accounts for the given provider type, ordered by creation time ascending.
+     *
+     * Emits the current snapshot and any subsequent updates whenever the
+     * `account` table changes (insert / update / delete).
+     */
+    @Query("SELECT * FROM account WHERE providerType = :providerType ORDER BY createdAtMillis ASC")
+    fun observeByProvider(providerType: CloudProviderType): Flow<List<AccountEntity>>
+
+    /**
      * Fetches the account with the given id.
      *
      * @param id The primary key id of the account to fetch.
@@ -143,6 +152,17 @@ interface AccountDao {
 @Dao
 interface SyncPairDao {
     /**
+     * Row projection used by [SyncPairDao.observeAccountsNeedingReauth] to
+     * carry the `(provider, accountId)` pair for each sync_pair row that has
+     * landed in `NEEDS_REAUTH`. Mapped to a domain
+     * [com.synckro.domain.auth.AccountKey] by callers.
+     */
+    data class AccountReauthRow(
+        val provider: CloudProviderType,
+        val accountId: String?,
+    )
+
+    /**
      * Observes all rows in the `sync_pair` table ordered by `id` ascending.
      *
      * Emits the current list of `SyncPairEntity` rows and subsequent updates whenever the table changes.
@@ -240,6 +260,25 @@ interface SyncPairDao {
     fun observeProvidersNeedingReauth(): Flow<List<CloudProviderType>>
 
     /**
+     * Observes the (provider, accountId) pairs that currently have at least one
+     * sync pair stuck in [com.synckro.data.worker.SyncWorker.RESULT_NEEDS_REAUTH].
+     *
+     * This is the account-aware replacement for [observeProvidersNeedingReauth];
+     * both methods are exposed during the multi-account migration so callers can
+     * be ported one at a time.
+     *
+     * `accountId` may be `null` for pairs that were never bound to a specific
+     * account (e.g. legacy pairs created before multi-account support, or pairs
+     * orphaned when their account was disconnected); such rows are still
+     * surfaced so the UI can render a re-link CTA against the provider card.
+     */
+    @Query(
+        "SELECT DISTINCT provider AS provider, accountId AS accountId " +
+            "FROM sync_pair WHERE lastSyncResult = 'NEEDS_REAUTH'",
+    )
+    fun observeAccountsNeedingReauth(): Flow<List<AccountReauthRow>>
+
+    /**
      * Clears the [com.synckro.data.worker.SyncWorker.RESULT_NEEDS_REAUTH]
      * outcome for every sync pair belonging to [providerType]. Called after a
      * successful interactive sign-in so the "Re-authenticate" CTA on the Accounts
@@ -251,6 +290,20 @@ interface SyncPairDao {
      */
     @Query("UPDATE sync_pair SET lastSyncResult = NULL WHERE provider = :providerType AND lastSyncResult = 'NEEDS_REAUTH'")
     suspend fun clearNeedsReauthForProvider(providerType: CloudProviderType)
+
+    /**
+     * Clears the [com.synckro.data.worker.SyncWorker.RESULT_NEEDS_REAUTH]
+     * outcome for every sync pair bound to [accountId].
+     *
+     * Called after a successful interactive sign-in for a specific account so
+     * the per-account "Re-authenticate" CTA disappears immediately, instead of
+     * waiting for the next periodic run to overwrite `lastSyncResult`.
+     */
+    @Query(
+        "UPDATE sync_pair SET lastSyncResult = NULL " +
+            "WHERE accountId = :accountId AND lastSyncResult = 'NEEDS_REAUTH'",
+    )
+    suspend fun clearNeedsReauthForAccount(accountId: String)
 }
 
 @Dao

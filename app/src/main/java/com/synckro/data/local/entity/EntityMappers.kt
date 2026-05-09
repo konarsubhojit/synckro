@@ -20,6 +20,7 @@ internal fun SyncPairEntity.toDomain(needsReLink: Boolean = false): SyncPair =
         displayName = displayName,
         localTreeUri = localTreeUri,
         provider = provider,
+        accountId = accountId,
         remoteFolderId = remoteFolderId,
         direction = direction,
         conflictPolicy = conflictPolicy,

@@ -3,6 +3,9 @@
 build/
 /out/
 
+# Android SDK installed locally for the sandbox
+.android-sdk/
+
 # Android Studio / IntelliJ
 .idea/
 *.iml

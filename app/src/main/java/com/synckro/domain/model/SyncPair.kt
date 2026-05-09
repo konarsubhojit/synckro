@@ -14,6 +14,14 @@ data class SyncPair(
     val displayName: String,
     val localTreeUri: String,
     val provider: CloudProviderType,
+    /**
+     * The id of the [com.synckro.domain.auth.Account] this pair is bound to,
+     * or `null` if the pair has not yet been linked to a specific account
+     * (for example, pairs created before multi-account support, or pairs whose
+     * account was disconnected). The UI surfaces null-accountId pairs as
+     * "needs re-link".
+     */
+    val accountId: String? = null,
     val remoteFolderId: String,
     val direction: SyncDirection = SyncDirection.BIDIRECTIONAL,
     val conflictPolicy: ConflictPolicy = ConflictPolicy.NEWEST_WINS,

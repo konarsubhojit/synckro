@@ -46,11 +46,13 @@ class EntityMappersTest {
         retentionDays: Int? = null,
         excludeSubfolders: Boolean = false,
         excludeEmptyFolders: Boolean = false,
+        accountId: String? = null,
     ) = SyncPairEntity(
         id = id,
         displayName = displayName,
         localTreeUri = localTreeUri,
         provider = provider,
+        accountId = accountId,
         remoteFolderId = remoteFolderId,
         direction = direction,
         conflictPolicy = conflictPolicy,
@@ -239,6 +241,21 @@ class EntityMappersTest {
     @Test
     fun `toDomain maps excludeEmptyFolders`() {
         assertTrue(buildEntity(excludeEmptyFolders = true).toDomain().excludeEmptyFolders)
+    }
+
+    // ---------------------------------------------------------------------------
+    // Multi-account fields
+    // ---------------------------------------------------------------------------
+
+    @Test
+    fun `toDomain maps accountId`() {
+        val entity = buildEntity(accountId = "acc-123")
+        assertEquals("acc-123", entity.toDomain().accountId)
+    }
+
+    @Test
+    fun `toDomain maps null accountId`() {
+        assertNull(buildEntity(accountId = null).toDomain().accountId)
     }
 
     // ---------------------------------------------------------------------------
