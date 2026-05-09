@@ -77,6 +77,7 @@
     <string name="pair_editor_exclude_empty_folders">Exclude empty folders</string>
     <string name="pair_editor_error_name_required">Display name is required</string>
     <string name="pair_editor_error_folder_required">Please select a local folder</string>
+    <string name="pair_editor_error_remote_folder_required">Please pick a cloud folder before saving.</string>
     <string name="pair_editor_error_save_failed">Save failed</string>
 
     <!-- Provider display names -->

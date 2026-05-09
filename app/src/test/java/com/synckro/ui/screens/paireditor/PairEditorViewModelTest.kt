@@ -1,6 +1,7 @@
 package com.synckro.ui.screens.paireditor
 
 import androidx.lifecycle.SavedStateHandle
+import com.synckro.R
 import com.synckro.data.repository.SyncPairRepository
 import com.synckro.data.worker.SyncScheduler
 import com.synckro.domain.model.CloudProviderType
@@ -42,6 +43,7 @@ class PairEditorViewModelTest {
             mockk {
                 every { getString(any()) } returns "error"
                 every { getString(any(), *anyVararg()) } returns "error"
+                every { getString(R.string.pair_editor_error_remote_folder_required) } returns "Please pick a cloud folder before saving."
             }
         mockSyncScheduler = mockk(relaxed = true)
     }
@@ -168,6 +170,23 @@ class PairEditorViewModelTest {
         }
 
     @Test
+    fun `save with blank remoteFolderId sets saveError and does not upsert`() =
+        runTest {
+            val vm = createVmWithFolder()
+            val initialEvent = vm.state.value.saveErrorEvent
+            vm.onDisplayNameChange("Test Pair")
+
+            var savedId: Long? = null
+            vm.save { savedId = it }
+            advanceUntilIdle()
+
+            assertNull(savedId)
+            assertEquals("Please pick a cloud folder before saving.", vm.state.value.saveError)
+            assertTrue(vm.state.value.saveErrorEvent > initialEvent)
+            coVerify(exactly = 0) { mockRepo.upsert(any()) }
+        }
+
+    @Test
     fun `clearSaveError leaves saveErrorEvent unchanged so snackbar history is preserved`() =
         runTest {
             val vm = createVm()
@@ -226,6 +245,7 @@ class PairEditorViewModelTest {
 
             val vm = createVmWithFolder()
             vm.onDisplayNameChange("Test Pair")
+            vm.onRemoteFolderPicked("remote-id", "Remote")
             advanceUntilIdle()
 
             var savedId: Long? = null
@@ -245,6 +265,7 @@ class PairEditorViewModelTest {
 
             val vm = createVmWithFolder()
             vm.onDisplayNameChange("Test Pair")
+            vm.onRemoteFolderPicked("remote-id", "Remote")
             advanceUntilIdle()
 
             vm.save {}
@@ -260,6 +281,7 @@ class PairEditorViewModelTest {
 
             val vm = createVmWithFolder()
             vm.onDisplayNameChange("Test Pair")
+            vm.onRemoteFolderPicked("remote-id", "Remote")
             vm.onAutoSyncEnabledChange(false)
             advanceUntilIdle()
 
@@ -281,6 +303,7 @@ class PairEditorViewModelTest {
 
             val vm = createVmWithFolder()
             vm.onDisplayNameChange("Test Pair")
+            vm.onRemoteFolderPicked("remote-id", "Remote")
             advanceUntilIdle()
 
             var savedId: Long? = null
@@ -499,6 +522,7 @@ class PairEditorViewModelTest {
 
             val vm = createVmWithFolder()
             vm.onDisplayNameChange("Backup Pair")
+            vm.onRemoteFolderPicked("remote-id", "Remote")
             vm.onRetentionDaysChange("7")
             advanceUntilIdle()
 
@@ -519,6 +543,7 @@ class PairEditorViewModelTest {
 
             val vm = createVmWithFolder()
             vm.onDisplayNameChange("Pair")
+            vm.onRemoteFolderPicked("remote-id", "Remote")
             vm.onRetentionDaysChange("")
             advanceUntilIdle()
 
@@ -535,6 +560,7 @@ class PairEditorViewModelTest {
 
             val vm = createVmWithFolder()
             vm.onDisplayNameChange("Pair")
+            vm.onRemoteFolderPicked("remote-id", "Remote")
             vm.onRetentionDaysChange((PairEditorViewModel.MAX_RETENTION_DAYS + 1).toString())
             advanceUntilIdle()
 
