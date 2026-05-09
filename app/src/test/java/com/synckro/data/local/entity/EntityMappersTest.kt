@@ -20,7 +20,6 @@ import org.junit.Test
  * from the Room entity to the domain model.
  */
 class EntityMappersTest {
-
     // ---------------------------------------------------------------------------
     // Helpers
     // ---------------------------------------------------------------------------
@@ -278,28 +277,29 @@ class EntityMappersTest {
 
     @Test
     fun `toDomain maps all fields in a fully-populated entity`() {
-        val entity = buildEntity(
-            id = 99L,
-            displayName = "Full Pair",
-            localTreeUri = "content://full/tree",
-            provider = CloudProviderType.GOOGLE_DRIVE,
-            remoteFolderId = "gdrive-folder",
-            direction = SyncDirection.REMOTE_TO_LOCAL,
-            conflictPolicy = ConflictPolicy.PREFER_LOCAL,
-            includeGlobs = "*.doc\n*.docx",
-            excludeGlobs = "*.tmp",
-            wifiOnly = false,
-            requiresCharging = true,
-            autoSyncEnabled = false,
-            lastDeltaToken = "delta-token-xyz",
-            lastSyncAtMs = 1_710_000_000_000L,
-            lastSyncResult = "PARTIAL_FAILURE",
-            scheduleIntervalMinutes = 30L,
-            lastFullScanAtMs = 1_700_000_000_000L,
-            retentionDays = 7,
-            excludeSubfolders = true,
-            excludeEmptyFolders = true,
-        )
+        val entity =
+            buildEntity(
+                id = 99L,
+                displayName = "Full Pair",
+                localTreeUri = "content://full/tree",
+                provider = CloudProviderType.GOOGLE_DRIVE,
+                remoteFolderId = "gdrive-folder",
+                direction = SyncDirection.REMOTE_TO_LOCAL,
+                conflictPolicy = ConflictPolicy.PREFER_LOCAL,
+                includeGlobs = "*.doc\n*.docx",
+                excludeGlobs = "*.tmp",
+                wifiOnly = false,
+                requiresCharging = true,
+                autoSyncEnabled = false,
+                lastDeltaToken = "delta-token-xyz",
+                lastSyncAtMs = 1_710_000_000_000L,
+                lastSyncResult = "PARTIAL_FAILURE",
+                scheduleIntervalMinutes = 30L,
+                lastFullScanAtMs = 1_700_000_000_000L,
+                retentionDays = 7,
+                excludeSubfolders = true,
+                excludeEmptyFolders = true,
+            )
         val pair = entity.toDomain(needsReLink = true)
 
         assertEquals(99L, pair.id)

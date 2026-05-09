@@ -263,6 +263,7 @@ abstract class SynckroDatabase : RoomDatabase() {
                     db.execSQL("ALTER TABLE `local_index` ADD COLUMN `remoteEtag` TEXT")
                 }
             }
+
         /**
          * Migrates the database from version 8 to 9:
          * - Adds `autoSyncEnabled` column to `sync_pair` (default 1 = enabled).

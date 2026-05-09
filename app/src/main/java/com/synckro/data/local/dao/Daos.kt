@@ -274,7 +274,8 @@ interface SyncPairDao {
      */
     @Query(
         "SELECT DISTINCT provider AS provider, accountId AS accountId " +
-            "FROM sync_pair WHERE lastSyncResult = 'NEEDS_REAUTH'",
+            "FROM sync_pair WHERE lastSyncResult = 'NEEDS_REAUTH' " +
+            "ORDER BY provider ASC, accountId ASC",
     )
     fun observeAccountsNeedingReauth(): Flow<List<AccountReauthRow>>
 

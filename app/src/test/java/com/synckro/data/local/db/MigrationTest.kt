@@ -440,6 +440,51 @@ class MigrationTest {
     }
 
     // -------------------------------------------------------------------------
+    // Full migration chain v1 → v12
+    // -------------------------------------------------------------------------
+
+    @Test
+    fun `all migrations from v1 to v12 run without error and backfill accountId`() {
+        val v1Db = openAtV1(context)
+        try {
+            // Bring the v1 bootstrap DB up to v10 (pre-account era for sync_pair).
+            SynckroDatabase.MIGRATION_1_2.migrate(v1Db)
+            SynckroDatabase.MIGRATION_2_3.migrate(v1Db)
+            SynckroDatabase.MIGRATION_3_4.migrate(v1Db)
+            SynckroDatabase.MIGRATION_4_5.migrate(v1Db)
+            SynckroDatabase.MIGRATION_5_6.migrate(v1Db)
+            SynckroDatabase.MIGRATION_6_7.migrate(v1Db)
+            SynckroDatabase.MIGRATION_7_8.migrate(v1Db)
+            SynckroDatabase.MIGRATION_8_9.migrate(v1Db)
+            SynckroDatabase.MIGRATION_9_10.migrate(v1Db)
+
+            // Seed an account row (created by MIGRATION_1_2) and a sync_pair row
+            // before applying the latest migrations, so the v11→v12 backfill SQL
+            // exercises the full v1 schema's column shape rather than a
+            // freshly-created v6 baseline.
+            insertAccount(v1Db, id = "acc-od-1", providerType = "ONEDRIVE")
+            insertSyncPairWithProvider(v1Db, displayName = "OD Pair v1Chain", provider = "ONEDRIVE")
+
+            SynckroDatabase.MIGRATION_10_11.migrate(v1Db)
+            SynckroDatabase.MIGRATION_11_12.migrate(v1Db)
+
+            val syncPairCols = columnNames(v1Db, "sync_pair")
+            assertTrue("excludeSubfolders must exist after v1→v12 chain", "excludeSubfolders" in syncPairCols)
+            assertTrue("excludeEmptyFolders must exist after v1→v12 chain", "excludeEmptyFolders" in syncPairCols)
+            assertTrue("accountId must exist after v1→v12 chain", "accountId" in syncPairCols)
+
+            assertEquals(
+                "accountId should be backfilled by MIGRATION_11_12 in the v1→v12 chain",
+                "acc-od-1",
+                accountIdFor(v1Db, "OD Pair v1Chain"),
+            )
+        } finally {
+            v1Db.close()
+            context.deleteDatabase("${TEST_DB}_v1")
+        }
+    }
+
+    // -------------------------------------------------------------------------
     // Full migration chain v1 → v10
     // -------------------------------------------------------------------------
 
