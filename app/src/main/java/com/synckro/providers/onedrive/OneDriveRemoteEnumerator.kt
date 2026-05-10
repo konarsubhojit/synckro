@@ -1,6 +1,7 @@
 package com.synckro.providers.onedrive
 
 import com.synckro.domain.provider.CloudProviderException
+import com.synckro.domain.sync.AccountAwareRemoteEnumerator
 import com.synckro.domain.sync.RemoteChange
 import com.synckro.domain.sync.RemoteChangeType
 import com.synckro.domain.sync.RemoteEnumerator
@@ -29,17 +30,16 @@ import javax.inject.Singleton
 class OneDriveRemoteEnumerator
     @Inject
     constructor(
-        private val provider: OneDriveProvider,
+        private val providerFactory: OneDriveProviderFactory,
         private val graphClient: OneDriveGraphClient,
-    ) : RemoteEnumerator {
+    ) : RemoteEnumerator, AccountAwareRemoteEnumerator {
         /**
          * Acquires an access token via [provider] and delegates to
          * [enumerateWithToken]. Authentication errors are surfaced as
          * [CloudProviderException] subtypes.
          */
         override suspend fun enumerate(deltaToken: String?, rootFolderId: String): RemoteSnapshot {
-            val token = provider.obtainAccessToken()
-            return enumerateWithToken(token, deltaToken, rootFolderId)
+            throw CloudProviderException.AuthenticationRequired("OneDrive enumerate requires an account id.")
         }
 
         /**
@@ -51,8 +51,24 @@ class OneDriveRemoteEnumerator
          * (empty changes + fresh deltaLink).
          */
         override suspend fun enumerateFull(rootFolderId: String): RemoteSnapshot {
-            if (rootFolderId.isEmpty()) return enumerate(null, rootFolderId)
-            val token = provider.obtainAccessToken()
+            throw CloudProviderException.AuthenticationRequired("OneDrive enumerateFull requires an account id.")
+        }
+
+        override suspend fun enumerateForAccount(
+            accountId: String,
+            deltaToken: String?,
+            rootFolderId: String,
+        ): RemoteSnapshot {
+            val token = providerFor(accountId).obtainAccessToken()
+            return enumerateWithToken(token, deltaToken, rootFolderId)
+        }
+
+        override suspend fun enumerateFullForAccount(
+            accountId: String,
+            rootFolderId: String,
+        ): RemoteSnapshot {
+            if (rootFolderId.isEmpty()) return enumerateForAccount(accountId, null, rootFolderId)
+            val token = providerFor(accountId).obtainAccessToken()
             return enumerateAllWithToken(token, rootFolderId)
         }
 
@@ -123,6 +139,8 @@ class OneDriveRemoteEnumerator
                 }
             }
         }
+
+        private fun providerFor(accountId: String): OneDriveProvider = providerFactory.providerFor(accountId) as OneDriveProvider
     }
 
 /**

@@ -7,20 +7,24 @@ import com.synckro.domain.model.ConflictRecord
 import com.synckro.domain.model.SyncDirection
 import com.synckro.domain.model.SyncPair
 import com.synckro.domain.provider.CloudProvider
+import com.synckro.domain.provider.CloudProviderFactory
 import com.synckro.providers.fake.FakeCloudProvider
 import io.mockk.coEvery
 import io.mockk.mockk
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SyncEngineTest {
     private val mockConflictRepo: ConflictRepository = mockk(relaxed = true)
     private val fakeProvider = FakeCloudProvider()
-    private val providers: Map<CloudProviderType, CloudProvider> =
+    private val providers: Map<CloudProviderType, CloudProviderFactory> =
         mapOf(
-            CloudProviderType.FAKE to fakeProvider,
+            CloudProviderType.FAKE to singleProviderFactory(fakeProvider),
         )
     private val engine = SyncEngine(mockConflictRepo, providers)
 
@@ -142,9 +146,9 @@ class SyncEngineTest {
     fun `provider not in map returns Terminal with unsupported message`() =
         runTest {
             // Engine with only the FAKE provider registered — ONEDRIVE is absent.
-            val partialProviders: Map<CloudProviderType, CloudProvider> =
+            val partialProviders: Map<CloudProviderType, CloudProviderFactory> =
                 mapOf(
-                    CloudProviderType.FAKE to fakeProvider,
+                    CloudProviderType.FAKE to singleProviderFactory(fakeProvider),
                 )
             val engineWithPartialMap = SyncEngine(mockConflictRepo, partialProviders)
             val result = engineWithPartialMap.runOnce(pair(CloudProviderType.ONEDRIVE))
@@ -157,16 +161,16 @@ class SyncEngineTest {
             coEvery { mockConflictRepo.getResolvedForPair(any()) } returns emptyList()
 
             val localFake = FakeCloudProvider()
-            val mockOneDrive: CloudProvider = mockk(relaxed = true)
-            val mockGoogleDrive: CloudProvider = mockk(relaxed = true)
+            val mockOneDrive = mockk<com.synckro.domain.provider.CloudProvider>(relaxed = true)
+            val mockGoogleDrive = mockk<com.synckro.domain.provider.CloudProvider>(relaxed = true)
 
             val multiEngine =
                 SyncEngine(
                     mockConflictRepo,
                     mapOf(
-                        CloudProviderType.FAKE to localFake,
-                        CloudProviderType.ONEDRIVE to mockOneDrive,
-                        CloudProviderType.GOOGLE_DRIVE to mockGoogleDrive,
+                        CloudProviderType.FAKE to singleProviderFactory(localFake),
+                        CloudProviderType.ONEDRIVE to singleProviderFactory(mockOneDrive),
+                        CloudProviderType.GOOGLE_DRIVE to singleProviderFactory(mockGoogleDrive),
                     ),
                 )
 
@@ -181,6 +185,53 @@ class SyncEngineTest {
             // GOOGLE_DRIVE resolves to Terminal (not yet implemented)
             val googleDriveResult = multiEngine.runOnce(pair(CloudProviderType.GOOGLE_DRIVE))
             assertTrue("GOOGLE_DRIVE resolves to Terminal", googleDriveResult is SyncEngine.Result.Terminal)
+        }
+
+    @Test
+    fun `parallel runOnce for same provider with different account ids uses isolated fake providers`() =
+        runTest {
+            coEvery { mockConflictRepo.getResolvedForPair(any()) } returns emptyList()
+            coEvery { mockConflictRepo.insert(any()) } returns 1L
+
+            val fakeByAccount = linkedMapOf<String, FakeCloudProvider>()
+            val fakeFactory =
+                object : CloudProviderFactory {
+                    override fun providerFor(accountId: String): CloudProvider =
+                        fakeByAccount.getOrPut(accountId) { FakeCloudProvider() }
+                }
+
+            val multiAccountEngine =
+                SyncEngine(
+                    conflictRepository = mockConflictRepo,
+                    providers = mapOf(CloudProviderType.FAKE to fakeFactory),
+                )
+
+            val pairA = pair(CloudProviderType.FAKE).copy(id = 101L, accountId = "acct-A")
+            val pairB = pair(CloudProviderType.FAKE).copy(id = 102L, accountId = "acct-B")
+
+            (fakeFactory.providerFor("acct-A") as FakeCloudProvider).forceConflict(
+                "docs/conflict-A.txt",
+                localLastModifiedMs = 2_000L,
+                remoteLastModifiedMs = 1_000L,
+            )
+
+            val (resultA, resultB) =
+                coroutineScope {
+                    val a = async { multiAccountEngine.runOnce(pairA.copy(conflictPolicy = ConflictPolicy.KEEP_BOTH)) }
+                    val b = async { multiAccountEngine.runOnce(pairB.copy(conflictPolicy = ConflictPolicy.KEEP_BOTH)) }
+                    Pair(a.await(), b.await())
+                }
+
+            assertTrue(resultA is SyncEngine.Result.Success)
+            assertTrue(resultB is SyncEngine.Result.Success)
+            assertEquals(1, (resultA as SyncEngine.Result.Success).conflicts)
+            assertEquals(0, (resultB as SyncEngine.Result.Success).conflicts)
+            assertNotSame(fakeByAccount["acct-A"], fakeByAccount["acct-B"])
+        }
+
+    private fun singleProviderFactory(provider: com.synckro.domain.provider.CloudProvider): CloudProviderFactory =
+        object : CloudProviderFactory {
+            override fun providerFor(accountId: String) = provider
         }
 
     // =========================================================================

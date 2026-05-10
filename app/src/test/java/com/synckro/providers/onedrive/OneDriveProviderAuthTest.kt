@@ -40,7 +40,7 @@ class OneDriveProviderAuthTest {
     fun setUp() {
         authManager = mockk()
         graphClient = mockk(relaxed = true)
-        provider = OneDriveProvider(authManager, graphClient)
+        provider = OneDriveProvider(fakeAccount.id, authManager, graphClient)
     }
 
     // -------------------------------------------------------------------------
@@ -67,13 +67,13 @@ class OneDriveProviderAuthTest {
     fun `ensureAuthenticated throws AuthenticationRequired when no account is signed in`() =
         runTest {
             coEvery { authManager.currentAccounts() } returns emptyList()
-            coEvery { authManager.getAccountHint() } returns null
+            coEvery { authManager.getAccountHint(fakeAccount.id) } returns null
 
             try {
                 provider.ensureAuthenticated()
                 fail("Expected CloudProviderException.AuthenticationRequired")
             } catch (e: CloudProviderException.AuthenticationRequired) {
-                assertTrue(e.message!!.contains("No OneDrive account is signed in"))
+                assertTrue(e.message!!.contains("No OneDrive account is linked"))
             }
         }
 
@@ -81,7 +81,7 @@ class OneDriveProviderAuthTest {
     fun `ensureAuthenticated includes account hint in message when available`() =
         runTest {
             coEvery { authManager.currentAccounts() } returns emptyList()
-            coEvery { authManager.getAccountHint() } returns "last@example.com"
+            coEvery { authManager.getAccountHint(fakeAccount.id) } returns "last@example.com"
 
             try {
                 provider.ensureAuthenticated()
@@ -201,7 +201,7 @@ class OneDriveProviderAuthTest {
     fun `AuthenticationRequired is a CloudProviderException`() =
         runTest {
             coEvery { authManager.currentAccounts() } returns emptyList()
-            coEvery { authManager.getAccountHint() } returns null
+            coEvery { authManager.getAccountHint(fakeAccount.id) } returns null
 
             try {
                 provider.ensureAuthenticated()

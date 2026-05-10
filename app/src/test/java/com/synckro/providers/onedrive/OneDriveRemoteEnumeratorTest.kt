@@ -38,8 +38,8 @@ class OneDriveRemoteEnumeratorTest {
                 .build()
         graphClient = OneDriveGraphClient(okHttpClient)
         graphClient.graphBaseUrl = server.url("/me/drive").toString().trimEnd('/')
-        // Provider is unused on the test seam path (`enumerateWithToken`).
-        enumerator = OneDriveRemoteEnumerator(provider = mockk(relaxed = true), graphClient = graphClient)
+        // ProviderFactory is unused on the test seam path (`enumerateWithToken`).
+        enumerator = OneDriveRemoteEnumerator(providerFactory = mockk(relaxed = true), graphClient = graphClient)
     }
 
     @After

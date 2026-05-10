@@ -39,8 +39,8 @@ class GoogleDriveRemoteEnumeratorTest {
         restClient = GoogleDriveRestClient(okHttpClient)
         restClient.driveBaseUrl = server.url("/drive/v3").toString().trimEnd('/')
         restClient.uploadBaseUrl = server.url("/upload/drive/v3").toString().trimEnd('/')
-        // Provider is unused on the test seam path (`enumerateWithToken`).
-        enumerator = GoogleDriveRemoteEnumerator(provider = mockk(relaxed = true), restClient = restClient)
+        // ProviderFactory is unused on the test seam path (`enumerateWithToken`).
+        enumerator = GoogleDriveRemoteEnumerator(providerFactory = mockk(relaxed = true), restClient = restClient)
     }
 
     @After

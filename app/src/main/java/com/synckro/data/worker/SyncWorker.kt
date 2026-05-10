@@ -22,8 +22,10 @@ import com.synckro.R
 import com.synckro.data.local.dao.SyncPairDao
 import com.synckro.data.local.entity.toDomain
 import com.synckro.data.repository.SyncEventRepository
+import com.synckro.domain.model.CloudProviderType
 import com.synckro.domain.model.SyncEventLevel
 import com.synckro.domain.model.SyncPair
+import com.synckro.domain.provider.CloudProviderFactory
 import com.synckro.domain.provider.CloudProviderException
 import com.synckro.domain.sync.CloudExceptionMapper
 import com.synckro.domain.sync.SyncEngine
@@ -37,6 +39,7 @@ import kotlinx.coroutines.launch
 import timber.log.Timber
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.jvm.JvmSuppressWildcards
 
 /**
  * Background worker that runs a single sync pass for one [SyncPair].
@@ -58,6 +61,7 @@ class SyncWorker
         @Assisted appContext: Context,
         @Assisted params: WorkerParameters,
         private val syncPairDao: SyncPairDao,
+        private val providerFactories: Map<CloudProviderType, @JvmSuppressWildcards CloudProviderFactory>,
         private val engine: SyncEngine,
         private val syncEventRepository: SyncEventRepository,
     ) : CoroutineWorker(appContext, params) {
@@ -115,6 +119,18 @@ class SyncWorker
                 return Result.success()
             }
             val pair = entity.toDomain()
+            if (pair.provider != CloudProviderType.FAKE && pair.accountId == null) {
+                val reason = "Sync pair is no longer linked to an account. Please re-link this pair."
+                Timber.w("SyncWorker.doWork: terminal relink required for pairId=%d (missing accountId)", pairId)
+                syncPairDao.updateLastSyncResult(pairId, System.currentTimeMillis(), RESULT_NEEDS_RELINK)
+                syncEventRepository.log(pairId, SyncEventLevel.ERROR, LOG_TAG, reason)
+                WorkManager.getInstance(applicationContext).cancelUniqueWork(uniqueName(pairId))
+                return Result.failure()
+            }
+            val accountId = pair.accountId
+            if (pair.provider != CloudProviderType.FAKE && accountId != null) {
+                providerFactories[pair.provider]?.providerFor(accountId)
+            }
 
             syncEventRepository.log(
                 pairId,

@@ -22,6 +22,8 @@ import com.synckro.domain.model.ConflictPolicy
 import com.synckro.domain.model.ConflictRecord
 import com.synckro.domain.model.SyncDirection
 import com.synckro.domain.model.SyncPair
+import com.synckro.domain.provider.CloudProvider
+import com.synckro.domain.provider.CloudProviderFactory
 import com.synckro.domain.provider.CloudProviderException
 import com.synckro.domain.sync.RemoteChange
 import com.synckro.domain.sync.RemoteChangeType
@@ -176,12 +178,14 @@ class SyncEngineRealIntegrationTest {
         providerType: CloudProviderType = CloudProviderType.ONEDRIVE,
         direction: SyncDirection = SyncDirection.BIDIRECTIONAL,
         conflictPolicy: ConflictPolicy = ConflictPolicy.NEWEST_WINS,
+        accountId: String = "test-account",
     ): SyncPair {
         val entity =
             SyncPairEntity(
                 displayName = "Smoke Test Pair",
                 localTreeUri = treeUri.toString(),
                 provider = providerType,
+                accountId = accountId,
                 remoteFolderId = "remote-root",
                 direction = direction,
                 conflictPolicy = conflictPolicy,
@@ -196,6 +200,7 @@ class SyncEngineRealIntegrationTest {
             displayName = entity.displayName,
             localTreeUri = entity.localTreeUri,
             provider = entity.provider,
+            accountId = entity.accountId,
             remoteFolderId = entity.remoteFolderId,
             direction = entity.direction,
             conflictPolicy = entity.conflictPolicy,
@@ -206,7 +211,7 @@ class SyncEngineRealIntegrationTest {
     private fun buildEngine(): SyncEngine =
         SyncEngine(
             conflictRepository = conflictRepository,
-            providers = mapOf(CloudProviderType.ONEDRIVE to fakeProvider),
+            providers = mapOf(CloudProviderType.ONEDRIVE to singleProviderFactory(fakeProvider)),
             localFsEnumerator = localFsEnumerator,
             remoteEnumerators = mapOf(CloudProviderType.ONEDRIVE to fakeRemoteEnumerator),
             syncPairDao = syncPairDao,
@@ -214,6 +219,11 @@ class SyncEngineRealIntegrationTest {
             eventRepository = eventRepository,
             localFileAccess = { _ -> localFileAccess },
         )
+
+    private fun singleProviderFactory(provider: CloudProvider): CloudProviderFactory =
+        object : CloudProviderFactory {
+            override fun providerFor(accountId: String): CloudProvider = provider
+        }
 
     // -------------------------------------------------------------------------
     // Smoke tests
@@ -368,7 +378,7 @@ class SyncEngineRealIntegrationTest {
             val engine =
                 SyncEngine(
                     conflictRepository = conflictRepository,
-                    providers = mapOf(CloudProviderType.GOOGLE_DRIVE to fakeProvider),
+                    providers = mapOf(CloudProviderType.GOOGLE_DRIVE to singleProviderFactory(fakeProvider)),
                     localFsEnumerator = localFsEnumerator,
                     remoteEnumerators = emptyMap(), // no GOOGLE_DRIVE enumerator
                     syncPairDao = syncPairDao,
@@ -399,7 +409,7 @@ class SyncEngineRealIntegrationTest {
             val engine =
                 SyncEngine(
                     conflictRepository = conflictRepository,
-                    providers = mapOf(CloudProviderType.ONEDRIVE to fakeProvider),
+                    providers = mapOf(CloudProviderType.ONEDRIVE to singleProviderFactory(fakeProvider)),
                     localFsEnumerator = localFsEnumerator,
                     remoteEnumerators = mapOf(CloudProviderType.ONEDRIVE to cancellingEnumerator),
                     syncPairDao = syncPairDao,
@@ -632,7 +642,7 @@ class SyncEngineRealIntegrationTest {
             val engine =
                 SyncEngine(
                     conflictRepository = conflictRepository,
-                    providers = mapOf(CloudProviderType.ONEDRIVE to fakeProvider),
+                    providers = mapOf(CloudProviderType.ONEDRIVE to singleProviderFactory(fakeProvider)),
                     localFsEnumerator = localFsEnumerator,
                     remoteEnumerators = mapOf(CloudProviderType.ONEDRIVE to failingEnumerator),
                     syncPairDao = syncPairDao,
@@ -664,7 +674,7 @@ class SyncEngineRealIntegrationTest {
             val engine =
                 SyncEngine(
                     conflictRepository = conflictRepository,
-                    providers = mapOf(CloudProviderType.ONEDRIVE to fakeProvider),
+                    providers = mapOf(CloudProviderType.ONEDRIVE to singleProviderFactory(fakeProvider)),
                     localFsEnumerator = localFsEnumerator,
                     remoteEnumerators = mapOf(CloudProviderType.ONEDRIVE to failingEnumerator),
                     syncPairDao = syncPairDao,
@@ -698,7 +708,7 @@ class SyncEngineRealIntegrationTest {
             val engine =
                 SyncEngine(
                     conflictRepository = conflictRepository,
-                    providers = mapOf(CloudProviderType.ONEDRIVE to fakeProvider),
+                    providers = mapOf(CloudProviderType.ONEDRIVE to singleProviderFactory(fakeProvider)),
                     localFsEnumerator = localFsEnumerator,
                     remoteEnumerators = mapOf(CloudProviderType.ONEDRIVE to failingEnumerator),
                     syncPairDao = syncPairDao,
@@ -815,7 +825,7 @@ class SyncEngineRealIntegrationTest {
             val engine =
                 SyncEngine(
                     conflictRepository = conflictRepository,
-                    providers = mapOf(CloudProviderType.ONEDRIVE to fakeProvider),
+                    providers = mapOf(CloudProviderType.ONEDRIVE to singleProviderFactory(fakeProvider)),
                     localFsEnumerator = localFsEnumerator,
                     remoteEnumerators = mapOf(CloudProviderType.ONEDRIVE to conflictEnumerator),
                     syncPairDao = syncPairDao,
@@ -975,7 +985,7 @@ class SyncEngineRealIntegrationTest {
             val engine =
                 SyncEngine(
                     conflictRepository = conflictRepository,
-                    providers = mapOf(CloudProviderType.ONEDRIVE to fakeProvider),
+                    providers = mapOf(CloudProviderType.ONEDRIVE to singleProviderFactory(fakeProvider)),
                     localFsEnumerator = localFsEnumerator,
                     remoteEnumerators = mapOf(CloudProviderType.ONEDRIVE to conflictEnumerator),
                     syncPairDao = syncPairDao,
@@ -1296,7 +1306,7 @@ class SyncEngineRealIntegrationTest {
             val renameEngine =
                 SyncEngine(
                     conflictRepository = conflictRepository,
-                    providers = mapOf(CloudProviderType.ONEDRIVE to fakeProvider),
+                    providers = mapOf(CloudProviderType.ONEDRIVE to singleProviderFactory(fakeProvider)),
                     localFsEnumerator = localFsEnumerator,
                     remoteEnumerators = mapOf(CloudProviderType.ONEDRIVE to renameEnumerator),
                     syncPairDao = syncPairDao,
@@ -1375,7 +1385,7 @@ class SyncEngineRealIntegrationTest {
             val renameEngine =
                 SyncEngine(
                     conflictRepository = conflictRepository,
-                    providers = mapOf(CloudProviderType.ONEDRIVE to fakeProvider),
+                    providers = mapOf(CloudProviderType.ONEDRIVE to singleProviderFactory(fakeProvider)),
                     localFsEnumerator = localFsEnumerator,
                     remoteEnumerators = mapOf(CloudProviderType.ONEDRIVE to sameIdRenameEnumerator),
                     syncPairDao = syncPairDao,
