@@ -1,8 +1,10 @@
 package com.synckro.ui.screens.pickfolder
 
 import androidx.lifecycle.SavedStateHandle
+import com.synckro.domain.auth.AuthManagerRegistry
 import com.synckro.domain.model.CloudProviderType
 import com.synckro.domain.provider.CloudProvider
+import com.synckro.domain.provider.CloudProviderFactory
 import com.synckro.domain.provider.RemoteFile
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -27,11 +29,13 @@ import org.junit.Test
 class PickRemoteFolderViewModelTest {
     private val testDispatcher = StandardTestDispatcher()
     private lateinit var mockProvider: CloudProvider
+    private lateinit var authRegistry: AuthManagerRegistry
 
     @Before
     fun setUp() {
         Dispatchers.setMain(testDispatcher)
         mockProvider = mockk(relaxed = true)
+        authRegistry = mockk(relaxed = true)
     }
 
     @After
@@ -42,14 +46,28 @@ class PickRemoteFolderViewModelTest {
     private fun createVm(
         provider: CloudProviderType = CloudProviderType.FAKE,
         providers: Map<CloudProviderType, CloudProvider> = mapOf(CloudProviderType.FAKE to mockProvider),
+        accountId: String? = if (provider == CloudProviderType.FAKE) null else "test-account",
     ): PickRemoteFolderViewModel =
         PickRemoteFolderViewModel(
             savedStateHandle =
                 SavedStateHandle(
-                    mapOf(PickRemoteFolderViewModel.ARG_PROVIDER to provider.name),
+                    buildMap {
+                        put(PickRemoteFolderViewModel.ARG_PROVIDER, provider.name)
+                        if (accountId != null) {
+                            put(PickRemoteFolderViewModel.ARG_ACCOUNT_ID, accountId)
+                        }
+                    },
                 ),
-            providers = providers,
+            providerFactories = providers.toFactoryMap(),
+            authRegistry = authRegistry,
         )
+
+    private fun Map<CloudProviderType, CloudProvider>.toFactoryMap(): Map<CloudProviderType, CloudProviderFactory> =
+        mapValues { (_, provider) ->
+            object : CloudProviderFactory {
+                override fun providerFor(accountId: String): CloudProvider = provider
+            }
+        }
 
     private fun folder(id: String, name: String, parentId: String? = null): RemoteFile =
         RemoteFile(
@@ -280,9 +298,13 @@ class PickRemoteFolderViewModelTest {
                 PickRemoteFolderViewModel(
                     savedStateHandle =
                         SavedStateHandle(
-                            mapOf(PickRemoteFolderViewModel.ARG_PROVIDER to CloudProviderType.GOOGLE_DRIVE.name),
+                            mapOf(
+                                PickRemoteFolderViewModel.ARG_PROVIDER to CloudProviderType.GOOGLE_DRIVE.name,
+                                PickRemoteFolderViewModel.ARG_ACCOUNT_ID to "test-account",
+                            ),
                         ),
-                    providers = mapOf(CloudProviderType.GOOGLE_DRIVE to mockGDrive),
+                    providerFactories = mapOf(CloudProviderType.GOOGLE_DRIVE to mockGDrive).toFactoryMap(),
+                    authRegistry = authRegistry,
                 )
             advanceUntilIdle()
 
@@ -305,9 +327,13 @@ class PickRemoteFolderViewModelTest {
                 PickRemoteFolderViewModel(
                     savedStateHandle =
                         SavedStateHandle(
-                            mapOf(PickRemoteFolderViewModel.ARG_PROVIDER to CloudProviderType.GOOGLE_DRIVE.name),
+                            mapOf(
+                                PickRemoteFolderViewModel.ARG_PROVIDER to CloudProviderType.GOOGLE_DRIVE.name,
+                                PickRemoteFolderViewModel.ARG_ACCOUNT_ID to "test-account",
+                            ),
                         ),
-                    providers = mapOf(CloudProviderType.GOOGLE_DRIVE to mockGDrive),
+                    providerFactories = mapOf(CloudProviderType.GOOGLE_DRIVE to mockGDrive).toFactoryMap(),
+                    authRegistry = authRegistry,
                 )
             advanceUntilIdle()
 
@@ -346,9 +372,13 @@ class PickRemoteFolderViewModelTest {
                 PickRemoteFolderViewModel(
                     savedStateHandle =
                         SavedStateHandle(
-                            mapOf(PickRemoteFolderViewModel.ARG_PROVIDER to "NOT_A_PROVIDER"),
+                            mapOf(
+                                PickRemoteFolderViewModel.ARG_PROVIDER to "NOT_A_PROVIDER",
+                                PickRemoteFolderViewModel.ARG_ACCOUNT_ID to "test-account",
+                            ),
                         ),
-                    providers = mapOf(CloudProviderType.GOOGLE_DRIVE to mockGDrive),
+                    providerFactories = mapOf(CloudProviderType.GOOGLE_DRIVE to mockGDrive).toFactoryMap(),
+                    authRegistry = authRegistry,
                 )
             advanceUntilIdle()
 

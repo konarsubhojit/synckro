@@ -3,6 +3,7 @@ package com.synckro.providers.onedrive
 import com.synckro.domain.auth.AuthResult
 import com.synckro.domain.provider.ChangesPage
 import com.synckro.domain.provider.CloudProvider
+import com.synckro.domain.provider.CloudProviderFactory
 import com.synckro.domain.provider.CloudProviderException
 import com.synckro.domain.provider.RemoteChange
 import com.synckro.domain.provider.RemoteFile
@@ -10,6 +11,7 @@ import timber.log.Timber
 import java.io.InputStream
 import javax.inject.Inject
 import javax.inject.Singleton
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * OneDrive provider backed by the Microsoft Graph API.
@@ -21,10 +23,9 @@ import javax.inject.Singleton
  * All Graph operations are delegated to [OneDriveGraphClient], which handles
  * chunked resumable uploads, delta-based change enumeration, and 429/5xx retries.
  */
-@Singleton
 class OneDriveProvider
-    @Inject
     constructor(
+        private val accountId: String,
         private val authManager: OneDriveAuthManager,
         private val graphClient: OneDriveGraphClient,
     ) : CloudProvider {
@@ -96,15 +97,14 @@ class OneDriveProvider
          * @throws CloudProviderException.AuthenticationFailed for unexpected MSAL errors.
          */
         override suspend fun ensureAuthenticated(): Boolean {
-            val accounts = authManager.currentAccounts()
             val account =
-                accounts.firstOrNull()
+                authManager.currentAccounts().firstOrNull { it.id == accountId }
                     ?: run {
-                        val hint = authManager.getAccountHint()
+                        val hint = authManager.getAccountHint(accountId)
                         val hintMsg = if (hint != null) " (last seen: $hint)" else ""
-                        Timber.w("OneDriveProvider.ensureAuthenticated: no signed-in account$hintMsg")
+                        Timber.w("OneDriveProvider.ensureAuthenticated: account not found; accountId=%s%s", accountId, hintMsg)
                         throw CloudProviderException.AuthenticationRequired(
-                            "No OneDrive account is signed in$hintMsg. Please sign in from the Accounts screen.",
+                            "No OneDrive account is linked for id=$accountId$hintMsg. Please sign in from the Accounts screen.",
                         )
                     }
 
@@ -216,6 +216,21 @@ class OneDriveProvider
                     nextToken = nextDeltaLink,
                     hasMore = false,
                 )
+            }
+    }
+
+@Singleton
+class OneDriveProviderFactory
+    @Inject
+    constructor(
+        private val authManager: OneDriveAuthManager,
+        private val graphClient: OneDriveGraphClient,
+    ) : CloudProviderFactory {
+        private val providersByAccount = ConcurrentHashMap<String, CloudProvider>()
+
+        override fun providerFor(accountId: String): CloudProvider =
+            providersByAccount.computeIfAbsent(accountId) {
+                OneDriveProvider(accountId = it, authManager = authManager, graphClient = graphClient)
             }
     }
 

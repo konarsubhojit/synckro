@@ -15,6 +15,7 @@ import com.synckro.domain.model.FileIndexEntry
 import com.synckro.domain.model.SyncEventLevel
 import com.synckro.domain.model.SyncPair
 import com.synckro.domain.provider.CloudProvider
+import com.synckro.domain.provider.CloudProviderFactory
 import com.synckro.domain.provider.RemoteFile
 import com.synckro.providers.fake.FakeCloudProvider
 import kotlinx.coroutines.CancellationException
@@ -53,7 +54,7 @@ import java.util.concurrent.ConcurrentHashMap
  */
 class SyncEngine(
     private val conflictRepository: ConflictRepository,
-    private val providers: Map<CloudProviderType, @JvmSuppressWildcards CloudProvider>,
+    private val providers: Map<CloudProviderType, @JvmSuppressWildcards CloudProviderFactory>,
     private val localFsEnumerator: LocalFsEnumerator? = null,
     private val remoteEnumerators: Map<CloudProviderType, @JvmSuppressWildcards RemoteEnumerator> = emptyMap(),
     private val syncPairDao: SyncPairDao? = null,
@@ -136,9 +137,21 @@ class SyncEngine(
      * @return A [Result] describing the sync outcome.
      */
     suspend fun runOnce(pair: SyncPair, onProgress: suspend (TransferProgress) -> Unit = {}): Result {
-        val provider =
+        val providerFactory =
             providers[pair.provider]
                 ?: return Result.Terminal("Unsupported provider: ${pair.provider}")
+        val provider =
+            if (pair.provider == CloudProviderType.FAKE) {
+                providerFactory.providerFor(pair.accountId ?: FAKE_ACCOUNT_KEY)
+            } else {
+                val accountId =
+                    pair.accountId
+                        ?: return Result.Terminal(
+                            reason = "Sync pair ${pair.id} is not linked to an account.",
+                            needsReLink = true,
+                        )
+                providerFactory.providerFor(accountId)
+            }
         if (pair.provider == CloudProviderType.FAKE) {
             return runFake(pair, provider as FakeCloudProvider)
         }
@@ -208,6 +221,30 @@ class SyncEngine(
                 includeFilterActive = key.includeGlobs.isNotEmpty(),
             )
         }
+
+    private suspend fun enumerateRemoteIncremental(
+        remoteEnumerator: RemoteEnumerator,
+        pair: SyncPair,
+    ): RemoteSnapshot {
+        val accountId = pair.accountId
+        return if (accountId != null && remoteEnumerator is AccountAwareRemoteEnumerator) {
+            remoteEnumerator.enumerateForAccount(accountId, pair.deltaToken, pair.remoteFolderId)
+        } else {
+            remoteEnumerator.enumerate(pair.deltaToken, pair.remoteFolderId)
+        }
+    }
+
+    private suspend fun enumerateRemoteFull(
+        remoteEnumerator: RemoteEnumerator,
+        pair: SyncPair,
+    ): RemoteSnapshot {
+        val accountId = pair.accountId
+        return if (accountId != null && remoteEnumerator is AccountAwareRemoteEnumerator) {
+            remoteEnumerator.enumerateFullForAccount(accountId, pair.remoteFolderId)
+        } else {
+            remoteEnumerator.enumerateFull(pair.remoteFolderId)
+        }
+    }
 
     private suspend fun runRealImpl(
         pair: SyncPair,
@@ -287,9 +324,9 @@ class SyncEngine(
         // -----------------------------------------------------------------
         val rawRemoteSnapshot =
             if (pair.deltaToken == null) {
-                remoteEnumerator.enumerateFull(pair.remoteFolderId)
+                enumerateRemoteFull(remoteEnumerator, pair)
             } else {
-                remoteEnumerator.enumerate(pair.deltaToken, pair.remoteFolderId)
+                enumerateRemoteIncremental(remoteEnumerator, pair)
             }
 
         // When excludeEmptyFolders is enabled, filter out folder entries from
@@ -794,6 +831,8 @@ class SyncEngine(
     }
 
     companion object {
+        private const val FAKE_ACCOUNT_KEY = "__fake__"
+
         internal data class ScopeFilterCacheKey(
             val includeGlobs: List<String>,
             val excludeGlobs: List<String>,

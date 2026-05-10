@@ -1,6 +1,7 @@
 package com.synckro.providers.gdrive
 
 import com.synckro.domain.provider.CloudProviderException
+import com.synckro.domain.sync.AccountAwareRemoteEnumerator
 import com.synckro.domain.sync.RemoteChange
 import com.synckro.domain.sync.RemoteChangeType
 import com.synckro.domain.sync.RemoteEnumerator
@@ -30,30 +31,42 @@ import javax.inject.Singleton
 class GoogleDriveRemoteEnumerator
     @Inject
     constructor(
-        private val provider: GoogleDriveProvider,
+        private val providerFactory: GoogleDriveProviderFactory,
         private val restClient: GoogleDriveRestClient,
-    ) : RemoteEnumerator {
+    ) : RemoteEnumerator, AccountAwareRemoteEnumerator {
         /**
-         * Acquires an access token via [provider] and delegates to
-         * [enumerateWithToken]. Authentication errors are surfaced as
-         * [CloudProviderException] subtypes.
+         * Account-unaware entrypoint is unsupported for Google Drive after
+         * multi-account migration; callers must use
+         * [enumerateForAccount] via [AccountAwareRemoteEnumerator].
          */
         override suspend fun enumerate(deltaToken: String?, rootFolderId: String): RemoteSnapshot {
-            val token = provider.obtainAccessToken()
-            return enumerateWithToken(token, deltaToken, rootFolderId)
+            throw CloudProviderException.AuthenticationRequired("Google Drive enumerate requires an account id.")
         }
 
         /**
-         * Performs a full initial listing of [rootFolderId] by recursively walking the
-         * folder tree via [GoogleDriveRestClient.listAllDescendants], then fetches a fresh
-         * `startPageToken` for subsequent incremental polling.
-         *
-         * When [rootFolderId] is empty, falls back to the baseline [enumerate]
-         * (empty changes + fresh startPageToken).
+         * Account-unaware entrypoint is unsupported for Google Drive after
+         * multi-account migration; callers must use
+         * [enumerateFullForAccount] via [AccountAwareRemoteEnumerator].
          */
         override suspend fun enumerateFull(rootFolderId: String): RemoteSnapshot {
-            if (rootFolderId.isEmpty()) return enumerate(null, rootFolderId)
-            val token = provider.obtainAccessToken()
+            throw CloudProviderException.AuthenticationRequired("Google Drive enumerateFull requires an account id.")
+        }
+
+        override suspend fun enumerateForAccount(
+            accountId: String,
+            deltaToken: String?,
+            rootFolderId: String,
+        ): RemoteSnapshot {
+            val token = providerFor(accountId).obtainAccessToken()
+            return enumerateWithToken(token, deltaToken, rootFolderId)
+        }
+
+        override suspend fun enumerateFullForAccount(
+            accountId: String,
+            rootFolderId: String,
+        ): RemoteSnapshot {
+            if (rootFolderId.isEmpty()) return enumerateForAccount(accountId, null, rootFolderId)
+            val token = providerFor(accountId).obtainAccessToken()
             return enumerateAllWithToken(token, rootFolderId)
         }
 
@@ -130,6 +143,12 @@ class GoogleDriveRemoteEnumerator
                     else -> throw e
                 }
             }
+        }
+
+        private fun providerFor(accountId: String): GoogleDriveProvider {
+            val provider = providerFactory.providerFor(accountId)
+            return provider as? GoogleDriveProvider
+                ?: error("GoogleDriveProviderFactory returned unexpected provider type: ${provider::class.java.simpleName}")
         }
     }
 

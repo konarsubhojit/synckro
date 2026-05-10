@@ -3,6 +3,7 @@ package com.synckro.providers.gdrive
 import com.synckro.domain.auth.AuthResult
 import com.synckro.domain.provider.ChangesPage
 import com.synckro.domain.provider.CloudProvider
+import com.synckro.domain.provider.CloudProviderFactory
 import com.synckro.domain.provider.CloudProviderException
 import com.synckro.domain.provider.RemoteChange
 import com.synckro.domain.provider.RemoteFile
@@ -10,6 +11,7 @@ import timber.log.Timber
 import java.io.InputStream
 import javax.inject.Inject
 import javax.inject.Singleton
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Google Drive provider backed by the Drive REST v3 API.
@@ -21,10 +23,9 @@ import javax.inject.Singleton
  * All Drive operations are delegated to [GoogleDriveRestClient], which handles
  * resumable uploads, changes-based change enumeration, and 429/5xx retries.
  */
-@Singleton
 class GoogleDriveProvider
-    @Inject
     constructor(
+        private val accountId: String,
         private val authManager: GoogleDriveAuthManager,
         private val restClient: GoogleDriveRestClient,
     ) : CloudProvider {
@@ -94,11 +95,11 @@ class GoogleDriveProvider
          */
         override suspend fun ensureAuthenticated(): Boolean {
             val account =
-                authManager.currentAccounts().firstOrNull()
+                authManager.currentAccounts().firstOrNull { it.id == accountId }
                     ?: run {
-                        Timber.w("GoogleDriveProvider.ensureAuthenticated: no signed-in account")
+                        Timber.w("GoogleDriveProvider.ensureAuthenticated: account not found; accountId=%s", accountId)
                         throw CloudProviderException.AuthenticationRequired(
-                            "No Google Drive account is signed in. Please sign in from the Accounts screen.",
+                            "No Google Drive account is linked for id=$accountId. Please sign in from the Accounts screen.",
                         )
                     }
 
@@ -220,6 +221,21 @@ class GoogleDriveProvider
                     nextToken = nextToken,
                     hasMore = false,
                 )
+            }
+    }
+
+@Singleton
+class GoogleDriveProviderFactory
+    @Inject
+    constructor(
+        private val authManager: GoogleDriveAuthManager,
+        private val restClient: GoogleDriveRestClient,
+    ) : CloudProviderFactory {
+        private val providersByAccount = ConcurrentHashMap<String, CloudProvider>()
+
+        override fun providerFor(accountId: String): CloudProvider =
+            providersByAccount.computeIfAbsent(accountId) {
+                GoogleDriveProvider(accountId = it, authManager = authManager, restClient = restClient)
             }
     }
 

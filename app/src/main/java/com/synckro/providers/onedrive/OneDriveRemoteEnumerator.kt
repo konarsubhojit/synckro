@@ -1,6 +1,7 @@
 package com.synckro.providers.onedrive
 
 import com.synckro.domain.provider.CloudProviderException
+import com.synckro.domain.sync.AccountAwareRemoteEnumerator
 import com.synckro.domain.sync.RemoteChange
 import com.synckro.domain.sync.RemoteChangeType
 import com.synckro.domain.sync.RemoteEnumerator
@@ -29,30 +30,42 @@ import javax.inject.Singleton
 class OneDriveRemoteEnumerator
     @Inject
     constructor(
-        private val provider: OneDriveProvider,
+        private val providerFactory: OneDriveProviderFactory,
         private val graphClient: OneDriveGraphClient,
-    ) : RemoteEnumerator {
+    ) : RemoteEnumerator, AccountAwareRemoteEnumerator {
         /**
-         * Acquires an access token via [provider] and delegates to
-         * [enumerateWithToken]. Authentication errors are surfaced as
-         * [CloudProviderException] subtypes.
+         * Account-unaware entrypoint is unsupported for OneDrive after
+         * multi-account migration; callers must use
+         * [enumerateForAccount] via [AccountAwareRemoteEnumerator].
          */
         override suspend fun enumerate(deltaToken: String?, rootFolderId: String): RemoteSnapshot {
-            val token = provider.obtainAccessToken()
-            return enumerateWithToken(token, deltaToken, rootFolderId)
+            throw CloudProviderException.AuthenticationRequired("OneDrive enumerate requires an account id.")
         }
 
         /**
-         * Performs a full initial listing of [rootFolderId] by calling
-         * [OneDriveGraphClient.listAll], which uses the OneDrive `/delta` endpoint
-         * without `$deltaToken=latest` so all current items are returned.
-         *
-         * When [rootFolderId] is empty, falls back to the baseline [enumerate]
-         * (empty changes + fresh deltaLink).
+         * Account-unaware entrypoint is unsupported for OneDrive after
+         * multi-account migration; callers must use
+         * [enumerateFullForAccount] via [AccountAwareRemoteEnumerator].
          */
         override suspend fun enumerateFull(rootFolderId: String): RemoteSnapshot {
-            if (rootFolderId.isEmpty()) return enumerate(null, rootFolderId)
-            val token = provider.obtainAccessToken()
+            throw CloudProviderException.AuthenticationRequired("OneDrive enumerateFull requires an account id.")
+        }
+
+        override suspend fun enumerateForAccount(
+            accountId: String,
+            deltaToken: String?,
+            rootFolderId: String,
+        ): RemoteSnapshot {
+            val token = providerFor(accountId).obtainAccessToken()
+            return enumerateWithToken(token, deltaToken, rootFolderId)
+        }
+
+        override suspend fun enumerateFullForAccount(
+            accountId: String,
+            rootFolderId: String,
+        ): RemoteSnapshot {
+            if (rootFolderId.isEmpty()) return enumerateForAccount(accountId, null, rootFolderId)
+            val token = providerFor(accountId).obtainAccessToken()
             return enumerateAllWithToken(token, rootFolderId)
         }
 
@@ -122,6 +135,12 @@ class OneDriveRemoteEnumerator
                     else -> throw e
                 }
             }
+        }
+
+        private fun providerFor(accountId: String): OneDriveProvider {
+            val provider = providerFactory.providerFor(accountId)
+            return provider as? OneDriveProvider
+                ?: error("OneDriveProviderFactory returned unexpected provider type: ${provider::class.java.simpleName}")
         }
     }
 
