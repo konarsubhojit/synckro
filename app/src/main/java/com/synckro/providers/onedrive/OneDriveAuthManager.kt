@@ -396,11 +396,6 @@ class OneDriveAuthManager private constructor(
     }
 
     override suspend fun probeMultiAccountCacheRead(): Result<Unit> {
-        when (OneDriveAuthConfig.validate(clientId, redirectUri)) {
-            is OneDriveAuthConfig.ValidationResult.NotConfigured,
-            is OneDriveAuthConfig.ValidationResult.Invalid,
-            is OneDriveAuthConfig.ValidationResult.Valid -> Unit
-        }
         if (!isConfigured()) return Result.success(Unit)
 
         val app =
