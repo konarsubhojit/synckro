@@ -2,6 +2,8 @@ name: Android CI
 
 on:
   push:
+    branches:
+      - master
     paths-ignore:
       - '**/*.md'
   pull_request:
@@ -11,7 +13,7 @@ on:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.ref != format('refs/heads/{0}', github.event.repository.default_branch) }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
 
 permissions:
   contents: read
@@ -42,11 +44,28 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
-          cache-read-only: ${{ github.ref != format('refs/heads/{0}', github.event.repository.default_branch) }}
+          # Read-only cache on PRs; writable on master pushes so future
+          # runs can populate the cache. GitHub Actions caches are evicted
+          # after 7 days of inactivity, which provides our 7-day cache TTL.
+          cache-read-only: ${{ github.event_name == 'pull_request' }}
           gradle-home-cache-cleanup: true
 
       - name: Cache Android SDK
+        # Read-only cache on PRs; writable on master pushes. GitHub evicts
+        # unused caches after 7 days, giving us the desired 7-day TTL.
         uses: actions/cache@v4
+        if: github.event_name != 'pull_request'
+        with:
+          path: ${{ env.ANDROID_SDK_ROOT }}
+          key: ${{ runner.os }}-android-sdk-${{ env.ANDROID_API_LEVEL }}-build-tools-${{ env.ANDROID_BUILD_TOOLS_VERSION }}-v1
+          restore-keys: |
+            ${{ runner.os }}-android-sdk-${{ env.ANDROID_API_LEVEL }}-build-tools-${{ env.ANDROID_BUILD_TOOLS_VERSION }}-
+            ${{ runner.os }}-android-sdk-${{ env.ANDROID_API_LEVEL }}-
+            ${{ runner.os }}-android-sdk-
+
+      - name: Restore Android SDK cache (read-only on PRs)
+        uses: actions/cache/restore@v4
+        if: github.event_name == 'pull_request'
         with:
           path: ${{ env.ANDROID_SDK_ROOT }}
           key: ${{ runner.os }}-android-sdk-${{ env.ANDROID_API_LEVEL }}-build-tools-${{ env.ANDROID_BUILD_TOOLS_VERSION }}-v1
@@ -88,7 +107,7 @@ jobs:
           name: synckro-debug-apk-${{ github.run_number }}
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
-          retention-days: 14
+          retention-days: ${{ github.event_name == 'pull_request' && 3 || 14 }}
 
       - name: Upload unit-test coverage report
         uses: actions/upload-artifact@v4
@@ -96,7 +115,7 @@ jobs:
           name: coverage-unit-tests-${{ github.run_number }}
           path: app/build/reports/coverage/test/debug/
           if-no-files-found: ignore
-          retention-days: 14
+          retention-days: ${{ github.event_name == 'pull_request' && 3 || 14 }}
 
   migration-android-test:
     name: Migration instrumentation test
@@ -120,7 +139,9 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
-          cache-read-only: ${{ github.ref != format('refs/heads/{0}', github.event.repository.default_branch) }}
+          # Read-only cache on PRs; writable on master pushes. GitHub
+          # evicts unused caches after 7 days, giving us the 7-day TTL.
+          cache-read-only: ${{ github.event_name == 'pull_request' }}
           gradle-home-cache-cleanup: true
 
       - name: Set up Android SDK
