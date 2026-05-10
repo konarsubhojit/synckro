@@ -8,6 +8,7 @@ import com.synckro.data.local.dao.SyncPairDao
 import com.synckro.data.repository.AccountRepository
 import com.synckro.data.repository.SyncEventRepository
 import com.synckro.domain.auth.Account
+import com.synckro.domain.auth.AccountKey
 import com.synckro.domain.auth.AuthManager
 import com.synckro.domain.auth.AuthManagerRegistry
 import com.synckro.domain.auth.AuthResult
@@ -75,22 +76,26 @@ class AccountsViewModel
         private val _state = MutableStateFlow(UiState())
         val state: StateFlow<UiState> = _state.asStateFlow()
 
-        /** Latest snapshot of providers that have a pair stuck in NEEDS_REAUTH. */
-        private var providersNeedingReauth: Set<CloudProviderType> = emptySet()
+        /** Latest snapshot of accounts that have a pair stuck in NEEDS_REAUTH. */
+        private var accountsNeedingReauth: Set<AccountKey> = emptySet()
 
         init {
             // Observe re-auth signals from sync_pair so the CTA appears as soon as
             // SyncWorker persists a NEEDS_REAUTH outcome — without forcing the user
             // to navigate away and back.
             syncPairDao
-                .observeProvidersNeedingReauth()
-                .onEach { providers ->
-                    providersNeedingReauth = providers.toSet()
+                .observeAccountsNeedingReauth()
+                .onEach { rows ->
+                    accountsNeedingReauth =
+                        rows.mapTo(LinkedHashSet(rows.size)) { row ->
+                            AccountKey(provider = row.provider, accountId = row.accountId)
+                        }
+                    val providers = accountsNeedingReauth.mapTo(HashSet(accountsNeedingReauth.size)) { it.provider }
                     _state.update { cur ->
                         cur.copy(
                             rows =
                                 cur.rows.map { row ->
-                                    row.copy(needsReauth = row.matchesAnyOf(providersNeedingReauth))
+                                    row.copy(needsReauth = row.matchesAnyOf(providers))
                                 },
                         )
                     }
@@ -103,7 +108,7 @@ class AccountsViewModel
         fun refresh() {
             viewModelScope.launch {
                 Timber.d("AccountsViewModel.refresh()")
-                val flagged = providersNeedingReauth
+                val flaggedProviders = accountsNeedingReauth.mapTo(HashSet(accountsNeedingReauth.size)) { it.provider }
                 val rows =
                     registry.all.map { manager ->
                         // Reconcile: merge accounts from manager's token cache with persisted accounts
@@ -113,7 +118,7 @@ class AccountsViewModel
                             providerKey = manager.providerType.name,
                             isConfigured = manager.isConfigured(),
                             accounts = providerAccounts,
-                            needsReauth = manager.providerType in flagged,
+                            needsReauth = manager.providerType in flaggedProviders,
                         )
                     }
                 _state.value = UiState(rows = rows, isLoading = false)
@@ -319,8 +324,8 @@ class AccountsViewModel
                     accountRepository.upsert(result.value)
                     // Clear any lingering NEEDS_REAUTH state so the CTA disappears immediately
                     // instead of waiting for the next worker run to overwrite lastSyncResult.
-                    runCatching { syncPairDao.clearNeedsReauthForProvider(manager.providerType) }
-                        .onFailure { Timber.w(it, "AccountsViewModel: failed to clear NEEDS_REAUTH for ${manager.providerType}") }
+                    runCatching { syncPairDao.clearNeedsReauthForAccount(result.value.id) }
+                        .onFailure { Timber.w(it, "AccountsViewModel: failed to clear NEEDS_REAUTH for accountId=${result.value.id}") }
                     syncEventRepository.log(
                         pairId = null,
                         level = SyncEventLevel.INFO,

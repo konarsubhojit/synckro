@@ -19,7 +19,7 @@ import com.synckro.data.scanner.LocalFolderScannerImpl
 import com.synckro.data.worker.SyncScheduler
 import com.synckro.domain.auth.AuthManager
 import com.synckro.domain.model.CloudProviderType
-import com.synckro.domain.provider.CloudProvider
+import com.synckro.domain.provider.CloudProviderFactory
 import com.synckro.domain.scan.LocalFolderScanner
 import com.synckro.domain.sync.RemoteEnumerator
 import com.synckro.domain.sync.SyncEngine
@@ -158,7 +158,7 @@ object AppModule {
     fun provideSyncEngine(
         @ApplicationContext ctx: Context,
         conflictRepository: ConflictRepository,
-        providers: Map<CloudProviderType, @JvmSuppressWildcards CloudProvider>,
+        providers: Map<CloudProviderType, @JvmSuppressWildcards CloudProviderFactory>,
         localFsEnumerator: LocalFsEnumerator,
         remoteEnumerators: Map<CloudProviderType, @JvmSuppressWildcards RemoteEnumerator>,
         syncPairDao: SyncPairDao,

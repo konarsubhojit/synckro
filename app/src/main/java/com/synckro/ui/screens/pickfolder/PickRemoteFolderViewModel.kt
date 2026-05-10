@@ -3,8 +3,10 @@ package com.synckro.ui.screens.pickfolder
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.synckro.domain.auth.AuthManagerRegistry
 import com.synckro.domain.model.CloudProviderType
 import com.synckro.domain.provider.CloudProvider
+import com.synckro.domain.provider.CloudProviderFactory
 import com.synckro.domain.provider.RemoteFile
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -28,7 +30,8 @@ class PickRemoteFolderViewModel
     @Inject
     constructor(
         savedStateHandle: SavedStateHandle,
-        private val providers: Map<CloudProviderType, @JvmSuppressWildcards CloudProvider>,
+        private val providerFactories: Map<CloudProviderType, @JvmSuppressWildcards CloudProviderFactory>,
+        private val authRegistry: AuthManagerRegistry,
     ) : ViewModel() {
         /** One entry in the breadcrumb trail; [folderId] is null for the root level. */
         data class BreadcrumbEntry(
@@ -56,7 +59,7 @@ class PickRemoteFolderViewModel
                 resolved ?: CloudProviderType.GOOGLE_DRIVE
             }
 
-        private val provider: CloudProvider? = providers[providerType]
+        private val requestedAccountId: String? = savedStateHandle.get<String>(ARG_ACCOUNT_ID)
 
         private val _state = MutableStateFlow(UiState())
         val state: StateFlow<UiState> = _state.asStateFlow()
@@ -102,16 +105,10 @@ class PickRemoteFolderViewModel
         }
 
         private fun loadFolder(folderId: String?) {
-            val p =
-                provider ?: run {
-                    _state.update {
-                        it.copy(isLoading = false, error = "Provider not available: $providerType")
-                    }
-                    return
-                }
             _state.update { it.copy(isLoading = true, error = null, currentFolderId = folderId) }
             viewModelScope.launch {
                 runCatching {
+                    val p = resolveProvider()
                     p.list(folderId)
                         .filter { it.isFolder }
                         .sortedBy { it.name.lowercase() }
@@ -126,8 +123,25 @@ class PickRemoteFolderViewModel
             }
         }
 
+        private suspend fun resolveProvider(): CloudProvider {
+            val factory =
+                providerFactories[providerType]
+                    ?: error("Provider not available: $providerType")
+            if (providerType == CloudProviderType.FAKE) return factory.providerFor("__fake__")
+
+            val manager = authRegistry.find(providerType)
+            val accountId =
+                when {
+                    !requestedAccountId.isNullOrBlank() -> requestedAccountId
+                    manager == null -> error("No AuthManager registered for provider: $providerType")
+                    else -> manager.currentAccounts().firstOrNull()?.id
+                }
+            return factory.providerFor(accountId ?: error("No signed-in account available for provider: $providerType"))
+        }
+
         companion object {
             /** Navigation argument key for the [CloudProviderType] to browse. */
             const val ARG_PROVIDER = "provider"
+            const val ARG_ACCOUNT_ID = "accountId"
         }
     }

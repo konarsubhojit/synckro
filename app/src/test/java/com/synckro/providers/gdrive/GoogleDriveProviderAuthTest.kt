@@ -40,7 +40,7 @@ class GoogleDriveProviderAuthTest {
     fun setUp() {
         authManager = mockk()
         restClient = mockk(relaxed = true)
-        provider = GoogleDriveProvider(authManager, restClient)
+        provider = GoogleDriveProvider(fakeAccount.id, authManager, restClient)
     }
 
     // -------------------------------------------------------------------------
@@ -72,7 +72,7 @@ class GoogleDriveProviderAuthTest {
                 provider.ensureAuthenticated()
                 fail("Expected CloudProviderException.AuthenticationRequired")
             } catch (e: CloudProviderException.AuthenticationRequired) {
-                assertTrue(e.message!!.contains("No Google Drive account is signed in"))
+                assertTrue(e.message!!.contains("No Google Drive account is linked"))
             }
         }
 
