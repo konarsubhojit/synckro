@@ -78,6 +78,8 @@ fun LogsScreen(
     val exportFailedMsg = stringResource(R.string.logs_export_failed)
     val exportSubject = stringResource(R.string.logs_export_subject)
     val exportChooser = stringResource(R.string.logs_export_chooser)
+    val exportMediaStoreError = stringResource(R.string.logs_export_mediastore_error)
+    val exportIoError = stringResource(R.string.logs_export_io_error)
 
     // Observe one-shot export results from the ViewModel.
     LaunchedEffect(Unit) {
@@ -89,6 +91,8 @@ fun LogsScreen(
                         uri = uri,
                         savedMsg = exportSavedMsg,
                         failedMsg = exportFailedMsg,
+                        mediaStoreError = exportMediaStoreError,
+                        ioError = exportIoError,
                         subject = exportSubject,
                         chooser = exportChooser,
                     )
@@ -209,6 +213,8 @@ private fun handleExportUri(
     uri: Uri,
     savedMsg: String,
     failedMsg: String,
+    mediaStoreError: String,
+    ioError: String,
     subject: String,
     chooser: String,
 ) {
@@ -225,7 +231,7 @@ private fun handleExportUri(
         val collection = MediaStore.Downloads.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
         val itemUri =
             resolver.insert(collection, values) ?: run {
-                Toast.makeText(context, failedMsg.format("MediaStore insert failed"), Toast.LENGTH_LONG).show()
+                Toast.makeText(context, mediaStoreError, Toast.LENGTH_LONG).show()
                 return
             }
         try {
@@ -238,7 +244,7 @@ private fun handleExportUri(
             Toast.makeText(context, savedMsg.format(fileName), Toast.LENGTH_LONG).show()
         } catch (e: Exception) {
             runCatching { resolver.delete(itemUri, null, null) }
-            Toast.makeText(context, failedMsg.format(e.localizedMessage ?: "I/O error"), Toast.LENGTH_LONG).show()
+            Toast.makeText(context, failedMsg.format(e.localizedMessage ?: ioError), Toast.LENGTH_LONG).show()
         }
     } else {
         val intent =

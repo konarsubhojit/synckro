@@ -333,77 +333,41 @@ class PairEditorViewModel
          */
         fun save(onSaved: (Long) -> Unit) {
             val s = _state.value
-            if (s.displayName.isBlank()) {
-                viewModelScope.launch {
-                    syncEventRepository.log(
-                        pairId = if (pairId != 0L) pairId else null,
-                        level = SyncEventLevel.WARN,
-                        tag = SyncEventTag.PairEditor,
-                        message = "Save validation failed: display name required",
-                    )
-                }
-                _state.update {
-                    it.copy(
-                        saveError = strings.getString(R.string.pair_editor_error_name_required),
-                        saveErrorEvent = it.saveErrorEvent + 1L,
-                        nameRequiredError = true,
-                    )
-                }
-                return
-            }
-            if (s.localTreeUri.isBlank()) {
-                viewModelScope.launch {
-                    syncEventRepository.log(
-                        pairId = if (pairId != 0L) pairId else null,
-                        level = SyncEventLevel.WARN,
-                        tag = SyncEventTag.PairEditor,
-                        message = "Save validation failed: local folder required",
-                    )
-                }
-                _state.update {
-                    it.copy(
-                        saveError = strings.getString(R.string.pair_editor_error_folder_required),
-                        saveErrorEvent = it.saveErrorEvent + 1L,
-                    )
-                }
-                return
-            }
-            if (s.remoteFolderId.isBlank()) {
-                viewModelScope.launch {
-                    syncEventRepository.log(
-                        pairId = if (pairId != 0L) pairId else null,
-                        level = SyncEventLevel.WARN,
-                        tag = SyncEventTag.PairEditor,
-                        message = "Save validation failed: remote folder required",
-                    )
-                }
-                _state.update {
-                    it.copy(
-                        saveError = strings.getString(R.string.pair_editor_error_remote_folder_required),
-                        saveErrorEvent = it.saveErrorEvent + 1L,
-                    )
-                }
-                return
-            }
             val retentionDaysText = s.retentionDaysText.trim()
             val retentionDays = retentionDaysText.takeIf { it.isNotBlank() }?.toIntOrNull()
-            if (retentionDaysText.isNotBlank() && (retentionDays == null || retentionDays !in 0..MAX_RETENTION_DAYS)) {
+
+            // Run all validations first; if any fail, log a single event and return.
+            val validationError: String? =
+                when {
+                    s.displayName.isBlank() -> strings.getString(R.string.pair_editor_error_name_required)
+                    s.localTreeUri.isBlank() -> strings.getString(R.string.pair_editor_error_folder_required)
+                    s.remoteFolderId.isBlank() -> strings.getString(R.string.pair_editor_error_remote_folder_required)
+                    retentionDaysText.isNotBlank() &&
+                        (retentionDays == null || retentionDays !in 0..MAX_RETENTION_DAYS) ->
+                        strings.getString(R.string.pair_editor_retention_days_error)
+                    else -> null
+                }
+
+            if (validationError != null) {
+                val nameError = s.displayName.isBlank()
                 viewModelScope.launch {
                     syncEventRepository.log(
                         pairId = if (pairId != 0L) pairId else null,
                         level = SyncEventLevel.WARN,
                         tag = SyncEventTag.PairEditor,
-                        message = "Save validation failed: invalid retention days '$retentionDaysText'",
+                        message = "Save validation failed: $validationError",
                     )
                 }
                 _state.update {
                     it.copy(
-                        saveError = strings.getString(R.string.pair_editor_retention_days_error),
+                        saveError = validationError,
                         saveErrorEvent = it.saveErrorEvent + 1L,
+                        nameRequiredError = nameError,
                     )
                 }
                 return
             }
+
             _state.update {
                 it.copy(
                     isSaving = true,

@@ -194,6 +194,8 @@
     <string name="logs_export_failed">Export failed: %1$s</string>
     <string name="logs_export_subject">Synckro logs</string>
     <string name="logs_export_chooser">Share logs via…</string>
+    <string name="logs_export_mediastore_error">Couldn\u0027t create the log file in Downloads. Please try again.</string>
+    <string name="logs_export_io_error">I/O error writing export file</string>
 
     <!-- Loading-state contextual labels (paired with a CircularProgressIndicator) -->
     <string name="loading_folders">Loading folders…</string>
