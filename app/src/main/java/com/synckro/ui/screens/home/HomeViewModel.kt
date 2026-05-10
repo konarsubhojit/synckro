@@ -9,6 +9,7 @@ import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.workDataOf
+import com.synckro.data.repository.AccountRepository
 import com.synckro.data.repository.ConflictRepository
 import com.synckro.data.repository.SyncPairRepository
 import com.synckro.data.worker.SyncScheduler
@@ -23,6 +24,8 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -42,6 +45,7 @@ class HomeViewModel
         private val conflictRepository: ConflictRepository,
         private val workManager: WorkManager,
         private val syncScheduler: SyncScheduler,
+        private val accountRepository: AccountRepository,
     ) : ViewModel() {
         /**
          * Soft-deleted pair waiting for the undo grace window to expire. Surfaced via
@@ -59,6 +63,8 @@ class HomeViewModel
             val syncingPairIds: Set<Long> = emptySet(),
             /** Non-null while a soft-deleted pair is still within the undo window. */
             val pendingDelete: PendingDelete? = null,
+            /** Maps account ID → display email/name for showing account context on each pair card. */
+            val accountEmailById: Map<String, String> = emptyMap(),
         )
 
         /** Pair IDs that have an active "sync now" run; updated optimistically. */
@@ -72,6 +78,9 @@ class HomeViewModel
 
         /** Coroutine that commits the pending soft-delete after [UNDO_WINDOW_MS]. */
         private var pendingDeleteJob: Job? = null
+
+        /** Maps accountId → display email/name, kept in sync with the accounts table. */
+        private val accountEmailById = MutableStateFlow<Map<String, String>>(emptyMap())
 
         val state: StateFlow<UiState> =
             combine(
@@ -88,11 +97,27 @@ class HomeViewModel
                     syncingPairIds = syncing,
                     pendingDelete = pending,
                 )
+            }.combine(accountEmailById) { uiState, emailMap ->
+                uiState.copy(accountEmailById = emailMap)
             }.stateIn(
                 scope = viewModelScope,
                 started = SharingStarted.WhileSubscribed(5_000),
                 initialValue = UiState(),
             )
+
+        init {
+            // Keep accountEmailById in sync with the accounts table so pair cards can
+            // show which account each pair is bound to without a separate query.
+            accountRepository.observeAll()
+                .onEach { accounts ->
+                    accountEmailById.value =
+                        accounts.associateBy(
+                            keySelector = { it.id },
+                            valueTransform = { it.email ?: it.displayName },
+                        )
+                }
+                .launchIn(viewModelScope)
+        }
 
         /**
          * Permanently removes the sync pair with [id] from the database and cancels any

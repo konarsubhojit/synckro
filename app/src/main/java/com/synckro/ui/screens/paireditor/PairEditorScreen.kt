@@ -255,6 +255,22 @@ fun PairEditorScreen(
                     modifier = Modifier.fillMaxWidth(),
                 )
 
+                // Account selector for the chosen provider.
+                if (state.availableAccounts.isNotEmpty()) {
+                    AccountDropdown(
+                        accounts = state.availableAccounts,
+                        selectedId = state.accountId,
+                        onSelect = viewModel::onAccountChange,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                } else {
+                    Text(
+                        text = stringResource(R.string.pair_editor_no_accounts_for_provider, providerLabel(state.provider)),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+
                 // Remote folder path
                 val remoteFolderDisplayName =
                     remember(state.remoteFolderId, state.remoteFolderName) {
@@ -536,6 +552,52 @@ private fun ProviderDropdown(
                     text = { Text(providerLabel(provider)) },
                     onClick = {
                         onSelect(provider)
+                        expanded = false
+                    },
+                    contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding,
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AccountDropdown(
+    accounts: List<com.synckro.domain.auth.Account>,
+    selectedId: String?,
+    onSelect: (String?) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val selected = accounts.firstOrNull { it.id == selectedId }
+    val displayValue = selected?.email ?: selected?.displayName ?: stringResource(R.string.pair_editor_account_hint)
+
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { expanded = it },
+        modifier = modifier,
+    ) {
+        OutlinedTextField(
+            value = displayValue,
+            onValueChange = {},
+            readOnly = true,
+            label = { Text(stringResource(R.string.pair_editor_account)) },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
+            modifier =
+                Modifier
+                    .menuAnchor(MenuAnchorType.PrimaryNotEditable)
+                    .fillMaxWidth(),
+        )
+        ExposedDropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+        ) {
+            accounts.forEach { account ->
+                DropdownMenuItem(
+                    text = { Text(account.email ?: account.displayName) },
+                    onClick = {
+                        onSelect(account.id)
                         expanded = false
                     },
                     contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding,

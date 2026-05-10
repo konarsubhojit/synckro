@@ -51,11 +51,20 @@ class AccountsViewModel
         private val userMessages: UserMessageReporter,
         private val syncEventRepository: SyncEventRepository,
     ) : ViewModel() {
+        /**
+         * A single connected account, augmented with a flag that indicates
+         * whether this specific account needs re-authentication.
+         */
+        data class AccountItem(
+            val account: Account,
+            val needsReauth: Boolean = false,
+        )
+
         data class AccountRow(
             val providerDisplayName: String,
             val providerKey: String,
             val isConfigured: Boolean,
-            val accounts: List<Account>,
+            val accounts: List<AccountItem>,
             val isBusy: Boolean = false,
             /**
              * True when at least one sync pair for this provider has reported a
@@ -95,7 +104,20 @@ class AccountsViewModel
                         cur.copy(
                             rows =
                                 cur.rows.map { row ->
-                                    row.copy(needsReauth = row.matchesAnyOf(providers))
+                                    val providerType = CloudProviderType.entries.firstOrNull { it.name == row.providerKey }
+                                    row.copy(
+                                        needsReauth = row.matchesAnyOf(providers),
+                                        accounts =
+                                            row.accounts.map { item ->
+                                                item.copy(
+                                                    needsReauth = providerType != null &&
+                                                        AccountKey(
+                                                            provider = providerType,
+                                                            accountId = item.account.id,
+                                                        ) in accountsNeedingReauth,
+                                                )
+                                            },
+                                    )
                                 },
                         )
                     }
@@ -113,11 +135,21 @@ class AccountsViewModel
                     registry.all.map { manager ->
                         // Reconcile: merge accounts from manager's token cache with persisted accounts
                         val providerAccounts = reconcileAccounts(manager)
+                        val accountItems =
+                            providerAccounts.map { account ->
+                                AccountItem(
+                                    account = account,
+                                    needsReauth = AccountKey(
+                                        provider = manager.providerType,
+                                        accountId = account.id,
+                                    ) in accountsNeedingReauth,
+                                )
+                            }
                         AccountRow(
                             providerDisplayName = manager.displayName,
                             providerKey = manager.providerType.name,
                             isConfigured = manager.isConfigured(),
-                            accounts = providerAccounts,
+                            accounts = accountItems,
                             needsReauth = manager.providerType in flaggedProviders,
                         )
                     }

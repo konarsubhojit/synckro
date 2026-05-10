@@ -6,6 +6,7 @@ import androidx.work.ExistingWorkPolicy
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequest
 import androidx.work.WorkManager
+import com.synckro.data.repository.AccountRepository
 import com.synckro.data.repository.ConflictRepository
 import com.synckro.data.repository.SyncPairRepository
 import com.synckro.data.worker.SyncScheduler
@@ -26,6 +27,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -52,6 +54,7 @@ class HomeViewModelTest {
     private lateinit var mockConflictRepo: ConflictRepository
     private lateinit var mockWorkManager: WorkManager
     private lateinit var mockScheduler: SyncScheduler
+    private lateinit var mockAccountRepository: AccountRepository
     private lateinit var context: Context
     private val pairsFlow = MutableStateFlow<List<SyncPair>>(emptyList())
 
@@ -62,6 +65,10 @@ class HomeViewModelTest {
         mockConflictRepo = mockk(relaxed = true)
         mockWorkManager = mockk(relaxed = true)
         mockScheduler = mockk(relaxed = true)
+        mockAccountRepository =
+            mockk {
+                every { observeAll() } returns flowOf(emptyList())
+            }
         context = ApplicationProvider.getApplicationContext()
         every { mockRepo.observeAll(any()) } returns pairsFlow
         every { mockConflictRepo.observeUnresolvedCount() } returns MutableStateFlow(0)
@@ -84,6 +91,7 @@ class HomeViewModelTest {
             conflictRepository = mockConflictRepo,
             workManager = mockWorkManager,
             syncScheduler = mockScheduler,
+            accountRepository = mockAccountRepository,
         )
 
     private fun pair(

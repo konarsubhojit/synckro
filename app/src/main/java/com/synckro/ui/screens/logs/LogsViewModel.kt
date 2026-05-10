@@ -11,10 +11,11 @@ import com.synckro.domain.model.SyncEventTag
 import com.synckro.util.logging.LogExporter
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -24,6 +25,9 @@ import javax.inject.Inject
  *
  * If a non-zero [pairId] was passed via [SavedStateHandle], the log is filtered
  * to that pair; otherwise all events are shown (global view).
+ *
+ * [levelFilter] and [tagFilter] narrow the displayed list without hitting the
+ * database — all filtering is done in memory on the already-observed list.
  */
 @HiltViewModel
 class LogsViewModel
@@ -39,12 +43,28 @@ class LogsViewModel
         data class UiState(
             val events: List<SyncEvent> = emptyList(),
             val isLoading: Boolean = true,
+            /** Active level filter; null means show all levels. */
+            val levelFilter: SyncEventLevel? = null,
+            /** Active tag filter; null means show all tags. */
+            val tagFilter: String? = null,
         )
 
+        private val _levelFilter = MutableStateFlow<SyncEventLevel?>(null)
+        private val _tagFilter = MutableStateFlow<String?>(null)
+
         val state: StateFlow<UiState> =
-            (if (pairId != 0L) syncEventRepository.observeForPair(pairId) else syncEventRepository.observeAll())
-                .map { UiState(events = it, isLoading = false) }
-                .stateIn(
+            combine(
+                if (pairId != 0L) syncEventRepository.observeForPair(pairId) else syncEventRepository.observeAll(),
+                _levelFilter,
+                _tagFilter,
+            ) { events, levelFilter, tagFilter ->
+                val filtered =
+                    events.filter { e ->
+                        (levelFilter == null || e.level == levelFilter) &&
+                            (tagFilter == null || e.tag == tagFilter)
+                    }
+                UiState(events = filtered, isLoading = false, levelFilter = levelFilter, tagFilter = tagFilter)
+            }.stateIn(
                     scope = viewModelScope,
                     started = SharingStarted.WhileSubscribed(5_000),
                     initialValue = UiState(),
@@ -91,6 +111,16 @@ class LogsViewModel
                 )
                 _exportResult.emit(result)
             }
+        }
+
+        /** Sets (or clears, when [level] is null) the active level filter. */
+        fun setLevelFilter(level: SyncEventLevel?) {
+            _levelFilter.value = level
+        }
+
+        /** Sets (or clears, when [tag] is null) the active tag filter. */
+        fun setTagFilter(tag: String?) {
+            _tagFilter.value = tag
         }
 
         companion object {

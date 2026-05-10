@@ -10,6 +10,7 @@ import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
 import android.widget.Toast
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -21,12 +22,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -54,6 +57,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.synckro.R
 import com.synckro.domain.model.SyncEvent
 import com.synckro.domain.model.SyncEventLevel
+import com.synckro.domain.model.SyncEventTag
 import com.synckro.ui.components.EmptyState
 import androidx.compose.material.icons.filled.History
 import kotlinx.coroutines.launch
@@ -174,28 +178,87 @@ fun LogsScreen(
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { padding ->
-        if (!state.isLoading && state.events.isEmpty()) {
-            EmptyState(
-                title = stringResource(R.string.logs_empty_title),
-                body = stringResource(R.string.logs_empty_body),
-                icon = Icons.Filled.History,
-                primaryActionLabel = stringResource(R.string.logs_empty_cta),
-                onPrimaryAction = onBack,
-                modifier = Modifier
+        Column(
+            modifier =
+                Modifier
                     .fillMaxSize()
                     .padding(padding),
-            )
-        } else {
-            LazyColumn(
+        ) {
+            // ── Level filter chips ───────────────────────────────────────────
+            Row(
                 modifier =
                     Modifier
-                        .fillMaxSize()
-                        .padding(padding),
-                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                verticalArrangement = Arrangement.spacedBy(2.dp),
+                        .horizontalScroll(rememberScrollState())
+                        .padding(horizontal = 8.dp, vertical = 2.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                items(state.events, key = { it.id }) { event ->
-                    LogEntryRow(event = event, dateFormat = dateFormat)
+                FilterChip(
+                    selected = state.levelFilter == null,
+                    onClick = { viewModel.setLevelFilter(null) },
+                    label = { Text(stringResource(R.string.logs_filter_all)) },
+                )
+                SyncEventLevel.entries.forEach { level ->
+                    FilterChip(
+                        selected = state.levelFilter == level,
+                        onClick = {
+                            viewModel.setLevelFilter(if (state.levelFilter == level) null else level)
+                        },
+                        label = { Text(level.name) },
+                    )
+                }
+            }
+            // ── Tag filter chips ─────────────────────────────────────────────
+            Row(
+                modifier =
+                    Modifier
+                        .horizontalScroll(rememberScrollState())
+                        .padding(horizontal = 8.dp, vertical = 2.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                FilterChip(
+                    selected = state.tagFilter == null,
+                    onClick = { viewModel.setTagFilter(null) },
+                    label = { Text(stringResource(R.string.logs_filter_all)) },
+                )
+                listOf(
+                    SyncEventTag.Auth,
+                    SyncEventTag.Account,
+                    SyncEventTag.PairEditor,
+                    SyncEventTag.Scheduler,
+                    SyncEventTag.SyncWorker,
+                    SyncEventTag.RemoteEnum,
+                    SyncEventTag.OpApplier,
+                    SyncEventTag.UI,
+                    SyncEventTag.Export,
+                ).forEach { tag ->
+                    FilterChip(
+                        selected = state.tagFilter == tag,
+                        onClick = {
+                            viewModel.setTagFilter(if (state.tagFilter == tag) null else tag)
+                        },
+                        label = { Text(tag) },
+                    )
+                }
+            }
+            // ── Events list / empty state ────────────────────────────────────
+            if (!state.isLoading && state.events.isEmpty()) {
+                EmptyState(
+                    title = stringResource(R.string.logs_empty_title),
+                    body = stringResource(R.string.logs_empty_body),
+                    icon = Icons.Filled.History,
+                    primaryActionLabel = stringResource(R.string.logs_empty_cta),
+                    onPrimaryAction = onBack,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    items(state.events, key = { it.id }) { event ->
+                        LogEntryRow(event = event, dateFormat = dateFormat)
+                    }
                 }
             }
         }

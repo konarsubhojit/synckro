@@ -1,14 +1,19 @@
 package com.synckro.ui.screens.accounts
 
 import androidx.activity.ComponentActivity
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -27,12 +32,14 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.synckro.R
+import com.synckro.domain.auth.Account
 import com.synckro.ui.auth.ActivityAuthUiHost
 
 /**
@@ -101,7 +108,7 @@ fun AccountsScreen(
 private fun AccountProviderCard(
     row: AccountsViewModel.AccountRow,
     onConnect: () -> Unit,
-    onDisconnect: (com.synckro.domain.auth.Account) -> Unit,
+    onDisconnect: (Account) -> Unit,
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -130,40 +137,23 @@ private fun AccountProviderCard(
                     color = MaterialTheme.colorScheme.error,
                 )
             }
-            if (row.needsReauth) {
-                // Surface the terminal-auth state inline so the user understands
-                // why background sync stopped and what tapping the button below
-                // is for.
-                Text(
-                    text = stringResource(R.string.accounts_reauth_required),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
-                )
-            }
             if (row.accounts.isEmpty()) {
                 Text(
                     text = stringResource(R.string.accounts_empty),
                     style = MaterialTheme.typography.bodySmall,
                 )
             } else {
-                row.accounts.forEach { account ->
-                    Text(
-                        text =
-                            stringResource(
-                                R.string.accounts_signed_in_format,
-                                account.email ?: account.displayName,
-                            ),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurface,
+                row.accounts.forEach { item ->
+                    AccountItemRow(
+                        item = item,
+                        isBusy = row.isBusy,
+                        onDisconnect = { onDisconnect(item.account) },
+                        onReauth = onConnect,
                     )
-                    OutlinedButton(
-                        onClick = { onDisconnect(account) },
-                        enabled = !row.isBusy,
-                    ) {
-                        Text(stringResource(R.string.accounts_disconnect))
-                    }
                 }
             }
+            // "Add another" when accounts exist; "Connect" when none; "Re-authenticate"
+            // when the provider level needs re-auth and no accounts are listed.
             Button(
                 onClick = onConnect,
                 enabled = !row.isBusy && row.isConfigured,
@@ -176,17 +166,78 @@ private fun AccountProviderCard(
                         color = MaterialTheme.colorScheme.onPrimary,
                     )
                 } else {
-                    // Re-authenticate when a pair for this provider is stuck in
-                    // NEEDS_REAUTH; otherwise the normal "Connect %provider" CTA.
                     val label =
-                        if (row.needsReauth) {
-                            stringResource(R.string.accounts_reauth_button, row.providerDisplayName)
-                        } else {
-                            stringResource(R.string.accounts_connect_format, row.providerDisplayName)
+                        when {
+                            row.accounts.isNotEmpty() ->
+                                stringResource(R.string.accounts_add_another_format, row.providerDisplayName)
+                            row.needsReauth ->
+                                stringResource(R.string.accounts_reauth_button, row.providerDisplayName)
+                            else ->
+                                stringResource(R.string.accounts_connect_format, row.providerDisplayName)
                         }
                     Text(label)
                 }
             }
+        }
+    }
+}
+
+/**
+ * A single row showing an account's avatar (first-letter initials), email /
+ * display name, an optional per-account Re-authenticate button, and a Disconnect
+ * button.
+ */
+@Composable
+private fun AccountItemRow(
+    item: AccountsViewModel.AccountItem,
+    isBusy: Boolean,
+    onDisconnect: () -> Unit,
+    onReauth: () -> Unit,
+) {
+    val label = item.account.email ?: item.account.displayName
+    val initial = label.firstOrNull()?.uppercaseChar()?.toString() ?: "?"
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        // Avatar circle with initials
+        Box(
+            modifier =
+                Modifier
+                    .size(32.dp)
+                    .background(
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                        shape = CircleShape,
+                    ),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = initial,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
+            )
+        }
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f),
+        )
+        if (item.needsReauth) {
+            OutlinedButton(
+                onClick = onReauth,
+                enabled = !isBusy,
+            ) {
+                Text(stringResource(R.string.accounts_reauth_account))
+            }
+        }
+        OutlinedButton(
+            onClick = onDisconnect,
+            enabled = !isBusy,
+        ) {
+            Text(stringResource(R.string.accounts_disconnect))
         }
     }
 }

@@ -4,9 +4,11 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.synckro.R
+import com.synckro.data.repository.AccountRepository
 import com.synckro.data.repository.SyncEventRepository
 import com.synckro.data.repository.SyncPairRepository
 import com.synckro.data.worker.SyncScheduler
+import com.synckro.domain.auth.Account
 import com.synckro.domain.model.CloudProviderType
 import com.synckro.domain.model.ConflictPolicy
 import com.synckro.domain.model.SyncDirection
@@ -19,10 +21,14 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import javax.inject.Inject
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 
 /**
  * Friendly schedule preset options shown in the pair editor.
@@ -60,6 +66,7 @@ enum class SyncSchedulePreset(
  * to test without Robolectric.
  */
 @HiltViewModel
+@OptIn(ExperimentalCoroutinesApi::class)
 class PairEditorViewModel
     @Inject
     constructor(
@@ -68,6 +75,7 @@ class PairEditorViewModel
         private val syncPairRepository: SyncPairRepository,
         private val syncScheduler: SyncScheduler,
         private val syncEventRepository: SyncEventRepository,
+        private val accountRepository: AccountRepository,
     ) : ViewModel() {
         private val pairId: Long = savedStateHandle.get<Long>("pairId") ?: 0L
 
@@ -76,6 +84,10 @@ class PairEditorViewModel
             val displayName: String = "",
             val localTreeUri: String = "",
             val provider: CloudProviderType = CloudProviderType.GOOGLE_DRIVE,
+            /** The id of the account this pair is bound to; null until the user selects one. */
+            val accountId: String? = null,
+            /** Accounts available for the currently selected [provider], updated reactively. */
+            val availableAccounts: List<Account> = emptyList(),
             val remoteFolderId: String = "",
             /** Human-readable display name for [remoteFolderId], set when the user browses
              *  and picks a folder via [PickRemoteFolderScreen]. Empty when the ID was loaded
@@ -187,6 +199,25 @@ class PairEditorViewModel
             }
 
             if (pairId > 0L) loadExisting(pairId)
+
+            // Observe accounts for the currently selected provider and update the
+            // available accounts list. When the provider changes, the previous
+            // subscription is automatically cancelled via flatMapLatest.
+            viewModelScope.launch {
+                _state
+                    .map { it.provider }
+                    .distinctUntilChanged()
+                    .flatMapLatest { provider -> accountRepository.observeByProvider(provider) }
+                    .collect { accounts ->
+                        _state.update { s ->
+                            // If the selected account is no longer in the list (e.g. disconnected),
+                            // clear the selection so validation catches it rather than silently
+                            // persisting a stale ID.
+                            val validAccountId = if (accounts.any { it.id == s.accountId }) s.accountId else null
+                            s.copy(availableAccounts = accounts, accountId = validAccountId)
+                        }
+                    }
+            }
         }
 
         private fun loadExisting(id: Long) {
@@ -204,6 +235,7 @@ class PairEditorViewModel
                             // the persisted value.
                             localTreeUri = if (userPickedFolder) it.localTreeUri else entity.localTreeUri,
                             provider = entity.provider,
+                            accountId = entity.accountId,
                             remoteFolderId = entity.remoteFolderId,
                             conflictPolicy = entity.conflictPolicy,
                             direction = entity.direction,
@@ -264,10 +296,14 @@ class PairEditorViewModel
 
         fun onProviderChange(value: CloudProviderType) =
             _state.update {
-                // Clear the remote folder selection when the provider changes because folder IDs
-                // are provider-specific and the previously chosen folder no longer applies.
-                it.copy(provider = value, remoteFolderId = "", remoteFolderName = "")
+                // Clear the remote folder and account selection when the provider changes because
+                // folder IDs and account IDs are provider-specific and the previously chosen
+                // values no longer apply.
+                it.copy(provider = value, remoteFolderId = "", remoteFolderName = "", accountId = null)
             }
+
+        /** Updates the selected account for this pair. Pass null to clear the selection. */
+        fun onAccountChange(accountId: String?) = _state.update { it.copy(accountId = accountId) }
 
         fun onConflictPolicyChange(value: ConflictPolicy) = _state.update { it.copy(conflictPolicy = value) }
 
@@ -389,6 +425,7 @@ class PairEditorViewModel
                             displayName = s.displayName.trim(),
                             localTreeUri = s.localTreeUri,
                             provider = s.provider,
+                            accountId = s.accountId,
                             remoteFolderId = s.remoteFolderId.trim(),
                             conflictPolicy = s.conflictPolicy,
                             direction = s.direction,
