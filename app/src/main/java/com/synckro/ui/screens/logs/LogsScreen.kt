@@ -235,9 +235,11 @@ private fun handleExportUri(
                 return
             }
         try {
-            resolver.openOutputStream(itemUri)?.use { out ->
-                resolver.openInputStream(uri)?.use { it.copyTo(out) }
-            }
+            val out = resolver.openOutputStream(itemUri)
+                ?: throw IllegalStateException("openOutputStream returned null for $itemUri")
+            val ins = resolver.openInputStream(uri)
+                ?: throw IllegalStateException("openInputStream returned null for $uri")
+            out.use { o -> ins.use { i -> i.copyTo(o) } }
             values.clear()
             values.put(MediaStore.Downloads.IS_PENDING, 0)
             resolver.update(itemUri, values, null, null)

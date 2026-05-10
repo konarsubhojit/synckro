@@ -2,7 +2,6 @@ package com.synckro.util.logging
 
 import android.content.Context
 import androidx.core.content.FileProvider
-import com.synckro.data.local.dao.SyncEventDao
 import com.synckro.data.repository.SyncEventRepository
 import com.synckro.domain.model.SyncEvent
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -126,7 +125,11 @@ class LogExporter
             }
 
             /**
-             * Serializes [events] to a RFC-4180 CSV byte array with a header row.
+             * Serializes [events] to a CSV byte array with a header row.
+             *
+             * Line endings are LF (not the CRLF required by strict RFC-4180);
+             * this is intentional for readability in most text editors and log
+             * viewers.
              *
              * Fields: `id`, `pairId`, `timestampMs`, `level`, `tag`, `message`.
              * String fields (`tag`, `message`) are always double-quoted and internal
