@@ -53,7 +53,7 @@ class PickRemoteFolderViewModelTest {
                 SavedStateHandle(
                     buildMap {
                         put(PickRemoteFolderViewModel.ARG_PROVIDER, provider.name)
-                        if (!accountId.isNullOrBlank()) {
+                        if (accountId != null) {
                             put(PickRemoteFolderViewModel.ARG_ACCOUNT_ID, accountId)
                         }
                     },

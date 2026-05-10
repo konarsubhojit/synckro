@@ -129,8 +129,14 @@ class PickRemoteFolderViewModel
                     ?: error("Provider not available: $providerType")
             if (providerType == CloudProviderType.FAKE) return factory.providerFor("__fake__")
 
-            val accountId = requestedAccountId ?: authRegistry.find(providerType)?.currentAccounts()?.firstOrNull()?.id
-            return factory.providerFor(accountId ?: error("No account available for provider: $providerType"))
+            val manager = authRegistry.find(providerType)
+            val accountId =
+                when {
+                    !requestedAccountId.isNullOrBlank() -> requestedAccountId
+                    manager == null -> error("No AuthManager registered for provider: $providerType")
+                    else -> manager.currentAccounts().firstOrNull()?.id
+                }
+            return factory.providerFor(accountId ?: error("No signed-in account available for provider: $providerType"))
         }
 
         companion object {

@@ -229,7 +229,7 @@ class SyncEngineTest {
             assertNotSame(fakeByAccount["acct-A"], fakeByAccount["acct-B"])
         }
 
-    private fun singleProviderFactory(provider: com.synckro.domain.provider.CloudProvider): CloudProviderFactory =
+    private fun singleProviderFactory(provider: CloudProvider): CloudProviderFactory =
         object : CloudProviderFactory {
             override fun providerFor(accountId: String) = provider
         }

@@ -34,21 +34,18 @@ class OneDriveRemoteEnumerator
         private val graphClient: OneDriveGraphClient,
     ) : RemoteEnumerator, AccountAwareRemoteEnumerator {
         /**
-         * Acquires an access token via [provider] and delegates to
-         * [enumerateWithToken]. Authentication errors are surfaced as
-         * [CloudProviderException] subtypes.
+         * Account-unaware entrypoint is unsupported for OneDrive after
+         * multi-account migration; callers must use
+         * [enumerateForAccount] via [AccountAwareRemoteEnumerator].
          */
         override suspend fun enumerate(deltaToken: String?, rootFolderId: String): RemoteSnapshot {
             throw CloudProviderException.AuthenticationRequired("OneDrive enumerate requires an account id.")
         }
 
         /**
-         * Performs a full initial listing of [rootFolderId] by calling
-         * [OneDriveGraphClient.listAll], which uses the OneDrive `/delta` endpoint
-         * without `$deltaToken=latest` so all current items are returned.
-         *
-         * When [rootFolderId] is empty, falls back to the baseline [enumerate]
-         * (empty changes + fresh deltaLink).
+         * Account-unaware entrypoint is unsupported for OneDrive after
+         * multi-account migration; callers must use
+         * [enumerateFullForAccount] via [AccountAwareRemoteEnumerator].
          */
         override suspend fun enumerateFull(rootFolderId: String): RemoteSnapshot {
             throw CloudProviderException.AuthenticationRequired("OneDrive enumerateFull requires an account id.")

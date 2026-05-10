@@ -129,7 +129,15 @@ class SyncWorker
             }
             val accountId = pair.accountId
             if (pair.provider != CloudProviderType.FAKE && accountId != null) {
-                providerFactories[pair.provider]?.providerFor(accountId)
+                val factory =
+                    providerFactories[pair.provider] ?: run {
+                        val reason = "No provider factory registered for ${pair.provider}."
+                        syncPairDao.updateLastSyncResult(pairId, System.currentTimeMillis(), RESULT_FAILURE)
+                        syncEventRepository.log(pairId, SyncEventLevel.ERROR, LOG_TAG, reason)
+                        WorkManager.getInstance(applicationContext).cancelUniqueWork(uniqueName(pairId))
+                        return Result.failure()
+                    }
+                factory.providerFor(accountId)
             }
 
             syncEventRepository.log(

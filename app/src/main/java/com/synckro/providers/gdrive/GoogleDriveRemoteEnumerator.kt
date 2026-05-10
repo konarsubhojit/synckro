@@ -35,21 +35,18 @@ class GoogleDriveRemoteEnumerator
         private val restClient: GoogleDriveRestClient,
     ) : RemoteEnumerator, AccountAwareRemoteEnumerator {
         /**
-         * Acquires an access token via [provider] and delegates to
-         * [enumerateWithToken]. Authentication errors are surfaced as
-         * [CloudProviderException] subtypes.
+         * Account-unaware entrypoint is unsupported for Google Drive after
+         * multi-account migration; callers must use
+         * [enumerateForAccount] via [AccountAwareRemoteEnumerator].
          */
         override suspend fun enumerate(deltaToken: String?, rootFolderId: String): RemoteSnapshot {
             throw CloudProviderException.AuthenticationRequired("Google Drive enumerate requires an account id.")
         }
 
         /**
-         * Performs a full initial listing of [rootFolderId] by recursively walking the
-         * folder tree via [GoogleDriveRestClient.listAllDescendants], then fetches a fresh
-         * `startPageToken` for subsequent incremental polling.
-         *
-         * When [rootFolderId] is empty, falls back to the baseline [enumerate]
-         * (empty changes + fresh startPageToken).
+         * Account-unaware entrypoint is unsupported for Google Drive after
+         * multi-account migration; callers must use
+         * [enumerateFullForAccount] via [AccountAwareRemoteEnumerator].
          */
         override suspend fun enumerateFull(rootFolderId: String): RemoteSnapshot {
             throw CloudProviderException.AuthenticationRequired("Google Drive enumerateFull requires an account id.")
