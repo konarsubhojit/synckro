@@ -2,6 +2,7 @@ package com.synckro.ui.screens.paireditor
 
 import androidx.lifecycle.SavedStateHandle
 import com.synckro.R
+import com.synckro.data.repository.AccountRepository
 import com.synckro.data.repository.SyncEventRepository
 import com.synckro.data.repository.SyncPairRepository
 import com.synckro.data.worker.SyncScheduler
@@ -15,6 +16,7 @@ import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
@@ -36,6 +38,7 @@ class PairEditorViewModelTest {
     private lateinit var mockStrings: StringProvider
     private lateinit var mockSyncScheduler: SyncScheduler
     private lateinit var mockEventRepository: SyncEventRepository
+    private lateinit var mockAccountRepository: AccountRepository
 
     @Before
     fun setUp() {
@@ -49,6 +52,24 @@ class PairEditorViewModelTest {
             }
         mockSyncScheduler = mockk(relaxed = true)
         mockEventRepository = mockk(relaxed = true)
+        mockAccountRepository =
+            mockk {
+                // Default: every provider has one fake account so existing tests can
+                // save without having to call onAccountChange. Tests that exercise
+                // the "no account picked" failure path can override this with
+                // flowOf(emptyList()) and avoid calling onAccountChange.
+                every { observeByProvider(any()) } returns
+                    flowOf(
+                        listOf(
+                            com.synckro.domain.auth.Account(
+                                id = "test-account",
+                                provider = com.synckro.domain.model.CloudProviderType.GOOGLE_DRIVE,
+                                displayName = "Test Account",
+                                email = "test@example.com",
+                            ),
+                        ),
+                    )
+            }
     }
 
     @After
@@ -63,6 +84,7 @@ class PairEditorViewModelTest {
             syncPairRepository = mockRepo,
             syncScheduler = mockSyncScheduler,
             syncEventRepository = mockEventRepository,
+            accountRepository = mockAccountRepository,
         )
 
     /**
@@ -87,6 +109,7 @@ class PairEditorViewModelTest {
             syncPairRepository = mockRepo,
             syncScheduler = mockSyncScheduler,
             syncEventRepository = mockEventRepository,
+            accountRepository = mockAccountRepository,
         )
 
     // -------------------------------------------------------------------------
@@ -252,6 +275,7 @@ class PairEditorViewModelTest {
             vm.onDisplayNameChange("Test Pair")
             vm.onRemoteFolderPicked("remote-id", "Remote")
             advanceUntilIdle()
+            vm.onAccountChange("test-account")
 
             var savedId: Long? = null
             vm.save { savedId = it }
@@ -272,6 +296,7 @@ class PairEditorViewModelTest {
             vm.onDisplayNameChange("Test Pair")
             vm.onRemoteFolderPicked("remote-id", "Remote")
             advanceUntilIdle()
+            vm.onAccountChange("test-account")
 
             vm.save {}
             advanceUntilIdle()
@@ -289,6 +314,7 @@ class PairEditorViewModelTest {
             vm.onRemoteFolderPicked("remote-id", "Remote")
             vm.onAutoSyncEnabledChange(false)
             advanceUntilIdle()
+            vm.onAccountChange("test-account")
 
             vm.save {}
             advanceUntilIdle()
@@ -310,6 +336,7 @@ class PairEditorViewModelTest {
             vm.onDisplayNameChange("Test Pair")
             vm.onRemoteFolderPicked("remote-id", "Remote")
             advanceUntilIdle()
+            vm.onAccountChange("test-account")
 
             var savedId: Long? = null
             vm.save { savedId = it }
@@ -368,6 +395,7 @@ class PairEditorViewModelTest {
                     syncPairRepository = mockRepo,
                     syncScheduler = mockSyncScheduler,
                     syncEventRepository = mockEventRepository,
+                    accountRepository = mockAccountRepository,
                 )
             advanceUntilIdle()
 
@@ -402,6 +430,7 @@ class PairEditorViewModelTest {
                     syncPairRepository = mockRepo,
                     syncScheduler = mockSyncScheduler,
                     syncEventRepository = mockEventRepository,
+                    accountRepository = mockAccountRepository,
                 )
             advanceUntilIdle()
 
@@ -532,6 +561,7 @@ class PairEditorViewModelTest {
             vm.onRemoteFolderPicked("remote-id", "Remote")
             vm.onRetentionDaysChange("7")
             advanceUntilIdle()
+            vm.onAccountChange("test-account")
 
             vm.save {}
             advanceUntilIdle()

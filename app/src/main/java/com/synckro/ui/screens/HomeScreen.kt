@@ -157,6 +157,7 @@ fun HomeScreen(
                 items(state.pairs, key = { it.id }) { pair ->
                     SyncPairRow(
                         pair = pair,
+                        accountEmail = pair.accountId?.let { state.accountEmailById[it] },
                         isSyncing = pair.id in state.syncingPairIds,
                         onEdit = { onEditSyncPair(pair.id) },
                         onDelete = { viewModel.requestDelete(pair) },
@@ -171,6 +172,7 @@ fun HomeScreen(
 @Composable
 private fun SyncPairRow(
     pair: SyncPair,
+    accountEmail: String?,
     isSyncing: Boolean,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
@@ -232,6 +234,13 @@ private fun SyncPairRow(
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.primary,
                     )
+                    if (accountEmail != null) {
+                        Text(
+                            text = accountEmail,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
                 if (pair.needsReLink) {
                     Icon(

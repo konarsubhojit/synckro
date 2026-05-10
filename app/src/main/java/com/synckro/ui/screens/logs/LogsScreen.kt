@@ -10,6 +10,9 @@ import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
 import android.widget.Toast
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -21,15 +24,19 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -52,8 +59,10 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.synckro.R
+import com.synckro.domain.model.CloudProviderType
 import com.synckro.domain.model.SyncEvent
 import com.synckro.domain.model.SyncEventLevel
+import com.synckro.domain.model.SyncEventTag
 import com.synckro.ui.components.EmptyState
 import androidx.compose.material.icons.filled.History
 import kotlinx.coroutines.launch
@@ -65,6 +74,7 @@ import java.util.Locale
 @Composable
 fun LogsScreen(
     onBack: () -> Unit,
+    onTriggerSync: () -> Unit = onBack,
     viewModel: LogsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -72,6 +82,7 @@ fun LogsScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val copiedMsg = stringResource(R.string.logs_copied)
+    val rowCopiedMsg = stringResource(R.string.logs_row_copy_done)
     val dateFormat = remember { SimpleDateFormat("MM-dd HH:mm:ss.SSS", Locale.US) }
 
     val exportSavedMsg = stringResource(R.string.logs_export_saved)
@@ -174,28 +185,209 @@ fun LogsScreen(
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { padding ->
-        if (!state.isLoading && state.events.isEmpty()) {
-            EmptyState(
-                title = stringResource(R.string.logs_empty_title),
-                body = stringResource(R.string.logs_empty_body),
-                icon = Icons.Filled.History,
-                primaryActionLabel = stringResource(R.string.logs_empty_cta),
-                onPrimaryAction = onBack,
-                modifier = Modifier
+        Column(
+            modifier =
+                Modifier
                     .fillMaxSize()
                     .padding(padding),
-            )
-        } else {
-            LazyColumn(
+        ) {
+            // ── Search field ─────────────────────────────────────────────────
+            OutlinedTextField(
+                value = state.searchQuery,
+                onValueChange = viewModel::setSearchQuery,
                 modifier =
                     Modifier
-                        .fillMaxSize()
-                        .padding(padding),
-                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                verticalArrangement = Arrangement.spacedBy(2.dp),
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                singleLine = true,
+                placeholder = { Text(stringResource(R.string.logs_search_placeholder)) },
+                trailingIcon = {
+                    if (state.searchQuery.isNotEmpty()) {
+                        IconButton(onClick = { viewModel.setSearchQuery("") }) {
+                            Icon(
+                                Icons.Default.Clear,
+                                contentDescription = stringResource(R.string.logs_search_clear),
+                            )
+                        }
+                    }
+                },
+            )
+            // ── Level filter chips ───────────────────────────────────────────
+            Row(
+                modifier =
+                    Modifier
+                        .horizontalScroll(rememberScrollState())
+                        .padding(horizontal = 8.dp, vertical = 2.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                items(state.events, key = { it.id }) { event ->
-                    LogEntryRow(event = event, dateFormat = dateFormat)
+                Text(
+                    text = stringResource(R.string.logs_filter_level_label),
+                    style = MaterialTheme.typography.labelSmall,
+                    modifier = Modifier.align(Alignment.CenterVertically),
+                )
+                FilterChip(
+                    selected = state.levelFilter == null,
+                    onClick = { viewModel.setLevelFilter(null) },
+                    label = { Text(stringResource(R.string.logs_filter_all)) },
+                )
+                SyncEventLevel.entries.forEach { level ->
+                    FilterChip(
+                        selected = state.levelFilter == level,
+                        onClick = {
+                            viewModel.setLevelFilter(if (state.levelFilter == level) null else level)
+                        },
+                        label = { Text(level.name) },
+                    )
+                }
+            }
+            // ── Tag filter chips ─────────────────────────────────────────────
+            Row(
+                modifier =
+                    Modifier
+                        .horizontalScroll(rememberScrollState())
+                        .padding(horizontal = 8.dp, vertical = 2.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Text(
+                    text = stringResource(R.string.logs_filter_tag_label),
+                    style = MaterialTheme.typography.labelSmall,
+                    modifier = Modifier.align(Alignment.CenterVertically),
+                )
+                FilterChip(
+                    selected = state.tagFilter == null,
+                    onClick = { viewModel.setTagFilter(null) },
+                    label = { Text(stringResource(R.string.logs_filter_all)) },
+                )
+                listOf(
+                    SyncEventTag.Auth,
+                    SyncEventTag.Account,
+                    SyncEventTag.PairEditor,
+                    SyncEventTag.Scheduler,
+                    SyncEventTag.SyncWorker,
+                    SyncEventTag.RemoteEnum,
+                    SyncEventTag.OpApplier,
+                    SyncEventTag.UI,
+                    SyncEventTag.Export,
+                ).forEach { tag ->
+                    FilterChip(
+                        selected = state.tagFilter == tag,
+                        onClick = {
+                            viewModel.setTagFilter(if (state.tagFilter == tag) null else tag)
+                        },
+                        label = { Text(tag) },
+                    )
+                }
+            }
+            // ── Provider filter chips ────────────────────────────────────────
+            Row(
+                modifier =
+                    Modifier
+                        .horizontalScroll(rememberScrollState())
+                        .padding(horizontal = 8.dp, vertical = 2.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Text(
+                    text = stringResource(R.string.logs_filter_provider_label),
+                    style = MaterialTheme.typography.labelSmall,
+                    modifier = Modifier.align(Alignment.CenterVertically),
+                )
+                FilterChip(
+                    selected = state.providerFilter == null,
+                    onClick = { viewModel.setProviderFilter(null) },
+                    label = { Text(stringResource(R.string.logs_filter_all)) },
+                )
+                CloudProviderType.entries.forEach { provider ->
+                    FilterChip(
+                        selected = state.providerFilter == provider,
+                        onClick = {
+                            viewModel.setProviderFilter(
+                                if (state.providerFilter == provider) null else provider,
+                            )
+                        },
+                        label = { Text(provider.name) },
+                    )
+                }
+            }
+            // ── Account filter chips ─────────────────────────────────────────
+            if (state.knownAccounts.isNotEmpty()) {
+                Row(
+                    modifier =
+                        Modifier
+                            .horizontalScroll(rememberScrollState())
+                            .padding(horizontal = 8.dp, vertical = 2.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Text(
+                        text = stringResource(R.string.logs_filter_account_label),
+                        style = MaterialTheme.typography.labelSmall,
+                        modifier = Modifier.align(Alignment.CenterVertically),
+                    )
+                    FilterChip(
+                        selected = state.accountFilter == null,
+                        onClick = { viewModel.setAccountFilter(null) },
+                        label = { Text(stringResource(R.string.logs_filter_all)) },
+                    )
+                    state.knownAccounts.forEach { account ->
+                        val label = account.email ?: account.displayName
+                        FilterChip(
+                            selected = state.accountFilter == account.id,
+                            onClick = {
+                                viewModel.setAccountFilter(
+                                    if (state.accountFilter == account.id) null else account.id,
+                                )
+                            },
+                            label = { Text(label) },
+                        )
+                    }
+                }
+            }
+            // ── Events list / empty state ────────────────────────────────────
+            if (!state.isLoading && state.events.isEmpty()) {
+                if (state.hasActiveFilters) {
+                    EmptyState(
+                        title = stringResource(R.string.logs_empty_filtered_title),
+                        body = stringResource(R.string.logs_empty_filtered_body),
+                        icon = Icons.Filled.History,
+                        primaryActionLabel = stringResource(R.string.logs_empty_filtered_cta),
+                        onPrimaryAction = { viewModel.clearFilters() },
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                } else {
+                    EmptyState(
+                        title = stringResource(R.string.logs_empty_title),
+                        body = stringResource(R.string.logs_empty_body),
+                        icon = Icons.Filled.History,
+                        primaryActionLabel = stringResource(R.string.logs_empty_trigger_sync_cta),
+                        onPrimaryAction = onTriggerSync,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
+            } else {
+                val rowDateFormat = dateFormat
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    items(state.events, key = { it.id }) { event ->
+                        LogEntryRow(
+                            event = event,
+                            dateFormat = rowDateFormat,
+                            onLongPress = {
+                                val text = event.toLogLine(rowDateFormat)
+                                val clipboard =
+                                    context.getSystemService(Context.CLIPBOARD_SERVICE)
+                                        as ClipboardManager
+                                clipboard.setPrimaryClip(
+                                    ClipData.newPlainText(
+                                        context.getString(R.string.logs_title),
+                                        text,
+                                    ),
+                                )
+                                scope.launch { snackbarHostState.showSnackbar(rowCopiedMsg) }
+                            },
+                        )
+                    }
                 }
             }
         }
@@ -260,10 +452,12 @@ private fun handleExportUri(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun LogEntryRow(
     event: SyncEvent,
     dateFormat: SimpleDateFormat,
+    onLongPress: () -> Unit = {},
 ) {
     val levelColor =
         when (event.level) {
@@ -273,7 +467,13 @@ private fun LogEntryRow(
             SyncEventLevel.ERROR -> MaterialTheme.colorScheme.error
         }
     Surface(
-        modifier = Modifier.fillMaxWidth(),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .combinedClickable(
+                    onClick = {},
+                    onLongClick = onLongPress,
+                ),
         color = MaterialTheme.colorScheme.surface,
         tonalElevation = 0.dp,
     ) {
@@ -310,7 +510,7 @@ private fun LogEntryRow(
     }
 }
 
-private fun SyncEvent.toLogLine(dateFormat: SimpleDateFormat): String {
+internal fun SyncEvent.toLogLine(dateFormat: SimpleDateFormat): String {
     val ts = dateFormat.format(Date(timestampMs))
     return "$ts ${level.name.padEnd(5)} [$tag] $message"
 }

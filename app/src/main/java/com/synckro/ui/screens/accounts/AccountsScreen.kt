@@ -1,21 +1,29 @@
 package com.synckro.ui.screens.accounts
 
 import androidx.activity.ComponentActivity
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -23,16 +31,23 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.synckro.R
+import com.synckro.domain.auth.Account
 import com.synckro.ui.auth.ActivityAuthUiHost
 
 /**
@@ -53,6 +68,15 @@ fun AccountsScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val host = remember(activity) { ActivityAuthUiHost(activity) }
+
+    state.pendingDisconnect?.let { pending ->
+        DisconnectConfirmDialog(
+            pending = pending,
+            onCancel = { viewModel.cancelDisconnect() },
+            onDelete = { viewModel.confirmDisconnectDelete() },
+            onReassign = { toAccountId -> viewModel.confirmDisconnectReassign(toAccountId) },
+        )
+    }
 
     Scaffold(
         topBar = {
@@ -101,7 +125,7 @@ fun AccountsScreen(
 private fun AccountProviderCard(
     row: AccountsViewModel.AccountRow,
     onConnect: () -> Unit,
-    onDisconnect: (com.synckro.domain.auth.Account) -> Unit,
+    onDisconnect: (Account) -> Unit,
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -130,40 +154,23 @@ private fun AccountProviderCard(
                     color = MaterialTheme.colorScheme.error,
                 )
             }
-            if (row.needsReauth) {
-                // Surface the terminal-auth state inline so the user understands
-                // why background sync stopped and what tapping the button below
-                // is for.
-                Text(
-                    text = stringResource(R.string.accounts_reauth_required),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
-                )
-            }
             if (row.accounts.isEmpty()) {
                 Text(
                     text = stringResource(R.string.accounts_empty),
                     style = MaterialTheme.typography.bodySmall,
                 )
             } else {
-                row.accounts.forEach { account ->
-                    Text(
-                        text =
-                            stringResource(
-                                R.string.accounts_signed_in_format,
-                                account.email ?: account.displayName,
-                            ),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurface,
+                row.accounts.forEach { item ->
+                    AccountItemRow(
+                        item = item,
+                        isBusy = row.isBusy,
+                        onDisconnect = { onDisconnect(item.account) },
+                        onReauth = onConnect,
                     )
-                    OutlinedButton(
-                        onClick = { onDisconnect(account) },
-                        enabled = !row.isBusy,
-                    ) {
-                        Text(stringResource(R.string.accounts_disconnect))
-                    }
                 }
             }
+            // "Add another" when accounts exist; "Connect" when none; "Re-authenticate"
+            // when the provider level needs re-auth and no accounts are listed.
             Button(
                 onClick = onConnect,
                 enabled = !row.isBusy && row.isConfigured,
@@ -176,13 +183,14 @@ private fun AccountProviderCard(
                         color = MaterialTheme.colorScheme.onPrimary,
                     )
                 } else {
-                    // Re-authenticate when a pair for this provider is stuck in
-                    // NEEDS_REAUTH; otherwise the normal "Connect %provider" CTA.
                     val label =
-                        if (row.needsReauth) {
-                            stringResource(R.string.accounts_reauth_button, row.providerDisplayName)
-                        } else {
-                            stringResource(R.string.accounts_connect_format, row.providerDisplayName)
+                        when {
+                            row.accounts.isNotEmpty() ->
+                                stringResource(R.string.accounts_add_another_format, row.providerDisplayName)
+                            row.needsReauth ->
+                                stringResource(R.string.accounts_reauth_button, row.providerDisplayName)
+                            else ->
+                                stringResource(R.string.accounts_connect_format, row.providerDisplayName)
                         }
                     Text(label)
                 }
@@ -190,3 +198,173 @@ private fun AccountProviderCard(
         }
     }
 }
+
+/**
+ * A single row showing an account's avatar (first-letter initials), email /
+ * display name, an optional per-account Re-authenticate button, and a Disconnect
+ * button.
+ */
+@Composable
+private fun AccountItemRow(
+    item: AccountsViewModel.AccountItem,
+    isBusy: Boolean,
+    onDisconnect: () -> Unit,
+    onReauth: () -> Unit,
+) {
+    val label = item.account.email ?: item.account.displayName
+    val initial = label.firstOrNull()?.uppercaseChar()?.toString() ?: "?"
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        // Avatar circle with initials
+        val avatarDescription = stringResource(R.string.accounts_avatar_description, label)
+        Box(
+            modifier =
+                Modifier
+                    .size(32.dp)
+                    .background(
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                        shape = CircleShape,
+                    )
+                    .semantics { contentDescription = avatarDescription },
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = initial,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
+            )
+        }
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f),
+        )
+        if (item.needsReauth) {
+            OutlinedButton(
+                onClick = onReauth,
+                enabled = !isBusy,
+            ) {
+                Text(stringResource(R.string.accounts_reauth_account))
+            }
+        }
+        OutlinedButton(
+            onClick = onDisconnect,
+            enabled = !isBusy,
+        ) {
+            Text(stringResource(R.string.accounts_disconnect))
+        }
+    }
+}
+
+/**
+ * Confirmation dialog shown when the user requests disconnect of an account
+ * that still owns one or more sync pairs. Offers three branches:
+ *
+ *  * **Delete pairs &amp; disconnect** — drops every orphaned pair and signs out.
+ *  * **Reassign pairs to <other account>** — re-binds orphans to the chosen
+ *    account on the same provider, then signs the original out. Only shown
+ *    when at least one re-assignment target exists.
+ *  * **Cancel** — closes the dialog without making changes.
+ */
+@Composable
+private fun DisconnectConfirmDialog(
+    pending: AccountsViewModel.PendingDisconnect,
+    onCancel: () -> Unit,
+    onDelete: () -> Unit,
+    onReassign: (String) -> Unit,
+) {
+    val accountLabel = pending.account.email ?: pending.account.displayName
+    var reassignMenuExpanded by remember { mutableStateOf(false) }
+    var selectedReassign by remember(pending.account.id) {
+        mutableStateOf(pending.reassignableAccounts.firstOrNull())
+    }
+
+    AlertDialog(
+        onDismissRequest = onCancel,
+        title = {
+            Text(stringResource(R.string.accounts_disconnect_confirm_title, accountLabel))
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    stringResource(
+                        R.string.accounts_disconnect_confirm_body,
+                        accountLabel,
+                        pending.orphanedPairs.size,
+                    ),
+                )
+                pending.orphanedPairs.take(MAX_ORPHAN_PREVIEW).forEach { pair ->
+                    Text(
+                        text = "• ${pair.displayName}",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+                if (pending.orphanedPairs.size > MAX_ORPHAN_PREVIEW) {
+                    Text(
+                        text = "…",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+                if (pending.reassignableAccounts.isNotEmpty()) {
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        stringResource(R.string.accounts_disconnect_confirm_reassign_label),
+                        style = MaterialTheme.typography.labelMedium,
+                    )
+                    Box {
+                        OutlinedButton(onClick = { reassignMenuExpanded = true }) {
+                            val current = selectedReassign
+                            Text(current?.email ?: current?.displayName ?: "")
+                        }
+                        DropdownMenu(
+                            expanded = reassignMenuExpanded,
+                            onDismissRequest = { reassignMenuExpanded = false },
+                        ) {
+                            pending.reassignableAccounts.forEach { acc ->
+                                DropdownMenuItem(
+                                    text = { Text(acc.email ?: acc.displayName) },
+                                    onClick = {
+                                        selectedReassign = acc
+                                        reassignMenuExpanded = false
+                                    },
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            // Two action buttons stacked: Reassign (when possible) then Delete.
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                val target = selectedReassign
+                if (target != null) {
+                    TextButton(onClick = { onReassign(target.id) }) {
+                        Text(
+                            stringResource(
+                                R.string.accounts_disconnect_confirm_reassign_format,
+                                target.email ?: target.displayName,
+                            ),
+                        )
+                    }
+                }
+                TextButton(onClick = onDelete) {
+                    Text(stringResource(R.string.accounts_disconnect_confirm_delete))
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onCancel) {
+                Text(stringResource(R.string.accounts_disconnect_confirm_cancel))
+            }
+        },
+    )
+}
+
+/** Maximum number of orphan-pair names to list inline in the disconnect dialog. */
+private const val MAX_ORPHAN_PREVIEW: Int = 5
