@@ -4,11 +4,14 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.synckro.R
+import com.synckro.data.repository.SyncEventRepository
 import com.synckro.data.repository.SyncPairRepository
 import com.synckro.data.worker.SyncScheduler
 import com.synckro.domain.model.CloudProviderType
 import com.synckro.domain.model.ConflictPolicy
 import com.synckro.domain.model.SyncDirection
+import com.synckro.domain.model.SyncEventLevel
+import com.synckro.domain.model.SyncEventTag
 import com.synckro.domain.model.SyncPair
 import com.synckro.domain.model.isDestructive
 import com.synckro.util.StringProvider
@@ -64,6 +67,7 @@ class PairEditorViewModel
         private val strings: StringProvider,
         private val syncPairRepository: SyncPairRepository,
         private val syncScheduler: SyncScheduler,
+        private val syncEventRepository: SyncEventRepository,
     ) : ViewModel() {
         private val pairId: Long = savedStateHandle.get<Long>("pairId") ?: 0L
 
@@ -330,6 +334,14 @@ class PairEditorViewModel
         fun save(onSaved: (Long) -> Unit) {
             val s = _state.value
             if (s.displayName.isBlank()) {
+                viewModelScope.launch {
+                    syncEventRepository.log(
+                        pairId = if (pairId != 0L) pairId else null,
+                        level = SyncEventLevel.WARN,
+                        tag = SyncEventTag.PairEditor,
+                        message = "Save validation failed: display name required",
+                    )
+                }
                 _state.update {
                     it.copy(
                         saveError = strings.getString(R.string.pair_editor_error_name_required),
@@ -340,6 +352,14 @@ class PairEditorViewModel
                 return
             }
             if (s.localTreeUri.isBlank()) {
+                viewModelScope.launch {
+                    syncEventRepository.log(
+                        pairId = if (pairId != 0L) pairId else null,
+                        level = SyncEventLevel.WARN,
+                        tag = SyncEventTag.PairEditor,
+                        message = "Save validation failed: local folder required",
+                    )
+                }
                 _state.update {
                     it.copy(
                         saveError = strings.getString(R.string.pair_editor_error_folder_required),
@@ -349,6 +369,14 @@ class PairEditorViewModel
                 return
             }
             if (s.remoteFolderId.isBlank()) {
+                viewModelScope.launch {
+                    syncEventRepository.log(
+                        pairId = if (pairId != 0L) pairId else null,
+                        level = SyncEventLevel.WARN,
+                        tag = SyncEventTag.PairEditor,
+                        message = "Save validation failed: remote folder required",
+                    )
+                }
                 _state.update {
                     it.copy(
                         saveError = strings.getString(R.string.pair_editor_error_remote_folder_required),
@@ -360,6 +388,14 @@ class PairEditorViewModel
             val retentionDaysText = s.retentionDaysText.trim()
             val retentionDays = retentionDaysText.takeIf { it.isNotBlank() }?.toIntOrNull()
             if (retentionDaysText.isNotBlank() && (retentionDays == null || retentionDays !in 0..MAX_RETENTION_DAYS)) {
+                viewModelScope.launch {
+                    syncEventRepository.log(
+                        pairId = if (pairId != 0L) pairId else null,
+                        level = SyncEventLevel.WARN,
+                        tag = SyncEventTag.PairEditor,
+                        message = "Save validation failed: invalid retention days '$retentionDaysText'",
+                    )
+                }
                 _state.update {
                     it.copy(
                         saveError = strings.getString(R.string.pair_editor_retention_days_error),
@@ -376,6 +412,12 @@ class PairEditorViewModel
                 )
             }
             viewModelScope.launch {
+                syncEventRepository.log(
+                    pairId = if (pairId != 0L) pairId else null,
+                    level = SyncEventLevel.INFO,
+                    tag = SyncEventTag.PairEditor,
+                    message = "Save started: '${s.displayName.trim()}' provider=${s.provider.name}",
+                )
                 runCatching {
                     val pair =
                         SyncPair(
@@ -409,13 +451,31 @@ class PairEditorViewModel
                     val savedId = syncPairRepository.upsert(pair)
                     // Schedule or cancel depending on autoSyncEnabled.
                     syncScheduler.scheduleOrCancel(pair.copy(id = savedId))
+                    syncEventRepository.log(
+                        pairId = savedId,
+                        level = SyncEventLevel.INFO,
+                        tag = SyncEventTag.Scheduler,
+                        message = "scheduleOrCancel pairId=$savedId autoSync=${s.autoSyncEnabled} interval=${s.scheduleIntervalMinutes}min",
+                    )
                     savedId
                 }.onSuccess { savedId ->
                     _state.update { it.copy(isSaving = false) }
                     Timber.i("PairEditorViewModel.save: saved pair id=$savedId")
+                    syncEventRepository.log(
+                        pairId = savedId,
+                        level = SyncEventLevel.INFO,
+                        tag = SyncEventTag.PairEditor,
+                        message = "Save succeeded: pairId=$savedId '${s.displayName.trim()}'",
+                    )
                     onSaved(savedId)
                 }.onFailure { t ->
                     Timber.e(t, "PairEditorViewModel.save: failed")
+                    syncEventRepository.log(
+                        pairId = if (pairId != 0L) pairId else null,
+                        level = SyncEventLevel.ERROR,
+                        tag = SyncEventTag.PairEditor,
+                        message = "Save failed: ${t.message}",
+                    )
                     _state.update {
                         it.copy(
                             isSaving = false,

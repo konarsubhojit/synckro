@@ -1,7 +1,25 @@
 package com.synckro.domain.model
 
 /** Severity levels for a structured sync-event log entry. */
-enum class SyncEventLevel { INFO, WARN, ERROR }
+enum class SyncEventLevel { DEBUG, INFO, WARN, ERROR }
+
+/**
+ * Short alphanumeric source labels used to tag [SyncEvent] entries.
+ *
+ * Keeping all tags in one place makes it easy to filter rows in the logs screen
+ * and ensures that searches in exported CSVs are stable across refactors.
+ */
+object SyncEventTag {
+    const val Auth = "Auth"
+    const val Account = "Account"
+    const val PairEditor = "PairEditor"
+    const val Scheduler = "Scheduler"
+    const val SyncWorker = "SyncWorker"
+    const val RemoteEnum = "RemoteEnum"
+    const val OpApplier = "OpApplier"
+    const val UI = "UI"
+    const val Export = "Export"
+}
 
 /**
  * A single log entry associated with a sync-pair run.

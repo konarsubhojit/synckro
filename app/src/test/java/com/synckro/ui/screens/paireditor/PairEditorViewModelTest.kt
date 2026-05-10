@@ -2,6 +2,7 @@ package com.synckro.ui.screens.paireditor
 
 import androidx.lifecycle.SavedStateHandle
 import com.synckro.R
+import com.synckro.data.repository.SyncEventRepository
 import com.synckro.data.repository.SyncPairRepository
 import com.synckro.data.worker.SyncScheduler
 import com.synckro.domain.model.CloudProviderType
@@ -34,6 +35,7 @@ class PairEditorViewModelTest {
     private lateinit var mockRepo: SyncPairRepository
     private lateinit var mockStrings: StringProvider
     private lateinit var mockSyncScheduler: SyncScheduler
+    private lateinit var mockEventRepository: SyncEventRepository
 
     @Before
     fun setUp() {
@@ -46,6 +48,7 @@ class PairEditorViewModelTest {
                 every { getString(R.string.pair_editor_error_remote_folder_required) } returns "Please pick a cloud folder before saving."
             }
         mockSyncScheduler = mockk(relaxed = true)
+        mockEventRepository = mockk(relaxed = true)
     }
 
     @After
@@ -59,6 +62,7 @@ class PairEditorViewModelTest {
             strings = mockStrings,
             syncPairRepository = mockRepo,
             syncScheduler = mockSyncScheduler,
+            syncEventRepository = mockEventRepository,
         )
 
     /**
@@ -82,6 +86,7 @@ class PairEditorViewModelTest {
             strings = mockStrings,
             syncPairRepository = mockRepo,
             syncScheduler = mockSyncScheduler,
+            syncEventRepository = mockEventRepository,
         )
 
     // -------------------------------------------------------------------------
@@ -362,6 +367,7 @@ class PairEditorViewModelTest {
                     strings = mockStrings,
                     syncPairRepository = mockRepo,
                     syncScheduler = mockSyncScheduler,
+                    syncEventRepository = mockEventRepository,
                 )
             advanceUntilIdle()
 
@@ -395,6 +401,7 @@ class PairEditorViewModelTest {
                     strings = mockStrings,
                     syncPairRepository = mockRepo,
                     syncScheduler = mockSyncScheduler,
+                    syncEventRepository = mockEventRepository,
                 )
             advanceUntilIdle()
 

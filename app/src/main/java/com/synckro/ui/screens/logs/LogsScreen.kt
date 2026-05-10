@@ -1,9 +1,15 @@
 package com.synckro.ui.screens.logs
 
+import android.content.ContentValues
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
+import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -18,6 +24,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -31,6 +38,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -65,6 +73,34 @@ fun LogsScreen(
     val scope = rememberCoroutineScope()
     val copiedMsg = stringResource(R.string.logs_copied)
     val dateFormat = remember { SimpleDateFormat("MM-dd HH:mm:ss.SSS", Locale.US) }
+
+    val exportSavedMsg = stringResource(R.string.logs_export_saved)
+    val exportFailedMsg = stringResource(R.string.logs_export_failed)
+    val exportSubject = stringResource(R.string.logs_export_subject)
+    val exportChooser = stringResource(R.string.logs_export_chooser)
+
+    // Observe one-shot export results from the ViewModel.
+    LaunchedEffect(Unit) {
+        viewModel.exportResult.collect { result ->
+            result.fold(
+                onSuccess = { uri ->
+                    handleExportUri(
+                        context = context,
+                        uri = uri,
+                        savedMsg = exportSavedMsg,
+                        failedMsg = exportFailedMsg,
+                        subject = exportSubject,
+                        chooser = exportChooser,
+                    )
+                },
+                onFailure = { e ->
+                    snackbarHostState.showSnackbar(
+                        exportFailedMsg.format(e.message ?: e.javaClass.simpleName),
+                    )
+                },
+            )
+        }
+    }
 
     val buildLogText: () -> String = {
         buildLogExportText(state.events, dateFormat)
@@ -120,6 +156,14 @@ fun LogsScreen(
                             contentDescription = stringResource(R.string.logs_share),
                         )
                     }
+                    // Export action: bundles structured events + Timber logs into a zip.
+                    // Always available in both debug and release builds.
+                    IconButton(onClick = { viewModel.exportLogs() }) {
+                        Icon(
+                            Icons.Default.FileDownload,
+                            contentDescription = stringResource(R.string.logs_export),
+                        )
+                    }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(),
             )
@@ -154,6 +198,60 @@ fun LogsScreen(
     }
 }
 
+/**
+ * Handles a successfully created export zip URI.
+ *
+ * On API 29+, copies the zip into MediaStore Downloads (no permission required).
+ * On API 26–28, fires an [Intent.ACTION_SEND] share-chooser via [FileProvider].
+ */
+private fun handleExportUri(
+    context: Context,
+    uri: Uri,
+    savedMsg: String,
+    failedMsg: String,
+    subject: String,
+    chooser: String,
+) {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        val resolver = context.contentResolver
+        val fileName = uri.lastPathSegment ?: "synckro-logs.zip"
+        val values =
+            ContentValues().apply {
+                put(MediaStore.Downloads.DISPLAY_NAME, fileName)
+                put(MediaStore.Downloads.MIME_TYPE, "application/zip")
+                put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+                put(MediaStore.Downloads.IS_PENDING, 1)
+            }
+        val collection = MediaStore.Downloads.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+        val itemUri =
+            resolver.insert(collection, values) ?: run {
+                Toast.makeText(context, failedMsg.format("MediaStore insert failed"), Toast.LENGTH_LONG).show()
+                return
+            }
+        try {
+            resolver.openOutputStream(itemUri)?.use { out ->
+                resolver.openInputStream(uri)?.use { it.copyTo(out) }
+            }
+            values.clear()
+            values.put(MediaStore.Downloads.IS_PENDING, 0)
+            resolver.update(itemUri, values, null, null)
+            Toast.makeText(context, savedMsg.format(fileName), Toast.LENGTH_LONG).show()
+        } catch (e: Exception) {
+            runCatching { resolver.delete(itemUri, null, null) }
+            Toast.makeText(context, failedMsg.format(e.localizedMessage ?: "I/O error"), Toast.LENGTH_LONG).show()
+        }
+    } else {
+        val intent =
+            Intent(Intent.ACTION_SEND).apply {
+                type = "application/zip"
+                putExtra(Intent.EXTRA_STREAM, uri)
+                putExtra(Intent.EXTRA_SUBJECT, subject)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+        context.startActivity(Intent.createChooser(intent, chooser))
+    }
+}
+
 @Composable
 private fun LogEntryRow(
     event: SyncEvent,
@@ -161,6 +259,7 @@ private fun LogEntryRow(
 ) {
     val levelColor =
         when (event.level) {
+            SyncEventLevel.DEBUG -> MaterialTheme.colorScheme.onSurfaceVariant
             SyncEventLevel.INFO -> MaterialTheme.colorScheme.onSurface
             SyncEventLevel.WARN -> Color(0xFFF59E0B) // Amber-500
             SyncEventLevel.ERROR -> MaterialTheme.colorScheme.error

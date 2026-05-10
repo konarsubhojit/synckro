@@ -462,6 +462,15 @@ interface SyncEventDao {
     fun observeAll(limit: Int = MAX_EVENTS_GLOBAL): Flow<List<SyncEventEntity>>
 
     /**
+     * Returns all events as a one-shot snapshot, newest first, up to [limit] rows.
+     * Use this when you need the list once (e.g. for export) rather than observing changes.
+     *
+     * @param limit Maximum number of rows to return.
+     */
+    @Query("SELECT * FROM sync_event ORDER BY timestampMs DESC LIMIT :limit")
+    suspend fun getAll(limit: Int = MAX_EVENTS_GLOBAL): List<SyncEventEntity>
+
+    /**
      * Returns events for the given pair, newest first, up to [limit] rows.
      *
      * @param pairId  The sync pair whose events should be observed.
@@ -524,8 +533,15 @@ interface SyncEventDao {
         /** Maximum events retained per sync-pair (oldest are discarded first). */
         const val MAX_EVENTS_PER_PAIR = 500
 
-        /** Maximum total events retained across all pairs. */
-        const val MAX_EVENTS_GLOBAL = 2_000
+        /**
+         * Maximum total events retained across all pairs.
+         *
+         * Raised from 2 000 to 5 000 to accommodate the new Auth / Account / PairEditor /
+         * Scheduler / Export instrumentation added in the structured-logging pass (issue #121-E).
+         * The rolling-deletion in [insertAndPrune] keeps the table bounded, so no periodic
+         * prune worker is needed at this cap level.
+         */
+        const val MAX_EVENTS_GLOBAL = 5_000
     }
 }
 

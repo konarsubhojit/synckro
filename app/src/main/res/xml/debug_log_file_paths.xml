@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  FileProvider path descriptor used by the debug-only log-export feature.
-  FileLoggingTree writes to filesDir/logs/ (internal storage), which the
-  FileProvider serves here as a content:// URI for the share-intent fallback
-  on API 26-28. On API 29+ the export button copies directly to MediaStore
-  Downloads so the user can browse the file without a USB cable.
+  FileProvider path descriptor used by the log-export feature.
+  FileLoggingTree writes to filesDir/logs/ (internal storage). The log-export
+  bundle zip is written to cacheDir/log_export/. Both are served as
+  content:// URIs so callers need no storage permission.
 -->
 <paths>
     <files-path name="debug_logs" path="logs/" />
+    <cache-path name="log_export" path="log_export/" />
 </paths>
