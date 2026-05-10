@@ -88,6 +88,15 @@ class AccountRepository
         }
 
         /**
+         * Observes all accounts for a given [providerType], emitting the
+         * current snapshot and any subsequent updates whenever the underlying
+         * `account` table changes. Emits an empty list when the provider has
+         * no persisted accounts.
+         */
+        fun observeByProvider(providerType: CloudProviderType): Flow<List<Account>> =
+            accountDao.observeByProvider(providerType).map { entities -> entities.map { it.toDomain() } }
+
+        /**
          * Atomically reconciles the persisted accounts for [providerType] against [cached] (the
          * provider's current token-cache snapshot). Missing / drifted accounts are upserted and
          * stale rows are deleted in a single Room transaction, so a mid-way failure rolls back

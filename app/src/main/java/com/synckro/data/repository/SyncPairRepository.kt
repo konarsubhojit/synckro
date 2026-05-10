@@ -5,6 +5,7 @@ import android.content.Intent
 import com.synckro.data.local.dao.SyncPairDao
 import com.synckro.data.local.entity.SyncPairEntity
 import com.synckro.data.local.entity.toDomain
+import com.synckro.domain.auth.AccountKey
 import com.synckro.domain.model.SyncPair
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -90,6 +91,27 @@ class SyncPairRepository
         }
 
         /**
+         * Observes the set of [AccountKey]s that currently have at least one
+         * sync pair stuck in `NEEDS_REAUTH`. The account-aware replacement for
+         * [SyncPairDao.observeProvidersNeedingReauth].
+         */
+        fun observeAccountsNeedingReauth(): Flow<Set<AccountKey>> =
+            syncPairDao.observeAccountsNeedingReauth().map { rows ->
+                rows.mapTo(LinkedHashSet(rows.size)) { row ->
+                    AccountKey(provider = row.provider, accountId = row.accountId)
+                }
+            }
+
+        /**
+         * Clears the `NEEDS_REAUTH` outcome for every sync pair bound to
+         * [accountId]. See [SyncPairDao.clearNeedsReauthForAccount].
+         */
+        suspend fun clearNeedsReauthForAccount(accountId: String) {
+            Timber.i("SyncPairRepository.clearNeedsReauthForAccount(accountId=$accountId)")
+            syncPairDao.clearNeedsReauthForAccount(accountId)
+        }
+
+        /**
          * Returns the set of URI strings for which the system currently holds a
          * persisted read+write permission grant.  Only URIs that have **both**
          * [Intent.FLAG_GRANT_READ_URI_PERMISSION] and
@@ -117,6 +139,7 @@ private fun SyncPair.toEntity(): SyncPairEntity =
         displayName = displayName,
         localTreeUri = localTreeUri,
         provider = provider,
+        accountId = accountId,
         remoteFolderId = remoteFolderId,
         direction = direction,
         conflictPolicy = conflictPolicy,

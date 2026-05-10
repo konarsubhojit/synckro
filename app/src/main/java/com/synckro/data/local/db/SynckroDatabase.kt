@@ -74,7 +74,7 @@ class EnumConverters {
 
 @Database(
     entities = [AccountEntity::class, SyncPairEntity::class, FileIndexEntity::class, SyncEventEntity::class, ConflictRecordEntity::class, LocalIndexEntity::class],
-    version = 11,
+    version = 12,
     exportSchema = true,
 )
 @TypeConverters(EnumConverters::class)
@@ -263,6 +263,7 @@ abstract class SynckroDatabase : RoomDatabase() {
                     db.execSQL("ALTER TABLE `local_index` ADD COLUMN `remoteEtag` TEXT")
                 }
             }
+
         /**
          * Migrates the database from version 8 to 9:
          * - Adds `autoSyncEnabled` column to `sync_pair` (default 1 = enabled).
@@ -309,6 +310,39 @@ abstract class SynckroDatabase : RoomDatabase() {
                     )
                     db.execSQL(
                         "ALTER TABLE `sync_pair` ADD COLUMN `excludeEmptyFolders` INTEGER NOT NULL DEFAULT 0",
+                    )
+                }
+            }
+
+        /**
+         * Migrates the database from version 11 to 12 (multi-account support):
+         * - Adds nullable `accountId` column to `sync_pair` so each pair can be
+         *   bound to a specific [com.synckro.data.local.entity.AccountEntity].
+         * - Backfills `accountId` for existing pairs from the (formerly implicit)
+         *   single-account-per-provider assumption: pairs whose provider has
+         *   exactly one persisted account get that account's id. Pairs whose
+         *   provider has zero accounts at upgrade time keep `accountId = NULL`
+         *   and are surfaced as "needs re-link" by the UI. The
+         *   `WHERE (SELECT COUNT(*) ...) = 1` guard intentionally leaves pairs
+         *   ambiguous when multiple accounts already exist for the same provider
+         *   so the user can pick one explicitly.
+         * - Adds the `index_sync_pair_accountId` index used by Room for the
+         *   `@Index("accountId")` declaration on the entity.
+         */
+        val MIGRATION_11_12 =
+            object : Migration(11, 12) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL("ALTER TABLE `sync_pair` ADD COLUMN `accountId` TEXT")
+                    db.execSQL(
+                        "UPDATE `sync_pair` SET `accountId` = (" +
+                            "SELECT a.id FROM `account` a " +
+                            "WHERE a.providerType = `sync_pair`.provider LIMIT 1) " +
+                            "WHERE (SELECT COUNT(*) FROM `account` a " +
+                            "WHERE a.providerType = `sync_pair`.provider) = 1",
+                    )
+                    db.execSQL(
+                        "CREATE INDEX IF NOT EXISTS `index_sync_pair_accountId` " +
+                            "ON `sync_pair` (`accountId`)",
                     )
                 }
             }

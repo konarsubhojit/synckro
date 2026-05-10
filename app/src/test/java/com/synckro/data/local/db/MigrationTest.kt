@@ -288,6 +288,203 @@ class MigrationTest {
     }
 
     // -------------------------------------------------------------------------
+    // MIGRATION_11_12 – accountId column on sync_pair (multi-account support)
+    // -------------------------------------------------------------------------
+
+    /** Brings [db] from the test bootstrap (v6) up to v11 in one shot. */
+    private fun migrateToV11(db: SupportSQLiteDatabase) {
+        SynckroDatabase.MIGRATION_6_7.migrate(db)
+        SynckroDatabase.MIGRATION_7_8.migrate(db)
+        SynckroDatabase.MIGRATION_8_9.migrate(db)
+        SynckroDatabase.MIGRATION_9_10.migrate(db)
+        SynckroDatabase.MIGRATION_10_11.migrate(db)
+    }
+
+    private fun insertAccount(
+        db: SupportSQLiteDatabase,
+        id: String,
+        providerType: String,
+        createdAtMillis: Long = 1L,
+    ) {
+        db.execSQL(
+            "INSERT INTO account (id, providerType, displayName, email, createdAtMillis) " +
+                "VALUES ('$id', '$providerType', '$id-name', null, $createdAtMillis)",
+        )
+    }
+
+    private fun insertSyncPairWithProvider(
+        db: SupportSQLiteDatabase,
+        displayName: String,
+        provider: String,
+    ) {
+        db.execSQL(
+            "INSERT INTO sync_pair (displayName, localTreeUri, provider, remoteFolderId, " +
+                "direction, conflictPolicy, includeGlobs, excludeGlobs, wifiOnly, " +
+                "requiresCharging, scheduleIntervalMinutes) VALUES " +
+                "('$displayName', 'content://test', '$provider', 'remote123', " +
+                "'BIDIRECTIONAL', 'NEWEST_WINS', '', '', 1, 0, 60)",
+        )
+    }
+
+    private fun accountIdFor(
+        db: SupportSQLiteDatabase,
+        displayName: String,
+    ): String? {
+        val cursor =
+            db.query(
+                "SELECT accountId FROM sync_pair WHERE displayName = '$displayName'",
+                emptyArray<Any?>(),
+            )
+        return cursor.use {
+            assertTrue(it.moveToFirst())
+            if (it.isNull(0)) null else it.getString(0)
+        }
+    }
+
+    @Test
+    fun `MIGRATION_11_12 adds accountId column to sync_pair`() {
+        migrateToV11(db)
+
+        SynckroDatabase.MIGRATION_11_12.migrate(db)
+
+        assertTrue(
+            "accountId column must exist in sync_pair after migration",
+            "accountId" in columnNames(db, "sync_pair"),
+        )
+    }
+
+    @Test
+    fun `MIGRATION_11_12 backfills accountId when provider has exactly one account`() {
+        migrateToV11(db)
+        insertAccount(db, id = "acc-onedrive-1", providerType = "ONEDRIVE")
+        insertSyncPairWithProvider(db, displayName = "OneDrive Pair", provider = "ONEDRIVE")
+
+        SynckroDatabase.MIGRATION_11_12.migrate(db)
+
+        assertEquals(
+            "accountId should be backfilled from the single matching account row",
+            "acc-onedrive-1",
+            accountIdFor(db, "OneDrive Pair"),
+        )
+    }
+
+    @Test
+    fun `MIGRATION_11_12 leaves accountId NULL when provider has no accounts`() {
+        migrateToV11(db)
+        // No account row for ONEDRIVE.
+        insertSyncPairWithProvider(db, displayName = "Orphan Pair", provider = "ONEDRIVE")
+
+        SynckroDatabase.MIGRATION_11_12.migrate(db)
+
+        assertEquals(
+            "accountId should remain NULL when no matching account exists",
+            null,
+            accountIdFor(db, "Orphan Pair"),
+        )
+    }
+
+    @Test
+    fun `MIGRATION_11_12 leaves accountId NULL when provider has multiple accounts`() {
+        // When a provider already has multiple accounts at upgrade time we cannot
+        // safely guess which one owns the pair; leave it for the user to re-link.
+        migrateToV11(db)
+        insertAccount(db, id = "acc-gdrive-1", providerType = "GOOGLE_DRIVE", createdAtMillis = 1L)
+        insertAccount(db, id = "acc-gdrive-2", providerType = "GOOGLE_DRIVE", createdAtMillis = 2L)
+        insertSyncPairWithProvider(db, displayName = "Ambiguous Pair", provider = "GOOGLE_DRIVE")
+
+        SynckroDatabase.MIGRATION_11_12.migrate(db)
+
+        assertEquals(
+            "accountId must stay NULL when multiple candidate accounts exist",
+            null,
+            accountIdFor(db, "Ambiguous Pair"),
+        )
+    }
+
+    @Test
+    fun `MIGRATION_11_12 only backfills pairs whose provider matches the account`() {
+        migrateToV11(db)
+        insertAccount(db, id = "acc-onedrive-1", providerType = "ONEDRIVE")
+        insertSyncPairWithProvider(db, displayName = "OD Pair", provider = "ONEDRIVE")
+        insertSyncPairWithProvider(db, displayName = "GD Pair", provider = "GOOGLE_DRIVE")
+
+        SynckroDatabase.MIGRATION_11_12.migrate(db)
+
+        assertEquals("acc-onedrive-1", accountIdFor(db, "OD Pair"))
+        assertEquals(
+            "GOOGLE_DRIVE pair must not pick up an ONEDRIVE accountId",
+            null,
+            accountIdFor(db, "GD Pair"),
+        )
+    }
+
+    @Test
+    fun `MIGRATION_11_12 creates index on accountId`() {
+        migrateToV11(db)
+
+        SynckroDatabase.MIGRATION_11_12.migrate(db)
+
+        val cursor =
+            db.query(
+                "SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'sync_pair'",
+                emptyArray<Any?>(),
+            )
+        val indexNames = mutableSetOf<String>()
+        cursor.use {
+            while (it.moveToNext()) indexNames.add(it.getString(0))
+        }
+        assertTrue(
+            "index_sync_pair_accountId must exist after migration; got $indexNames",
+            "index_sync_pair_accountId" in indexNames,
+        )
+    }
+
+    // -------------------------------------------------------------------------
+    // Full migration chain v1 → v12
+    // -------------------------------------------------------------------------
+
+    @Test
+    fun `all migrations from v1 to v12 run without error and backfill accountId`() {
+        val v1Db = openAtV1(context)
+        try {
+            // Bring the v1 bootstrap DB up to v10 (pre-account era for sync_pair).
+            SynckroDatabase.MIGRATION_1_2.migrate(v1Db)
+            SynckroDatabase.MIGRATION_2_3.migrate(v1Db)
+            SynckroDatabase.MIGRATION_3_4.migrate(v1Db)
+            SynckroDatabase.MIGRATION_4_5.migrate(v1Db)
+            SynckroDatabase.MIGRATION_5_6.migrate(v1Db)
+            SynckroDatabase.MIGRATION_6_7.migrate(v1Db)
+            SynckroDatabase.MIGRATION_7_8.migrate(v1Db)
+            SynckroDatabase.MIGRATION_8_9.migrate(v1Db)
+            SynckroDatabase.MIGRATION_9_10.migrate(v1Db)
+
+            // Seed an account row (created by MIGRATION_1_2) and a sync_pair row
+            // before applying the latest migrations, so the v11→v12 backfill SQL
+            // exercises the full v1 schema's column shape rather than a
+            // freshly-created v6 baseline.
+            insertAccount(v1Db, id = "acc-od-1", providerType = "ONEDRIVE")
+            insertSyncPairWithProvider(v1Db, displayName = "OD Pair v1Chain", provider = "ONEDRIVE")
+
+            SynckroDatabase.MIGRATION_10_11.migrate(v1Db)
+            SynckroDatabase.MIGRATION_11_12.migrate(v1Db)
+
+            val syncPairCols = columnNames(v1Db, "sync_pair")
+            assertTrue("excludeSubfolders must exist after v1→v12 chain", "excludeSubfolders" in syncPairCols)
+            assertTrue("excludeEmptyFolders must exist after v1→v12 chain", "excludeEmptyFolders" in syncPairCols)
+            assertTrue("accountId must exist after v1→v12 chain", "accountId" in syncPairCols)
+
+            assertEquals(
+                "accountId should be backfilled by MIGRATION_11_12 in the v1→v12 chain",
+                "acc-od-1",
+                accountIdFor(v1Db, "OD Pair v1Chain"),
+            )
+        } finally {
+            v1Db.close()
+            context.deleteDatabase("${TEST_DB}_v1")
+        }
+    }
+
+    // -------------------------------------------------------------------------
     // Full migration chain v1 → v10
     // -------------------------------------------------------------------------
 

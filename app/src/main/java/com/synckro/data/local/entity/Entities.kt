@@ -17,12 +17,27 @@ data class AccountEntity(
     val createdAtMillis: Long,
 )
 
-@Entity(tableName = "sync_pair")
+@Entity(
+    tableName = "sync_pair",
+    indices = [Index("accountId")],
+)
 data class SyncPairEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val displayName: String,
     val localTreeUri: String,
     val provider: CloudProviderType,
+    /**
+     * Foreign-key reference to [AccountEntity.id]. Nullable because a sync pair
+     * may exist without an associated account row — for example after the
+     * account is disconnected (the pair is then surfaced as "needs re-link" in
+     * the UI), or transiently during a v11→v12 schema upgrade where the
+     * provider had zero persisted accounts at upgrade time.
+     *
+     * Not declared as a Room [ForeignKey] on purpose: deleting an account
+     * should not cascade-delete the user's sync pairs; it should leave them
+     * orphaned so the user can re-link them to a new account.
+     */
+    val accountId: String? = null,
     val remoteFolderId: String,
     val direction: SyncDirection,
     val conflictPolicy: ConflictPolicy,
