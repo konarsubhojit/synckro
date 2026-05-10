@@ -137,7 +137,13 @@ class SyncWorker
                         WorkManager.getInstance(applicationContext).cancelUniqueWork(uniqueName(pairId))
                         return Result.failure()
                     }
-                factory.providerFor(accountId)
+                val resolvedProvider = factory.providerFor(accountId)
+                Timber.v(
+                    "SyncWorker.doWork: resolved provider %s for pairId=%d accountId=%s",
+                    resolvedProvider.displayName,
+                    pairId,
+                    accountId,
+                )
             }
 
             syncEventRepository.log(

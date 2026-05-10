@@ -137,7 +137,11 @@ class OneDriveRemoteEnumerator
             }
         }
 
-        private fun providerFor(accountId: String): OneDriveProvider = providerFactory.providerFor(accountId) as OneDriveProvider
+        private fun providerFor(accountId: String): OneDriveProvider {
+            val provider = providerFactory.providerFor(accountId)
+            return provider as? OneDriveProvider
+                ?: error("OneDriveProviderFactory returned unexpected provider type: ${provider::class.java.simpleName}")
+        }
     }
 
 /**

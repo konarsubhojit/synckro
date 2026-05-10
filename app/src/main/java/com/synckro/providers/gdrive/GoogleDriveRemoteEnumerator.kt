@@ -145,7 +145,11 @@ class GoogleDriveRemoteEnumerator
             }
         }
 
-        private fun providerFor(accountId: String): GoogleDriveProvider = providerFactory.providerFor(accountId) as GoogleDriveProvider
+        private fun providerFor(accountId: String): GoogleDriveProvider {
+            val provider = providerFactory.providerFor(accountId)
+            return provider as? GoogleDriveProvider
+                ?: error("GoogleDriveProviderFactory returned unexpected provider type: ${provider::class.java.simpleName}")
+        }
     }
 
 /**
