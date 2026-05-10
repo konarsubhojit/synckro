@@ -66,6 +66,14 @@ class SyncEventRepository
         fun observeAll(limit: Int = SyncEventDao.MAX_EVENTS_GLOBAL): Flow<List<SyncEvent>> = dao.observeAll(limit).map { list -> list.map { it.toDomain() } }
 
         /**
+         * Returns a one-shot snapshot of all log entries, newest first, up to [limit] rows.
+         * Use this for export rather than observing changes.
+         *
+         * @param limit Maximum rows to return (defaults to [SyncEventDao.MAX_EVENTS_GLOBAL]).
+         */
+        suspend fun getAll(limit: Int = SyncEventDao.MAX_EVENTS_GLOBAL): List<SyncEvent> = dao.getAll(limit).map { it.toDomain() }
+
+        /**
          * Observes log entries for [pairId], newest first, up to [limit] rows.
          *
          * @param pairId The sync pair whose events should be observed.

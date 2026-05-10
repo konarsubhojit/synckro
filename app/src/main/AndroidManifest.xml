@@ -72,6 +72,20 @@
                     android:path="${msalPath}" />
             </intent-filter>
         </activity>
+        <!-- FileProvider used by the log-export feature to serve the bundled zip
+             as a content:// URI without requiring any storage permission. Available
+             in both debug and release builds so the export action in LogsScreen works
+             regardless of the build variant. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/debug_log_file_paths" />
+        </provider>
+
     </application>
 
 </manifest>

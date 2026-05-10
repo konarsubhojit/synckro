@@ -6,12 +6,15 @@ import androidx.lifecycle.viewModelScope
 import com.synckro.R
 import com.synckro.data.local.dao.SyncPairDao
 import com.synckro.data.repository.AccountRepository
+import com.synckro.data.repository.SyncEventRepository
 import com.synckro.domain.auth.Account
 import com.synckro.domain.auth.AccountKey
 import com.synckro.domain.auth.AuthManager
 import com.synckro.domain.auth.AuthManagerRegistry
 import com.synckro.domain.auth.AuthResult
 import com.synckro.domain.model.CloudProviderType
+import com.synckro.domain.model.SyncEventLevel
+import com.synckro.domain.model.SyncEventTag
 import com.synckro.util.error.UserMessage
 import com.synckro.util.error.UserMessageReporter
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -46,6 +49,7 @@ class AccountsViewModel
         private val accountRepository: AccountRepository,
         private val syncPairDao: SyncPairDao,
         private val userMessages: UserMessageReporter,
+        private val syncEventRepository: SyncEventRepository,
     ) : ViewModel() {
         data class AccountRow(
             val providerDisplayName: String,
@@ -145,10 +149,24 @@ class AccountsViewModel
 
             return try {
                 accountRepository.reconcileProvider(manager.providerType, cachedAccounts)
+                if (cachedAccounts.isNotEmpty()) {
+                    syncEventRepository.log(
+                        pairId = null,
+                        level = SyncEventLevel.DEBUG,
+                        tag = SyncEventTag.Account,
+                        message = "Reconcile ${manager.displayName}: ${cachedAccounts.size} account(s)",
+                    )
+                }
                 cachedAccounts
             } catch (t: Throwable) {
                 if (t is CancellationException) throw t
                 Timber.e(t, "AccountsViewModel.reconcile: transactional reconcile failed for ${manager.providerType}")
+                syncEventRepository.log(
+                    pairId = null,
+                    level = SyncEventLevel.WARN,
+                    tag = SyncEventTag.Account,
+                    message = "Reconcile ${manager.displayName} failed: ${t.message}",
+                )
                 userMessages.reportError(
                     context.getString(
                         R.string.accounts_reconcile_failed_format,
@@ -183,12 +201,24 @@ class AccountsViewModel
                         )
                         return@launch
                     }
+                syncEventRepository.log(
+                    pairId = null,
+                    level = SyncEventLevel.INFO,
+                    tag = SyncEventTag.Auth,
+                    message = "signIn ${manager.displayName}: started",
+                )
                 val result =
                     runCatching { launchSignIn(manager) }.getOrElse { t ->
                         // Never swallow cooperative cancellation — let the coroutine
                         // machinery propagate it so viewModelScope cancellation works.
                         if (t is CancellationException) throw t
                         setBusy(providerKey, false)
+                        syncEventRepository.log(
+                            pairId = null,
+                            level = SyncEventLevel.ERROR,
+                            tag = SyncEventTag.Auth,
+                            message = "signIn ${manager.displayName}: error — ${t.message}",
+                        )
                         userMessages.reportError(
                             context.getString(
                                 R.string.error_auth_failed_format,
@@ -221,10 +251,22 @@ class AccountsViewModel
                         refresh()
                         return@launch
                     }
+                syncEventRepository.log(
+                    pairId = null,
+                    level = SyncEventLevel.INFO,
+                    tag = SyncEventTag.Auth,
+                    message = "signOut ${manager.displayName} (${account.email ?: account.id}): started",
+                )
                 when (val r = manager.signOut(account)) {
                     is AuthResult.Success -> {
                         // Remove from Room after successful sign-out
                         accountRepository.delete(account.id)
+                        syncEventRepository.log(
+                            pairId = null,
+                            level = SyncEventLevel.INFO,
+                            tag = SyncEventTag.Auth,
+                            message = "signOut ${manager.displayName} (${account.email ?: account.id}): success",
+                        )
                         userMessages.report(
                             UserMessage(
                                 context.getString(R.string.accounts_disconnected_format, manager.displayName),
@@ -236,6 +278,12 @@ class AccountsViewModel
                         // Do NOT delete from DB on sign-out failure — that would hide the
                         // error and leave MSAL's token cache and Room out of sync. The user
                         // can retry disconnect; a forced-local removal would be a separate flow.
+                        syncEventRepository.log(
+                            pairId = null,
+                            level = SyncEventLevel.ERROR,
+                            tag = SyncEventTag.Auth,
+                            message = "signOut ${manager.displayName}: error — ${r.message}",
+                        )
                         userMessages.reportError(
                             context.getString(
                                 R.string.accounts_disconnect_failed_format,
@@ -248,6 +296,12 @@ class AccountsViewModel
                     else -> {
                         // Same rationale as the Error branch: preserve DB row when sign-out
                         // didn't positively succeed.
+                        syncEventRepository.log(
+                            pairId = null,
+                            level = SyncEventLevel.WARN,
+                            tag = SyncEventTag.Auth,
+                            message = "signOut ${manager.displayName}: unexpected result $r",
+                        )
                         userMessages.reportError(
                             context.getString(
                                 R.string.accounts_disconnect_failed_generic_format,
@@ -272,6 +326,12 @@ class AccountsViewModel
                     // instead of waiting for the next worker run to overwrite lastSyncResult.
                     runCatching { syncPairDao.clearNeedsReauthForAccount(result.value.id) }
                         .onFailure { Timber.w(it, "AccountsViewModel: failed to clear NEEDS_REAUTH for accountId=${result.value.id}") }
+                    syncEventRepository.log(
+                        pairId = null,
+                        level = SyncEventLevel.INFO,
+                        tag = SyncEventTag.Auth,
+                        message = "signIn ${manager.displayName} (${result.value.email ?: result.value.id}): success",
+                    )
                     userMessages.report(
                         UserMessage(
                             context.getString(
@@ -283,21 +343,41 @@ class AccountsViewModel
                         ),
                     )
                 }
-                AuthResult.Cancelled ->
+                AuthResult.Cancelled -> {
+                    syncEventRepository.log(
+                        pairId = null,
+                        level = SyncEventLevel.INFO,
+                        tag = SyncEventTag.Auth,
+                        message = "signIn ${manager.displayName}: cancelled",
+                    )
                     userMessages.report(
                         UserMessage(
                             context.getString(R.string.error_auth_cancelled),
                             UserMessage.Severity.WARNING,
                         ),
                     )
-                AuthResult.NeedsInteractiveSignIn ->
+                }
+                AuthResult.NeedsInteractiveSignIn -> {
+                    syncEventRepository.log(
+                        pairId = null,
+                        level = SyncEventLevel.WARN,
+                        tag = SyncEventTag.Auth,
+                        message = "signIn ${manager.displayName}: needs interactive sign-in",
+                    )
                     userMessages.report(
                         UserMessage(
                             context.getString(R.string.error_auth_needs_interactive),
                             UserMessage.Severity.WARNING,
                         ),
                     )
-                is AuthResult.NotConfigured ->
+                }
+                is AuthResult.NotConfigured -> {
+                    syncEventRepository.log(
+                        pairId = null,
+                        level = SyncEventLevel.WARN,
+                        tag = SyncEventTag.Auth,
+                        message = "signIn ${manager.displayName}: not configured — ${result.message}",
+                    )
                     userMessages.reportError(
                         context.getString(
                             R.string.accounts_not_configured_detail_format,
@@ -305,7 +385,14 @@ class AccountsViewModel
                             result.message,
                         ),
                     )
-                is AuthResult.Error ->
+                }
+                is AuthResult.Error -> {
+                    syncEventRepository.log(
+                        pairId = null,
+                        level = SyncEventLevel.ERROR,
+                        tag = SyncEventTag.Auth,
+                        message = "signIn ${manager.displayName}: error — ${result.message}",
+                    )
                     userMessages.reportError(
                         context.getString(
                             R.string.error_auth_failed_format,
@@ -314,6 +401,7 @@ class AccountsViewModel
                         ),
                         result.cause,
                     )
+                }
             }
         }
 
