@@ -305,6 +305,34 @@ interface SyncPairDao {
             "WHERE accountId = :accountId AND lastSyncResult = 'NEEDS_REAUTH'",
     )
     suspend fun clearNeedsReauthForAccount(accountId: String)
+
+    /**
+     * Returns all sync pairs currently bound to [accountId]. Used by the
+     * Accounts screen to detect "orphaned-on-disconnect" pairs and to power
+     * the reassign/delete confirmation flow.
+     */
+    @Query("SELECT * FROM sync_pair WHERE accountId = :accountId ORDER BY id ASC")
+    suspend fun getByAccountId(accountId: String): List<SyncPairEntity>
+
+    /**
+     * Reassigns every sync pair currently bound to [fromAccountId] so it
+     * points at [toAccountId] instead. Used by the Accounts disconnect
+     * confirmation flow when the user chooses to move pairs to another
+     * account on the same provider rather than delete them.
+     */
+    @Query("UPDATE sync_pair SET accountId = :toAccountId WHERE accountId = :fromAccountId")
+    suspend fun reassignAccountId(
+        fromAccountId: String,
+        toAccountId: String,
+    )
+
+    /**
+     * Deletes every sync pair currently bound to [accountId]. Used by the
+     * Accounts disconnect confirmation flow when the user chooses to delete
+     * orphaned pairs along with the account.
+     */
+    @Query("DELETE FROM sync_pair WHERE accountId = :accountId")
+    suspend fun deleteByAccountId(accountId: String)
 }
 
 @Dao

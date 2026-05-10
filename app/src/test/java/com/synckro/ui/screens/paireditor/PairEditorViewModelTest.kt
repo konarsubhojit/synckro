@@ -54,7 +54,21 @@ class PairEditorViewModelTest {
         mockEventRepository = mockk(relaxed = true)
         mockAccountRepository =
             mockk {
-                every { observeByProvider(any()) } returns flowOf(emptyList())
+                // Default: every provider has one fake account so existing tests can
+                // save without having to call onAccountChange. Tests that exercise
+                // the "no account picked" failure path can override this with
+                // flowOf(emptyList()) and avoid calling onAccountChange.
+                every { observeByProvider(any()) } returns
+                    flowOf(
+                        listOf(
+                            com.synckro.domain.auth.Account(
+                                id = "test-account",
+                                provider = com.synckro.domain.model.CloudProviderType.GOOGLE_DRIVE,
+                                displayName = "Test Account",
+                                email = "test@example.com",
+                            ),
+                        ),
+                    )
             }
     }
 
@@ -261,6 +275,7 @@ class PairEditorViewModelTest {
             vm.onDisplayNameChange("Test Pair")
             vm.onRemoteFolderPicked("remote-id", "Remote")
             advanceUntilIdle()
+            vm.onAccountChange("test-account")
 
             var savedId: Long? = null
             vm.save { savedId = it }
@@ -281,6 +296,7 @@ class PairEditorViewModelTest {
             vm.onDisplayNameChange("Test Pair")
             vm.onRemoteFolderPicked("remote-id", "Remote")
             advanceUntilIdle()
+            vm.onAccountChange("test-account")
 
             vm.save {}
             advanceUntilIdle()
@@ -298,6 +314,7 @@ class PairEditorViewModelTest {
             vm.onRemoteFolderPicked("remote-id", "Remote")
             vm.onAutoSyncEnabledChange(false)
             advanceUntilIdle()
+            vm.onAccountChange("test-account")
 
             vm.save {}
             advanceUntilIdle()
@@ -319,6 +336,7 @@ class PairEditorViewModelTest {
             vm.onDisplayNameChange("Test Pair")
             vm.onRemoteFolderPicked("remote-id", "Remote")
             advanceUntilIdle()
+            vm.onAccountChange("test-account")
 
             var savedId: Long? = null
             vm.save { savedId = it }
@@ -543,6 +561,7 @@ class PairEditorViewModelTest {
             vm.onRemoteFolderPicked("remote-id", "Remote")
             vm.onRetentionDaysChange("7")
             advanceUntilIdle()
+            vm.onAccountChange("test-account")
 
             vm.save {}
             advanceUntilIdle()

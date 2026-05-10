@@ -17,10 +17,13 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -28,10 +31,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -62,6 +68,15 @@ fun AccountsScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val host = remember(activity) { ActivityAuthUiHost(activity) }
+
+    state.pendingDisconnect?.let { pending ->
+        DisconnectConfirmDialog(
+            pending = pending,
+            onCancel = { viewModel.cancelDisconnect() },
+            onDelete = { viewModel.confirmDisconnectDelete() },
+            onReassign = { toAccountId -> viewModel.confirmDisconnectReassign(toAccountId) },
+        )
+    }
 
     Scaffold(
         topBar = {
@@ -245,3 +260,111 @@ private fun AccountItemRow(
         }
     }
 }
+
+/**
+ * Confirmation dialog shown when the user requests disconnect of an account
+ * that still owns one or more sync pairs. Offers three branches:
+ *
+ *  * **Delete pairs &amp; disconnect** — drops every orphaned pair and signs out.
+ *  * **Reassign pairs to <other account>** — re-binds orphans to the chosen
+ *    account on the same provider, then signs the original out. Only shown
+ *    when at least one re-assignment target exists.
+ *  * **Cancel** — closes the dialog without making changes.
+ */
+@Composable
+private fun DisconnectConfirmDialog(
+    pending: AccountsViewModel.PendingDisconnect,
+    onCancel: () -> Unit,
+    onDelete: () -> Unit,
+    onReassign: (String) -> Unit,
+) {
+    val accountLabel = pending.account.email ?: pending.account.displayName
+    var reassignMenuExpanded by remember { mutableStateOf(false) }
+    var selectedReassign by remember(pending.account.id) {
+        mutableStateOf(pending.reassignableAccounts.firstOrNull())
+    }
+
+    AlertDialog(
+        onDismissRequest = onCancel,
+        title = {
+            Text(stringResource(R.string.accounts_disconnect_confirm_title, accountLabel))
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    stringResource(
+                        R.string.accounts_disconnect_confirm_body,
+                        accountLabel,
+                        pending.orphanedPairs.size,
+                    ),
+                )
+                pending.orphanedPairs.take(MAX_ORPHAN_PREVIEW).forEach { pair ->
+                    Text(
+                        text = "• ${pair.displayName}",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+                if (pending.orphanedPairs.size > MAX_ORPHAN_PREVIEW) {
+                    Text(
+                        text = "…",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+                if (pending.reassignableAccounts.isNotEmpty()) {
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        stringResource(R.string.accounts_disconnect_confirm_reassign_label),
+                        style = MaterialTheme.typography.labelMedium,
+                    )
+                    Box {
+                        OutlinedButton(onClick = { reassignMenuExpanded = true }) {
+                            val current = selectedReassign
+                            Text(current?.email ?: current?.displayName ?: "")
+                        }
+                        DropdownMenu(
+                            expanded = reassignMenuExpanded,
+                            onDismissRequest = { reassignMenuExpanded = false },
+                        ) {
+                            pending.reassignableAccounts.forEach { acc ->
+                                DropdownMenuItem(
+                                    text = { Text(acc.email ?: acc.displayName) },
+                                    onClick = {
+                                        selectedReassign = acc
+                                        reassignMenuExpanded = false
+                                    },
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            // Two action buttons stacked: Reassign (when possible) then Delete.
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                val target = selectedReassign
+                if (target != null) {
+                    TextButton(onClick = { onReassign(target.id) }) {
+                        Text(
+                            stringResource(
+                                R.string.accounts_disconnect_confirm_reassign_format,
+                                target.email ?: target.displayName,
+                            ),
+                        )
+                    }
+                }
+                TextButton(onClick = onDelete) {
+                    Text(stringResource(R.string.accounts_disconnect_confirm_delete))
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onCancel) {
+                Text(stringResource(R.string.accounts_disconnect_confirm_cancel))
+            }
+        },
+    )
+}
+
+/** Maximum number of orphan-pair names to list inline in the disconnect dialog. */
+private const val MAX_ORPHAN_PREVIEW: Int = 5

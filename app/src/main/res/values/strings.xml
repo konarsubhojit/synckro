@@ -39,6 +39,13 @@
     <string name="accounts_reauth_required">Sign-in expired or access was revoked. Sync stopped — tap to re-authenticate.</string>
     <string name="accounts_reauth_button">Re-authenticate %1$s</string>
     <string name="accounts_avatar_description">Account avatar for %1$s</string>
+    <!-- Disconnect confirmation dialog (orphaned pairs) -->
+    <string name="accounts_disconnect_confirm_title">Disconnect %1$s?</string>
+    <string name="accounts_disconnect_confirm_body">Disconnecting %1$s will affect %2$d sync pair(s). Choose what to do with them:</string>
+    <string name="accounts_disconnect_confirm_delete">Delete pairs &amp; disconnect</string>
+    <string name="accounts_disconnect_confirm_reassign_label">Reassign pairs to:</string>
+    <string name="accounts_disconnect_confirm_reassign_format">Reassign &amp; disconnect (%1$s)</string>
+    <string name="accounts_disconnect_confirm_cancel">Cancel</string>
 
     <!-- Add sync pair (placeholder for PR #1; full wizard arrives in PR #2) -->
     <string name="add_pair_title">Add sync pair</string>
@@ -202,6 +209,15 @@
     <string name="logs_filter_all">All</string>
     <string name="logs_filter_level_label">Level</string>
     <string name="logs_filter_tag_label">Tag</string>
+    <string name="logs_filter_account_label">Account</string>
+    <string name="logs_filter_provider_label">Provider</string>
+    <string name="logs_search_placeholder">Search messages…</string>
+    <string name="logs_search_clear">Clear search</string>
+    <string name="logs_empty_filtered_title">No matching log entries</string>
+    <string name="logs_empty_filtered_body">No entries match the current filters or search.</string>
+    <string name="logs_empty_filtered_cta">Clear filters</string>
+    <string name="logs_empty_trigger_sync_cta">Trigger a sync</string>
+    <string name="logs_row_copy_done">Log entry copied to clipboard</string>
 
     <!-- Loading-state contextual labels (paired with a CircularProgressIndicator) -->
     <string name="loading_folders">Loading folders…</string>
@@ -236,5 +252,7 @@
     <string name="pair_editor_account">Account</string>
     <string name="pair_editor_account_hint">Select account</string>
     <string name="pair_editor_no_accounts_for_provider">No %1$s accounts connected. Go to Accounts to add one.</string>
+    <string name="pair_editor_account_required">Please pick an account before saving.</string>
+    <string name="pair_editor_account_disappeared">The previously selected account is no longer connected. Pick another account.</string>
     <string name="home_account_label">%1$s</string>
 </resources>

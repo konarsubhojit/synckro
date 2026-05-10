@@ -148,6 +148,14 @@ class PairEditorViewModel
              * or [dismissDestructiveDirection] based on the user's choice.
              */
             val pendingDestructiveDirection: SyncDirection? = null,
+            /**
+             * True when the previously-persisted [accountId] could not be found in
+             * the latest [availableAccounts] snapshot (e.g. the account was
+             * disconnected on another screen). Drives an inline error under the
+             * account dropdown in the editor so the user notices and re-picks
+             * before saving.
+             */
+            val accountDisappeared: Boolean = false,
         ) {
             /** Parses [customIntervalText] as a non-negative Long, or 0 if the text is blank/invalid. */
             private val parsedCustomInterval: Long
@@ -168,6 +176,20 @@ class PairEditorViewModel
                     schedulePreset == SyncSchedulePreset.CUSTOM &&
                         customIntervalText.isNotEmpty() &&
                         parsedCustomInterval < 15L
+
+            /**
+             * Whether the form is in a state that should allow Save. Used to
+             * disable the Save button when required fields are missing — most
+             * importantly, when no account has been picked for the chosen
+             * provider. Save is also disabled while a save is in flight.
+             */
+            val canSave: Boolean
+                get() =
+                    !isSaving &&
+                        displayName.isNotBlank() &&
+                        localTreeUri.isNotBlank() &&
+                        remoteFolderId.isNotBlank() &&
+                        accountId != null
         }
 
         private val _state = MutableStateFlow(UiState())
@@ -212,9 +234,17 @@ class PairEditorViewModel
                         _state.update { s ->
                             // If the selected account is no longer in the list (e.g. disconnected),
                             // clear the selection so validation catches it rather than silently
-                            // persisting a stale ID.
-                            val validAccountId = if (accounts.any { it.id == s.accountId }) s.accountId else null
-                            s.copy(availableAccounts = accounts, accountId = validAccountId)
+                            // persisting a stale ID. Set the [accountDisappeared] flag so the
+                            // editor screen can show an inline error explaining what happened —
+                            // but only when the user actually had something selected previously
+                            // (we don't want to flash an error on the very first load).
+                            val hadSelection = s.accountId != null
+                            val stillThere = accounts.any { it.id == s.accountId }
+                            s.copy(
+                                availableAccounts = accounts,
+                                accountId = if (stillThere) s.accountId else null,
+                                accountDisappeared = hadSelection && !stillThere,
+                            )
                         }
                     }
             }
@@ -299,11 +329,18 @@ class PairEditorViewModel
                 // Clear the remote folder and account selection when the provider changes because
                 // folder IDs and account IDs are provider-specific and the previously chosen
                 // values no longer apply.
-                it.copy(provider = value, remoteFolderId = "", remoteFolderName = "", accountId = null)
+                it.copy(
+                    provider = value,
+                    remoteFolderId = "",
+                    remoteFolderName = "",
+                    accountId = null,
+                    accountDisappeared = false,
+                )
             }
 
         /** Updates the selected account for this pair. Pass null to clear the selection. */
-        fun onAccountChange(accountId: String?) = _state.update { it.copy(accountId = accountId) }
+        fun onAccountChange(accountId: String?) =
+            _state.update { it.copy(accountId = accountId, accountDisappeared = false) }
 
         fun onConflictPolicyChange(value: ConflictPolicy) = _state.update { it.copy(conflictPolicy = value) }
 
@@ -378,6 +415,7 @@ class PairEditorViewModel
                     s.displayName.isBlank() -> strings.getString(R.string.pair_editor_error_name_required)
                     s.localTreeUri.isBlank() -> strings.getString(R.string.pair_editor_error_folder_required)
                     s.remoteFolderId.isBlank() -> strings.getString(R.string.pair_editor_error_remote_folder_required)
+                    s.accountId == null -> strings.getString(R.string.pair_editor_account_required)
                     retentionDaysText.isNotBlank() &&
                         (retentionDays == null || retentionDays !in 0..MAX_RETENTION_DAYS) ->
                         strings.getString(R.string.pair_editor_retention_days_error)

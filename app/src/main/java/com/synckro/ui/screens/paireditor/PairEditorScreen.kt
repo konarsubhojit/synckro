@@ -263,6 +263,13 @@ fun PairEditorScreen(
                         onSelect = viewModel::onAccountChange,
                         modifier = Modifier.fillMaxWidth(),
                     )
+                    if (state.accountDisappeared) {
+                        Text(
+                            text = stringResource(R.string.pair_editor_account_disappeared),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
                 } else {
                     Text(
                         text = stringResource(R.string.pair_editor_no_accounts_for_provider, providerLabel(state.provider)),
@@ -496,7 +503,7 @@ fun PairEditorScreen(
 
                 Button(
                     onClick = { viewModel.save(onSaved) },
-                    enabled = !state.isSaving,
+                    enabled = state.canSave,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     if (state.isSaving) {

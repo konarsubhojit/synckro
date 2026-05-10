@@ -112,6 +112,41 @@ class SyncPairRepository
         }
 
         /**
+         * Returns all sync pairs currently bound to [accountId]. Used by the
+         * Accounts screen to surface which pairs would be orphaned by a
+         * disconnect.
+         */
+        suspend fun getByAccountId(accountId: String): List<SyncPair> {
+            Timber.d("SyncPairRepository.getByAccountId(accountId=$accountId)")
+            return syncPairDao.getByAccountId(accountId).map { it.toDomain(needsReLink = false) }
+        }
+
+        /**
+         * Reassigns every sync pair currently bound to [fromAccountId] so it
+         * points at [toAccountId] instead. Used by the Accounts disconnect
+         * confirmation flow.
+         */
+        suspend fun reassignAccountId(
+            fromAccountId: String,
+            toAccountId: String,
+        ) {
+            Timber.i(
+                "SyncPairRepository.reassignAccountId(from=$fromAccountId, to=$toAccountId)",
+            )
+            syncPairDao.reassignAccountId(fromAccountId, toAccountId)
+        }
+
+        /**
+         * Deletes every sync pair currently bound to [accountId]. Used by the
+         * Accounts disconnect confirmation flow when the user chooses to drop
+         * orphaned pairs along with the account.
+         */
+        suspend fun deleteByAccountId(accountId: String) {
+            Timber.i("SyncPairRepository.deleteByAccountId(accountId=$accountId)")
+            syncPairDao.deleteByAccountId(accountId)
+        }
+
+        /**
          * Returns the set of URI strings for which the system currently holds a
          * persisted read+write permission grant.  Only URIs that have **both**
          * [Intent.FLAG_GRANT_READ_URI_PERMISSION] and

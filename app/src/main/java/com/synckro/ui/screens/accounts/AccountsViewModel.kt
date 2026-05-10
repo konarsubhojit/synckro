@@ -7,6 +7,8 @@ import com.synckro.R
 import com.synckro.data.local.dao.SyncPairDao
 import com.synckro.data.repository.AccountRepository
 import com.synckro.data.repository.SyncEventRepository
+import com.synckro.data.repository.SyncPairRepository
+import com.synckro.data.worker.SyncScheduler
 import com.synckro.domain.auth.Account
 import com.synckro.domain.auth.AccountKey
 import com.synckro.domain.auth.AuthManager
@@ -15,6 +17,7 @@ import com.synckro.domain.auth.AuthResult
 import com.synckro.domain.model.CloudProviderType
 import com.synckro.domain.model.SyncEventLevel
 import com.synckro.domain.model.SyncEventTag
+import com.synckro.domain.model.SyncPair
 import com.synckro.util.error.UserMessage
 import com.synckro.util.error.UserMessageReporter
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -48,6 +51,8 @@ class AccountsViewModel
         private val registry: AuthManagerRegistry,
         private val accountRepository: AccountRepository,
         private val syncPairDao: SyncPairDao,
+        private val syncPairRepository: SyncPairRepository,
+        private val syncScheduler: SyncScheduler,
         private val userMessages: UserMessageReporter,
         private val syncEventRepository: SyncEventRepository,
     ) : ViewModel() {
@@ -77,9 +82,31 @@ class AccountsViewModel
             val needsReauth: Boolean = false,
         )
 
+        /**
+         * Pending disconnect of [account]. When [orphanedPairs] is non-empty the
+         * UI must surface a confirmation dialog and call [confirmDisconnectDelete],
+         * [confirmDisconnectReassign] or [cancelDisconnect]. When it is empty the
+         * disconnect proceeds immediately.
+         *
+         * [reassignableAccounts] lists every other account on the same provider
+         * that the user can re-bind the orphaned pairs to (always excluding the
+         * one being disconnected).
+         */
+        data class PendingDisconnect(
+            val account: Account,
+            val providerDisplayName: String,
+            val orphanedPairs: List<SyncPair>,
+            val reassignableAccounts: List<Account>,
+        )
+
         data class UiState(
             val rows: List<AccountRow> = emptyList(),
             val isLoading: Boolean = true,
+            /**
+             * Set when the user requested a disconnect that needs explicit
+             * confirmation (i.e. the account currently owns one or more sync pairs).
+             */
+            val pendingDisconnect: PendingDisconnect? = null,
         )
 
         private val _state = MutableStateFlow(UiState())
@@ -267,7 +294,123 @@ class AccountsViewModel
             }
         }
 
+        /**
+         * Entry point invoked from the Accounts screen when the user taps
+         * "Disconnect" on an account row. If the account currently owns one or
+         * more sync pairs we stage a [PendingDisconnect] so the screen can
+         * surface a confirmation dialog (Delete / Reassign / Cancel). When no
+         * pairs are bound to the account the disconnect proceeds immediately.
+         */
         fun disconnect(account: Account) {
+            viewModelScope.launch {
+                val orphans = runCatching { syncPairRepository.getByAccountId(account.id) }
+                    .getOrElse { t ->
+                        if (t is CancellationException) throw t
+                        Timber.w(t, "AccountsViewModel.disconnect: failed to query pairs for ${account.id}")
+                        // If we can't read the pair list, fall through to the no-confirmation
+                        // path — disconnect is still a user-initiated action and we shouldn't
+                        // refuse it just because the orphan check failed.
+                        emptyList()
+                    }
+                if (orphans.isEmpty()) {
+                    performDisconnect(account, postReassignToAccountId = null)
+                    return@launch
+                }
+                val manager = registry.find(account.provider)
+                val providerDisplayName = manager?.displayName ?: account.provider.name
+                // Other accounts on the same provider that the user can re-bind orphan pairs to.
+                val reassignable = accountRepository
+                    .getByProvider(account.provider)
+                    .filter { it.id != account.id }
+                _state.update { cur ->
+                    cur.copy(
+                        pendingDisconnect = PendingDisconnect(
+                            account = account,
+                            providerDisplayName = providerDisplayName,
+                            orphanedPairs = orphans,
+                            reassignableAccounts = reassignable,
+                        ),
+                    )
+                }
+            }
+        }
+
+        /** Cancels the pending disconnect dialog without making any changes. */
+        fun cancelDisconnect() {
+            _state.update { it.copy(pendingDisconnect = null) }
+        }
+
+        /**
+         * Confirms the pending disconnect by deleting every orphaned sync pair
+         * along with the account. Cancels each pair's scheduled work first so
+         * the periodic worker doesn't keep firing for a deleted pair.
+         */
+        fun confirmDisconnectDelete() {
+            val pending = _state.value.pendingDisconnect ?: return
+            _state.update { it.copy(pendingDisconnect = null) }
+            viewModelScope.launch {
+                pending.orphanedPairs.forEach { pair ->
+                    runCatching { syncScheduler.cancel(pair.id) }
+                        .onFailure { Timber.w(it, "Failed to cancel scheduler for pair ${pair.id}") }
+                }
+                runCatching { syncPairRepository.deleteByAccountId(pending.account.id) }
+                    .onFailure { t ->
+                        Timber.e(t, "Failed to delete pairs for account ${pending.account.id}")
+                    }
+                syncEventRepository.log(
+                    pairId = null,
+                    level = SyncEventLevel.INFO,
+                    tag = SyncEventTag.Account,
+                    message =
+                        "Disconnect ${pending.providerDisplayName} (${pending.account.email ?: pending.account.id}): " +
+                            "deleted ${pending.orphanedPairs.size} orphan pair(s)",
+                )
+                performDisconnect(pending.account, postReassignToAccountId = null)
+            }
+        }
+
+        /**
+         * Confirms the pending disconnect by reassigning every orphaned pair
+         * to [toAccountId] (an account on the same provider) before signing
+         * out. The new account must already exist in [PendingDisconnect.reassignableAccounts].
+         */
+        fun confirmDisconnectReassign(toAccountId: String) {
+            val pending = _state.value.pendingDisconnect ?: return
+            if (pending.reassignableAccounts.none { it.id == toAccountId }) {
+                Timber.w("confirmDisconnectReassign: target $toAccountId not in reassignable list; ignoring")
+                return
+            }
+            _state.update { it.copy(pendingDisconnect = null) }
+            viewModelScope.launch {
+                runCatching {
+                    syncPairRepository.reassignAccountId(
+                        fromAccountId = pending.account.id,
+                        toAccountId = toAccountId,
+                    )
+                }.onFailure { t ->
+                    Timber.e(t, "Failed to reassign pairs from ${pending.account.id} to $toAccountId")
+                }
+                syncEventRepository.log(
+                    pairId = null,
+                    level = SyncEventLevel.INFO,
+                    tag = SyncEventTag.Account,
+                    message =
+                        "Disconnect ${pending.providerDisplayName}: reassigned ${pending.orphanedPairs.size} pair(s) " +
+                            "to $toAccountId",
+                )
+                performDisconnect(pending.account, postReassignToAccountId = toAccountId)
+            }
+        }
+
+        /**
+         * Performs the actual sign-out + Room delete, identical to the
+         * pre-confirmation behaviour. Called once any required orphan handling
+         * (delete or reassign) has completed.
+         */
+        private fun performDisconnect(
+            account: Account,
+            @Suppress("UNUSED_PARAMETER") postReassignToAccountId: String?,
+        ) {
             viewModelScope.launch {
                 val manager =
                     registry.find(account.provider) ?: run {

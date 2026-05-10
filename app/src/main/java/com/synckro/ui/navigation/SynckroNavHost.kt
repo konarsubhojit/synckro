@@ -208,7 +208,12 @@ fun SynckroNavHost(activity: ComponentActivity) {
                     },
                 ),
         ) {
-            LogsScreen(onBack = { nav.popBackStack() })
+            LogsScreen(
+                onBack = { nav.popBackStack() },
+                onTriggerSync = {
+                    nav.popBackStack(Routes.HOME, inclusive = false)
+                },
+            )
         }
     }
 }
