@@ -52,6 +52,15 @@ class LogExporterTest {
     }
 
     @Test
+    fun `buildCsvBytes tolerates commas and newlines inside message fields`() {
+        val events = listOf(event(id = 1, message = "line 1,\nline 2"))
+        val csv = LogExporter.buildCsvBytes(events).toString(Charsets.UTF_8)
+
+        assertTrue(csv.contains("\"line 1,\nline 2\""))
+        assertTrue(csv.startsWith("id,pairId,timestampMs,level,tag,message"))
+    }
+
+    @Test
     fun `buildCsvBytes writes null pairId as empty`() {
         val events = listOf(event(id = 1, pairId = null))
         val csv = LogExporter.buildCsvBytes(events).toString(Charsets.UTF_8)

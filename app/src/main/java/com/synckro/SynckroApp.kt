@@ -6,9 +6,14 @@ import android.app.NotificationManager
 import android.os.Build
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
+import com.synckro.providers.onedrive.OneDriveMultiAccountStartupProbe
 import com.synckro.data.worker.SyncWorker
 import com.synckro.util.logging.FileLoggingTree
 import dagger.hilt.android.HiltAndroidApp
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import timber.log.Timber
 import javax.inject.Inject
 
@@ -28,10 +33,16 @@ class SynckroApp :
     Application(),
     Configuration.Provider {
     @Inject lateinit var workerFactory: HiltWorkerFactory
+    @Inject lateinit var oneDriveMultiAccountStartupProbe: OneDriveMultiAccountStartupProbe
+
+    private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override fun onCreate() {
         super.onCreate()
         createNotificationChannels()
+        applicationScope.launch {
+            oneDriveMultiAccountStartupProbe.runIfNeeded()
+        }
         if (BuildConfig.DEBUG) {
             Timber.plant(Timber.DebugTree())
             val fileTree = FileLoggingTree(this)
