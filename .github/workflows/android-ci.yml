@@ -154,6 +154,33 @@ jobs:
             emulator
             system-images;android-${{ env.ANDROID_API_LEVEL }};google_apis;x86_64
 
+      - name: Cache AVD snapshot (writable on master)
+        # Cache the created AVD + boot snapshot to skip cold-boot on subsequent
+        # runs. Writable only on master pushes; PRs restore in read-only mode.
+        # GitHub evicts unused caches after 7 days (our 7-day TTL).
+        uses: actions/cache@v4
+        if: github.event_name != 'pull_request'
+        with:
+          path: |
+            ~/.android/avd/*
+            ~/.android/adb*
+          key: ${{ runner.os }}-avd-${{ env.ANDROID_API_LEVEL }}-google_apis-x86_64-pixel_6-v1
+          restore-keys: |
+            ${{ runner.os }}-avd-${{ env.ANDROID_API_LEVEL }}-google_apis-x86_64-pixel_6-
+            ${{ runner.os }}-avd-${{ env.ANDROID_API_LEVEL }}-
+
+      - name: Restore AVD snapshot (read-only on PRs)
+        uses: actions/cache/restore@v4
+        if: github.event_name == 'pull_request'
+        with:
+          path: |
+            ~/.android/avd/*
+            ~/.android/adb*
+          key: ${{ runner.os }}-avd-${{ env.ANDROID_API_LEVEL }}-google_apis-x86_64-pixel_6-v1
+          restore-keys: |
+            ${{ runner.os }}-avd-${{ env.ANDROID_API_LEVEL }}-google_apis-x86_64-pixel_6-
+            ${{ runner.os }}-avd-${{ env.ANDROID_API_LEVEL }}-
+
       - name: Decode debug keystore
         env:
           DEBUG_KEYSTORE_BASE64: ${{ secrets.DEBUG_KEYSTORE_BASE64 }}
@@ -190,5 +217,16 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -no-snapshot-save -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           script: ./gradlew connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.synckro.data.local.db.Migration11To12InstrumentedTest
+
+      - name: Upload instrumentation test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: instrumentation-test-report-${{ github.run_number }}
+          path: |
+            app/build/reports/androidTests/
+            app/build/outputs/androidTest-results/
+          if-no-files-found: ignore
+          retention-days: ${{ github.event_name == 'pull_request' && 3 || 14 }}
 
   
