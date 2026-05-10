@@ -35,6 +35,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -203,6 +205,7 @@ private fun AccountItemRow(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         // Avatar circle with initials
+        val avatarDescription = stringResource(R.string.accounts_avatar_description, label)
         Box(
             modifier =
                 Modifier
@@ -210,7 +213,8 @@ private fun AccountItemRow(
                     .background(
                         color = MaterialTheme.colorScheme.primaryContainer,
                         shape = CircleShape,
-                    ),
+                    )
+                    .semantics { contentDescription = avatarDescription },
             contentAlignment = Alignment.Center,
         ) {
             Text(
