@@ -313,7 +313,7 @@ class AccountsViewModel
                         emptyList()
                     }
                 if (orphans.isEmpty()) {
-                    performDisconnect(account, postReassignToAccountId = null)
+                    performDisconnect(account)
                     return@launch
                 }
                 val manager = registry.find(account.provider)
@@ -365,7 +365,7 @@ class AccountsViewModel
                         "Disconnect ${pending.providerDisplayName} (${pending.account.email ?: pending.account.id}): " +
                             "deleted ${pending.orphanedPairs.size} orphan pair(s)",
                 )
-                performDisconnect(pending.account, postReassignToAccountId = null)
+                performDisconnect(pending.account)
             }
         }
 
@@ -398,7 +398,7 @@ class AccountsViewModel
                         "Disconnect ${pending.providerDisplayName}: reassigned ${pending.orphanedPairs.size} pair(s) " +
                             "to $toAccountId",
                 )
-                performDisconnect(pending.account, postReassignToAccountId = toAccountId)
+                performDisconnect(pending.account)
             }
         }
 
@@ -407,10 +407,7 @@ class AccountsViewModel
          * pre-confirmation behaviour. Called once any required orphan handling
          * (delete or reassign) has completed.
          */
-        private fun performDisconnect(
-            account: Account,
-            @Suppress("UNUSED_PARAMETER") postReassignToAccountId: String?,
-        ) {
+        private fun performDisconnect(account: Account) {
             viewModelScope.launch {
                 val manager =
                     registry.find(account.provider) ?: run {
