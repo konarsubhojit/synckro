@@ -141,6 +141,11 @@ jobs:
             echo "$DEBUG_KEYSTORE_BASE64" | base64 --decode > "${{ github.workspace }}/debug.keystore"
           fi
 
+      - name: Install emulator runtime dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libpulse0
+
       - name: Run Room migration instrumentation test
         uses: ReactiveCircus/android-emulator-runner@v2
         env:
