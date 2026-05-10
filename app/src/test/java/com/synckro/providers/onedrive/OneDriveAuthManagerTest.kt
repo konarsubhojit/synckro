@@ -235,10 +235,10 @@ class OneDriveAuthManagerTest {
                     clientId = "",
                     redirectUri = "",
                     testPrefs = testPrefs,
-                )
+            )
 
             assertEquals("legacy@example.com", mgr.getAccountHint())
-            assertTrue(!testPrefs.contains(OneDriveAuthManager.KEY_ACCOUNT_HINT))
+            assertFalse(testPrefs.contains(OneDriveAuthManager.KEY_ACCOUNT_HINT))
             assertTrue(testPrefs.contains(OneDriveAuthManager.KEY_ACCOUNT_HINTS))
         }
 }

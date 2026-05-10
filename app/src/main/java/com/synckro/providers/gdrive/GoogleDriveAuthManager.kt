@@ -18,6 +18,7 @@ import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import com.google.android.gms.auth.GoogleAuthUtil
 import com.google.android.gms.auth.api.identity.AuthorizationRequest
+import com.google.android.gms.auth.api.identity.AuthorizationResult
 import com.google.android.gms.auth.api.identity.Identity
 import com.google.android.gms.common.api.Scope
 import com.google.android.gms.tasks.Task
@@ -302,7 +303,11 @@ class GoogleDriveAuthManager private constructor(
             .builder()
             .setRequestedScopes(listOf(Scope(DRIVE_SCOPE)))
             .apply {
+                // Interactive sign-in may not yet know which account to pin, but silent
+                // token acquisition always supplies a concrete email to target.
                 if (!accountEmail.isNullOrBlank()) {
+                    // Pin silent authorization to the requested Google account so we never
+                    // accept a token resolved for a different principal on the device.
                     setAccount(AndroidAccount(accountEmail, GoogleAuthUtil.GOOGLE_ACCOUNT_TYPE))
                 }
             }.build()
@@ -325,7 +330,7 @@ class GoogleDriveAuthManager private constructor(
                             id = id,
                             provider = CloudProviderType.GOOGLE_DRIVE,
                             displayName = item.optString(KEY_DISPLAY_NAME).ifBlank { id },
-                            email = item.optString(KEY_EMAIL).ifBlank { null },
+                            email = item.optString(KEY_EMAIL).ifEmpty { null },
                         ),
                     )
                 }
@@ -387,7 +392,7 @@ class GoogleDriveAuthManager private constructor(
         }
     }
 
-    private fun com.google.android.gms.auth.api.identity.AuthorizationResult.matchesRequestedAccount(account: Account): Boolean {
+    private fun AuthorizationResult.matchesRequestedAccount(account: Account): Boolean {
         val resolvedAccount = toGoogleSignInAccount() ?: return false
         return resolvedAccount.id == account.id || resolvedAccount.email == account.email
     }

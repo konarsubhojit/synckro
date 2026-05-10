@@ -111,13 +111,14 @@ class OneDriveAuthManager private constructor(
         email: String?,
     ) {
         val prefs = accountHintPrefs ?: return
-        val hints = readAccountHints(prefs).toMutableMap()
-        if (email.isNullOrBlank()) {
+        val hints = LinkedHashMap(readAccountHints(prefs))
+        val shouldRemoveHint = email.isNullOrBlank()
+        if (shouldRemoveHint) {
             hints.remove(accountId)
         } else {
             hints[accountId] = email
         }
-        writeAccountHints(prefs, hints, latestAccountId = if (email.isNullOrBlank()) null else accountId)
+        writeAccountHints(prefs, hints, latestAccountId = if (shouldRemoveHint) null else accountId)
     }
 
     /** Returns the persisted account hint, or null if none is stored. */
@@ -127,6 +128,11 @@ class OneDriveAuthManager private constructor(
         if (hints.isEmpty()) return null
         if (accountId != null) return hints[accountId]
         val latestAccountId = prefs.getString(KEY_LATEST_ACCOUNT_HINT_ID, null)
+        if (latestAccountId != null && !hints.containsKey(latestAccountId)) {
+            Timber.w("OneDriveAuthManager: latest account hint id %s missing from stored hints", latestAccountId)
+        }
+        // readAccountHints() preserves insertion order so falling back to the
+        // last value still yields the most recently written hint.
         return hints[latestAccountId] ?: hints.values.lastOrNull()
     }
 
@@ -537,7 +543,7 @@ class OneDriveAuthManager private constructor(
         internal const val KEY_ACCOUNT_HINT = "account_hint"
         internal const val KEY_ACCOUNT_HINTS = "account_hints"
         private const val KEY_LATEST_ACCOUNT_HINT_ID = "latest_account_hint_id"
-        private const val LEGACY_ACCOUNT_HINT_ID = "__legacy__"
+        private const val LEGACY_ACCOUNT_HINT_ID = "__legacy_hint_migrated_v1__"
 
         /**
          * Creates an instance with explicit [clientId] and [redirectUri] values

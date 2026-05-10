@@ -9,6 +9,7 @@ import com.synckro.domain.auth.AuthUiHost
 import com.synckro.domain.model.CloudProviderType
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -178,8 +179,8 @@ class GoogleDriveAuthManagerTest {
 
             assertEquals(listOf(accountA), accounts)
             assertTrue(testPrefs.contains("accounts"))
-            assertTrue(!testPrefs.contains("account_id"))
-            assertTrue(!testPrefs.contains("display_name"))
-            assertTrue(!testPrefs.contains("email"))
+            assertFalse(testPrefs.contains("account_id"))
+            assertFalse(testPrefs.contains("display_name"))
+            assertFalse(testPrefs.contains("email"))
         }
 }
