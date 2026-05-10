@@ -52,7 +52,7 @@ class OneDriveAuthManager private constructor(
     private val clientId: String,
     private val redirectUri: String,
     private val prefsOverride: SharedPreferences? = null,
-) : AuthManager {
+) : AuthManager, OneDriveCacheCompatibilityChecker {
     /** Hilt-injected constructor (production path). */
     @Inject
     constructor(
@@ -389,6 +389,58 @@ class OneDriveAuthManager private constructor(
                         if (!cont.isActive) return
                         Timber.e(exception, "OneDriveAuthManager.currentAccounts: error")
                         cont.resume(emptyList())
+                    }
+                },
+            )
+        }
+    }
+
+    override suspend fun probeMultiAccountCacheRead(): Result<Unit> {
+        if (!isConfigured()) return Result.success(Unit)
+
+        val app =
+            if (msalApp != null) {
+                msalApp
+            } else {
+                suspendCancellableCoroutine { cont ->
+                    try {
+                        PublicClientApplication.createMultipleAccountPublicClientApplication(
+                            context,
+                            R.raw.msal_config,
+                            object : IPublicClientApplication.IMultipleAccountApplicationCreatedListener {
+                                override fun onCreated(application: IMultipleAccountPublicClientApplication?) {
+                                    msalApp = application
+                                    cont.resume(Result.success(application))
+                                }
+
+                                override fun onError(exception: MsalException?) {
+                                    msalInitFailed = true
+                                    cont.resume(
+                                        Result.failure(
+                                            exception ?: IllegalStateException("Failed to create MSAL app"),
+                                        ),
+                                    )
+                                }
+                            },
+                        )
+                    } catch (e: Exception) {
+                        msalInitFailed = true
+                        cont.resume(Result.failure(e))
+                    }
+                }.getOrElse { return Result.failure(it) }
+            } ?: return Result.success(Unit)
+
+        return suspendCancellableCoroutine { cont ->
+            app.getAccounts(
+                object : IPublicClientApplication.LoadAccountsCallback {
+                    override fun onTaskCompleted(accounts: MutableList<IAccount>?) {
+                        if (!cont.isActive) return
+                        cont.resume(Result.success(Unit))
+                    }
+
+                    override fun onError(exception: MsalException) {
+                        if (!cont.isActive) return
+                        cont.resume(Result.failure(exception))
                     }
                 },
             )

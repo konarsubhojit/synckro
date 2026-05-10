@@ -240,9 +240,20 @@ class PairEditorViewModel
                             // (we don't want to flash an error on the very first load).
                             val hadSelection = s.accountId != null
                             val stillThere = accounts.any { it.id == s.accountId }
+                            val autoSelectedAccountId =
+                                if (!hadSelection && accounts.size == 1) {
+                                    accounts.single().id
+                                } else {
+                                    null
+                                }
                             s.copy(
                                 availableAccounts = accounts,
-                                accountId = if (stillThere) s.accountId else null,
+                                accountId =
+                                    when {
+                                        stillThere -> s.accountId
+                                        autoSelectedAccountId != null -> autoSelectedAccountId
+                                        else -> null
+                                    },
                                 accountDisappeared = hadSelection && !stillThere,
                             )
                         }

@@ -132,10 +132,11 @@ export GOOGLE_WEB_CLIENT_ID=123456789-xxxx.apps.googleusercontent.com
 In GitHub Actions, store the value as the repository secret
 `GOOGLE_WEB_CLIENT_ID` (see `debug-auth-setup.md` Step 5).
 
-`GoogleDriveAuthManager` reads this value via `BuildConfig.GOOGLE_WEB_CLIENT_ID`
-and returns `AuthResult.NotConfigured` from `signIn()` if it is blank, so the
-app will not crash — it will just show a "not configured" message in the
-Accounts screen.
+`GoogleDriveAuthManager` reads this value via `BuildConfig.GOOGLE_WEB_CLIENT_ID`.
+This single Web client ID is reused for every Google account in Synckro's
+multi-account flow, so seed it before testing "Add another account" paths. If
+it is blank, `signIn()` returns `AuthResult.NotConfigured`, so the app will not
+crash — it will just show a "not configured" message in the Accounts screen.
 
 ### 5. Required scope — drive
 
@@ -185,7 +186,7 @@ before sign-in completes.
 
 ## OneDrive
 
-The app uses **MSAL (Microsoft Authentication Library)** in single-account mode
+The app uses **MSAL (Microsoft Authentication Library)** in multi-account mode
 backed by `R.raw.msal_config`.
 
 ### 1. Register the app in Microsoft Entra ID
@@ -234,6 +235,12 @@ The output is a 28-character base64 string (e.g. `qqqwww...==`).
 
    Copy this **entire URI verbatim** (URL-encoded, do not modify).
    This is your `MSAL_REDIRECT_URI`.
+
+> **Personal Microsoft accounts:** you do **not** need a separate Web redirect
+> URI just because you want to support personal MSA accounts. Synckro only
+> needs the Android-platform `msauth://…` redirect shown above; personal-vs-work
+> support comes from selecting the `common` / personal-account-capable app
+> registration, not from adding another portal redirect entry.
 
 #### Wire the redirect URI into AndroidManifest.xml via Gradle
 
@@ -291,17 +298,21 @@ The app's `build.gradle.kts` reads these values and passes them as
 > accounts or most organizational accounts — the user grants consent
 > interactively on first sign-in.
 
-### 4. Create msal_config.json
+### 4. Generated msal_config.json
 
-MSAL requires a configuration file at `app/src/main/res/raw/msal_config.json`.
-Create the file with the following content, replacing the placeholders:
+MSAL still requires a configuration file, but in this repository Gradle
+generates `msal_config.json` for you from `MS_CLIENT_ID` and
+`MSAL_REDIRECT_URI`. You do **not** need to create or commit
+`app/src/main/res/raw/msal_config.json` manually.
+
+The generated file contains the equivalent of:
 
 ```json
 {
   "client_id": "aaaabbbb-cccc-dddd-eeee-ffffgggggggg",
   "authorization_user_agent": "DEFAULT",
   "redirect_uri": "msauth://com.synckro.debug/<base64-hash>",
-  "account_mode": "SINGLE",
+  "account_mode": "MULTIPLE",
   "authorities": [
     {
       "type": "AAD",
@@ -320,7 +331,7 @@ Create the file with the following content, replacing the placeholders:
 
 `OneDriveAuthManager` reads this file via `R.raw.msal_config` (the resource ID
 is resolved by the Android resource system at runtime). If the file is missing
-the MSAL `PublicClientApplication.createSingleAccountPublicClientApplication`
+the MSAL `PublicClientApplication.createMultipleAccountPublicClientApplication`
 call fails and `isConfigured()` returns `false`, causing the app to show a
 "not configured" message in the Accounts screen.
 
@@ -365,8 +376,9 @@ call fails and `isConfigured()` returns `false`, causing the app to show a
   Play Services' own encrypted storage and is cleared by GIS when the user
   revokes access or signs out through the app.
 - **OneDrive**: the MSAL token cache is cleared via
-  `ISingleAccountPublicClientApplication.signOut()`. The account hint (email)
-  stored in `EncryptedSharedPreferences` is also cleared.
+  `IMultipleAccountPublicClientApplication.removeAccount()`. The account hint
+  (email) stored in `EncryptedSharedPreferences` is also cleared for the
+  selected account.
 
 In both cases, any pending or running sync workers for pairs that used that
 account are cancelled and removed from WorkManager. The sync pair records
@@ -374,17 +386,14 @@ remain in the Room database; they must be deleted or re-configured manually.
 
 ### Switch accounts
 
-The app currently supports **one account per provider** (single-account mode
-for OneDrive; single Google account stored in encrypted prefs for Google Drive).
+The app now supports **multiple accounts per provider**.
 
-To switch to a different account:
-
-1. Sign out of the current account (see above).
-2. Tap **Sign in** under the same provider and authenticate with the new
-   account.
-
-Any sync pairs that were linked to the old account will fail to authenticate
-after the switch. Delete and recreate those pairs to use the new account.
+- Use **+ Add another … account** on the Accounts screen to connect another
+  Google Drive or OneDrive identity.
+- Each sync pair stores its own `accountId`, so different pairs can target
+  different accounts on the same provider.
+- If an account is disconnected, any pairs still bound to it must be deleted,
+  reassigned, or re-linked before they can sync again.
 
 ### Revoked tokens
 

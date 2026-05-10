@@ -16,6 +16,7 @@ a folder on **OneDrive** or **Google Drive**.
 
 - Pick a local folder (internal or SD card) via the Storage Access Framework.
 - Link it to a folder on OneDrive or Google Drive.
+- Connect multiple Google Drive or OneDrive accounts and bind each sync pair to a specific account.
 - Bidirectional sync with configurable conflict policy (newest-wins / keep-both /
   prefer-local / prefer-remote).
 - Periodic background sync (WorkManager) with constraints (Wi-Fi only,

@@ -16,6 +16,7 @@ import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -126,6 +127,82 @@ class PairEditorViewModelTest {
         assertFalse(state.isSaving)
         assertNull(state.saveError)
     }
+
+    @Test
+    fun `single available account auto-selects on first load`() =
+        runTest {
+            val onlyAccount =
+                com.synckro.domain.auth.Account(
+                    id = "solo-account",
+                    provider = CloudProviderType.GOOGLE_DRIVE,
+                    displayName = "Solo",
+                    email = "solo@example.com",
+                )
+            every { mockAccountRepository.observeByProvider(any()) } returns flowOf(listOf(onlyAccount))
+
+            val vm = createVm()
+            advanceUntilIdle()
+
+            assertEquals(listOf(onlyAccount), vm.state.value.availableAccounts)
+            assertEquals("solo-account", vm.state.value.accountId)
+        }
+
+    @Test
+    fun `availableAccounts follow provider selection for account picker visibility`() =
+        runTest {
+            val oneDriveAccount =
+                com.synckro.domain.auth.Account(
+                    id = "od-1",
+                    provider = CloudProviderType.ONEDRIVE,
+                    displayName = "OneDrive",
+                    email = "od@example.com",
+                )
+            every { mockAccountRepository.observeByProvider(CloudProviderType.GOOGLE_DRIVE) } returns flowOf(emptyList())
+            every { mockAccountRepository.observeByProvider(CloudProviderType.ONEDRIVE) } returns flowOf(listOf(oneDriveAccount))
+
+            val vm = createVm()
+            advanceUntilIdle()
+            assertTrue(vm.state.value.availableAccounts.isEmpty())
+
+            vm.onProviderChange(CloudProviderType.ONEDRIVE)
+            advanceUntilIdle()
+
+            assertEquals(listOf(oneDriveAccount), vm.state.value.availableAccounts)
+        }
+
+    @Test
+    fun `account removal clears stale selection and sets accountDisappeared`() =
+        runTest {
+            val accounts =
+                MutableStateFlow(
+                    listOf(
+                        com.synckro.domain.auth.Account(
+                            id = "account-a",
+                            provider = CloudProviderType.GOOGLE_DRIVE,
+                            displayName = "Alpha",
+                            email = "alpha@example.com",
+                        ),
+                        com.synckro.domain.auth.Account(
+                            id = "account-b",
+                            provider = CloudProviderType.GOOGLE_DRIVE,
+                            displayName = "Beta",
+                            email = "beta@example.com",
+                        ),
+                    ),
+                )
+            every { mockAccountRepository.observeByProvider(any()) } returns accounts
+
+            val vm = createVm()
+            advanceUntilIdle()
+            vm.onAccountChange("account-a")
+
+            accounts.value = accounts.value.drop(1)
+            advanceUntilIdle()
+
+            assertEquals(listOf("account-b"), vm.state.value.availableAccounts.map { it.id })
+            assertNull(vm.state.value.accountId)
+            assertTrue(vm.state.value.accountDisappeared)
+        }
 
     // -------------------------------------------------------------------------
     // Field mutations

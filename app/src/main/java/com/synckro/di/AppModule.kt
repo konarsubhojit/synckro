@@ -25,6 +25,7 @@ import com.synckro.domain.sync.RemoteEnumerator
 import com.synckro.domain.sync.SyncEngine
 import com.synckro.providers.fake.FakeCloudProvider
 import com.synckro.providers.gdrive.GoogleDriveAuthManager
+import com.synckro.providers.onedrive.OneDriveCacheCompatibilityChecker
 import com.synckro.providers.onedrive.OneDriveAuthManager
 import com.synckro.util.ContextStringProvider
 import com.synckro.util.StringProvider
@@ -187,6 +188,9 @@ object AppModule {
     @CloudProviderKey(CloudProviderType.GOOGLE_DRIVE)
     @Singleton
     fun provideGoogleDriveAuthManager(impl: GoogleDriveAuthManager): AuthManager = impl
+
+    @Provides @Singleton
+    fun provideOneDriveCacheCompatibilityChecker(impl: OneDriveAuthManager): OneDriveCacheCompatibilityChecker = impl
 
     @Provides @Singleton
     fun provideStringProvider(impl: ContextStringProvider): StringProvider = impl
