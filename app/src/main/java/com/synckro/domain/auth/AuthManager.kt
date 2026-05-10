@@ -70,6 +70,11 @@ interface AuthManager {
      * Tries to acquire an access token silently using the cached refresh
      * token. If silent acquisition is not possible, returns
      * [AuthResult.NeedsInteractiveSignIn] so the caller can prompt the user.
+     *
+     * Implementations must only return a token for the requested [account.id].
+     * If the cached credentials belong to a different principal, this must
+     * return [AuthResult.NeedsInteractiveSignIn] instead of handing back the
+     * wrong token.
      */
     suspend fun acquireAccessToken(account: Account): AuthResult<String>
 }

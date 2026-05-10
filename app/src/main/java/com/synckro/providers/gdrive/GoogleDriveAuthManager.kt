@@ -1,5 +1,6 @@
 package com.synckro.providers.gdrive
 
+import android.accounts.Account as AndroidAccount
 import android.app.Activity
 import android.app.PendingIntent
 import android.content.Context
@@ -15,7 +16,9 @@ import androidx.credentials.exceptions.GetCredentialException
 import androidx.credentials.exceptions.NoCredentialException
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
+import com.google.android.gms.auth.GoogleAuthUtil
 import com.google.android.gms.auth.api.identity.AuthorizationRequest
+import com.google.android.gms.auth.api.identity.AuthorizationResult
 import com.google.android.gms.auth.api.identity.Identity
 import com.google.android.gms.common.api.Scope
 import com.google.android.gms.tasks.Task
@@ -34,6 +37,8 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import org.json.JSONArray
+import org.json.JSONObject
 import timber.log.Timber
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -56,9 +61,10 @@ import kotlin.coroutines.resume
  *    transparently. Returns [AuthResult.NeedsInteractiveSignIn] when consent
  *    must be re-obtained.
  *
- * Account metadata is persisted in [EncryptedSharedPreferences] so it survives
- * process restarts. The OAuth tokens themselves stay inside Google Play Services'
- * own encrypted storage; no raw tokens are written to disk by this class.
+ * Account metadata is persisted in [EncryptedSharedPreferences] as a multi-account
+ * JSON list so it survives process restarts. The OAuth tokens themselves stay
+ * inside Google Play Services' own encrypted storage; no raw tokens are written
+ * to disk by this class.
  */
 @Singleton
 class GoogleDriveAuthManager private constructor(
@@ -69,6 +75,7 @@ class GoogleDriveAuthManager private constructor(
     companion object {
         private const val DRIVE_SCOPE = "https://www.googleapis.com/auth/drive"
         private const val PREFS_NAME = "gdrive_account"
+        private const val KEY_ACCOUNTS = "accounts"
         private const val KEY_ACCOUNT_ID = "account_id"
         private const val KEY_DISPLAY_NAME = "display_name"
         private const val KEY_EMAIL = "email"
@@ -100,16 +107,6 @@ class GoogleDriveAuthManager private constructor(
     override val displayName: String = "Google Drive"
 
     private val credentialManager: CredentialManager = CredentialManager.create(context)
-
-    /**
-     * Reusable [AuthorizationRequest] for the full Drive scope. Created once so both
-     * [signIn] and [acquireAccessToken] share the same request object.
-     */
-    private val driveAuthRequest: AuthorizationRequest =
-        AuthorizationRequest
-            .builder()
-            .setRequestedScopes(listOf(Scope(DRIVE_SCOPE)))
-            .build()
 
     /**
      * Lazily-created [EncryptedSharedPreferences] for persisting account metadata
@@ -191,7 +188,7 @@ class GoogleDriveAuthManager private constructor(
         val authorizationResult =
             Identity
                 .getAuthorizationClient(activity)
-                .authorize(driveAuthRequest)
+                .authorize(buildDriveAuthRequest(accountEmail = idTokenCredential.id))
                 .awaitTask()
                 .getOrElse { e ->
                     Timber.e(e, "GoogleDriveAuthManager.signIn: authorization failed")
@@ -228,22 +225,13 @@ class GoogleDriveAuthManager private constructor(
 
     override suspend fun signOut(account: Account): AuthResult<Unit> {
         Timber.i("GoogleDriveAuthManager.signOut: account=${account.id}")
-        clearStoredAccount()
+        clearCachedAuthorization(account)
+        removeStoredAccount(account.id)
         return AuthResult.Success(Unit)
     }
 
     override suspend fun currentAccounts(): List<Account> {
-        val id = accountPrefs.getString(KEY_ACCOUNT_ID, null) ?: return emptyList()
-        val storedDisplayName = accountPrefs.getString(KEY_DISPLAY_NAME, null) ?: id
-        val email = accountPrefs.getString(KEY_EMAIL, null)
-        return listOf(
-            Account(
-                id = id,
-                provider = CloudProviderType.GOOGLE_DRIVE,
-                displayName = storedDisplayName,
-                email = email,
-            ),
-        )
+        return readStoredAccounts()
     }
 
     /**
@@ -257,12 +245,17 @@ class GoogleDriveAuthManager private constructor(
             return AuthResult.NotConfigured(context.getString(R.string.gdrive_not_configured))
         }
 
+        val storedAccount =
+            readStoredAccounts().firstOrNull { it.id == account.id }
+                ?: return AuthResult.NeedsInteractiveSignIn
+        val email = storedAccount.email ?: return AuthResult.NeedsInteractiveSignIn
+
         Timber.d("GoogleDriveAuthManager.acquireAccessToken: silent acquisition for ${account.id}")
 
         val authorizationResult =
             Identity
                 .getAuthorizationClient(context)
-                .authorize(driveAuthRequest)
+                .authorize(buildDriveAuthRequest(accountEmail = email))
                 .awaitTask()
                 .getOrElse { e ->
                     Timber.e(e, "GoogleDriveAuthManager.acquireAccessToken: authorization error")
@@ -271,6 +264,11 @@ class GoogleDriveAuthManager private constructor(
 
         if (authorizationResult.hasResolution()) {
             Timber.w("GoogleDriveAuthManager.acquireAccessToken: re-authorization required")
+            return AuthResult.NeedsInteractiveSignIn
+        }
+
+        if (!authorizationResult.matchesRequestedAccount(storedAccount)) {
+            Timber.w("GoogleDriveAuthManager.acquireAccessToken: silent result resolved a different account")
             return AuthResult.NeedsInteractiveSignIn
         }
 
@@ -286,17 +284,117 @@ class GoogleDriveAuthManager private constructor(
 
     // ---- Private helpers ----
 
-    private fun storeAccount(account: Account) {
+    internal fun storeAccount(account: Account) {
+        val updatedAccounts =
+            readStoredAccounts()
+                .filterNot { it.id == account.id }
+                .toMutableList()
+                .apply { add(account) }
+        writeStoredAccounts(updatedAccounts)
+    }
+
+    private fun removeStoredAccount(accountId: String) {
+        val updatedAccounts = readStoredAccounts().filterNot { it.id == accountId }
+        writeStoredAccounts(updatedAccounts)
+    }
+
+    private fun buildDriveAuthRequest(accountEmail: String? = null): AuthorizationRequest =
+        AuthorizationRequest
+            .builder()
+            .setRequestedScopes(listOf(Scope(DRIVE_SCOPE)))
+            .apply {
+                // Interactive sign-in may not yet know which account to pin, but silent
+                // token acquisition always supplies a concrete email to target.
+                if (!accountEmail.isNullOrBlank()) {
+                    // Pin silent authorization to the requested Google account so we never
+                    // accept a token resolved for a different principal on the device.
+                    setAccount(AndroidAccount(accountEmail, GoogleAuthUtil.GOOGLE_ACCOUNT_TYPE))
+                }
+            }.build()
+
+    private fun readStoredAccounts(): List<Account> {
+        val stored = accountPrefs.getString(KEY_ACCOUNTS, null)
+        if (stored.isNullOrBlank()) {
+            return migrateLegacyAccountIfNeeded()
+        }
+
+        return try {
+            val json = JSONArray(stored)
+            buildList(json.length()) {
+                repeat(json.length()) { index ->
+                    val item = json.optJSONObject(index) ?: return@repeat
+                    val id = item.optString(KEY_ACCOUNT_ID)
+                    if (id.isBlank()) return@repeat
+                    add(
+                        Account(
+                            id = id,
+                            provider = CloudProviderType.GOOGLE_DRIVE,
+                            displayName = item.optString(KEY_DISPLAY_NAME).ifBlank { id },
+                            email = item.optString(KEY_EMAIL).ifEmpty { null },
+                        ),
+                    )
+                }
+            }
+        } catch (e: Exception) {
+            Timber.e(e, "GoogleDriveAuthManager: failed to parse stored accounts")
+            emptyList()
+        }
+    }
+
+    private fun writeStoredAccounts(accounts: List<Account>) {
+        val json =
+            JSONArray().apply {
+                accounts.forEach { account ->
+                    put(
+                        JSONObject()
+                            .put(KEY_ACCOUNT_ID, account.id)
+                            .put(KEY_DISPLAY_NAME, account.displayName)
+                            .put(KEY_EMAIL, account.email),
+                    )
+                }
+            }
+
         accountPrefs
             .edit()
-            .putString(KEY_ACCOUNT_ID, account.id)
-            .putString(KEY_DISPLAY_NAME, account.displayName)
-            .putString(KEY_EMAIL, account.email)
+            .putString(KEY_ACCOUNTS, json.toString())
+            .remove(KEY_ACCOUNT_ID)
+            .remove(KEY_DISPLAY_NAME)
+            .remove(KEY_EMAIL)
             .apply()
     }
 
-    private fun clearStoredAccount() {
-        accountPrefs.edit().clear().apply()
+    private fun migrateLegacyAccountIfNeeded(): List<Account> {
+        val id = accountPrefs.getString(KEY_ACCOUNT_ID, null) ?: return emptyList()
+        val migratedAccount =
+            Account(
+                id = id,
+                provider = CloudProviderType.GOOGLE_DRIVE,
+                displayName = accountPrefs.getString(KEY_DISPLAY_NAME, null) ?: id,
+                email = accountPrefs.getString(KEY_EMAIL, null),
+            )
+        writeStoredAccounts(listOf(migratedAccount))
+        return listOf(migratedAccount)
+    }
+
+    private suspend fun clearCachedAuthorization(account: Account) {
+        val token =
+            when (val result = acquireAccessToken(account)) {
+                is AuthResult.Success -> result.value
+                else -> return
+            }
+
+        withContext(Dispatchers.IO) {
+            try {
+                GoogleAuthUtil.clearToken(context, token)
+            } catch (e: Exception) {
+                Timber.w(e, "GoogleDriveAuthManager.signOut: failed to clear cached token for ${account.id}")
+            }
+        }
+    }
+
+    private fun AuthorizationResult.matchesRequestedAccount(account: Account): Boolean {
+        val resolvedAccount = toGoogleSignInAccount() ?: return false
+        return resolvedAccount.id == account.id || resolvedAccount.email == account.email
     }
 
     /**
