@@ -1,6 +1,7 @@
 package com.synckro.providers.onedrive
 
 import android.content.Context
+import android.content.SharedPreferences
 import androidx.test.core.app.ApplicationProvider
 import com.synckro.domain.auth.Account
 import com.synckro.domain.auth.AuthResult
@@ -32,6 +33,7 @@ import org.robolectric.annotation.Config
 @Config(sdk = [34])
 class OneDriveAuthManagerTest {
     private lateinit var context: Context
+    private lateinit var testPrefs: SharedPreferences
     private val fakeHost: AuthUiHost = object : AuthUiHost {}
     private val fakeAccount =
         Account(
@@ -44,6 +46,8 @@ class OneDriveAuthManagerTest {
     @Before
     fun setUp() {
         context = ApplicationProvider.getApplicationContext()
+        testPrefs = context.getSharedPreferences("onedrive_test", Context.MODE_PRIVATE)
+        testPrefs.edit().clear().apply()
     }
 
     // -------------------------------------------------------------------------
@@ -193,5 +197,48 @@ class OneDriveAuthManagerTest {
             val mgr = OneDriveAuthManager.forTest(context, clientId = "", redirectUri = "")
             val accounts = mgr.currentAccounts()
             assertTrue("Expected empty, got $accounts", accounts.isEmpty())
+        }
+
+    @Test
+    fun `account hints keep multiple accounts and remove only the signed out one`() =
+        runTest {
+            val mgr =
+                OneDriveAuthManager.forTest(
+                    context,
+                    clientId = "",
+                    redirectUri = "",
+                    testPrefs = testPrefs,
+                )
+
+            mgr.setAccountHint("a", "alpha@example.com")
+            mgr.setAccountHint("b", "beta@example.com")
+
+            assertEquals("beta@example.com", mgr.getAccountHint())
+            assertEquals("alpha@example.com", mgr.getAccountHint("a"))
+            assertEquals("beta@example.com", mgr.getAccountHint("b"))
+
+            mgr.setAccountHint("a", null)
+
+            assertEquals("beta@example.com", mgr.getAccountHint())
+            assertEquals(null, mgr.getAccountHint("a"))
+            assertEquals("beta@example.com", mgr.getAccountHint("b"))
+        }
+
+    @Test
+    fun `legacy account hint migrates on first read`() =
+        runTest {
+            testPrefs.edit().putString(OneDriveAuthManager.KEY_ACCOUNT_HINT, "legacy@example.com").apply()
+
+            val mgr =
+                OneDriveAuthManager.forTest(
+                    context,
+                    clientId = "",
+                    redirectUri = "",
+                    testPrefs = testPrefs,
+                )
+
+            assertEquals("legacy@example.com", mgr.getAccountHint())
+            assertTrue(!testPrefs.contains(OneDriveAuthManager.KEY_ACCOUNT_HINT))
+            assertTrue(testPrefs.contains(OneDriveAuthManager.KEY_ACCOUNT_HINTS))
         }
 }

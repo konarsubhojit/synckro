@@ -240,7 +240,7 @@ abstract class GenerateMsalConfigTask : DefaultTask() {
               "client_id": "${clientId.get().esc()}",
               "authorization_user_agent": "DEFAULT",
               "redirect_uri": "${redirect.get().esc()}",
-              "account_mode": "SINGLE",
+              "account_mode": "MULTIPLE",
               "broker_redirect_uri_registered": false,
               "authorities": [
                 {

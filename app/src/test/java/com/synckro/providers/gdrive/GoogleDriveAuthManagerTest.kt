@@ -39,6 +39,20 @@ class GoogleDriveAuthManagerTest {
     private lateinit var testPrefs: SharedPreferences
     private lateinit var authManager: GoogleDriveAuthManager
     private val fakeHost: AuthUiHost = object : AuthUiHost {}
+    private val accountA =
+        Account(
+            id = "alpha@gmail.com",
+            provider = CloudProviderType.GOOGLE_DRIVE,
+            displayName = "Alpha",
+            email = "alpha@gmail.com",
+        )
+    private val accountB =
+        Account(
+            id = "beta@gmail.com",
+            provider = CloudProviderType.GOOGLE_DRIVE,
+            displayName = "Beta",
+            email = "beta@gmail.com",
+        )
 
     @Before
     fun setUp() {
@@ -86,46 +100,43 @@ class GoogleDriveAuthManagerTest {
     @Test
     fun `currentAccounts returns stored account after prefs are populated`() =
         runTest {
-            testPrefs
-                .edit()
-                .putString("account_id", "user@gmail.com")
-                .putString("display_name", "Test User")
-                .putString("email", "user@gmail.com")
-                .apply()
+            authManager.storeAccount(accountA)
 
             val accounts = authManager.currentAccounts()
             assertEquals(1, accounts.size)
             val stored = accounts.single()
-            assertEquals("user@gmail.com", stored.id)
-            assertEquals("Test User", stored.displayName)
-            assertEquals("user@gmail.com", stored.email)
+            assertEquals(accountA.id, stored.id)
+            assertEquals(accountA.displayName, stored.displayName)
+            assertEquals(accountA.email, stored.email)
             assertEquals(CloudProviderType.GOOGLE_DRIVE, stored.provider)
         }
 
     @Test
-    fun `signOut clears stored account and returns Success`() =
+    fun `currentAccounts returns both stored accounts in insertion order`() =
         runTest {
-            testPrefs
-                .edit()
-                .putString("account_id", "user@gmail.com")
-                .putString("display_name", "Test User")
-                .putString("email", "user@gmail.com")
-                .apply()
+            authManager.storeAccount(accountA)
+            authManager.storeAccount(accountB)
 
-            val beforeSignOut = authManager.currentAccounts()
-            assertEquals(1, beforeSignOut.size)
+            val accounts = authManager.currentAccounts()
 
-            val account =
-                Account(
-                    id = "user@gmail.com",
-                    provider = CloudProviderType.GOOGLE_DRIVE,
-                    displayName = "Test User",
-                    email = "user@gmail.com",
-                )
-            val result = authManager.signOut(account)
+            assertEquals(listOf(accountA, accountB), accounts)
+        }
+
+    @Test
+    fun `signOut removes only requested account and later token lookup needs interactive sign in`() =
+        runTest {
+            authManager.storeAccount(accountA)
+            authManager.storeAccount(accountB)
+
+            val result = authManager.signOut(accountA)
 
             assertTrue(result is AuthResult.Success)
-            assertTrue(authManager.currentAccounts().isEmpty())
+            assertEquals(listOf(accountB), authManager.currentAccounts())
+
+            val configuredManager =
+                GoogleDriveAuthManager.forTest(context, testPrefs, webClientId = "configured")
+            val tokenResult = configuredManager.acquireAccessToken(accountA)
+            assertTrue(tokenResult is AuthResult.NeedsInteractiveSignIn)
         }
 
     @Test
@@ -133,12 +144,42 @@ class GoogleDriveAuthManagerTest {
         runTest {
             testPrefs
                 .edit()
-                .putString("account_id", "user@gmail.com")
-                // display_name deliberately omitted
+                .putString("accounts", """[{"account_id":"user@gmail.com","email":"user@gmail.com"}]""")
                 .apply()
 
             val accounts = authManager.currentAccounts()
             assertEquals(1, accounts.size)
             assertEquals("user@gmail.com", accounts.single().displayName)
+        }
+
+    @Test
+    fun `acquireAccessToken returns NeedsInteractiveSignIn for unknown stored id before touching SDK`() =
+        runTest {
+            authManager.storeAccount(accountB)
+
+            val configuredManager =
+                GoogleDriveAuthManager.forTest(context, testPrefs, webClientId = "configured")
+            val result = configuredManager.acquireAccessToken(accountA)
+
+            assertTrue(result is AuthResult.NeedsInteractiveSignIn)
+        }
+
+    @Test
+    fun `currentAccounts migrates legacy single account prefs on first read`() =
+        runTest {
+            testPrefs
+                .edit()
+                .putString("account_id", accountA.id)
+                .putString("display_name", accountA.displayName)
+                .putString("email", accountA.email)
+                .apply()
+
+            val accounts = authManager.currentAccounts()
+
+            assertEquals(listOf(accountA), accounts)
+            assertTrue(testPrefs.contains("accounts"))
+            assertTrue(!testPrefs.contains("account_id"))
+            assertTrue(!testPrefs.contains("display_name"))
+            assertTrue(!testPrefs.contains("email"))
         }
 }

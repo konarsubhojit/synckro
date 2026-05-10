@@ -1,16 +1,17 @@
 package com.synckro.providers.onedrive
 
 import android.content.Context
+import android.content.SharedPreferences
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
+import com.microsoft.identity.client.AcquireTokenParameters
 import com.microsoft.identity.client.AcquireTokenSilentParameters
 import com.microsoft.identity.client.AuthenticationCallback
 import com.microsoft.identity.client.IAccount
 import com.microsoft.identity.client.IAuthenticationResult
 import com.microsoft.identity.client.IPublicClientApplication
-import com.microsoft.identity.client.ISingleAccountPublicClientApplication
+import com.microsoft.identity.client.IMultipleAccountPublicClientApplication
 import com.microsoft.identity.client.PublicClientApplication
-import com.microsoft.identity.client.SignInParameters
 import com.microsoft.identity.client.SilentAuthenticationCallback
 import com.microsoft.identity.client.exception.MsalClientException
 import com.microsoft.identity.client.exception.MsalException
@@ -30,10 +31,12 @@ import timber.log.Timber
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.coroutines.resume
+import org.json.JSONObject
 
 /**
  * OneDrive [AuthManager] backed by MSAL (Microsoft Authentication Library).
- * Uses single-account mode for simplicity. This class is responsible only for
+ * Uses MSAL multi-account mode so callers can address specific OneDrive
+ * principals. This class is responsible only for
  * MSAL token-cache operations; persistent database cleanup (Room) is the
  * responsibility of the caller (e.g. AccountsViewModel).
  *
@@ -48,6 +51,7 @@ class OneDriveAuthManager private constructor(
     @ApplicationContext private val context: Context,
     private val clientId: String,
     private val redirectUri: String,
+    private val prefsOverride: SharedPreferences? = null,
 ) : AuthManager {
     /** Hilt-injected constructor (production path). */
     @Inject
@@ -59,7 +63,7 @@ class OneDriveAuthManager private constructor(
     override val providerType: CloudProviderType = CloudProviderType.ONEDRIVE
     override val displayName: String = "OneDrive"
 
-    private var msalApp: ISingleAccountPublicClientApplication? = null
+    private var msalApp: IMultipleAccountPublicClientApplication? = null
 
     /**
      * Set to `true` after the first failed MSAL initialization attempt so that
@@ -77,8 +81,13 @@ class OneDriveAuthManager private constructor(
      * Initialisation is lazy so that tests and builds without the security
      * library on the class-path do not crash at class-load time.
      */
-    private val encryptedPrefs by lazy {
-        try {
+    private val accountHintPrefs by lazy {
+        prefsOverride ?: createEncryptedPrefs()
+    }
+
+    @Suppress("DEPRECATION")
+    private fun createEncryptedPrefs(): SharedPreferences? {
+        return try {
             val masterKey =
                 MasterKey.Builder(context)
                     .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
@@ -96,18 +105,30 @@ class OneDriveAuthManager private constructor(
         }
     }
 
-    /** Stores [email] as the account hint, or clears it when [email] is null. */
-    internal fun setAccountHint(email: String?) {
-        val prefs = encryptedPrefs ?: return
-        if (email == null) {
-            prefs.edit().remove(KEY_ACCOUNT_HINT).apply()
+    /** Stores [email] for [accountId], or clears it when [email] is null. */
+    internal fun setAccountHint(
+        accountId: String,
+        email: String?,
+    ) {
+        val prefs = accountHintPrefs ?: return
+        val hints = readAccountHints(prefs).toMutableMap()
+        if (email.isNullOrBlank()) {
+            hints.remove(accountId)
         } else {
-            prefs.edit().putString(KEY_ACCOUNT_HINT, email).apply()
+            hints[accountId] = email
         }
+        writeAccountHints(prefs, hints, latestAccountId = if (email.isNullOrBlank()) null else accountId)
     }
 
     /** Returns the persisted account hint, or null if none is stored. */
-    fun getAccountHint(): String? = encryptedPrefs?.getString(KEY_ACCOUNT_HINT, null)
+    fun getAccountHint(accountId: String? = null): String? {
+        val prefs = accountHintPrefs ?: return null
+        val hints = readAccountHints(prefs)
+        if (hints.isEmpty()) return null
+        if (accountId != null) return hints[accountId]
+        val latestAccountId = prefs.getString(KEY_LATEST_ACCOUNT_HINT_ID, null)
+        return hints[latestAccountId] ?: hints.values.lastOrNull()
+    }
 
     /**
      * `offline_access` is intentionally omitted here because it is an OIDC
@@ -125,12 +146,12 @@ class OneDriveAuthManager private constructor(
         OneDriveAuthConfig.validate(clientId, redirectUri) == OneDriveAuthConfig.ValidationResult.Valid
 
     /**
-     * Lazily initializes the MSAL single-account application. Returns `null` and
+     * Lazily initializes the MSAL multi-account application. Returns `null` and
      * logs a warning if the config is missing or invalid, or if the first
      * initialization attempt already failed (cached to avoid log spam on repeated
      * [currentAccounts] / [acquireAccessToken] calls).
      */
-    private suspend fun getOrCreateMsalApp(): ISingleAccountPublicClientApplication? {
+    private suspend fun getOrCreateMsalApp(): IMultipleAccountPublicClientApplication? {
         if (msalApp != null) return msalApp
         if (msalInitFailed) return null
 
@@ -152,11 +173,11 @@ class OneDriveAuthManager private constructor(
 
         return suspendCancellableCoroutine { cont ->
             try {
-                PublicClientApplication.createSingleAccountPublicClientApplication(
+                PublicClientApplication.createMultipleAccountPublicClientApplication(
                     context,
                     R.raw.msal_config,
-                    object : IPublicClientApplication.ISingleAccountApplicationCreatedListener {
-                        override fun onCreated(application: ISingleAccountPublicClientApplication?) {
+                    object : IPublicClientApplication.IMultipleAccountApplicationCreatedListener {
+                        override fun onCreated(application: IMultipleAccountPublicClientApplication?) {
                             msalApp = application
                             Timber.d("OneDriveAuthManager: MSAL app created successfully")
                             cont.resume(application)
@@ -196,9 +217,10 @@ class OneDriveAuthManager private constructor(
 
         return suspendCancellableCoroutine { cont ->
             val params =
-                SignInParameters.builder()
-                    .withActivity(activity)
+                AcquireTokenParameters.Builder()
+                    .startAuthorizationFromActivity(activity)
                     .withScopes(scopes)
+                    .withLoginHint(getAccountHint())
                     .withCallback(
                         object : AuthenticationCallback {
                             override fun onSuccess(authenticationResult: IAuthenticationResult?) {
@@ -220,7 +242,7 @@ class OneDriveAuthManager private constructor(
                                         email = msalAccount.username,
                                     )
 
-                                setAccountHint(msalAccount.username)
+                                setAccountHint(msalAccount.id, msalAccount.username)
                                 cont.resume(AuthResult.Success(account))
                             }
 
@@ -268,7 +290,7 @@ class OneDriveAuthManager private constructor(
                     )
                     .build()
 
-            app.signIn(params)
+            app.acquireToken(params)
         }
     }
 
@@ -282,22 +304,45 @@ class OneDriveAuthManager private constructor(
         val app = getOrCreateMsalApp()
         if (app == null) {
             Timber.w("OneDriveAuthManager.signOut: MSAL app not available, treating as already signed out")
+            setAccountHint(account.id, null)
             return AuthResult.Success(Unit)
         }
 
         return suspendCancellableCoroutine { cont ->
-            app.signOut(
-                object : ISingleAccountPublicClientApplication.SignOutCallback {
-                    override fun onSignOut() {
+            app.getAccount(
+                account.id,
+                object : IMultipleAccountPublicClientApplication.GetAccountCallback {
+                    override fun onTaskCompleted(matchingAccount: IAccount?) {
                         if (!cont.isActive) return
-                        Timber.i("OneDriveAuthManager.signOut: MSAL sign-out successful")
-                        setAccountHint(null)
-                        cont.resume(AuthResult.Success(Unit))
+                        if (matchingAccount == null) {
+                            Timber.i("OneDriveAuthManager.signOut: account already absent from MSAL cache")
+                            setAccountHint(account.id, null)
+                            cont.resume(AuthResult.Success(Unit))
+                            return
+                        }
+
+                        app.removeAccount(
+                            matchingAccount,
+                            object : IMultipleAccountPublicClientApplication.RemoveAccountCallback {
+                                override fun onRemoved() {
+                                    if (!cont.isActive) return
+                                    Timber.i("OneDriveAuthManager.signOut: MSAL sign-out successful")
+                                    setAccountHint(account.id, null)
+                                    cont.resume(AuthResult.Success(Unit))
+                                }
+
+                                override fun onError(exception: MsalException) {
+                                    if (!cont.isActive) return
+                                    Timber.e(exception, "OneDriveAuthManager.signOut: MSAL removeAccount error")
+                                    cont.resume(AuthResult.Error(exception.message ?: "Sign-out failed", exception))
+                                }
+                            },
+                        )
                     }
 
                     override fun onError(exception: MsalException) {
                         if (!cont.isActive) return
-                        Timber.e(exception, "OneDriveAuthManager.signOut: MSAL error")
+                        Timber.e(exception, "OneDriveAuthManager.signOut: MSAL lookup error")
                         cont.resume(AuthResult.Error(exception.message ?: "Sign-out failed", exception))
                     }
                 },
@@ -311,31 +356,27 @@ class OneDriveAuthManager private constructor(
         Timber.d("OneDriveAuthManager.currentAccounts: checking MSAL cache")
 
         return suspendCancellableCoroutine { cont ->
-            app.getCurrentAccountAsync(
-                object : ISingleAccountPublicClientApplication.CurrentAccountCallback {
-                    override fun onAccountLoaded(activeAccount: IAccount?) {
+            app.getAccounts(
+                object : IPublicClientApplication.LoadAccountsCallback {
+                    override fun onTaskCompleted(accounts: MutableList<IAccount>?) {
                         if (!cont.isActive) return
-                        if (activeAccount == null) {
+                        if (accounts.isNullOrEmpty()) {
                             Timber.d("OneDriveAuthManager.currentAccounts: no MSAL account")
                             cont.resume(emptyList())
                             return
                         }
 
-                        Timber.d("OneDriveAuthManager.currentAccounts: found ${activeAccount.username}")
-                        val account =
-                            Account(
-                                id = activeAccount.id,
-                                provider = CloudProviderType.ONEDRIVE,
-                                displayName = activeAccount.username ?: activeAccount.id,
-                                email = activeAccount.username,
-                            )
-                        cont.resume(listOf(account))
-                    }
-
-                    override fun onAccountChanged(priorAccount: IAccount?, currentAccount: IAccount?) {
-                        // onAccountChanged can fire alongside onAccountLoaded; log it but do not
-                        // resume — this is a one-shot call and onAccountLoaded covers the result.
-                        Timber.d("OneDriveAuthManager.currentAccounts: account changed (ignored for one-shot call)")
+                        Timber.d("OneDriveAuthManager.currentAccounts: found ${accounts.size} account(s)")
+                        cont.resume(
+                            accounts.map { activeAccount ->
+                                Account(
+                                    id = activeAccount.id,
+                                    provider = CloudProviderType.ONEDRIVE,
+                                    displayName = activeAccount.username ?: activeAccount.id,
+                                    email = activeAccount.username,
+                                )
+                            },
+                        )
                     }
 
                     override fun onError(exception: MsalException) {
@@ -360,36 +401,18 @@ class OneDriveAuthManager private constructor(
         Timber.d("OneDriveAuthManager.acquireAccessToken: attempting silent acquisition for ${account.id}")
 
         return suspendCancellableCoroutine { cont ->
-            app.getCurrentAccountAsync(
-                object : ISingleAccountPublicClientApplication.CurrentAccountCallback {
-                    override fun onAccountLoaded(activeAccount: IAccount?) {
+            app.getAccount(
+                account.id,
+                object : IMultipleAccountPublicClientApplication.GetAccountCallback {
+                    override fun onTaskCompleted(activeAccount: IAccount?) {
                         if (!cont.isActive) return
                         if (activeAccount == null) {
-                            Timber.w("OneDriveAuthManager.acquireAccessToken: no active account")
+                            Timber.w("OneDriveAuthManager.acquireAccessToken: no cached account for ${account.id}")
                             cont.resume(AuthResult.NeedsInteractiveSignIn)
                             return
                         }
 
-                        // Validate that the active MSAL account matches the requested account to
-                        // avoid returning a token for a different principal than requested.
-                        if (activeAccount.id != account.id) {
-                            Timber.w(
-                                "OneDriveAuthManager.acquireAccessToken: active account mismatch " +
-                                    "(activeId=${activeAccount.id}, requestedId=${account.id})",
-                            )
-                            cont.resume(AuthResult.NeedsInteractiveSignIn)
-                            return
-                        }
-
-                        // Delegate the silent-acquisition nested-callback logic to a dedicated helper
-                        // that resumes the continuation exactly once (guarded via cont.isActive).
                         acquireTokenSilent(app, activeAccount, cont)
-                    }
-
-                    override fun onAccountChanged(priorAccount: IAccount?, currentAccount: IAccount?) {
-                        if (!cont.isActive) return
-                        Timber.w("OneDriveAuthManager.acquireAccessToken: account changed during acquisition")
-                        cont.resume(AuthResult.NeedsInteractiveSignIn)
                     }
 
                     override fun onError(exception: MsalException) {
@@ -409,7 +432,7 @@ class OneDriveAuthManager private constructor(
      * double-resume crashes.
      */
     private fun acquireTokenSilent(
-        app: ISingleAccountPublicClientApplication,
+        app: IMultipleAccountPublicClientApplication,
         activeAccount: IAccount,
         cont: kotlinx.coroutines.CancellableContinuation<AuthResult<String>>,
     ) {
@@ -453,9 +476,68 @@ class OneDriveAuthManager private constructor(
         app.acquireTokenSilentAsync(params)
     }
 
+    private fun readAccountHints(prefs: SharedPreferences): LinkedHashMap<String, String> {
+        val storedHints = prefs.getString(KEY_ACCOUNT_HINTS, null)
+        if (storedHints.isNullOrBlank()) {
+            val legacyHint = prefs.getString(KEY_ACCOUNT_HINT, null)
+            if (legacyHint.isNullOrBlank()) return linkedMapOf()
+
+            val migrated =
+                linkedMapOf(
+                    LEGACY_ACCOUNT_HINT_ID to legacyHint,
+                )
+            writeAccountHints(prefs, migrated, latestAccountId = LEGACY_ACCOUNT_HINT_ID)
+            prefs.edit().remove(KEY_ACCOUNT_HINT).apply()
+            return migrated
+        }
+
+        return try {
+            val json = JSONObject(storedHints)
+            linkedMapOf<String, String>().apply {
+                json.keys().forEach { key ->
+                    put(key, json.optString(key))
+                }
+            }
+        } catch (e: Exception) {
+            Timber.e(e, "OneDriveAuthManager: failed to parse stored account hints")
+            linkedMapOf()
+        }
+    }
+
+    private fun writeAccountHints(
+        prefs: SharedPreferences,
+        hints: Map<String, String>,
+        latestAccountId: String?,
+    ) {
+        val json = JSONObject()
+        hints.forEach { (accountId, hint) ->
+            json.put(accountId, hint)
+        }
+
+        val resolvedLatestAccountId =
+            latestAccountId
+                ?: prefs.getString(KEY_LATEST_ACCOUNT_HINT_ID, null)
+                    ?.takeIf { hints.containsKey(it) }
+                ?: hints.keys.lastOrNull()
+
+        prefs
+            .edit()
+            .putString(KEY_ACCOUNT_HINTS, json.toString())
+            .apply {
+                if (resolvedLatestAccountId == null) {
+                    remove(KEY_LATEST_ACCOUNT_HINT_ID)
+                } else {
+                    putString(KEY_LATEST_ACCOUNT_HINT_ID, resolvedLatestAccountId)
+                }
+            }.apply()
+    }
+
     companion object {
         private const val PREFS_FILE = "onedrive_auth_prefs"
         internal const val KEY_ACCOUNT_HINT = "account_hint"
+        internal const val KEY_ACCOUNT_HINTS = "account_hints"
+        private const val KEY_LATEST_ACCOUNT_HINT_ID = "latest_account_hint_id"
+        private const val LEGACY_ACCOUNT_HINT_ID = "__legacy__"
 
         /**
          * Creates an instance with explicit [clientId] and [redirectUri] values
@@ -470,6 +552,7 @@ class OneDriveAuthManager private constructor(
             context: Context,
             clientId: String = "",
             redirectUri: String = "",
-        ) = OneDriveAuthManager(context, clientId, redirectUri)
+            testPrefs: SharedPreferences? = null,
+        ) = OneDriveAuthManager(context, clientId, redirectUri, prefsOverride = testPrefs)
     }
 }
