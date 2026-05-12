@@ -326,7 +326,7 @@ class GoogleDriveAuthManager private constructor(
             extractEmailFromIdToken(idToken),
         ).firstOrNull()
 
-    private fun resolveSilentAuthEmail(
+    internal fun resolveSilentAuthEmail(
         storedAccount: Account,
         requestedAccount: Account,
     ): String? =
