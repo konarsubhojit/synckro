@@ -42,6 +42,7 @@ import org.json.JSONObject
 import timber.log.Timber
 import javax.inject.Inject
 import javax.inject.Singleton
+import java.util.Base64
 import kotlin.coroutines.resume
 
 /**
@@ -185,10 +186,11 @@ class GoogleDriveAuthManager private constructor(
             }
 
         // Step 2: Request Drive authorization (shows consent screen if needed).
+        val accountEmail = resolveGoogleAccountEmail(idTokenCredential.id, idTokenCredential.idToken)
         val authorizationResult =
             Identity
                 .getAuthorizationClient(activity)
-                .authorize(buildDriveAuthRequest(accountEmail = idTokenCredential.id))
+                .authorize(buildDriveAuthRequest(accountEmail = accountEmail))
                 .awaitTask()
                 .getOrElse { e ->
                     Timber.e(e, "GoogleDriveAuthManager.signIn: authorization failed")
@@ -215,8 +217,8 @@ class GoogleDriveAuthManager private constructor(
             Account(
                 id = idTokenCredential.id,
                 provider = CloudProviderType.GOOGLE_DRIVE,
-                displayName = idTokenCredential.displayName ?: idTokenCredential.id,
-                email = idTokenCredential.id,
+                displayName = idTokenCredential.displayName ?: accountEmail ?: idTokenCredential.id,
+                email = accountEmail,
             )
         storeAccount(account)
         Timber.i("GoogleDriveAuthManager.signIn: success for ${account.email}")
@@ -248,7 +250,10 @@ class GoogleDriveAuthManager private constructor(
         val storedAccount =
             readStoredAccounts().firstOrNull { it.id == account.id }
                 ?: return AuthResult.NeedsInteractiveSignIn
-        val email = storedAccount.email ?: return AuthResult.NeedsInteractiveSignIn
+        val email = resolveSilentAuthEmail(storedAccount, account) ?: return AuthResult.NeedsInteractiveSignIn
+        if (storedAccount.email != email) {
+            storeAccount(storedAccount.copy(email = email))
+        }
 
         Timber.d("GoogleDriveAuthManager.acquireAccessToken: silent acquisition for ${account.id}")
 
@@ -311,6 +316,42 @@ class GoogleDriveAuthManager private constructor(
                     setAccount(AndroidAccount(accountEmail, GoogleAuthUtil.GOOGLE_ACCOUNT_TYPE))
                 }
             }.build()
+
+    internal fun resolveGoogleAccountEmail(
+        credentialId: String,
+        idToken: String?,
+    ): String? =
+        listOfNotNull(
+            credentialId.takeIf(::isLikelyEmail),
+            extractEmailFromIdToken(idToken),
+        ).firstOrNull()
+
+    private fun resolveSilentAuthEmail(
+        storedAccount: Account,
+        requestedAccount: Account,
+    ): String? =
+        listOfNotNull(
+            storedAccount.email?.takeIf(::isLikelyEmail),
+            requestedAccount.email?.takeIf(::isLikelyEmail),
+            requestedAccount.id.takeIf(::isLikelyEmail),
+            storedAccount.id.takeIf(::isLikelyEmail),
+        ).firstOrNull()
+
+    internal fun extractEmailFromIdToken(idToken: String?): String? {
+        if (idToken.isNullOrBlank()) return null
+        val payloadPart = idToken.split('.').getOrNull(1) ?: return null
+        return runCatching {
+            val payloadJson = String(Base64.getUrlDecoder().decode(payloadPart))
+            JSONObject(payloadJson).optString("email").takeIf(::isLikelyEmail)
+        }.getOrNull()
+    }
+
+    internal fun isLikelyEmail(value: String?): Boolean {
+        val trimmed = value?.trim().orEmpty()
+        if (trimmed.isEmpty()) return false
+        val at = trimmed.indexOf('@')
+        return at > 0 && at < trimmed.lastIndex
+    }
 
     private fun readStoredAccounts(): List<Account> {
         val stored = accountPrefs.getString(KEY_ACCOUNTS, null)

@@ -16,6 +16,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import java.util.Base64
 
 /**
  * Unit tests for [GoogleDriveAuthManager] using Robolectric so that
@@ -183,4 +184,38 @@ class GoogleDriveAuthManagerTest {
             assertFalse(testPrefs.contains("display_name"))
             assertFalse(testPrefs.contains("email"))
         }
+
+    @Test
+    fun `resolveGoogleAccountEmail prefers credential id when it is an email`() {
+        val resolved =
+            authManager.resolveGoogleAccountEmail(
+                credentialId = "user@gmail.com",
+                idToken = null,
+            )
+
+        assertEquals("user@gmail.com", resolved)
+    }
+
+    @Test
+    fun `resolveGoogleAccountEmail falls back to id token email claim`() {
+        val payload =
+            Base64
+                .getUrlEncoder()
+                .withoutPadding()
+                .encodeToString("""{"email":"claim@gmail.com"}""".toByteArray())
+        val token = "header.$payload.signature"
+
+        val resolved =
+            authManager.resolveGoogleAccountEmail(
+                credentialId = "opaque-subject-id",
+                idToken = token,
+            )
+
+        assertEquals("claim@gmail.com", resolved)
+    }
+
+    @Test
+    fun `extractEmailFromIdToken returns null for malformed token`() {
+        assertEquals(null, authManager.extractEmailFromIdToken("not-a-jwt"))
+    }
 }
