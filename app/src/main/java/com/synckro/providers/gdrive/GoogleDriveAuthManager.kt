@@ -252,9 +252,12 @@ class GoogleDriveAuthManager private constructor(
             readStoredAccounts().firstOrNull { it.id == account.id }
                 ?: return AuthResult.NeedsInteractiveSignIn
         val email = resolveSilentAuthEmail(storedAccount, account) ?: return AuthResult.NeedsInteractiveSignIn
-        if (storedAccount.email != email) {
-            storeAccount(storedAccount.copy(email = email))
-        }
+        val resolvedStoredAccount =
+            if (storedAccount.email == email) {
+                storedAccount
+            } else {
+                storedAccount.copy(email = email).also { storeAccount(it) }
+            }
 
         Timber.d("GoogleDriveAuthManager.acquireAccessToken: silent acquisition for ${account.id}")
 
@@ -273,7 +276,7 @@ class GoogleDriveAuthManager private constructor(
             return AuthResult.NeedsInteractiveSignIn
         }
 
-        if (!authorizationResult.matchesRequestedAccount(storedAccount)) {
+        if (!authorizationResult.matchesRequestedAccount(resolvedStoredAccount)) {
             Timber.w("GoogleDriveAuthManager.acquireAccessToken: silent result resolved a different account")
             return AuthResult.NeedsInteractiveSignIn
         }
@@ -342,9 +345,11 @@ class GoogleDriveAuthManager private constructor(
         if (idToken.isNullOrBlank()) return null
         val payloadPart = idToken.split('.').getOrNull(1) ?: return null
         return runCatching {
-            // We only use this as a UI/account hint fallback when CredentialManager does not
-            // expose a directly usable email. Authorization still relies on Play Services token
-            // APIs, so this decoded claim is never treated as a standalone proof of identity.
+            // This claim is decoded only as a fallback account hint when CredentialManager does
+            // not surface an email-like id directly. The idToken value originates from Google
+            // CredentialManager/Play Services (not app-provided input), and Drive authorization
+            // still relies on Play Services token APIs. We do not treat this decoded claim as
+            // standalone identity proof.
             val payloadJson = String(Base64.getUrlDecoder().decode(payloadPart))
             JSONObject(payloadJson).optString("email").takeIf(::hasEmailShape)
         }.getOrNull()

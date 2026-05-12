@@ -215,6 +215,24 @@ class GoogleDriveAuthManagerTest {
     }
 
     @Test
+    fun `resolveGoogleAccountEmail prefers credential id over token claim`() {
+        val payload =
+            Base64
+                .getUrlEncoder()
+                .withoutPadding()
+                .encodeToString("""{"email":"claim@gmail.com"}""".toByteArray())
+        val token = "header.$payload.signature"
+
+        val resolved =
+            authManager.resolveGoogleAccountEmail(
+                credentialId = "credential@gmail.com",
+                idToken = token,
+            )
+
+        assertEquals("credential@gmail.com", resolved)
+    }
+
+    @Test
     fun `resolveGoogleAccountEmail returns null when neither credential id nor token has email`() {
         val resolved =
             authManager.resolveGoogleAccountEmail(
