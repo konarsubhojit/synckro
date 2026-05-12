@@ -249,6 +249,7 @@ class GoogleDriveAuthManagerTest {
         assertTrue(authManager.hasEmailShape("user@domain.com"))
         assertFalse(authManager.hasEmailShape("@domain.com"))
         assertFalse(authManager.hasEmailShape("user@"))
+        assertFalse(authManager.hasEmailShape("user@domain@extra.com"))
         assertFalse(authManager.hasEmailShape("user-domain.com"))
         assertFalse(authManager.hasEmailShape(null))
         assertFalse(authManager.hasEmailShape(""))

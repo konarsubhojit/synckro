@@ -5,6 +5,7 @@ import android.app.Activity
 import android.app.PendingIntent
 import android.content.Context
 import android.content.SharedPreferences
+import android.util.Patterns
 import androidx.activity.ComponentActivity
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.IntentSenderRequest
@@ -341,6 +342,9 @@ class GoogleDriveAuthManager private constructor(
         if (idToken.isNullOrBlank()) return null
         val payloadPart = idToken.split('.').getOrNull(1) ?: return null
         return runCatching {
+            // We only use this as a UI/account hint fallback when CredentialManager does not
+            // expose a directly usable email. Authorization still relies on Play Services token
+            // APIs, so this decoded claim is never treated as a standalone proof of identity.
             val payloadJson = String(Base64.getUrlDecoder().decode(payloadPart))
             JSONObject(payloadJson).optString("email").takeIf(::hasEmailShape)
         }.getOrNull()
@@ -354,9 +358,7 @@ class GoogleDriveAuthManager private constructor(
 
     internal fun hasEmailShape(value: String?): Boolean {
         val trimmed = value?.trim().orEmpty()
-        if (trimmed.isEmpty()) return false
-        val at = trimmed.indexOf('@')
-        return at > 0 && at < trimmed.lastIndex
+        return trimmed.isNotEmpty() && Patterns.EMAIL_ADDRESS.matcher(trimmed).matches()
     }
 
     private fun readStoredAccounts(): List<Account> {
