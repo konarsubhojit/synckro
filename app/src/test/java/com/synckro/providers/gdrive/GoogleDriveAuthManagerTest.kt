@@ -218,4 +218,18 @@ class GoogleDriveAuthManagerTest {
     fun `extractEmailFromIdToken returns null for malformed token`() {
         assertEquals(null, authManager.extractEmailFromIdToken("not-a-jwt"))
     }
+
+    @Test
+    fun `extractEmailFromIdToken returns null for invalid payload encoding or json`() {
+        val invalidBase64Token = "header.@@@.signature"
+        val nonJsonPayload =
+            Base64
+                .getUrlEncoder()
+                .withoutPadding()
+                .encodeToString("not-json".toByteArray())
+        val nonJsonToken = "header.$nonJsonPayload.signature"
+
+        assertEquals(null, authManager.extractEmailFromIdToken(invalidBase64Token))
+        assertEquals(null, authManager.extractEmailFromIdToken(nonJsonToken))
+    }
 }

@@ -217,7 +217,7 @@ class GoogleDriveAuthManager private constructor(
             Account(
                 id = idTokenCredential.id,
                 provider = CloudProviderType.GOOGLE_DRIVE,
-                displayName = idTokenCredential.displayName ?: accountEmail ?: idTokenCredential.id,
+                displayName = resolveDisplayName(idTokenCredential.displayName, accountEmail, idTokenCredential.id),
                 email = accountEmail,
             )
         storeAccount(account)
@@ -322,7 +322,7 @@ class GoogleDriveAuthManager private constructor(
         idToken: String?,
     ): String? =
         listOfNotNull(
-            credentialId.takeIf(::isLikelyEmail),
+            credentialId.takeIf(::hasEmailShape),
             extractEmailFromIdToken(idToken),
         ).firstOrNull()
 
@@ -331,10 +331,10 @@ class GoogleDriveAuthManager private constructor(
         requestedAccount: Account,
     ): String? =
         listOfNotNull(
-            storedAccount.email?.takeIf(::isLikelyEmail),
-            requestedAccount.email?.takeIf(::isLikelyEmail),
-            requestedAccount.id.takeIf(::isLikelyEmail),
-            storedAccount.id.takeIf(::isLikelyEmail),
+            storedAccount.email?.takeIf(::hasEmailShape),
+            requestedAccount.email?.takeIf(::hasEmailShape),
+            requestedAccount.id.takeIf(::hasEmailShape),
+            storedAccount.id.takeIf(::hasEmailShape),
         ).firstOrNull()
 
     internal fun extractEmailFromIdToken(idToken: String?): String? {
@@ -342,11 +342,17 @@ class GoogleDriveAuthManager private constructor(
         val payloadPart = idToken.split('.').getOrNull(1) ?: return null
         return runCatching {
             val payloadJson = String(Base64.getUrlDecoder().decode(payloadPart))
-            JSONObject(payloadJson).optString("email").takeIf(::isLikelyEmail)
+            JSONObject(payloadJson).optString("email").takeIf(::hasEmailShape)
         }.getOrNull()
     }
 
-    internal fun isLikelyEmail(value: String?): Boolean {
+    private fun resolveDisplayName(
+        providerDisplayName: String?,
+        resolvedEmail: String?,
+        fallbackId: String,
+    ): String = providerDisplayName ?: resolvedEmail ?: fallbackId
+
+    internal fun hasEmailShape(value: String?): Boolean {
         val trimmed = value?.trim().orEmpty()
         if (trimmed.isEmpty()) return false
         val at = trimmed.indexOf('@')
