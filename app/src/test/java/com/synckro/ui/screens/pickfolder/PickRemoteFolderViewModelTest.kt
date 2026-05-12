@@ -288,6 +288,105 @@ class PickRemoteFolderViewModelTest {
             assertFalse(state.isLoading)
         }
 
+    // -------------------------------------------------------------------------
+    // Auth-required → reauthEvent + signInAndRetry
+    // -------------------------------------------------------------------------
+
+    @Test
+    fun `AuthenticationRequired emits reauthEvent and sets isReauthenticating`() =
+        runTest {
+            val authError = com.synckro.domain.provider.CloudProviderException.AuthenticationRequired(
+                "Token expired",
+            )
+            coEvery { mockProvider.list(null) } throws authError
+
+            val vm = createVm()
+            advanceUntilIdle()
+
+            // The ViewModel should have set isReauthenticating = true (keeping isLoading = true)
+            // and must NOT have set an error string — the screen handles the reauth flow.
+            assertTrue(vm.state.value.isReauthenticating)
+            assertTrue(vm.state.value.isLoading)
+            assertNull(vm.state.value.error)
+        }
+
+    @Test
+    fun `signInAndRetry on success clears reauth state and reloads folders`() =
+        runTest {
+            val fakeAuthManager = com.synckro.domain.auth.FakeAuthManager(CloudProviderType.FAKE)
+            val registry = mockk<com.synckro.domain.auth.AuthManagerRegistry>()
+            coEvery { registry.find(CloudProviderType.FAKE) } returns fakeAuthManager
+
+            val authError = com.synckro.domain.provider.CloudProviderException.AuthenticationRequired(
+                "Token expired",
+            )
+            val childFolder = folder("f1", "Docs")
+            // First call throws; second succeeds after re-auth.
+            coEvery { mockProvider.list(null) } throws authError andThen listOf(childFolder)
+
+            val vm =
+                PickRemoteFolderViewModel(
+                    savedStateHandle =
+                        SavedStateHandle(
+                            mapOf(PickRemoteFolderViewModel.ARG_PROVIDER to CloudProviderType.FAKE.name),
+                        ),
+                    providerFactories =
+                        mapOf(CloudProviderType.FAKE to mockProvider).toFactoryMap(),
+                    authRegistry = registry,
+                )
+
+            advanceUntilIdle() // triggers auth error → reauthEvent
+
+            // Simulate the screen calling signInAndRetry with a stub sign-in lambda.
+            vm.signInAndRetry { manager ->
+                manager.signIn(object : com.synckro.domain.auth.AuthUiHost {})
+            }
+            advanceUntilIdle()
+
+            val state = vm.state.value
+            assertFalse(state.isReauthenticating)
+            assertFalse(state.isLoading)
+            assertNull(state.error)
+            assertEquals(1, state.items.size)
+            assertEquals("Docs", state.items.first().name)
+        }
+
+    @Test
+    fun `signInAndRetry on cancel shows error and clears loading`() =
+        runTest {
+            val fakeAuthManager = com.synckro.domain.auth.FakeAuthManager(CloudProviderType.FAKE)
+            fakeAuthManager.nextSignInResult = com.synckro.domain.auth.AuthResult.Cancelled
+            val registry = mockk<com.synckro.domain.auth.AuthManagerRegistry>()
+            coEvery { registry.find(CloudProviderType.FAKE) } returns fakeAuthManager
+
+            coEvery { mockProvider.list(null) } throws
+                com.synckro.domain.provider.CloudProviderException.AuthenticationRequired("Token expired")
+
+            val vm =
+                PickRemoteFolderViewModel(
+                    savedStateHandle =
+                        SavedStateHandle(
+                            mapOf(PickRemoteFolderViewModel.ARG_PROVIDER to CloudProviderType.FAKE.name),
+                        ),
+                    providerFactories =
+                        mapOf(CloudProviderType.FAKE to mockProvider).toFactoryMap(),
+                    authRegistry = registry,
+                )
+
+            advanceUntilIdle()
+
+            vm.signInAndRetry { manager ->
+                manager.signIn(object : com.synckro.domain.auth.AuthUiHost {})
+            }
+            advanceUntilIdle()
+
+            val state = vm.state.value
+            assertFalse(state.isReauthenticating)
+            assertFalse(state.isLoading)
+            assertNotNull(state.error)
+            assertTrue(state.error!!.contains("cancelled", ignoreCase = true))
+        }
+
     @Test
     fun `Google Drive empty root shows empty items with null currentFolderId`() =
         runTest {

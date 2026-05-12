@@ -184,6 +184,7 @@ fun SynckroNavHost(activity: ComponentActivity) {
                 ),
         ) {
             PickRemoteFolderScreen(
+                activity = activity,
                 onFolderPicked = { id, name ->
                     // Pass the chosen folder back to the PairEditorScreen via its
                     // SavedStateHandle so PairEditorViewModel can update its state.

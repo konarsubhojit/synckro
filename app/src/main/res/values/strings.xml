@@ -256,4 +256,39 @@
     <string name="pair_editor_account_required">Please pick an account before saving.</string>
     <string name="pair_editor_account_disappeared">The previously selected account is no longer connected. Pick another account.</string>
     <string name="home_account_label">%1$s</string>
+
+    <!-- Onboarding step-by-step guide -->
+    <string name="onboarding_how_it_works">How it works</string>
+    <string name="onboarding_step1_title">Connect a cloud account</string>
+    <string name="onboarding_step1_body">Sign in to Google Drive or OneDrive. You can add more than one account.</string>
+    <string name="onboarding_step2_title">Choose folders to sync</string>
+    <string name="onboarding_step2_body">Pick a local folder on your device and a cloud folder to link together.</string>
+    <string name="onboarding_step3_title">Sit back — Synckro does the rest</string>
+    <string name="onboarding_step3_body">Your folders stay in sync automatically in the background, on your schedule.</string>
+
+    <!-- Home screen guide steps shown in the empty state -->
+    <string name="home_empty_how_to_start">Get started in 3 steps</string>
+    <string name="home_empty_step1">Connect a Google Drive or OneDrive account.</string>
+    <string name="home_empty_step1_action">Accounts</string>
+    <string name="home_empty_step2">Create a sync pair linking a local folder to a cloud folder.</string>
+    <string name="home_empty_step2_action">Create pair</string>
+    <string name="home_empty_step3">Synckro will keep both folders in sync automatically.</string>
+
+    <!-- Home pair card status messages -->
+    <string name="home_needs_reauth_hint">Sign-in expired — go to Accounts to re-authenticate and resume syncing.</string>
+
+    <!-- Accounts screen additional hints -->
+    <string name="accounts_body_hint">After connecting an account, tap the + button on the home screen to add your first sync pair.</string>
+    <string name="accounts_reauth_account_hint">Sign-in expired — tap Re-authenticate to restore access.</string>
+
+    <!-- Pick remote folder: signing-in loading state -->
+    <string name="pick_remote_folder_signing_in">Signing in to cloud storage…</string>
+
+    <!-- Conflict inbox: explainer and per-action descriptions -->
+    <string name="conflict_inbox_explainer">Both the local and cloud copies of these files changed since the last sync. Choose how to resolve each conflict — your choice will be applied on the next sync.</string>
+    <string name="conflict_inbox_local_label">Local version</string>
+    <string name="conflict_inbox_remote_label">Cloud version</string>
+    <string name="conflict_inbox_keep_local_hint">Overwrite the cloud copy with your local file</string>
+    <string name="conflict_inbox_keep_remote_hint">Overwrite the local copy with the cloud file</string>
+    <string name="conflict_inbox_keep_both_hint">Rename one copy and keep both versions</string>
 </resources>

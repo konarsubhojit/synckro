@@ -1,12 +1,15 @@
 package com.synckro.ui.screens.pickfolder
 
+import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -17,6 +20,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.NavigateNext
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -30,7 +34,9 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -40,6 +46,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.synckro.R
 import com.synckro.domain.provider.RemoteFile
+import com.synckro.ui.auth.ActivityAuthUiHost
 import com.synckro.ui.components.LoadingState
 
 /**
@@ -49,6 +56,15 @@ import com.synckro.ui.components.LoadingState
  * Back navigation (system back or the top-app-bar arrow) navigates up the folder
  * tree rather than closing the screen. Pressing back at the root calls [onBack].
  *
+ * When the cloud provider returns an authentication error the ViewModel emits a
+ * [PickRemoteFolderViewModel.reauthEvent].  This screen observes that event and
+ * immediately calls [PickRemoteFolderViewModel.signInAndRetry] with an
+ * [ActivityAuthUiHost] so the interactive sign-in flow is launched automatically
+ * without the user having to navigate away to the Accounts screen first.
+ *
+ * @param activity The host [ComponentActivity] needed to launch interactive sign-in
+ *   flows (Credential Manager / consent intents). Kept here — not in the ViewModel —
+ *   to avoid leaking Activity references.
  * @param onFolderPicked Called with the selected folder's ID and display name.
  *   An empty [id] means the root level was chosen.
  * @param onBack Called when the user cancels without making a selection.
@@ -56,11 +72,24 @@ import com.synckro.ui.components.LoadingState
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PickRemoteFolderScreen(
+    activity: ComponentActivity,
     onFolderPicked: (id: String, name: String) -> Unit,
     onBack: () -> Unit,
     viewModel: PickRemoteFolderViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val host = remember(activity) { ActivityAuthUiHost(activity) }
+
+    // When the ViewModel detects an expired or missing access token it emits a
+    // reauthEvent instead of showing an error.  We collect that here and kick off
+    // the interactive sign-in flow; the ViewModel keeps isReauthenticating = true
+    // so the screen shows a dedicated "Signing in…" message instead of the generic
+    // loading spinner.
+    LaunchedEffect(Unit) {
+        viewModel.reauthEvent.collect {
+            viewModel.signInAndRetry { manager -> manager.signIn(host) }
+        }
+    }
 
     // Intercept system back to navigate up the hierarchy; close the screen only when at root.
     BackHandler(enabled = state.breadcrumbs.size > 1) {
@@ -102,6 +131,11 @@ fun PickRemoteFolderScreen(
 
             Box(modifier = Modifier.weight(1f)) {
                 when {
+                    state.isReauthenticating -> {
+                        LoadingState(
+                            message = stringResource(R.string.pick_remote_folder_signing_in),
+                        )
+                    }
                     state.isLoading -> {
                         LoadingState(
                             message = stringResource(R.string.loading_folders),
@@ -154,7 +188,7 @@ fun PickRemoteFolderScreen(
                         val folderId = state.currentFolderId ?: ""
                         onFolderPicked(folderId, currentName)
                     },
-                    enabled = !state.isLoading && state.error == null,
+                    enabled = !state.isLoading && !state.isReauthenticating && state.error == null,
                     modifier =
                         Modifier
                             .fillMaxWidth()
@@ -253,12 +287,19 @@ private fun ErrorContent(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+        Icon(
+            Icons.Filled.Lock,
+            contentDescription = null,
+            modifier = Modifier.size(40.dp),
+            tint = MaterialTheme.colorScheme.error,
+        )
         Text(
             text = error ?: stringResource(R.string.pick_remote_folder_unknown_error),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.error,
         )
-        OutlinedButton(onClick = onRetry) {
+        Spacer(Modifier.height(4.dp))
+        Button(onClick = onRetry) {
             Text(stringResource(R.string.pick_remote_folder_retry))
         }
     }

@@ -17,6 +17,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -25,11 +28,13 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -43,6 +48,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -100,14 +106,40 @@ fun AccountsScreen(
                     .fillMaxSize()
                     .verticalScroll(rememberScrollState())
                     .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Text(
-                text = stringResource(R.string.accounts_body),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(Modifier.height(4.dp))
+            // Introductory instruction banner
+            Surface(
+                color = MaterialTheme.colorScheme.secondaryContainer,
+                shape = MaterialTheme.shapes.medium,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Row(
+                    modifier = Modifier.padding(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.Top,
+                ) {
+                    Icon(
+                        Icons.Default.Info,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            text = stringResource(R.string.accounts_body),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        )
+                        Text(
+                            text = stringResource(R.string.accounts_body_hint),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        )
+                    }
+                }
+            }
+
             state.rows.forEach { row ->
                 AccountProviderCard(
                     row = row,
@@ -127,26 +159,47 @@ private fun AccountProviderCard(
     onConnect: () -> Unit,
     onDisconnect: (Account) -> Unit,
 ) {
+    val needsReauth = row.needsReauth
+    val cardColor = if (needsReauth) {
+        MaterialTheme.colorScheme.errorContainer
+    } else {
+        MaterialTheme.colorScheme.surfaceVariant
+    }
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors =
-            CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-            ),
+        colors = CardDefaults.cardColors(
+            containerColor = cardColor,
+            contentColor = MaterialTheme.colorScheme.onSurface,
+        ),
     ) {
         Column(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text(
-                text = row.providerDisplayName,
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
+            // Provider header
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = row.providerDisplayName,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                if (row.accounts.isNotEmpty() && !needsReauth) {
+                    Icon(
+                        Icons.Default.CheckCircle,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
+            }
+
             if (!row.isConfigured) {
                 Text(
                     text = stringResource(R.string.accounts_not_configured_format, row.providerDisplayName),
@@ -154,12 +207,42 @@ private fun AccountProviderCard(
                     color = MaterialTheme.colorScheme.error,
                 )
             }
+
+            // Reauth banner — shown at provider level when ANY account needs it
+            if (needsReauth) {
+                Surface(
+                    color = MaterialTheme.colorScheme.error.copy(alpha = 0.12f),
+                    shape = MaterialTheme.shapes.small,
+                ) {
+                    Row(
+                        modifier = Modifier.padding(10.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.Top,
+                    ) {
+                        Icon(
+                            Icons.Default.Warning,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(16.dp),
+                        )
+                        Text(
+                            text = stringResource(R.string.accounts_reauth_required),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                }
+            }
+
+            // Connected accounts
             if (row.accounts.isEmpty()) {
                 Text(
                     text = stringResource(R.string.accounts_empty),
                     style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             } else {
+                HorizontalDivider()
                 row.accounts.forEach { item ->
                     AccountItemRow(
                         item = item,
@@ -169,8 +252,8 @@ private fun AccountProviderCard(
                     )
                 }
             }
-            // "Add another" when accounts exist; "Connect" when none; "Re-authenticate"
-            // when the provider level needs re-auth and no accounts are listed.
+
+            // Connect / Add another / Re-authenticate button
             Button(
                 onClick = onConnect,
                 enabled = !row.isBusy && row.isConfigured,
@@ -178,21 +261,21 @@ private fun AccountProviderCard(
             ) {
                 if (row.isBusy) {
                     CircularProgressIndicator(
-                        modifier = Modifier.height(18.dp),
+                        modifier = Modifier.size(18.dp),
                         strokeWidth = 2.dp,
                         color = MaterialTheme.colorScheme.onPrimary,
                     )
                 } else {
                     val label =
                         when {
-                            row.accounts.isNotEmpty() ->
+                            row.accounts.isNotEmpty() && !needsReauth ->
                                 stringResource(R.string.accounts_add_another_format, row.providerDisplayName)
-                            row.needsReauth ->
+                            needsReauth ->
                                 stringResource(R.string.accounts_reauth_button, row.providerDisplayName)
                             else ->
                                 stringResource(R.string.accounts_connect_format, row.providerDisplayName)
                         }
-                    Text(label)
+                    Text(label, fontWeight = FontWeight.Medium)
                 }
             }
         }
@@ -200,9 +283,8 @@ private fun AccountProviderCard(
 }
 
 /**
- * A single row showing an account's avatar (first-letter initials), email /
- * display name, an optional per-account Re-authenticate button, and a Disconnect
- * button.
+ * A single row showing an account's avatar initials, email / display name,
+ * an optional per-account Re-authenticate button, and a Disconnect button.
  */
 @Composable
 private fun AccountItemRow(
@@ -219,12 +301,11 @@ private fun AccountItemRow(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        // Avatar circle with initials
         val avatarDescription = stringResource(R.string.accounts_avatar_description, label)
         Box(
             modifier =
                 Modifier
-                    .size(32.dp)
+                    .size(36.dp)
                     .background(
                         color = MaterialTheme.colorScheme.primaryContainer,
                         shape = CircleShape,
@@ -236,14 +317,30 @@ private fun AccountItemRow(
                 text = initial,
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onPrimaryContainer,
+                fontWeight = FontWeight.Bold,
             )
         }
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.weight(1f),
-        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface,
+                fontWeight = FontWeight.Medium,
+            )
+            if (item.needsReauth) {
+                Text(
+                    text = stringResource(R.string.accounts_reauth_account_hint),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            } else {
+                Text(
+                    text = stringResource(R.string.accounts_signed_in_format, label),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+        }
         if (item.needsReauth) {
             OutlinedButton(
                 onClick = onReauth,
@@ -340,7 +437,6 @@ private fun DisconnectConfirmDialog(
             }
         },
         confirmButton = {
-            // Two action buttons stacked: Reassign (when possible) then Delete.
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 val target = selectedReassign
                 if (target != null) {
@@ -354,7 +450,10 @@ private fun DisconnectConfirmDialog(
                     }
                 }
                 TextButton(onClick = onDelete) {
-                    Text(stringResource(R.string.accounts_disconnect_confirm_delete))
+                    Text(
+                        stringResource(R.string.accounts_disconnect_confirm_delete),
+                        color = MaterialTheme.colorScheme.error,
+                    )
                 }
             }
         },
