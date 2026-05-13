@@ -80,6 +80,34 @@ class GoogleDriveAuthManager private constructor(
     )
 
     companion object {
+        /**
+         * Google Drive OAuth scope.
+         *
+         * **Scope rationale (sub-issue #141, evaluate drive vs drive.file):**
+         *
+         * We currently request the full `auth/drive` scope rather than the narrower
+         * `auth/drive.file` scope. The reason is that Synckro must enumerate and sync
+         * **any folder the user picks via "Pick remote folder"** — including folders
+         * that were created outside the app (the user's existing Drive layout). The
+         * `drive.file` scope only grants access to files the app itself created or
+         * that the user explicitly opened through Google's Drive picker UI. That
+         * constraint is incompatible with the current "browse my Drive → pick any
+         * folder → sync it bidirectionally" UX.
+         *
+         * **Future migration path:**
+         * 1. Adopt the Google Drive Picker (Android `OpenIntent` / `DocumentSelector`)
+         *    on the "Pick remote folder" screen — file/folder ids returned by that
+         *    picker are accessible under `drive.file`.
+         * 2. Persist the picker-granted ids so existing pairs continue to work after
+         *    the scope migration; trigger the picker again for any pair whose remote
+         *    folder is no longer reachable post-migration.
+         * 3. Switch [DRIVE_SCOPE] to `https://www.googleapis.com/auth/drive.file`,
+         *    bump the Drive client id config in Google Cloud Console, and re-run
+         *    CASA / OAuth verification.
+         *
+         * Until step 1 is implemented, the broader `drive` scope is required and
+         * is documented in the Play Console data-safety form and our privacy policy.
+         */
         private const val DRIVE_SCOPE = "https://www.googleapis.com/auth/drive"
         private const val PREFS_NAME = "gdrive_account"
         private const val KEY_ACCOUNTS = "accounts"

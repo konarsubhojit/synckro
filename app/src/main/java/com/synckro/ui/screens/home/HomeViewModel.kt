@@ -3,12 +3,14 @@ package com.synckro.ui.screens.home
 import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.work.BackoffPolicy
 import androidx.work.Constraints
 import androidx.work.ExistingWorkPolicy
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.workDataOf
+import java.util.concurrent.TimeUnit
 import com.synckro.data.repository.AccountRepository
 import com.synckro.data.repository.ConflictRepository
 import com.synckro.data.repository.SyncPairRepository
@@ -227,6 +229,14 @@ class HomeViewModel
                 OneTimeWorkRequestBuilder<SyncWorker>()
                     .setConstraints(constraints)
                     .setInputData(workDataOf(SyncWorker.KEY_PAIR_ID to pair.id))
+                    // Same exponential-backoff policy as the periodic schedule so a
+                    // manual "Sync now" that hits a transient network/auth blip retries
+                    // on a sane curve instead of WorkManager's default 10s linear.
+                    .setBackoffCriteria(
+                        BackoffPolicy.EXPONENTIAL,
+                        SyncWorker.BACKOFF_INITIAL_DELAY_SECONDS,
+                        TimeUnit.SECONDS,
+                    )
                     .build()
             // Optimistically mark the pair as syncing so the home row shows a spinner
             // immediately; the watcher coroutine below clears it once the worker is
