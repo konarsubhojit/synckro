@@ -95,9 +95,11 @@ class GoogleDriveAuthManager private constructor(
          * folder → sync it bidirectionally" UX.
          *
          * **Future migration path:**
-         * 1. Adopt the Google Drive Picker (Android `OpenIntent` / `DocumentSelector`)
-         *    on the "Pick remote folder" screen — file/folder ids returned by that
-         *    picker are accessible under `drive.file`.
+         * 1. Adopt Google's Drive Picker (an OAuth-aware folder/file picker exposed by
+         *    Google Play Services / Drive SDK) on the "Pick remote folder" screen — file
+         *    and folder ids returned by that picker are accessible under `drive.file`.
+         *    Where the Picker is not available, the OS-level `Intent.ACTION_OPEN_DOCUMENT_TREE`
+         *    flow could be evaluated as a fallback for users who don't have Play Services.
          * 2. Persist the picker-granted ids so existing pairs continue to work after
          *    the scope migration; trigger the picker again for any pair whose remote
          *    folder is no longer reachable post-migration.
