@@ -278,8 +278,7 @@ class GoogleDriveAuthManagerTest {
         assertTrue(
             authManager.matchesRequestedAccount(
                 accountA,
-                resolvedAccountId = null,
-                resolvedEmail = null,
+                resolvedAccount = null,
             ),
         )
     }
@@ -289,8 +288,11 @@ class GoogleDriveAuthManagerTest {
         assertTrue(
             authManager.matchesRequestedAccount(
                 accountA,
-                resolvedAccountId = "117248723489723498723",
-                resolvedEmail = null,
+                resolvedAccount =
+                    GoogleDriveAuthManager.ResolvedGoogleAccount(
+                        id = "117248723489723498723",
+                        email = null,
+                    ),
             ),
         )
     }
@@ -300,8 +302,11 @@ class GoogleDriveAuthManagerTest {
         assertTrue(
             authManager.matchesRequestedAccount(
                 accountA,
-                resolvedAccountId = "117248723489723498723",
-                resolvedEmail = "ALPHA@GMAIL.COM",
+                resolvedAccount =
+                    GoogleDriveAuthManager.ResolvedGoogleAccount(
+                        id = "117248723489723498723",
+                        email = "ALPHA@GMAIL.COM",
+                    ),
             ),
         )
     }
@@ -311,8 +316,11 @@ class GoogleDriveAuthManagerTest {
         assertFalse(
             authManager.matchesRequestedAccount(
                 accountA,
-                resolvedAccountId = "117248723489723498723",
-                resolvedEmail = "other@gmail.com",
+                resolvedAccount =
+                    GoogleDriveAuthManager.ResolvedGoogleAccount(
+                        id = "117248723489723498723",
+                        email = "other@gmail.com",
+                    ),
             ),
         )
     }

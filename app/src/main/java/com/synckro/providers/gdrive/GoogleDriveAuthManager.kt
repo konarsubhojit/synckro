@@ -74,6 +74,11 @@ class GoogleDriveAuthManager private constructor(
     private val prefsOverride: SharedPreferences?,
     private val webClientId: String,
 ) : AuthManager {
+    internal data class ResolvedGoogleAccount(
+        val id: String?,
+        val email: String?,
+    )
+
     companion object {
         private const val DRIVE_SCOPE = "https://www.googleapis.com/auth/drive"
         private const val PREFS_NAME = "gdrive_account"
@@ -450,21 +455,31 @@ class GoogleDriveAuthManager private constructor(
         val resolvedAccount = toGoogleSignInAccount()
         return matchesRequestedAccount(
             account = account,
-            resolvedAccountId = resolvedAccount?.id,
-            resolvedEmail = resolvedAccount?.email,
+            resolvedAccount =
+                ResolvedGoogleAccount(
+                    id = resolvedAccount?.id,
+                    email = resolvedAccount?.email,
+                ),
         )
     }
 
+    /**
+     * Validates silent authorization principal matching.
+     *
+     * [resolvedAccount?.id] is intentionally not compared because GoogleSignInAccount.id is an opaque Google
+     * account identifier, while this app stores account ids as emails for Google Drive.
+     */
     internal fun matchesRequestedAccount(
         account: Account,
-        @Suppress("UNUSED_PARAMETER")
-        resolvedAccountId: String?,
-        resolvedEmail: String?,
+        resolvedAccount: ResolvedGoogleAccount?,
     ): Boolean {
         // toGoogleSignInAccount() often yields null/blank email for silent Drive-scope-only
         // authorization results. Because buildDriveAuthRequest() already pins authorization to
         // the requested account via setAccount(), unverifiable silent results should be trusted.
         // Also, GoogleSignInAccount.id is an opaque Google account id, not the user's email.
+        // account.id is still used as a fallback because Google Drive accounts in this app are
+        // persisted with email-shaped ids (legacy/current storage contract).
+        val resolvedEmail = resolvedAccount?.email
         val requestedEmail = account.email ?: account.id
         return resolvedEmail.isNullOrBlank() || resolvedEmail.equals(requestedEmail, ignoreCase = true)
     }
