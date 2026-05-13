@@ -28,6 +28,8 @@ class GoogleDriveProvider
         private val accountId: String,
         private val authManager: GoogleDriveAuthManager,
         private val restClient: GoogleDriveRestClient,
+        private val clock: () -> Long = System::currentTimeMillis,
+        private val tokenExpiryThresholdMs: Long = TOKEN_EXPIRY_THRESHOLD_MS,
     ) : CloudProvider {
         override val displayName: String = "Google Drive"
 
@@ -37,6 +39,20 @@ class GoogleDriveProvider
          */
         @Volatile
         private var cachedAccessToken: String? = null
+
+        /**
+         * Epoch-millis timestamp at which [cachedAccessToken] was last acquired.
+         * Reset to 0 whenever the token is cleared.
+         */
+        @Volatile
+        private var tokenAcquiredAtMs: Long = 0L
+
+        /**
+         * Returns `true` when the cached token exists but is older than
+         * [tokenExpiryThresholdMs] and should be proactively refreshed.
+         * Only meaningful when [cachedAccessToken] is non-null.
+         */
+        private fun isTokenStale(): Boolean = (clock() - tokenAcquiredAtMs) >= tokenExpiryThresholdMs
 
         /**
          * Returns the cached access token or throws [CloudProviderException.AuthenticationRequired]
@@ -53,12 +69,24 @@ class GoogleDriveProvider
          * [RemoteEnumerator] implementations
          * that need to make Drive calls outside the [CloudProvider] surface.
          *
+         * Proactively refreshes the token when it is older than [tokenExpiryThresholdMs]
+         * to avoid reactive 401 round-trips on nominal operation.
+         *
          * Follows the same concurrency contract as [ensureAuthenticated]: callers
          * must ensure sequential access (the cached-token field is `@Volatile`,
          * but this method does not serialize concurrent invocations itself).
          */
         internal suspend fun obtainAccessToken(): String {
-            if (cachedAccessToken == null) ensureAuthenticated()
+            when {
+                cachedAccessToken == null -> ensureAuthenticated()
+                isTokenStale() -> {
+                    Timber.d(
+                        "GoogleDriveProvider.obtainAccessToken: token is stale " +
+                            "(age ${clock() - tokenAcquiredAtMs}ms ≥ threshold ${tokenExpiryThresholdMs}ms); refreshing proactively",
+                    )
+                    ensureAuthenticated()
+                }
+            }
             return requireToken()
         }
 
@@ -73,6 +101,7 @@ class GoogleDriveProvider
             } catch (e: DriveApiException) {
                 if (e.statusCode == 401) {
                     cachedAccessToken = null
+                    tokenAcquiredAtMs = 0L
                     throw CloudProviderException.AuthenticationRequired(
                         "Google Drive access token rejected (401). Please re-authenticate.",
                     )
@@ -108,6 +137,7 @@ class GoogleDriveProvider
             return when (val result = authManager.acquireAccessToken(account)) {
                 is AuthResult.Success -> {
                     cachedAccessToken = result.value
+                    tokenAcquiredAtMs = clock()
                     Timber.d("GoogleDriveProvider.ensureAuthenticated: token acquired")
                     true
                 }
@@ -222,6 +252,11 @@ class GoogleDriveProvider
                     hasMore = false,
                 )
             }
+
+        companion object {
+            /** Tokens older than this threshold are proactively refreshed before any API call. */
+            internal const val TOKEN_EXPIRY_THRESHOLD_MS = 50L * 60 * 1_000 // 50 minutes
+        }
     }
 
 @Singleton

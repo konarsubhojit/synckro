@@ -194,6 +194,62 @@ class OneDriveProviderAuthTest {
         }
 
     // -------------------------------------------------------------------------
+    // Proactive token refresh
+    // -------------------------------------------------------------------------
+
+    @Test
+    fun `obtainAccessToken proactively refreshes when token is stale`() =
+        runTest {
+            var fakeTime = 0L
+            val testProvider = OneDriveProvider(
+                fakeAccount.id, authManager, graphClient,
+                clock = { fakeTime },
+                tokenExpiryThresholdMs = OneDriveProvider.TOKEN_EXPIRY_THRESHOLD_MS,
+            )
+            // First authentication — acquires a fresh token.
+            coEvery { authManager.currentAccounts() } returns listOf(fakeAccount)
+            coEvery { authManager.acquireAccessToken(fakeAccount) } returns AuthResult.Success("token-fresh")
+            coEvery { graphClient.list(any(), null) } returns emptyList()
+
+            testProvider.ensureAuthenticated()
+
+            // Advance clock past the 50-minute threshold.
+            fakeTime = OneDriveProvider.TOKEN_EXPIRY_THRESHOLD_MS
+
+            // Next API call must trigger a proactive refresh.
+            coEvery { authManager.acquireAccessToken(fakeAccount) } returns AuthResult.Success("token-refreshed")
+            coEvery { graphClient.list("token-refreshed", null) } returns emptyList()
+
+            testProvider.list(null)
+
+            coVerify(exactly = 2) { authManager.acquireAccessToken(fakeAccount) }
+        }
+
+    @Test
+    fun `obtainAccessToken does not refresh when token is still fresh`() =
+        runTest {
+            var fakeTime = 0L
+            val testProvider = OneDriveProvider(
+                fakeAccount.id, authManager, graphClient,
+                clock = { fakeTime },
+                tokenExpiryThresholdMs = OneDriveProvider.TOKEN_EXPIRY_THRESHOLD_MS,
+            )
+            coEvery { authManager.currentAccounts() } returns listOf(fakeAccount)
+            coEvery { authManager.acquireAccessToken(fakeAccount) } returns AuthResult.Success("token-abc")
+            coEvery { graphClient.list("token-abc", null) } returns emptyList()
+
+            testProvider.ensureAuthenticated()
+
+            // Advance clock to just under the threshold.
+            fakeTime = OneDriveProvider.TOKEN_EXPIRY_THRESHOLD_MS - 1
+
+            testProvider.list(null)
+
+            // acquireAccessToken called only once (during ensureAuthenticated).
+            coVerify(exactly = 1) { authManager.acquireAccessToken(fakeAccount) }
+        }
+
+    // -------------------------------------------------------------------------
     // Exception hierarchy — ensure subtypes are correct
     // -------------------------------------------------------------------------
 
