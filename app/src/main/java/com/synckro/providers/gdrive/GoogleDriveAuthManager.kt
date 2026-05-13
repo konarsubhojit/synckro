@@ -447,13 +447,26 @@ class GoogleDriveAuthManager private constructor(
     }
 
     private fun AuthorizationResult.matchesRequestedAccount(account: Account): Boolean {
-        // toGoogleSignInAccount() returns null for silent Drive-scope-only authorization
-        // results that do not embed an ID token (the Drive scope alone does not produce
-        // one).  Since the authorization request already pins the account via setAccount()
-        // in buildDriveAuthRequest, a successful silent result that cannot be verified
-        // should be trusted rather than rejected as belonging to the wrong principal.
-        val resolvedAccount = toGoogleSignInAccount() ?: return true
-        return resolvedAccount.id == account.id || resolvedAccount.email == account.email
+        val resolvedAccount = toGoogleSignInAccount()
+        return matchesRequestedAccount(
+            account = account,
+            resolvedAccountId = resolvedAccount?.id,
+            resolvedEmail = resolvedAccount?.email,
+        )
+    }
+
+    internal fun matchesRequestedAccount(
+        account: Account,
+        @Suppress("UNUSED_PARAMETER")
+        resolvedAccountId: String?,
+        resolvedEmail: String?,
+    ): Boolean {
+        // toGoogleSignInAccount() often yields null/blank email for silent Drive-scope-only
+        // authorization results. Because buildDriveAuthRequest() already pins authorization to
+        // the requested account via setAccount(), unverifiable silent results should be trusted.
+        // Also, GoogleSignInAccount.id is an opaque Google account id, not the user's email.
+        val requestedEmail = account.email ?: account.id
+        return resolvedEmail.isNullOrBlank() || resolvedEmail.equals(requestedEmail, ignoreCase = true)
     }
 
     /**

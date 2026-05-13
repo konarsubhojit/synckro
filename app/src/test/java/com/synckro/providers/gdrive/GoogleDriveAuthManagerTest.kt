@@ -274,6 +274,50 @@ class GoogleDriveAuthManagerTest {
     }
 
     @Test
+    fun `matchesRequestedAccount accepts when google sign in account is unavailable`() {
+        assertTrue(
+            authManager.matchesRequestedAccount(
+                accountA,
+                resolvedAccountId = null,
+                resolvedEmail = null,
+            ),
+        )
+    }
+
+    @Test
+    fun `matchesRequestedAccount accepts when resolved account has null email and numeric id`() {
+        assertTrue(
+            authManager.matchesRequestedAccount(
+                accountA,
+                resolvedAccountId = "117248723489723498723",
+                resolvedEmail = null,
+            ),
+        )
+    }
+
+    @Test
+    fun `matchesRequestedAccount accepts case insensitive email match`() {
+        assertTrue(
+            authManager.matchesRequestedAccount(
+                accountA,
+                resolvedAccountId = "117248723489723498723",
+                resolvedEmail = "ALPHA@GMAIL.COM",
+            ),
+        )
+    }
+
+    @Test
+    fun `matchesRequestedAccount rejects concrete mismatched email`() {
+        assertFalse(
+            authManager.matchesRequestedAccount(
+                accountA,
+                resolvedAccountId = "117248723489723498723",
+                resolvedEmail = "other@gmail.com",
+            ),
+        )
+    }
+
+    @Test
     fun `resolveSilentAuthEmail prefers stored email then requested email then ids`() {
         val storedWithEmail = accountA.copy(email = "stored@gmail.com", id = "stored-id")
         val requestedWithEmail = accountB.copy(email = "requested@gmail.com", id = "requested-id")
