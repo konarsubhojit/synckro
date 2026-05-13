@@ -64,9 +64,10 @@ class Migration11To12InstrumentedTest {
         execSQL(
             "INSERT INTO sync_pair (displayName, localTreeUri, provider, remoteFolderId, " +
                 "direction, conflictPolicy, includeGlobs, excludeGlobs, wifiOnly, " +
-                "requiresCharging, scheduleIntervalMinutes) VALUES " +
+                "requiresCharging, autoSyncEnabled, scheduleIntervalMinutes, " +
+                "excludeSubfolders, excludeEmptyFolders) VALUES " +
                 "('$displayName', 'content://test', '$provider', 'remote123', " +
-                "'BIDIRECTIONAL', 'NEWEST_WINS', '', '', 1, 0, 60)",
+                "'BIDIRECTIONAL', 'NEWEST_WINS', '', '', 1, 0, 1, 60, 0, 0)",
         )
     }
 
