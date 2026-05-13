@@ -16,6 +16,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import java.util.Base64
 
 /**
  * Unit tests for [GoogleDriveAuthManager] using Robolectric so that
@@ -183,4 +184,129 @@ class GoogleDriveAuthManagerTest {
             assertFalse(testPrefs.contains("display_name"))
             assertFalse(testPrefs.contains("email"))
         }
+
+    @Test
+    fun `resolveGoogleAccountEmail prefers credential id when it is an email`() {
+        val resolved =
+            authManager.resolveGoogleAccountEmail(
+                credentialId = "user@gmail.com",
+                idToken = null,
+            )
+
+        assertEquals("user@gmail.com", resolved)
+    }
+
+    @Test
+    fun `resolveGoogleAccountEmail falls back to id token email claim`() {
+        val payload =
+            Base64
+                .getUrlEncoder()
+                .withoutPadding()
+                .encodeToString("""{"email":"claim@gmail.com"}""".toByteArray())
+        val token = "header.$payload.signature"
+
+        val resolved =
+            authManager.resolveGoogleAccountEmail(
+                credentialId = "opaque-subject-id",
+                idToken = token,
+            )
+
+        assertEquals("claim@gmail.com", resolved)
+    }
+
+    @Test
+    fun `resolveGoogleAccountEmail prefers credential id over token claim`() {
+        val payload =
+            Base64
+                .getUrlEncoder()
+                .withoutPadding()
+                .encodeToString("""{"email":"claim@gmail.com"}""".toByteArray())
+        val token = "header.$payload.signature"
+
+        val resolved =
+            authManager.resolveGoogleAccountEmail(
+                credentialId = "credential@gmail.com",
+                idToken = token,
+            )
+
+        assertEquals("credential@gmail.com", resolved)
+    }
+
+    @Test
+    fun `resolveGoogleAccountEmail returns null when neither credential id nor token has email`() {
+        val resolved =
+            authManager.resolveGoogleAccountEmail(
+                credentialId = "opaque-subject-id",
+                idToken = null,
+            )
+
+        assertEquals(null, resolved)
+    }
+
+    @Test
+    fun `extractEmailFromIdToken returns null for malformed token`() {
+        assertEquals(null, authManager.extractEmailFromIdToken("not-a-jwt"))
+    }
+
+    @Test
+    fun `extractEmailFromIdToken returns null for invalid payload encoding or json`() {
+        val invalidBase64Token = "header.@@@.signature"
+        val nonJsonPayload =
+            Base64
+                .getUrlEncoder()
+                .withoutPadding()
+                .encodeToString("not-json".toByteArray())
+        val nonJsonToken = "header.$nonJsonPayload.signature"
+
+        assertEquals(null, authManager.extractEmailFromIdToken(invalidBase64Token))
+        assertEquals(null, authManager.extractEmailFromIdToken(nonJsonToken))
+    }
+
+    @Test
+    fun `hasEmailShape validates basic email pattern`() {
+        assertTrue(authManager.hasEmailShape("user@domain.com"))
+        assertFalse(authManager.hasEmailShape("@domain.com"))
+        assertFalse(authManager.hasEmailShape("user@"))
+        assertFalse(authManager.hasEmailShape("user@domain@extra.com"))
+        assertFalse(authManager.hasEmailShape("user-domain.com"))
+        assertFalse(authManager.hasEmailShape(null))
+        assertFalse(authManager.hasEmailShape(""))
+    }
+
+    @Test
+    fun `resolveSilentAuthEmail prefers stored email then requested email then ids`() {
+        val storedWithEmail = accountA.copy(email = "stored@gmail.com", id = "stored-id")
+        val requestedWithEmail = accountB.copy(email = "requested@gmail.com", id = "requested-id")
+        assertEquals(
+            "stored@gmail.com",
+            authManager.resolveSilentAuthEmail(storedWithEmail, requestedWithEmail),
+        )
+
+        val storedWithoutEmail = storedWithEmail.copy(email = null)
+        assertEquals(
+            "requested@gmail.com",
+            authManager.resolveSilentAuthEmail(storedWithoutEmail, requestedWithEmail),
+        )
+
+        val requestedWithEmailIdOnly = requestedWithEmail.copy(email = null, id = "requested-id@gmail.com")
+        assertEquals(
+            "requested-id@gmail.com",
+            authManager.resolveSilentAuthEmail(storedWithoutEmail, requestedWithEmailIdOnly),
+        )
+
+        val storedWithEmailIdOnly = storedWithoutEmail.copy(id = "stored-id@gmail.com")
+        val requestedNoEmailShape = requestedWithEmail.copy(email = null, id = "requested-id")
+        assertEquals(
+            "stored-id@gmail.com",
+            authManager.resolveSilentAuthEmail(storedWithEmailIdOnly, requestedNoEmailShape),
+        )
+
+        assertEquals(
+            null,
+            authManager.resolveSilentAuthEmail(
+                storedWithoutEmail.copy(id = "stored-id"),
+                requestedNoEmailShape,
+            ),
+        )
+    }
 }

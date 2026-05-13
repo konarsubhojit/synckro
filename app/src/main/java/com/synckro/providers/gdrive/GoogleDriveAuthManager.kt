@@ -5,6 +5,7 @@ import android.app.Activity
 import android.app.PendingIntent
 import android.content.Context
 import android.content.SharedPreferences
+import android.util.Patterns
 import androidx.activity.ComponentActivity
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.IntentSenderRequest
@@ -42,6 +43,7 @@ import org.json.JSONObject
 import timber.log.Timber
 import javax.inject.Inject
 import javax.inject.Singleton
+import java.util.Base64
 import kotlin.coroutines.resume
 
 /**
@@ -185,10 +187,11 @@ class GoogleDriveAuthManager private constructor(
             }
 
         // Step 2: Request Drive authorization (shows consent screen if needed).
+        val accountEmail = resolveGoogleAccountEmail(idTokenCredential.id, idTokenCredential.idToken)
         val authorizationResult =
             Identity
                 .getAuthorizationClient(activity)
-                .authorize(buildDriveAuthRequest(accountEmail = idTokenCredential.id))
+                .authorize(buildDriveAuthRequest(accountEmail = accountEmail))
                 .awaitTask()
                 .getOrElse { e ->
                     Timber.e(e, "GoogleDriveAuthManager.signIn: authorization failed")
@@ -215,8 +218,8 @@ class GoogleDriveAuthManager private constructor(
             Account(
                 id = idTokenCredential.id,
                 provider = CloudProviderType.GOOGLE_DRIVE,
-                displayName = idTokenCredential.displayName ?: idTokenCredential.id,
-                email = idTokenCredential.id,
+                displayName = resolveDisplayName(idTokenCredential.displayName, accountEmail, idTokenCredential.id),
+                email = accountEmail,
             )
         storeAccount(account)
         Timber.i("GoogleDriveAuthManager.signIn: success for ${account.email}")
@@ -248,7 +251,13 @@ class GoogleDriveAuthManager private constructor(
         val storedAccount =
             readStoredAccounts().firstOrNull { it.id == account.id }
                 ?: return AuthResult.NeedsInteractiveSignIn
-        val email = storedAccount.email ?: return AuthResult.NeedsInteractiveSignIn
+        val email = resolveSilentAuthEmail(storedAccount, account) ?: return AuthResult.NeedsInteractiveSignIn
+        val resolvedStoredAccount =
+            if (storedAccount.email == email) {
+                storedAccount
+            } else {
+                storedAccount.copy(email = email).also { storeAccount(it) }
+            }
 
         Timber.d("GoogleDriveAuthManager.acquireAccessToken: silent acquisition for ${account.id}")
 
@@ -267,7 +276,7 @@ class GoogleDriveAuthManager private constructor(
             return AuthResult.NeedsInteractiveSignIn
         }
 
-        if (!authorizationResult.matchesRequestedAccount(storedAccount)) {
+        if (!authorizationResult.matchesRequestedAccount(resolvedStoredAccount)) {
             Timber.w("GoogleDriveAuthManager.acquireAccessToken: silent result resolved a different account")
             return AuthResult.NeedsInteractiveSignIn
         }
@@ -311,6 +320,51 @@ class GoogleDriveAuthManager private constructor(
                     setAccount(AndroidAccount(accountEmail, GoogleAuthUtil.GOOGLE_ACCOUNT_TYPE))
                 }
             }.build()
+
+    internal fun resolveGoogleAccountEmail(
+        credentialId: String,
+        idToken: String?,
+    ): String? =
+        listOfNotNull(
+            credentialId.takeIf(::hasEmailShape),
+            extractEmailFromIdToken(idToken),
+        ).firstOrNull()
+
+    internal fun resolveSilentAuthEmail(
+        storedAccount: Account,
+        requestedAccount: Account,
+    ): String? =
+        listOfNotNull(
+            storedAccount.email?.takeIf(::hasEmailShape),
+            requestedAccount.email?.takeIf(::hasEmailShape),
+            requestedAccount.id.takeIf(::hasEmailShape),
+            storedAccount.id.takeIf(::hasEmailShape),
+        ).firstOrNull()
+
+    internal fun extractEmailFromIdToken(idToken: String?): String? {
+        if (idToken.isNullOrBlank()) return null
+        val payloadPart = idToken.split('.').getOrNull(1) ?: return null
+        return runCatching {
+            // This claim is decoded only as a fallback account hint when CredentialManager does
+            // not surface an email-like id directly. The idToken value originates from Google
+            // CredentialManager/Play Services (not app-provided input), and Drive authorization
+            // still relies on Play Services token APIs. We do not treat this decoded claim as
+            // standalone identity proof.
+            val payloadJson = String(Base64.getUrlDecoder().decode(payloadPart))
+            JSONObject(payloadJson).optString("email").takeIf(::hasEmailShape)
+        }.getOrNull()
+    }
+
+    private fun resolveDisplayName(
+        providerDisplayName: String?,
+        resolvedEmail: String?,
+        fallbackId: String,
+    ): String = providerDisplayName ?: resolvedEmail ?: fallbackId
+
+    internal fun hasEmailShape(value: String?): Boolean {
+        val trimmed = value?.trim().orEmpty()
+        return trimmed.isNotEmpty() && Patterns.EMAIL_ADDRESS.matcher(trimmed).matches()
+    }
 
     private fun readStoredAccounts(): List<Account> {
         val stored = accountPrefs.getString(KEY_ACCOUNTS, null)
