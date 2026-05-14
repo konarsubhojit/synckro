@@ -8,6 +8,8 @@
 
     <!-- Home -->
     <string name="home_title">Sync pairs</string>
+    <string name="home_tab_sync_pairs">Sync pairs</string>
+    <string name="home_tab_logs">Logs</string>
     <string name="home_empty">No sync pairs yet. Tap + to create one.</string>
     <string name="home_empty_hint">Tap the + button to add your first sync pair.</string>
     <string name="home_empty_needs_account">Connect a cloud account first — tap Accounts, then the + button to add a sync pair.</string>
