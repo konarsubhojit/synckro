@@ -1,5 +1,6 @@
 package com.synckro
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -22,6 +23,9 @@ import com.synckro.ui.theme.SynckroTheme
 import com.synckro.util.error.LocalUserMessageReporter
 import com.synckro.util.error.UserMessage
 import com.synckro.util.error.UserMessageReporter
+import com.synckro.util.navigation.AppNavEvent
+import com.synckro.util.navigation.AppNavigationDispatcher
+import com.synckro.util.notification.ReauthNotificationHelper
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.collectLatest
 import javax.inject.Inject
@@ -29,10 +33,13 @@ import javax.inject.Inject
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     @Inject lateinit var userMessages: UserMessageReporter
+    @Inject lateinit var appNavigationDispatcher: AppNavigationDispatcher
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        // Forward any deep-link navigation action present at launch time.
+        dispatchNavigationIntent(intent)
         setContent {
             SynckroTheme {
                 val snackbarHostState = remember { SnackbarHostState() }
@@ -77,11 +84,34 @@ class MainActivity : ComponentActivity() {
                                     .fillMaxSize()
                                     .padding(padding),
                         ) {
-                            SynckroNavHost(activity = this@MainActivity)
+                            SynckroNavHost(
+                                activity = this@MainActivity,
+                                appNavigationDispatcher = appNavigationDispatcher,
+                            )
                         }
                     }
                 }
             }
+        }
+    }
+
+    /**
+     * Called when the Activity is already running and receives a new intent (e.g. the user taps a
+     * notification while the app is in the foreground or in the back-stack).
+     * Forwards any navigation action to [appNavigationDispatcher] so the Compose NavHost can react.
+     */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        dispatchNavigationIntent(intent)
+    }
+
+    /**
+     * Extracts a navigation destination from [intent] and posts it to [appNavigationDispatcher].
+     * Currently handles [ReauthNotificationHelper.ACTION_OPEN_ACCOUNTS].
+     */
+    private fun dispatchNavigationIntent(intent: Intent) {
+        if (intent.action == ReauthNotificationHelper.ACTION_OPEN_ACCOUNTS) {
+            appNavigationDispatcher.navigateTo(AppNavEvent.OpenAccounts)
         }
     }
 }

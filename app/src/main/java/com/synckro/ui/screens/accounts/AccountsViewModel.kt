@@ -20,6 +20,7 @@ import com.synckro.domain.model.SyncEventTag
 import com.synckro.domain.model.SyncPair
 import com.synckro.util.error.UserMessage
 import com.synckro.util.error.UserMessageReporter
+import com.synckro.util.notification.ReauthNotificationHelper
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -498,6 +499,8 @@ class AccountsViewModel
                     // instead of waiting for the next worker run to overwrite lastSyncResult.
                     runCatching { syncPairDao.clearNeedsReauthForAccount(result.value.id) }
                         .onFailure { Timber.w(it, "AccountsViewModel: failed to clear NEEDS_REAUTH for accountId=${result.value.id}") }
+                    // Dismiss the system notification (if any) now that the account is reconnected.
+                    ReauthNotificationHelper.cancelReauthNotification(context, result.value.id)
                     syncEventRepository.log(
                         pairId = null,
                         level = SyncEventLevel.INFO,
