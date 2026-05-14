@@ -1,5 +1,6 @@
 package com.synckro.ui.navigation
 
+import android.net.Uri
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -34,15 +35,24 @@ object Routes {
     const val PICK_FOLDER = "pick_folder"
 
     /** Route template for the remote folder browser; requires a `provider` query parameter. */
-    const val PICK_REMOTE_FOLDER = "pick_remote_folder?${PickRemoteFolderViewModel.ARG_PROVIDER}={${PickRemoteFolderViewModel.ARG_PROVIDER}}"
+    const val PICK_REMOTE_FOLDER =
+        "pick_remote_folder" +
+            "?${PickRemoteFolderViewModel.ARG_PROVIDER}={${PickRemoteFolderViewModel.ARG_PROVIDER}}" +
+            "&${PickRemoteFolderViewModel.ARG_ACCOUNT_ID}={${PickRemoteFolderViewModel.ARG_ACCOUNT_ID}}"
 
     /** Optional query parameter `pairId`; defaults to 0 (show all pairs). */
     const val LOGS = "logs?pairId={pairId}"
 
     fun pairEditor(pairId: Long = 0L) = "pair_editor?pairId=$pairId"
 
-    fun pickRemoteFolder(provider: CloudProviderType) =
-        "pick_remote_folder?${PickRemoteFolderViewModel.ARG_PROVIDER}=${provider.name}"
+    fun pickRemoteFolder(provider: CloudProviderType, accountId: String?): String {
+        val base = "pick_remote_folder?${PickRemoteFolderViewModel.ARG_PROVIDER}=${provider.name}"
+        return if (accountId.isNullOrBlank()) {
+            base
+        } else {
+            "$base&${PickRemoteFolderViewModel.ARG_ACCOUNT_ID}=${Uri.encode(accountId)}"
+        }
+    }
 
     fun logs(pairId: Long = 0L) = "logs?pairId=$pairId"
 }
@@ -141,8 +151,8 @@ fun SynckroNavHost(activity: ComponentActivity) {
                         initialUri
                     nav.navigate(Routes.PICK_FOLDER) { launchSingleTop = true }
                 },
-                onPickRemoteFolder = { provider ->
-                    nav.navigate(Routes.pickRemoteFolder(provider)) { launchSingleTop = true }
+                onPickRemoteFolder = { provider, accountId ->
+                    nav.navigate(Routes.pickRemoteFolder(provider, accountId)) { launchSingleTop = true }
                 },
                 onSaved = { nav.popBackStack() },
                 viewModel = editorViewModel,
@@ -179,7 +189,13 @@ fun SynckroNavHost(activity: ComponentActivity) {
                 listOf(
                     navArgument(PickRemoteFolderViewModel.ARG_PROVIDER) {
                         type = NavType.StringType
-                        defaultValue = CloudProviderType.GOOGLE_DRIVE.name
+                        nullable = true
+                        defaultValue = null
+                    },
+                    navArgument(PickRemoteFolderViewModel.ARG_ACCOUNT_ID) {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
                     },
                 ),
         ) {
