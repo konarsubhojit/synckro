@@ -23,6 +23,9 @@ import com.synckro.ui.screens.paireditor.PairEditorViewModel
 import com.synckro.ui.screens.pickfolder.PickLocalFolderScreen
 import com.synckro.ui.screens.pickfolder.PickRemoteFolderScreen
 import com.synckro.ui.screens.pickfolder.PickRemoteFolderViewModel
+import com.synckro.util.navigation.AppNavEvent
+import com.synckro.util.navigation.AppNavigationDispatcher
+import kotlinx.coroutines.flow.filterNotNull
 
 object Routes {
     const val ONBOARDING = "onboarding"
@@ -58,8 +61,26 @@ object Routes {
 }
 
 @Composable
-fun SynckroNavHost(activity: ComponentActivity) {
+fun SynckroNavHost(
+    activity: ComponentActivity,
+    appNavigationDispatcher: AppNavigationDispatcher? = null,
+) {
     val nav = rememberNavController()
+
+    // Observe navigation commands dispatched from outside the Compose tree
+    // (e.g. from a re-auth notification tap handled in MainActivity.onNewIntent).
+    LaunchedEffect(appNavigationDispatcher) {
+        appNavigationDispatcher?.pendingEvent
+            ?.filterNotNull()
+            ?.collect { event ->
+                appNavigationDispatcher.consumeEvent()
+                when (event) {
+                    AppNavEvent.OpenAccounts ->
+                        nav.navigate(Routes.ACCOUNTS) { launchSingleTop = true }
+                }
+            }
+    }
+
     NavHost(navController = nav, startDestination = Routes.ONBOARDING) {
         composable(Routes.ONBOARDING) {
             OnboardingScreen(onContinue = {

@@ -183,6 +183,15 @@
     <string name="sync_notification_title">Syncing %1$s</string>
     <string name="sync_notification_content">Transfer in progress…</string>
 
+    <!-- Re-authentication notification (shown when a cloud account needs to be reconnected) -->
+    <string name="reauth_channel_name">Account sign-in required</string>
+    <string name="reauth_channel_description">Alerts when a cloud account needs to be re-authenticated to continue syncing.</string>
+    <!-- %1$s = provider name (e.g. "Google Drive"), %2$s = sync pair display name -->
+    <string name="reauth_notification_title">Sign-in required – %1$s</string>
+    <string name="reauth_notification_content">"%1$s" cannot sync — tap to reconnect your account.</string>
+    <string name="reauth_notification_action">Reconnect</string>
+    <string name="reauth_notification_group_summary">%1$d accounts need re-authentication</string>
+
     <!-- Debug log export (debug builds only) -->
     <string name="accounts_export_debug_log">[DEBUG] Export app log file</string>
     <string name="accounts_export_debug_log_subject">Synckro debug log</string>

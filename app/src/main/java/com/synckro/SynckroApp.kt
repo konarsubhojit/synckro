@@ -9,6 +9,7 @@ import androidx.work.Configuration
 import com.synckro.providers.onedrive.OneDriveMultiAccountStartupProbe
 import com.synckro.data.worker.SyncWorker
 import com.synckro.util.logging.FileLoggingTree
+import com.synckro.util.notification.ReauthNotificationHelper
 import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -60,11 +61,25 @@ class SynckroApp :
     /**
      * Creates all notification channels required by the app. Safe to call on every launch —
      * creating an already-existing channel is a no-op on API 26+.
+     *
+     * ## Channel inventory
+     *
+     * | Channel ID                        | Importance | Purpose                                           |
+     * |:----------------------------------|:-----------|:--------------------------------------------------|
+     * | [SyncWorker.SYNC_CHANNEL_ID]      | LOW        | Foreground-service progress bar while syncing.    |
+     * | [ReauthNotificationHelper.REAUTH_CHANNEL_ID] | HIGH | Persistent alert when a cloud account needs re-authentication. |
+     *
+     * Both channels are created here at app startup.  Channels cannot be deleted at runtime
+     * (the user controls their settings in System Settings), so this is the canonical place to
+     * register new ones.  See `docs/notifications.md` for the full notification strategy.
      */
     private fun createNotificationChannels() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val nm = getSystemService(NotificationManager::class.java)
-            val channel =
+
+            // Sync-progress channel — low importance: silent, no badge, shown only while
+            // a foreground service is active (long-running or large-file transfers).
+            val syncChannel =
                 NotificationChannel(
                     SyncWorker.SYNC_CHANNEL_ID,
                     getString(R.string.sync_channel_name),
@@ -73,7 +88,20 @@ class SynckroApp :
                     description = getString(R.string.sync_channel_description)
                     setShowBadge(false)
                 }
-            nm.createNotificationChannel(channel)
+
+            // Re-auth alert channel — high importance: heads-up banner, badge, sound.
+            // Users must notice this alert because sync is fully stopped until they act.
+            val reauthChannel =
+                NotificationChannel(
+                    ReauthNotificationHelper.REAUTH_CHANNEL_ID,
+                    getString(R.string.reauth_channel_name),
+                    NotificationManager.IMPORTANCE_HIGH,
+                ).apply {
+                    description = getString(R.string.reauth_channel_description)
+                    setShowBadge(true)
+                }
+
+            nm.createNotificationChannels(listOf(syncChannel, reauthChannel))
         }
     }
 

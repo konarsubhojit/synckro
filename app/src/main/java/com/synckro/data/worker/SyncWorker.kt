@@ -31,6 +31,7 @@ import com.synckro.domain.provider.CloudProviderException
 import com.synckro.domain.sync.CloudExceptionMapper
 import com.synckro.domain.sync.SyncEngine
 import com.synckro.domain.sync.TransferProgress
+import com.synckro.util.notification.ReauthNotificationHelper
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import kotlinx.coroutines.CancellationException
@@ -309,7 +310,7 @@ class SyncWorker
                                     }
                                 syncPairDao.updateLastSyncResult(pairId, System.currentTimeMillis(), outcome)
                                 when {
-                                    r.needsReauth ->
+                                    r.needsReauth -> {
                                         // Tag `auth` so the user can filter/copy these from LogsScreen.
                                         syncEventRepository.log(
                                             pairId,
@@ -317,6 +318,10 @@ class SyncWorker
                                             LOG_TAG_AUTH,
                                             "Re-authentication required: ${r.reason}",
                                         )
+                                        // Post a persistent system notification so the user is alerted
+                                        // even when the app is in the background or killed.
+                                        ReauthNotificationHelper.postReauthNotification(applicationContext, pair)
+                                    }
                                     r.needsReLink ->
                                         syncEventRepository.log(
                                             pairId,
@@ -345,6 +350,9 @@ class SyncWorker
                                 syncPairDao.updateLastSyncResult(pairId, System.currentTimeMillis(), outcome)
                                 val tag = if (mapped.needsReauth) LOG_TAG_AUTH else LOG_TAG
                                 syncEventRepository.log(pairId, SyncEventLevel.ERROR, tag, "Sync failed (terminal): ${mapped.reason}")
+                                if (mapped.needsReauth) {
+                                    ReauthNotificationHelper.postReauthNotification(applicationContext, pair)
+                                }
                                 WorkManager.getInstance(applicationContext).cancelUniqueWork(uniqueName(pairId))
                                 Result.failure()
                             }
