@@ -551,6 +551,113 @@ class SyncEngineRealIntegrationTest {
         }
 
     @Test
+    fun `runReal on cold-start relink seeds index for matching local and remote file`() =
+        runTest {
+            val fileContent = "same content".toByteArray()
+            val remoteFile =
+                fakeProvider.uploadNew(
+                    parentId = "remote-root",
+                    name = "same.txt",
+                    content = fileContent.inputStream(),
+                    size = fileContent.size.toLong(),
+                    mimeType = "text/plain",
+                )
+
+            localFileAccess.put("same.txt", fileContent)
+            inMemoryChildren.set(
+                "root",
+                listOf(
+                    RawDocChild(
+                        docId = "doc-same",
+                        name = "same.txt",
+                        mimeType = "text/plain",
+                        size = fileContent.size.toLong(),
+                        lastModifiedMs = remoteFile.lastModifiedMs ?: 5_000L,
+                    ),
+                ),
+            )
+
+            val pair = insertPair()
+            val result = buildEngine().runOnce(pair)
+
+            assertTrue("Cold-start relink should succeed", result is SyncEngine.Result.Success)
+            assertEquals(
+                "Matching files should be reconciled without applying upload/download ops",
+                0,
+                (result as SyncEngine.Result.Success).applied,
+            )
+
+            val remoteFiles = fakeProvider.list("remote-root").filter { !it.isFolder && it.name == "same.txt" }
+            assertEquals("Remote file must not be duplicated", 1, remoteFiles.size)
+
+            val indexEntry = localIndexDao.getForPair(pair.id).single { it.relativePath == "same.txt" }
+            assertEquals(remoteFile.id, indexEntry.remoteId)
+            assertEquals(remoteFile.size, indexEntry.remoteSizeBytes)
+            assertEquals(remoteFile.lastModifiedMs, indexEntry.remoteMtimeMs)
+            assertEquals(remoteFile.eTag, indexEntry.remoteEtag)
+
+            val events = eventRepository.getAll()
+            assertTrue(
+                "Cold-start reconciliation should emit an INFO log entry",
+                events.any { it.message == "Reconciled existing remote file: same.txt" },
+            )
+        }
+
+    @Test
+    fun `runReal on cold-start relink with local-newer file updates existing remote instead of uploading duplicate`() =
+        runTest {
+            val remoteContent = "remote".toByteArray()
+            val remoteFile =
+                fakeProvider.uploadNew(
+                    parentId = "remote-root",
+                    name = "notes.txt",
+                    content = remoteContent.inputStream(),
+                    size = remoteContent.size.toLong(),
+                    mimeType = "text/plain",
+                )
+
+            val localContent = "local-newer".toByteArray()
+            localFileAccess.put("notes.txt", localContent)
+            inMemoryChildren.set(
+                "root",
+                listOf(
+                    RawDocChild(
+                        docId = "doc-notes",
+                        name = "notes.txt",
+                        mimeType = "text/plain",
+                        size = localContent.size.toLong(),
+                        lastModifiedMs = (remoteFile.lastModifiedMs ?: 5_000L) + 1_000L,
+                    ),
+                ),
+            )
+
+            val pair = insertPair(conflictPolicy = ConflictPolicy.NEWEST_WINS)
+            val result = buildEngine().runOnce(pair)
+
+            assertTrue("Cold-start relink with local-newer content should succeed", result is SyncEngine.Result.Success)
+            assertEquals(
+                "The existing remote file should be updated in place",
+                1,
+                (result as SyncEngine.Result.Success).applied,
+            )
+
+            val remoteFiles = fakeProvider.list("remote-root").filter { !it.isFolder && it.name == "notes.txt" }
+            assertEquals("Updating an existing remote file must not create a duplicate", 1, remoteFiles.size)
+            assertEquals(
+                "The remote content should now match the local newer version",
+                "local-newer",
+                fakeProvider.download(remoteFiles.single().id).readBytes().toString(Charsets.UTF_8),
+            )
+
+            val indexEntry = localIndexDao.getForPair(pair.id).single { it.relativePath == "notes.txt" }
+            assertEquals(
+                "The sync should keep the original remote ID when updating in place",
+                remoteFile.id,
+                indexEntry.remoteId,
+            )
+        }
+
+    @Test
     fun `runReal on new pair with nested existing remote files downloads all of them`() =
         runTest {
             // Seed a nested structure: remote-root/docs/report.txt

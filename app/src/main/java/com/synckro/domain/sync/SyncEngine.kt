@@ -4,6 +4,7 @@ import android.net.Uri
 import com.synckro.data.local.dao.LocalIndexDao
 import com.synckro.data.local.dao.SyncPairDao
 import com.synckro.data.local.entity.LocalIndexEntity
+import com.synckro.data.local.fs.LocalFileEntry
 import com.synckro.data.local.fs.LocalFsEnumerator
 import com.synckro.data.repository.ConflictRepository
 import com.synckro.data.repository.SyncEventRepository
@@ -466,13 +467,41 @@ class SyncEngine(
             }
         }
 
+        val coldStartReconciliation =
+            if (pair.deltaToken == null && preScanIndex.isEmpty()) {
+                reconcileColdStart(
+                    pairId = pair.id,
+                    localEntries = localEnum.snapshot,
+                    remoteSnapshotsByPath = syntheticRemote,
+                    remoteChanges = remoteSnapshot.changes,
+                )
+            } else {
+                ColdStartReconciliation()
+            }
+        if (coldStartReconciliation.seededEntries.isNotEmpty()) {
+            indexDao.upsertAll(coldStartReconciliation.seededEntries)
+            coldStartReconciliation.seededEntries.forEach { entry ->
+                evtRepo.log(
+                    pair.id,
+                    SyncEventLevel.INFO,
+                    TAG,
+                    "Reconciled existing remote file: ${entry.relativePath}",
+                )
+            }
+        }
+
         // Use only pre-scan synced entries (remoteId != null, in scope) as the
         // SyncDiffer baseline — entries without remoteId are not yet synced to
         // remote; out-of-scope entries are excluded to match the local snapshot.
         val fileIndexEntries =
-            preScanIndex
-                .filter { it.remoteId != null && isInScope(it.relativePath) }
-                .map { it.toFileIndexEntry() }
+            buildList {
+                addAll(
+                    preScanIndex
+                        .filter { it.remoteId != null && isInScope(it.relativePath) }
+                        .map { it.toFileIndexEntry() },
+                )
+                addAll(coldStartReconciliation.seededEntries.map { it.toFileIndexEntry() })
+            }
 
         // -----------------------------------------------------------------
         // Step 4 – Compute ops.
@@ -552,7 +581,7 @@ class SyncEngine(
                 ops = ops,
                 pair = pair,
                 remoteFilesByPath = remoteFilesByPath,
-                localIndexByPath = preScanIndexByPath,
+                localIndexByPath = preScanIndexByPath + coldStartReconciliation.linkedEntriesByPath,
                 onProgress = onProgress,
             )
 
@@ -844,6 +873,17 @@ class SyncEngine(
             val includeFilterActive: Boolean,
         )
 
+        internal data class ColdStartReconciliation(
+            val seededEntries: List<LocalIndexEntity> = emptyList(),
+            val linkedEntriesByPath: Map<String, LocalIndexEntity> = emptyMap(),
+        )
+
+        private data class ColdStartRemoteState(
+            val remoteId: String,
+            val snapshot: FileSnapshot,
+            val etag: String?,
+        )
+
         /**
          * Maps a [LocalIndexEntity] row to the [FileIndexEntry] domain model consumed by
          * [SyncDiffer.diff]. Remote metadata columns populate the remote-side fields;
@@ -861,6 +901,65 @@ class SyncEngine(
                 remoteSize = remoteSizeBytes,
                 remoteLastModifiedMs = remoteMtimeMs,
             )
+
+        internal fun reconcileColdStart(
+            pairId: Long,
+            localEntries: Collection<LocalFileEntry>,
+            remoteSnapshotsByPath: Map<String, FileSnapshot>,
+            remoteChanges: List<RemoteChange>,
+        ): ColdStartReconciliation {
+            val remoteByPath =
+                buildMap<String, ColdStartRemoteState> {
+                    remoteChanges.forEach { change ->
+                        if (change.type == RemoteChangeType.DELETE || change.isFolder || change.remoteId.isEmpty()) return@forEach
+                        val snapshot = remoteSnapshotsByPath[change.relativePath] ?: return@forEach
+                        put(
+                            change.relativePath,
+                            ColdStartRemoteState(
+                                remoteId = change.remoteId,
+                                snapshot = snapshot,
+                                etag = change.etag ?: snapshot.hash,
+                            ),
+                        )
+                    }
+                }
+            if (remoteByPath.isEmpty()) return ColdStartReconciliation()
+
+            val seededEntries = mutableListOf<LocalIndexEntity>()
+            val linkedEntriesByPath = mutableMapOf<String, LocalIndexEntity>()
+            for (local in localEntries) {
+                val remote = remoteByPath[local.relativePath] ?: continue
+                val linkedEntry =
+                    LocalIndexEntity(
+                        pairId = pairId,
+                        relativePath = local.relativePath,
+                        sizeBytes = local.sizeBytes,
+                        mtimeMs = local.mtimeMs,
+                        contentHash = local.contentHash,
+                        remoteId = remote.remoteId,
+                        remoteSizeBytes = remote.snapshot.size,
+                        remoteMtimeMs = remote.snapshot.lastModifiedMs,
+                        remoteEtag = remote.etag,
+                    )
+                linkedEntriesByPath[local.relativePath] = linkedEntry
+                if (coldStartSnapshotsEquivalent(local, remote.snapshot)) {
+                    seededEntries += linkedEntry
+                }
+            }
+
+            return ColdStartReconciliation(
+                seededEntries = seededEntries,
+                linkedEntriesByPath = linkedEntriesByPath,
+            )
+        }
+
+        private fun coldStartSnapshotsEquivalent(
+            local: LocalFileEntry,
+            remote: FileSnapshot,
+        ): Boolean {
+            if (local.contentHash != null && remote.hash != null) return local.contentHash == remote.hash
+            return local.sizeBytes == remote.size && local.mtimeMs == remote.lastModifiedMs
+        }
 
         /**
          * Returns a deterministic conflict-copy path for a "keep-both" resolution.
