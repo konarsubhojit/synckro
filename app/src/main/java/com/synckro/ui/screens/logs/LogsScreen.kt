@@ -64,6 +64,7 @@ import com.synckro.domain.model.SyncEvent
 import com.synckro.domain.model.SyncEventLevel
 import com.synckro.domain.model.SyncEventTag
 import com.synckro.ui.components.EmptyState
+import com.synckro.util.logging.LogVisibilityConfig
 import androidx.compose.material.icons.filled.History
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -185,100 +186,183 @@ fun LogsScreen(
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { padding ->
-        Column(
+        LogsTabContent(
+            state = state,
+            onSearchQueryChange = viewModel::setSearchQuery,
+            onLevelFilterChange = viewModel::setLevelFilter,
+            onTagFilterChange = viewModel::setTagFilter,
+            onProviderFilterChange = viewModel::setProviderFilter,
+            onAccountFilterChange = viewModel::setAccountFilter,
+            onClearFilters = viewModel::clearFilters,
+            onTriggerSync = onTriggerSync,
+            dateFormat = dateFormat,
+            onRowLongPress = { event ->
+                val text = event.toLogLine(dateFormat)
+                val clipboard =
+                    context.getSystemService(Context.CLIPBOARD_SERVICE)
+                        as ClipboardManager
+                clipboard.setPrimaryClip(
+                    ClipData.newPlainText(
+                        context.getString(R.string.logs_title),
+                        text,
+                    ),
+                )
+                scope.launch { snackbarHostState.showSnackbar(rowCopiedMsg) }
+            },
+            modifier = Modifier.padding(padding),
+        )
+    }
+}
+
+/**
+ * Stateless logs content (search, filter chips, events list) used by both the
+ * standalone [LogsScreen] and the Logs tab on the Home screen.
+ *
+ * Renders no [Scaffold] or top app bar of its own; callers wrap or embed it as
+ * appropriate. The DEBUG filter chip is omitted when
+ * [LogVisibilityConfig.minVisibleLevel] is above DEBUG (i.e. release builds) so
+ * users can't pick a level that will never match.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun LogsTabContent(
+    state: LogsViewModel.UiState,
+    onSearchQueryChange: (String) -> Unit,
+    onLevelFilterChange: (SyncEventLevel?) -> Unit,
+    onTagFilterChange: (String?) -> Unit,
+    onProviderFilterChange: (CloudProviderType?) -> Unit,
+    onAccountFilterChange: (String?) -> Unit,
+    onClearFilters: () -> Unit,
+    onTriggerSync: () -> Unit,
+    dateFormat: SimpleDateFormat,
+    onRowLongPress: (SyncEvent) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val visibleLevels = LogVisibilityConfig.visibleLevels()
+    Column(
+        modifier =
+            modifier
+                .fillMaxSize(),
+    ) {
+        // ── Search field ─────────────────────────────────────────────────
+        OutlinedTextField(
+            value = state.searchQuery,
+            onValueChange = onSearchQueryChange,
             modifier =
                 Modifier
-                    .fillMaxSize()
-                    .padding(padding),
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+            singleLine = true,
+            placeholder = { Text(stringResource(R.string.logs_search_placeholder)) },
+            trailingIcon = {
+                if (state.searchQuery.isNotEmpty()) {
+                    IconButton(onClick = { onSearchQueryChange("") }) {
+                        Icon(
+                            Icons.Default.Clear,
+                            contentDescription = stringResource(R.string.logs_search_clear),
+                        )
+                    }
+                }
+            },
+        )
+        // ── Level filter chips ───────────────────────────────────────────
+        Row(
+            modifier =
+                Modifier
+                    .horizontalScroll(rememberScrollState())
+                    .padding(horizontal = 8.dp, vertical = 2.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            // ── Search field ─────────────────────────────────────────────────
-            OutlinedTextField(
-                value = state.searchQuery,
-                onValueChange = viewModel::setSearchQuery,
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 8.dp, vertical = 4.dp),
-                singleLine = true,
-                placeholder = { Text(stringResource(R.string.logs_search_placeholder)) },
-                trailingIcon = {
-                    if (state.searchQuery.isNotEmpty()) {
-                        IconButton(onClick = { viewModel.setSearchQuery("") }) {
-                            Icon(
-                                Icons.Default.Clear,
-                                contentDescription = stringResource(R.string.logs_search_clear),
-                            )
-                        }
-                    }
-                },
+            Text(
+                text = stringResource(R.string.logs_filter_level_label),
+                style = MaterialTheme.typography.labelSmall,
+                modifier = Modifier.align(Alignment.CenterVertically),
             )
-            // ── Level filter chips ───────────────────────────────────────────
-            Row(
-                modifier =
-                    Modifier
-                        .horizontalScroll(rememberScrollState())
-                        .padding(horizontal = 8.dp, vertical = 2.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                Text(
-                    text = stringResource(R.string.logs_filter_level_label),
-                    style = MaterialTheme.typography.labelSmall,
-                    modifier = Modifier.align(Alignment.CenterVertically),
-                )
+            FilterChip(
+                selected = state.levelFilter == null,
+                onClick = { onLevelFilterChange(null) },
+                label = { Text(stringResource(R.string.logs_filter_all)) },
+            )
+            visibleLevels.forEach { level ->
                 FilterChip(
-                    selected = state.levelFilter == null,
-                    onClick = { viewModel.setLevelFilter(null) },
-                    label = { Text(stringResource(R.string.logs_filter_all)) },
+                    selected = state.levelFilter == level,
+                    onClick = {
+                        onLevelFilterChange(if (state.levelFilter == level) null else level)
+                    },
+                    label = { Text(level.name) },
                 )
-                SyncEventLevel.entries.forEach { level ->
-                    FilterChip(
-                        selected = state.levelFilter == level,
-                        onClick = {
-                            viewModel.setLevelFilter(if (state.levelFilter == level) null else level)
-                        },
-                        label = { Text(level.name) },
-                    )
-                }
             }
-            // ── Tag filter chips ─────────────────────────────────────────────
-            Row(
-                modifier =
-                    Modifier
-                        .horizontalScroll(rememberScrollState())
-                        .padding(horizontal = 8.dp, vertical = 2.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                Text(
-                    text = stringResource(R.string.logs_filter_tag_label),
-                    style = MaterialTheme.typography.labelSmall,
-                    modifier = Modifier.align(Alignment.CenterVertically),
-                )
+        }
+        // ── Tag filter chips ─────────────────────────────────────────────
+        Row(
+            modifier =
+                Modifier
+                    .horizontalScroll(rememberScrollState())
+                    .padding(horizontal = 8.dp, vertical = 2.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Text(
+                text = stringResource(R.string.logs_filter_tag_label),
+                style = MaterialTheme.typography.labelSmall,
+                modifier = Modifier.align(Alignment.CenterVertically),
+            )
+            FilterChip(
+                selected = state.tagFilter == null,
+                onClick = { onTagFilterChange(null) },
+                label = { Text(stringResource(R.string.logs_filter_all)) },
+            )
+            listOf(
+                SyncEventTag.Auth,
+                SyncEventTag.Account,
+                SyncEventTag.PairEditor,
+                SyncEventTag.Scheduler,
+                SyncEventTag.SyncWorker,
+                SyncEventTag.RemoteEnum,
+                SyncEventTag.OpApplier,
+                SyncEventTag.UI,
+                SyncEventTag.Export,
+            ).forEach { tag ->
                 FilterChip(
-                    selected = state.tagFilter == null,
-                    onClick = { viewModel.setTagFilter(null) },
-                    label = { Text(stringResource(R.string.logs_filter_all)) },
+                    selected = state.tagFilter == tag,
+                    onClick = {
+                        onTagFilterChange(if (state.tagFilter == tag) null else tag)
+                    },
+                    label = { Text(tag) },
                 )
-                listOf(
-                    SyncEventTag.Auth,
-                    SyncEventTag.Account,
-                    SyncEventTag.PairEditor,
-                    SyncEventTag.Scheduler,
-                    SyncEventTag.SyncWorker,
-                    SyncEventTag.RemoteEnum,
-                    SyncEventTag.OpApplier,
-                    SyncEventTag.UI,
-                    SyncEventTag.Export,
-                ).forEach { tag ->
-                    FilterChip(
-                        selected = state.tagFilter == tag,
-                        onClick = {
-                            viewModel.setTagFilter(if (state.tagFilter == tag) null else tag)
-                        },
-                        label = { Text(tag) },
-                    )
-                }
             }
-            // ── Provider filter chips ────────────────────────────────────────
+        }
+        // ── Provider filter chips ────────────────────────────────────────
+        Row(
+            modifier =
+                Modifier
+                    .horizontalScroll(rememberScrollState())
+                    .padding(horizontal = 8.dp, vertical = 2.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Text(
+                text = stringResource(R.string.logs_filter_provider_label),
+                style = MaterialTheme.typography.labelSmall,
+                modifier = Modifier.align(Alignment.CenterVertically),
+            )
+            FilterChip(
+                selected = state.providerFilter == null,
+                onClick = { onProviderFilterChange(null) },
+                label = { Text(stringResource(R.string.logs_filter_all)) },
+            )
+            CloudProviderType.entries.forEach { provider ->
+                FilterChip(
+                    selected = state.providerFilter == provider,
+                    onClick = {
+                        onProviderFilterChange(
+                            if (state.providerFilter == provider) null else provider,
+                        )
+                    },
+                    label = { Text(provider.name) },
+                )
+            }
+        }
+        // ── Account filter chips ─────────────────────────────────────────
+        if (state.knownAccounts.isNotEmpty()) {
             Row(
                 modifier =
                     Modifier
@@ -287,107 +371,62 @@ fun LogsScreen(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 Text(
-                    text = stringResource(R.string.logs_filter_provider_label),
+                    text = stringResource(R.string.logs_filter_account_label),
                     style = MaterialTheme.typography.labelSmall,
                     modifier = Modifier.align(Alignment.CenterVertically),
                 )
                 FilterChip(
-                    selected = state.providerFilter == null,
-                    onClick = { viewModel.setProviderFilter(null) },
+                    selected = state.accountFilter == null,
+                    onClick = { onAccountFilterChange(null) },
                     label = { Text(stringResource(R.string.logs_filter_all)) },
                 )
-                CloudProviderType.entries.forEach { provider ->
+                state.knownAccounts.forEach { account ->
+                    val label = account.email ?: account.displayName
                     FilterChip(
-                        selected = state.providerFilter == provider,
+                        selected = state.accountFilter == account.id,
                         onClick = {
-                            viewModel.setProviderFilter(
-                                if (state.providerFilter == provider) null else provider,
+                            onAccountFilterChange(
+                                if (state.accountFilter == account.id) null else account.id,
                             )
                         },
-                        label = { Text(provider.name) },
+                        label = { Text(label) },
                     )
                 }
             }
-            // ── Account filter chips ─────────────────────────────────────────
-            if (state.knownAccounts.isNotEmpty()) {
-                Row(
-                    modifier =
-                        Modifier
-                            .horizontalScroll(rememberScrollState())
-                            .padding(horizontal = 8.dp, vertical = 2.dp),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    Text(
-                        text = stringResource(R.string.logs_filter_account_label),
-                        style = MaterialTheme.typography.labelSmall,
-                        modifier = Modifier.align(Alignment.CenterVertically),
-                    )
-                    FilterChip(
-                        selected = state.accountFilter == null,
-                        onClick = { viewModel.setAccountFilter(null) },
-                        label = { Text(stringResource(R.string.logs_filter_all)) },
-                    )
-                    state.knownAccounts.forEach { account ->
-                        val label = account.email ?: account.displayName
-                        FilterChip(
-                            selected = state.accountFilter == account.id,
-                            onClick = {
-                                viewModel.setAccountFilter(
-                                    if (state.accountFilter == account.id) null else account.id,
-                                )
-                            },
-                            label = { Text(label) },
-                        )
-                    }
-                }
-            }
-            // ── Events list / empty state ────────────────────────────────────
-            if (!state.isLoading && state.events.isEmpty()) {
-                if (state.hasActiveFilters) {
-                    EmptyState(
-                        title = stringResource(R.string.logs_empty_filtered_title),
-                        body = stringResource(R.string.logs_empty_filtered_body),
-                        icon = Icons.Filled.History,
-                        primaryActionLabel = stringResource(R.string.logs_empty_filtered_cta),
-                        onPrimaryAction = { viewModel.clearFilters() },
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                } else {
-                    EmptyState(
-                        title = stringResource(R.string.logs_empty_title),
-                        body = stringResource(R.string.logs_empty_body),
-                        icon = Icons.Filled.History,
-                        primaryActionLabel = stringResource(R.string.logs_empty_trigger_sync_cta),
-                        onPrimaryAction = onTriggerSync,
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                }
-            } else {
-                val rowDateFormat = dateFormat
-                LazyColumn(
+        }
+        // ── Events list / empty state ────────────────────────────────────
+        if (!state.isLoading && state.events.isEmpty()) {
+            if (state.hasActiveFilters) {
+                EmptyState(
+                    title = stringResource(R.string.logs_empty_filtered_title),
+                    body = stringResource(R.string.logs_empty_filtered_body),
+                    icon = Icons.Filled.History,
+                    primaryActionLabel = stringResource(R.string.logs_empty_filtered_cta),
+                    onPrimaryAction = onClearFilters,
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                    verticalArrangement = Arrangement.spacedBy(2.dp),
-                ) {
-                    items(state.events, key = { it.id }) { event ->
-                        LogEntryRow(
-                            event = event,
-                            dateFormat = rowDateFormat,
-                            onLongPress = {
-                                val text = event.toLogLine(rowDateFormat)
-                                val clipboard =
-                                    context.getSystemService(Context.CLIPBOARD_SERVICE)
-                                        as ClipboardManager
-                                clipboard.setPrimaryClip(
-                                    ClipData.newPlainText(
-                                        context.getString(R.string.logs_title),
-                                        text,
-                                    ),
-                                )
-                                scope.launch { snackbarHostState.showSnackbar(rowCopiedMsg) }
-                            },
-                        )
-                    }
+                )
+            } else {
+                EmptyState(
+                    title = stringResource(R.string.logs_empty_title),
+                    body = stringResource(R.string.logs_empty_body),
+                    icon = Icons.Filled.History,
+                    primaryActionLabel = stringResource(R.string.logs_empty_trigger_sync_cta),
+                    onPrimaryAction = onTriggerSync,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                items(state.events, key = { it.id }) { event ->
+                    LogEntryRow(
+                        event = event,
+                        dateFormat = dateFormat,
+                        onLongPress = { onRowLongPress(event) },
+                    )
                 }
             }
         }

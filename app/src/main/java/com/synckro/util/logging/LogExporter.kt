@@ -52,7 +52,9 @@ class LogExporter
          */
         suspend fun export(): android.net.Uri =
             withContext(Dispatchers.IO) {
-                val events = syncEventRepository.getAll()
+                // Apply the build-variant visibility gate so DEBUG entries are excluded
+                // from release-build exports (parity with the on-screen Logs tab).
+                val events = filterVisibleForExport(syncEventRepository.getAll())
                 val logFiles = collectLogFiles(context)
                 val timestamp = timestampFormat.format(Date())
                 val outDir = File(context.cacheDir, CACHE_SUBDIR).also { it.mkdirs() }
@@ -151,5 +153,14 @@ class LogExporter
 
             /** Escapes a CSV field value by doubling any embedded double-quote characters. */
             private fun String.csvEscape() = replace("\"", "\"\"")
+
+            /**
+             * Drops any events whose level falls below [LogVisibilityConfig.minVisibleLevel].
+             *
+             * Exposed as `internal` so the build-variant filtering can be unit-tested
+             * without an Android [Context] or [FileProvider].
+             */
+            internal fun filterVisibleForExport(events: List<SyncEvent>): List<SyncEvent> =
+                events.filter { LogVisibilityConfig.isVisible(it.level) }
         }
     }

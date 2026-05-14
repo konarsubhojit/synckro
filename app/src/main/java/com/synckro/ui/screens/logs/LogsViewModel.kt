@@ -13,6 +13,7 @@ import com.synckro.domain.model.SyncEvent
 import com.synckro.domain.model.SyncEventLevel
 import com.synckro.domain.model.SyncEventTag
 import com.synckro.util.logging.LogExporter
+import com.synckro.util.logging.LogVisibilityConfig
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -140,6 +141,11 @@ class LogsViewModel
             contexts: Map<Long, Pair<CloudProviderType, String?>>,
             query: String,
         ): Boolean {
+            // Baseline build-variant gate: hide DEBUG entries in release regardless
+            // of the user-selected level filter. Applied before any user filter so
+            // even an explicit DEBUG selection (which shouldn't be reachable from
+            // the UI in release) cannot surface DEBUG rows.
+            if (!LogVisibilityConfig.isVisible(e.level)) return false
             if (f.level != null && e.level != f.level) return false
             if (f.tag != null && e.tag != f.tag) return false
             if (f.account != null) {

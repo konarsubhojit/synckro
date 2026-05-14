@@ -184,6 +184,50 @@ class LogExporterTest {
     }
 
     // -------------------------------------------------------------------------
+    // filterVisibleForExport (build-variant gate)
+    // -------------------------------------------------------------------------
+
+    @Test
+    fun `filterVisibleForExport drops DEBUG entries when min visible level is INFO`() {
+        val original = com.synckro.util.logging.LogVisibilityConfig.minVisibleLevel
+        try {
+            com.synckro.util.logging.LogVisibilityConfig.minVisibleLevel = SyncEventLevel.INFO
+            val events = listOf(
+                event(id = 1).copy(level = SyncEventLevel.DEBUG),
+                event(id = 2).copy(level = SyncEventLevel.INFO),
+                event(id = 3).copy(level = SyncEventLevel.WARN),
+                event(id = 4).copy(level = SyncEventLevel.ERROR),
+            )
+
+            val filtered = LogExporter.filterVisibleForExport(events)
+
+            assertEquals(listOf(2L, 3L, 4L), filtered.map { it.id })
+            assertTrue("DEBUG entries must not appear in release-build exports",
+                filtered.none { it.level == SyncEventLevel.DEBUG })
+        } finally {
+            com.synckro.util.logging.LogVisibilityConfig.minVisibleLevel = original
+        }
+    }
+
+    @Test
+    fun `filterVisibleForExport keeps DEBUG entries when min visible level is DEBUG`() {
+        val original = com.synckro.util.logging.LogVisibilityConfig.minVisibleLevel
+        try {
+            com.synckro.util.logging.LogVisibilityConfig.minVisibleLevel = SyncEventLevel.DEBUG
+            val events = listOf(
+                event(id = 1).copy(level = SyncEventLevel.DEBUG),
+                event(id = 2).copy(level = SyncEventLevel.INFO),
+            )
+
+            val filtered = LogExporter.filterVisibleForExport(events)
+
+            assertEquals(listOf(1L, 2L), filtered.map { it.id })
+        } finally {
+            com.synckro.util.logging.LogVisibilityConfig.minVisibleLevel = original
+        }
+    }
+
+    // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
 

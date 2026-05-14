@@ -103,9 +103,6 @@ fun SynckroNavHost(
                 onOpenConflictInbox = {
                     nav.navigate(Routes.CONFLICT_INBOX) { launchSingleTop = true }
                 },
-                onOpenLogs = {
-                    nav.navigate(Routes.logs()) { launchSingleTop = true }
-                },
             )
         }
         composable(Routes.ACCOUNTS) {
