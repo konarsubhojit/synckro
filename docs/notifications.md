@@ -43,7 +43,7 @@ Because a syncing animation is already visible in the Home screen, low importanc
 1. `SyncEngine.Result.Terminal` with `needsReauth = true`.
 2. An escaped `CloudProviderException` mapped to a terminal reauth result.
 
-**Per-account notifications:** Each distinct `accountId` receives its own notification (ID computed from `accountId.hashCode()` in the range `[100_000, 104_095]`).  On Android 7+ (API 24) these are grouped under a single drawer header using the group key `com.synckro.REAUTH_GROUP`.
+**Per-account notifications:** Each distinct `accountId` receives its own notification (ID computed from `accountId.hashCode()` in the range `[100,000 – 104,095]`).  On Android 7+ (API 24) these are grouped under a single drawer header using the group key `com.synckro.REAUTH_GROUP`.
 
 **Deep link:** Both the notification tap and the "Reconnect" action button fire an `Intent` with action `com.synckro.ACTION_OPEN_ACCOUNTS` targeting `MainActivity`.  `MainActivity` forwards this to `AppNavigationDispatcher`, which posts `AppNavEvent.OpenAccounts`.  `SynckroNavHost` observes the dispatcher and calls `nav.navigate(Routes.ACCOUNTS)` so the Accounts screen opens immediately.
 
@@ -55,9 +55,9 @@ Because a syncing animation is already visible in the Home screen, low importanc
 
 | Range               | Owner                          | Purpose                                   |
 |:--------------------|:-------------------------------|:------------------------------------------|
-| 1 000 – 66 535      | `SyncWorker`                   | Per-pair sync-progress foreground service |
-| 99 999              | `ReauthNotificationHelper`     | Reauth group summary                      |
-| 100 000 – 104 095   | `ReauthNotificationHelper`     | Per-account reauth alerts                 |
+| 1,000 – 66,535      | `SyncWorker`                   | Per-pair sync-progress foreground service |
+| 99,999              | `ReauthNotificationHelper`     | Reauth group summary                      |
+| 100,000 – 104,095   | `ReauthNotificationHelper`     | Per-account reauth alerts (`MAX_ACCOUNTS = 4,096`) |
 
 Keep ranges non-overlapping when adding new notification types.
 
