@@ -911,12 +911,16 @@ class SyncEngine(
             val remoteByPath =
                 buildMap<String, ColdStartRemoteState> {
                     remoteChanges.forEach { change ->
-                        if (change.type == RemoteChangeType.DELETE || change.isFolder || change.remoteId.isEmpty()) return@forEach
+                        val remoteId = change.remoteId
+                        // Defensive guard: cold-start reconciliation can only link against a stable
+                        // provider ID. Providers should always populate this for non-DELETE file
+                        // entries, but skip malformed items rather than seeding an unusable row.
+                        if (change.type == RemoteChangeType.DELETE || change.isFolder || remoteId.isEmpty()) return@forEach
                         val snapshot = remoteSnapshotsByPath[change.relativePath] ?: return@forEach
                         put(
                             change.relativePath,
                             ColdStartRemoteState(
-                                remoteId = change.remoteId,
+                                remoteId = remoteId,
                                 snapshot = snapshot,
                                 etag = change.etag ?: snapshot.hash,
                             ),
@@ -958,6 +962,9 @@ class SyncEngine(
             remote: FileSnapshot,
         ): Boolean {
             if (local.contentHash != null && remote.hash != null) return local.contentHash == remote.hash
+            // On a wiped index we no longer have a prior baseline row to compare against. When the
+            // provider cannot offer a comparable content hash, matching size+mtime is the best
+            // available signal that the local file already corresponds to the current remote item.
             return local.sizeBytes == remote.size && local.mtimeMs == remote.lastModifiedMs
         }
 
