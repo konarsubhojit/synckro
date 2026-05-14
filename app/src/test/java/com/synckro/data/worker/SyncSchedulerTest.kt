@@ -199,6 +199,29 @@ class SyncSchedulerTest {
     }
 
     // -------------------------------------------------------------------------
+    // schedulePeriodic – exponential backoff (sub-issue #142)
+    // -------------------------------------------------------------------------
+
+    @Test
+    fun `schedulePeriodic uses 30-second initial backoff constant`() {
+        // The backoff policy itself is not directly observable on WorkInfo, but the
+        // constant is part of the public worker API and shared with the one-shot
+        // Sync-now path in HomeViewModel — guard it against accidental changes.
+        assertEquals(30L, SyncWorker.BACKOFF_INITIAL_DELAY_SECONDS)
+
+        val p = pair(id = 99L)
+        // Calling schedulePeriodic must not throw when setBackoffCriteria is applied
+        // with the constant value above.
+        scheduler.schedulePeriodic(p)
+
+        val infos =
+            workManager
+                .getWorkInfosForUniqueWork(SyncWorker.uniqueName(p.id))
+                .get()
+        assertFalse("Expected periodic work to be enqueued with backoff policy", infos.isEmpty())
+    }
+
+    // -------------------------------------------------------------------------
     // cancel
     // -------------------------------------------------------------------------
 

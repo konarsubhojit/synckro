@@ -77,21 +77,69 @@ class GoogleDriveProviderAuthTest {
         }
 
     // -------------------------------------------------------------------------
-    // NeedsInteractiveSignIn → AuthenticationRequired
+    // NeedsInteractiveSignIn → AuthenticationRequired (only after threshold)
     // -------------------------------------------------------------------------
 
     @Test
-    fun `ensureAuthenticated throws AuthenticationRequired when NeedsInteractiveSignIn`() =
+    fun `ensureAuthenticated throws AuthenticationFailed on first NeedsInteractiveSignIn`() =
         runTest {
             coEvery { authManager.currentAccounts() } returns listOf(fakeAccount)
             coEvery { authManager.acquireAccessToken(fakeAccount) } returns AuthResult.NeedsInteractiveSignIn
 
             try {
                 provider.ensureAuthenticated()
+                fail("Expected CloudProviderException.AuthenticationFailed")
+            } catch (e: CloudProviderException.AuthenticationFailed) {
+                assertTrue(e.message!!.contains("transient"))
+            }
+        }
+
+    @Test
+    fun `ensureAuthenticated throws AuthenticationRequired after threshold NeedsInteractiveSignIn`() =
+        runTest {
+            coEvery { authManager.currentAccounts() } returns listOf(fakeAccount)
+            coEvery { authManager.acquireAccessToken(fakeAccount) } returns AuthResult.NeedsInteractiveSignIn
+
+            // First call: transient (retriable).
+            try {
+                provider.ensureAuthenticated()
+                fail("Expected AuthenticationFailed")
+            } catch (_: CloudProviderException.AuthenticationFailed) { /* ok */ }
+
+            // Second call (threshold reached): terminal.
+            try {
+                provider.ensureAuthenticated()
                 fail("Expected CloudProviderException.AuthenticationRequired")
             } catch (e: CloudProviderException.AuthenticationRequired) {
                 assertTrue(e.message!!.contains("expired"))
             }
+        }
+
+    @Test
+    fun `consecutive NeedsInteractiveSignIn counter resets on Success`() =
+        runTest {
+            coEvery { authManager.currentAccounts() } returns listOf(fakeAccount)
+            // Sequence: transient failure, then success, then transient failure again.
+            coEvery { authManager.acquireAccessToken(fakeAccount) } returnsMany
+                listOf(
+                    AuthResult.NeedsInteractiveSignIn,
+                    AuthResult.Success("token-ok"),
+                    AuthResult.NeedsInteractiveSignIn,
+                )
+
+            try {
+                provider.ensureAuthenticated()
+                fail("Expected AuthenticationFailed")
+            } catch (_: CloudProviderException.AuthenticationFailed) { /* ok */ }
+
+            // Successful refresh resets the counter.
+            assertTrue(provider.ensureAuthenticated())
+
+            // First failure after success is again retriable (not terminal).
+            try {
+                provider.ensureAuthenticated()
+                fail("Expected AuthenticationFailed")
+            } catch (_: CloudProviderException.AuthenticationFailed) { /* ok */ }
         }
 
     // -------------------------------------------------------------------------
@@ -277,5 +325,63 @@ class GoogleDriveProviderAuthTest {
             } catch (e: CloudProviderException) {
                 assertTrue(e is CloudProviderException.AuthenticationFailed)
             }
+        }
+
+    // -------------------------------------------------------------------------
+    // 401 silent refresh + replay (sub-issue #138)
+    // -------------------------------------------------------------------------
+
+    @Test
+    fun `driveCall transparently recovers when first attempt returns 401 but refresh succeeds`() =
+        runTest {
+            coEvery { authManager.currentAccounts() } returns listOf(fakeAccount)
+            // First token issued, then a refreshed token after the 401.
+            coEvery { authManager.acquireAccessToken(fakeAccount) } returnsMany
+                listOf(AuthResult.Success("token-old"), AuthResult.Success("token-new"))
+            // First list() call with the old token returns 401; replay with new token succeeds.
+            coEvery { restClient.list("token-old", null) } throws DriveApiException(401, "unauthorized")
+            coEvery { restClient.list("token-new", null) } returns emptyList()
+
+            val result = provider.list(null)
+
+            assertTrue(result.isEmpty())
+            coVerify(exactly = 2) { authManager.acquireAccessToken(fakeAccount) }
+            coVerify(exactly = 1) { restClient.list("token-old", null) }
+            coVerify(exactly = 1) { restClient.list("token-new", null) }
+        }
+
+    @Test
+    fun `driveCall surfaces AuthenticationRequired when retry also returns 401`() =
+        runTest {
+            coEvery { authManager.currentAccounts() } returns listOf(fakeAccount)
+            coEvery { authManager.acquireAccessToken(fakeAccount) } returnsMany
+                listOf(AuthResult.Success("token-1"), AuthResult.Success("token-2"))
+            coEvery { restClient.list(any(), null) } throws DriveApiException(401, "unauthorized")
+
+            try {
+                provider.list(null)
+                fail("Expected CloudProviderException.AuthenticationRequired")
+            } catch (e: CloudProviderException.AuthenticationRequired) {
+                assertTrue(e.message!!.contains("after silent refresh"))
+            }
+            // First call + replay.
+            coVerify(exactly = 2) { authManager.acquireAccessToken(fakeAccount) }
+        }
+
+    @Test
+    fun `driveCall propagates non-401 errors without retry`() =
+        runTest {
+            coEvery { authManager.currentAccounts() } returns listOf(fakeAccount)
+            coEvery { authManager.acquireAccessToken(fakeAccount) } returns AuthResult.Success("token-x")
+            coEvery { restClient.list("token-x", null) } throws DriveApiException(500, "server error")
+
+            try {
+                provider.list(null)
+                fail("Expected DriveApiException to propagate")
+            } catch (e: DriveApiException) {
+                assertEquals(500, e.statusCode)
+            }
+            // No second refresh.
+            coVerify(exactly = 1) { authManager.acquireAccessToken(fakeAccount) }
         }
 }

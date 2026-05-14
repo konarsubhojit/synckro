@@ -30,6 +30,7 @@ class OneDriveProvider
         private val graphClient: OneDriveGraphClient,
         private val clock: () -> Long = System::currentTimeMillis,
         private val tokenExpiryThresholdMs: Long = TOKEN_EXPIRY_THRESHOLD_MS,
+        private val interactiveSignInFailureThreshold: Int = INTERACTIVE_SIGNIN_FAILURE_THRESHOLD,
     ) : CloudProvider {
         override val displayName: String = "OneDrive"
 
@@ -49,6 +50,20 @@ class OneDriveProvider
          */
         @Volatile
         private var tokenAcquiredAtMs: Long = 0L
+
+        /**
+         * Number of consecutive [AuthResult.NeedsInteractiveSignIn] results from
+         * [OneDriveAuthManager.acquireAccessToken]. Reset to 0 on every
+         * successful refresh. Only when this count reaches
+         * [interactiveSignInFailureThreshold] does [ensureAuthenticated] surface a
+         * terminal [CloudProviderException.AuthenticationRequired] — earlier
+         * failures are treated as transient ([CloudProviderException.AuthenticationFailed]),
+         * which the worker can retry with backoff. This prevents MSAL hiccups or
+         * short network outages from triggering a user-facing "re-auth required"
+         * prompt on the very first failure.
+         */
+        @Volatile
+        private var consecutiveNeedsInteractiveSignInCount: Int = 0
 
         /**
          * Returns `true` when the cached token exists but is older than
@@ -94,23 +109,54 @@ class OneDriveProvider
         }
 
         /**
-         * Executes [block] and maps a [GraphApiException] with status 401 to
-         * [CloudProviderException.AuthenticationRequired], clearing the cached token
-         * so the next call to [ensureAuthenticated] will force a fresh acquisition.
+         * Executes [block] and transparently recovers from a single 401 response by
+         * forcibly clearing the cached token, re-running [ensureAuthenticated] (which
+         * performs a silent MSAL token refresh), and replaying [block] exactly once.
+         * If the second attempt also fails with 401 — or if the silent refresh itself
+         * raises [CloudProviderException.AuthenticationRequired] — that error is
+         * propagated to the caller so the UX can surface "re-auth required".
+         *
+         * Implements the OkHttp `Authenticator` pattern at the provider boundary: most
+         * 401s during nominal operation are caused by tokens that expired between
+         * the proactive-refresh window and the actual API call. Replaying after a
+         * silent refresh recovers without bothering the user.
          */
-        private suspend fun <T> graphCall(block: suspend () -> T): T =
-            try {
+        private suspend fun <T> graphCall(block: suspend () -> T): T {
+            return try {
                 block()
             } catch (e: GraphApiException) {
-                if (e.statusCode == 401) {
-                    cachedAccessToken = null
-                    tokenAcquiredAtMs = 0L
-                    throw CloudProviderException.AuthenticationRequired(
-                        "OneDrive access token rejected by Graph API (401). Please re-authenticate.",
-                    )
+                if (e.statusCode != 401) throw e
+                Timber.i(
+                    "OneDriveProvider.graphCall: received 401 on first attempt; " +
+                        "forcing silent token refresh and replaying request once",
+                )
+                cachedAccessToken = null
+                tokenAcquiredAtMs = 0L
+                try {
+                    ensureAuthenticated()
+                } catch (refresh: CloudProviderException.AuthenticationRequired) {
+                    Timber.w(refresh, "OneDriveProvider.graphCall: silent refresh requires user re-auth")
+                    throw refresh
                 }
-                throw e
+                try {
+                    block()
+                } catch (retry: GraphApiException) {
+                    if (retry.statusCode == 401) {
+                        Timber.w(
+                            "OneDriveProvider.graphCall: second attempt also returned 401; " +
+                                "escalating to AuthenticationRequired",
+                        )
+                        cachedAccessToken = null
+                        tokenAcquiredAtMs = 0L
+                        throw CloudProviderException.AuthenticationRequired(
+                            "OneDrive access token rejected by Graph API (401) after silent refresh. " +
+                                "Please re-authenticate.",
+                        )
+                    }
+                    throw retry
+                }
             }
+        }
 
         /**
          * Ensures a valid access token is available.
@@ -143,11 +189,33 @@ class OneDriveProvider
                 is AuthResult.Success -> {
                     cachedAccessToken = result.value
                     tokenAcquiredAtMs = clock()
+                    consecutiveNeedsInteractiveSignInCount = 0
                     Timber.d("OneDriveProvider.ensureAuthenticated: token acquired")
                     true
                 }
                 is AuthResult.NeedsInteractiveSignIn -> {
-                    Timber.w("OneDriveProvider.ensureAuthenticated: interactive sign-in required")
+                    val count = ++consecutiveNeedsInteractiveSignInCount
+                    if (count < interactiveSignInFailureThreshold) {
+                        // Treat the first few transient failures (MSAL blip, network
+                        // glitch, …) as retriable rather than immediately prompting
+                        // the user. WorkManager will retry with backoff and the next
+                        // attempt usually succeeds silently.
+                        Timber.w(
+                            "OneDriveProvider.ensureAuthenticated: NeedsInteractiveSignIn " +
+                                "(attempt %d/%d) — treating as transient",
+                            count,
+                            interactiveSignInFailureThreshold,
+                        )
+                        throw CloudProviderException.AuthenticationFailed(
+                            "OneDrive silent sign-in failed transiently (attempt $count/" +
+                                "$interactiveSignInFailureThreshold). Will retry.",
+                        )
+                    }
+                    Timber.w(
+                        "OneDriveProvider.ensureAuthenticated: interactive sign-in required " +
+                            "after %d consecutive failures",
+                        count,
+                    )
                     throw CloudProviderException.AuthenticationRequired(
                         "OneDrive access token expired. Please sign in again from the Accounts screen.",
                     )
@@ -251,6 +319,15 @@ class OneDriveProvider
         companion object {
             /** Tokens older than this threshold are proactively refreshed before any API call. */
             internal const val TOKEN_EXPIRY_THRESHOLD_MS = 50L * 60 * 1_000 // 50 minutes
+
+            /**
+             * Number of consecutive [AuthResult.NeedsInteractiveSignIn] results that must be
+             * observed before [ensureAuthenticated] escalates to the terminal
+             * [CloudProviderException.AuthenticationRequired]. Earlier failures surface as
+             * retriable [CloudProviderException.AuthenticationFailed] so transient MSAL /
+             * network issues don't trigger a user-facing "re-auth" prompt.
+             */
+            internal const val INTERACTIVE_SIGNIN_FAILURE_THRESHOLD: Int = 2
         }
     }
 

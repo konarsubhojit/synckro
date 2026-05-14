@@ -92,14 +92,33 @@ class OneDriveProviderAuthTest {
         }
 
     // -------------------------------------------------------------------------
-    // NeedsInteractiveSignIn → AuthenticationRequired
+    // NeedsInteractiveSignIn → AuthenticationRequired (only after threshold)
     // -------------------------------------------------------------------------
 
     @Test
-    fun `ensureAuthenticated throws AuthenticationRequired when silent auth returns NeedsInteractiveSignIn`() =
+    fun `ensureAuthenticated throws AuthenticationFailed on first NeedsInteractiveSignIn`() =
         runTest {
             coEvery { authManager.currentAccounts() } returns listOf(fakeAccount)
             coEvery { authManager.acquireAccessToken(fakeAccount) } returns AuthResult.NeedsInteractiveSignIn
+
+            try {
+                provider.ensureAuthenticated()
+                fail("Expected CloudProviderException.AuthenticationFailed")
+            } catch (e: CloudProviderException.AuthenticationFailed) {
+                assertTrue(e.message!!.contains("transient"))
+            }
+        }
+
+    @Test
+    fun `ensureAuthenticated throws AuthenticationRequired after threshold NeedsInteractiveSignIn`() =
+        runTest {
+            coEvery { authManager.currentAccounts() } returns listOf(fakeAccount)
+            coEvery { authManager.acquireAccessToken(fakeAccount) } returns AuthResult.NeedsInteractiveSignIn
+
+            try {
+                provider.ensureAuthenticated()
+                fail("Expected AuthenticationFailed")
+            } catch (_: CloudProviderException.AuthenticationFailed) { /* ok */ }
 
             try {
                 provider.ensureAuthenticated()
@@ -107,6 +126,30 @@ class OneDriveProviderAuthTest {
             } catch (e: CloudProviderException.AuthenticationRequired) {
                 assertTrue(e.message!!.contains("expired"))
             }
+        }
+
+    @Test
+    fun `consecutive NeedsInteractiveSignIn counter resets on Success`() =
+        runTest {
+            coEvery { authManager.currentAccounts() } returns listOf(fakeAccount)
+            coEvery { authManager.acquireAccessToken(fakeAccount) } returnsMany
+                listOf(
+                    AuthResult.NeedsInteractiveSignIn,
+                    AuthResult.Success("token-ok"),
+                    AuthResult.NeedsInteractiveSignIn,
+                )
+
+            try {
+                provider.ensureAuthenticated()
+                fail("Expected AuthenticationFailed")
+            } catch (_: CloudProviderException.AuthenticationFailed) { /* ok */ }
+
+            assertTrue(provider.ensureAuthenticated())
+
+            try {
+                provider.ensureAuthenticated()
+                fail("Expected AuthenticationFailed")
+            } catch (_: CloudProviderException.AuthenticationFailed) { /* ok */ }
         }
 
     // -------------------------------------------------------------------------
@@ -293,5 +336,59 @@ class OneDriveProviderAuthTest {
             } catch (e: CloudProviderException) {
                 assertTrue(e is CloudProviderException.AuthenticationFailed)
             }
+        }
+
+    // -------------------------------------------------------------------------
+    // 401 silent refresh + replay (sub-issue #138)
+    // -------------------------------------------------------------------------
+
+    @Test
+    fun `graphCall transparently recovers when first attempt returns 401 but refresh succeeds`() =
+        runTest {
+            coEvery { authManager.currentAccounts() } returns listOf(fakeAccount)
+            coEvery { authManager.acquireAccessToken(fakeAccount) } returnsMany
+                listOf(AuthResult.Success("token-old"), AuthResult.Success("token-new"))
+            coEvery { graphClient.list("token-old", null) } throws GraphApiException(401, "unauthorized")
+            coEvery { graphClient.list("token-new", null) } returns emptyList()
+
+            val result = provider.list(null)
+
+            assertTrue(result.isEmpty())
+            coVerify(exactly = 2) { authManager.acquireAccessToken(fakeAccount) }
+            coVerify(exactly = 1) { graphClient.list("token-old", null) }
+            coVerify(exactly = 1) { graphClient.list("token-new", null) }
+        }
+
+    @Test
+    fun `graphCall surfaces AuthenticationRequired when retry also returns 401`() =
+        runTest {
+            coEvery { authManager.currentAccounts() } returns listOf(fakeAccount)
+            coEvery { authManager.acquireAccessToken(fakeAccount) } returnsMany
+                listOf(AuthResult.Success("token-1"), AuthResult.Success("token-2"))
+            coEvery { graphClient.list(any(), null) } throws GraphApiException(401, "unauthorized")
+
+            try {
+                provider.list(null)
+                fail("Expected CloudProviderException.AuthenticationRequired")
+            } catch (e: CloudProviderException.AuthenticationRequired) {
+                assertTrue(e.message!!.contains("after silent refresh"))
+            }
+            coVerify(exactly = 2) { authManager.acquireAccessToken(fakeAccount) }
+        }
+
+    @Test
+    fun `graphCall propagates non-401 errors without retry`() =
+        runTest {
+            coEvery { authManager.currentAccounts() } returns listOf(fakeAccount)
+            coEvery { authManager.acquireAccessToken(fakeAccount) } returns AuthResult.Success("token-x")
+            coEvery { graphClient.list("token-x", null) } throws GraphApiException(500, "server error")
+
+            try {
+                provider.list(null)
+                fail("Expected GraphApiException to propagate")
+            } catch (e: GraphApiException) {
+                assertEquals(500, e.statusCode)
+            }
+            coVerify(exactly = 1) { authManager.acquireAccessToken(fakeAccount) }
         }
 }
