@@ -1,6 +1,8 @@
 package com.synckro.ui.screens.pickfolder
 
 import androidx.lifecycle.SavedStateHandle
+import com.synckro.domain.auth.Account
+import com.synckro.domain.auth.AuthManager
 import com.synckro.domain.auth.AuthManagerRegistry
 import com.synckro.domain.model.CloudProviderType
 import com.synckro.domain.provider.CloudProvider
@@ -8,7 +10,9 @@ import com.synckro.domain.provider.CloudProviderFactory
 import com.synckro.domain.provider.RemoteFile
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -459,6 +463,42 @@ class PickRemoteFolderViewModelTest {
             advanceUntilIdle()
 
             assertEquals(CloudProviderType.FAKE, vm.providerType)
+        }
+
+    @Test
+    fun `requested account id is preferred over first signed-in account`() =
+        runTest {
+            val requestedAccountId = "second-account"
+            val firstAccountId = "first-account"
+            val providerFactory = mockk<CloudProviderFactory>(relaxed = true)
+            val manager = mockk<AuthManager>()
+            coEvery { authRegistry.find(CloudProviderType.GOOGLE_DRIVE) } returns manager
+            coEvery {
+                manager.currentAccounts()
+            } returns
+                listOf(
+                    Account(firstAccountId, CloudProviderType.GOOGLE_DRIVE, "First", null),
+                    Account(requestedAccountId, CloudProviderType.GOOGLE_DRIVE, "Second", null),
+                )
+            every { providerFactory.providerFor(any()) } returns mockProvider
+            coEvery { mockProvider.list(null) } returns emptyList()
+
+            PickRemoteFolderViewModel(
+                savedStateHandle =
+                    SavedStateHandle(
+                        mapOf(
+                            PickRemoteFolderViewModel.ARG_PROVIDER to CloudProviderType.GOOGLE_DRIVE.name,
+                            PickRemoteFolderViewModel.ARG_ACCOUNT_ID to requestedAccountId,
+                        ),
+                    ),
+                providerFactories = mapOf(CloudProviderType.GOOGLE_DRIVE to providerFactory),
+                authRegistry = authRegistry,
+            )
+            advanceUntilIdle()
+
+            verify(exactly = 1) { providerFactory.providerFor(requestedAccountId) }
+            verify(exactly = 0) { providerFactory.providerFor(firstAccountId) }
+            coVerify(exactly = 0) { manager.currentAccounts() }
         }
 
     @Test

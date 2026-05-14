@@ -71,7 +71,7 @@ import com.synckro.ui.components.LoadingState
  * @param onBack Called when the user presses the back / up button.
  * @param onPickFolder Called when the user taps "Pick local folder".
  * @param onPickRemoteFolder Called when the user taps the cloud folder browse button,
- *   receiving the currently selected provider type.
+ *   receiving the currently selected provider type and account id.
  * @param onSaved Called with the saved pair ID after a successful save.
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -80,7 +80,7 @@ fun PairEditorScreen(
     pairId: Long = 0L,
     onBack: () -> Unit,
     onPickFolder: (String?) -> Unit,
-    onPickRemoteFolder: (CloudProviderType) -> Unit,
+    onPickRemoteFolder: (CloudProviderType, String?) -> Unit,
     onSaved: (Long) -> Unit,
     viewModel: PairEditorViewModel = hiltViewModel(),
 ) {
@@ -290,7 +290,7 @@ fun PairEditorScreen(
                     label = { Text(stringResource(R.string.pair_editor_remote_folder)) },
                     placeholder = { Text(stringResource(R.string.pair_editor_remote_folder_hint)) },
                     trailingIcon = {
-                        IconButton(onClick = { onPickRemoteFolder(state.provider) }) {
+                        IconButton(onClick = { onPickRemoteFolder(state.provider, state.accountId) }) {
                             Icon(
                                 Icons.Filled.FolderOpen,
                                 contentDescription = stringResource(R.string.pair_editor_pick_remote_folder),
