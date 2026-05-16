@@ -63,6 +63,7 @@ class OneDriveGraphClient
         }
 
         private val json = Json { ignoreUnknownKeys = true }
+        private val jsonWithDefaults = Json(json) { encodeDefaults = true }
 
         // -------------------------------------------------------------------------
         // Internal API (accessible to OneDriveProvider and tests in the same module)
@@ -174,7 +175,7 @@ class OneDriveGraphClient
             parentId: String,
             name: String,
         ): GraphDriveItem {
-            val body = json.encodeToString(GraphCreateFolderRequest(name = name))
+            val body = jsonWithDefaults.encodeToString(GraphCreateFolderRequest(name = name))
             val req =
                 Request
                     .Builder()

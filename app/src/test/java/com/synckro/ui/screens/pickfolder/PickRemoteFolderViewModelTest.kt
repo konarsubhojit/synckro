@@ -282,6 +282,62 @@ class PickRemoteFolderViewModelTest {
         }
 
     @Test
+    fun `createFolder at root uses root parent id and refreshes folder list`() =
+        runTest {
+            val createdFolder = folder("new-folder", "New Folder")
+            coEvery { mockProvider.list(null) } returns emptyList() andThen listOf(createdFolder)
+            coEvery { mockProvider.createFolder("root", "New Folder") } returns createdFolder
+
+            val vm = createVm()
+            advanceUntilIdle()
+
+            vm.createFolder("New Folder")
+            advanceUntilIdle()
+
+            coVerify(exactly = 1) { mockProvider.createFolder("root", "New Folder") }
+            assertEquals(listOf("New Folder"), vm.state.value.items.map { it.name })
+            assertFalse(vm.state.value.isLoading)
+            assertNull(vm.state.value.error)
+        }
+
+    @Test
+    fun `createFolder in subfolder uses current folder id as parent`() =
+        runTest {
+            val subFolder = folder("sub-1", "Sub")
+            val createdFolder = folder("new-folder", "New Child", parentId = "sub-1")
+            coEvery { mockProvider.list(null) } returns listOf(subFolder)
+            coEvery { mockProvider.list("sub-1") } returns emptyList() andThen listOf(createdFolder)
+            coEvery { mockProvider.createFolder("sub-1", "New Child") } returns createdFolder
+
+            val vm = createVm()
+            advanceUntilIdle()
+            vm.navigateInto(subFolder)
+            advanceUntilIdle()
+
+            vm.createFolder("New Child")
+            advanceUntilIdle()
+
+            coVerify(exactly = 1) { mockProvider.createFolder("sub-1", "New Child") }
+            assertEquals(listOf("New Child"), vm.state.value.items.map { it.name })
+        }
+
+    @Test
+    fun `createFolder with blank name is ignored`() =
+        runTest {
+            coEvery { mockProvider.list(null) } returns emptyList()
+
+            val vm = createVm()
+            advanceUntilIdle()
+
+            vm.createFolder("   ")
+            advanceUntilIdle()
+
+            coVerify(exactly = 0) { mockProvider.createFolder(any(), any()) }
+            coVerify(exactly = 1) { mockProvider.list(null) }
+            assertNull(vm.state.value.error)
+        }
+
+    @Test
     fun `missing provider sets error state`() =
         runTest {
             val vm = createVm(provider = CloudProviderType.FAKE, providers = emptyMap())

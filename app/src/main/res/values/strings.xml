@@ -140,6 +140,10 @@
     <string name="pick_remote_folder_retry">Retry</string>
     <string name="pick_remote_folder_navigate_into">Open folder</string>
     <string name="pick_remote_folder_unknown_error">An unknown error occurred</string>
+    <string name="pick_remote_folder_create_folder">Create folder</string>
+    <string name="pick_remote_folder_create_folder_title">Create new folder</string>
+    <string name="pick_remote_folder_create_folder_name">Folder name</string>
+    <string name="pick_remote_folder_create_folder_confirm">Create</string>
 
     <!-- Accounts – snackbar / status messages surfaced by AccountsViewModel -->
     <string name="accounts_unknown_provider_format">Unknown provider: %1$s</string>
