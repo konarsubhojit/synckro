@@ -19,8 +19,8 @@ permissions:
   contents: read
 
 jobs:
-  build-debug-apk:
-    name: Build debug APK
+  build-apks:
+    name: Build debug + testing release APKs
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
@@ -90,6 +90,28 @@ jobs:
             echo "$DEBUG_KEYSTORE_BASE64" | base64 --decode > "${{ github.workspace }}/debug.keystore"
           fi
 
+      - name: Derive per-build-type MSAL redirect URIs
+        env:
+          MSAL_REDIRECT_URI: ${{ secrets.MSAL_REDIRECT_URI }}
+        run: |
+          # Gradle configures every build type up front, so each build type's
+          # MSAL host validation must see a URI with its own applicationId
+          # host. From the single MSAL_REDIRECT_URI secret, derive both the
+          # debug- and release-form URIs and expose them as build-type-specific
+          # env vars consumed by app/build.gradle.kts.
+          DEBUG_URI="$MSAL_REDIRECT_URI"
+          RELEASE_URI="$MSAL_REDIRECT_URI"
+          if [ -n "$MSAL_REDIRECT_URI" ]; then
+            redirect_without_scheme="${MSAL_REDIRECT_URI#msauth://}"
+            redirect_path="${redirect_without_scheme#*/}"
+            if [ -n "$redirect_path" ] && [ "$redirect_path" != "$redirect_without_scheme" ]; then
+              DEBUG_URI="msauth://com.synckro.debug/$redirect_path"
+              RELEASE_URI="msauth://com.synckro/$redirect_path"
+            fi
+          fi
+          echo "MSAL_REDIRECT_URI_DEBUG=$DEBUG_URI" >> "$GITHUB_ENV"
+          echo "MSAL_REDIRECT_URI_RELEASE=$RELEASE_URI" >> "$GITHUB_ENV"
+
       - name: Run unit tests, lint, and assemble debug APK
         env:
           GOOGLE_WEB_CLIENT_ID: ${{ secrets.GOOGLE_WEB_CLIENT_ID }}
@@ -101,11 +123,30 @@ jobs:
           DEBUG_KEY_PASSWORD: ${{ secrets.DEBUG_KEY_PASSWORD }}
         run: ./gradlew testDebugUnitTest lintDebug assembleDebug
 
+      - name: Assemble testing release APK
+        env:
+          GOOGLE_WEB_CLIENT_ID: ${{ secrets.GOOGLE_WEB_CLIENT_ID }}
+          MS_CLIENT_ID: ${{ secrets.MS_CLIENT_ID }}
+          MSAL_REDIRECT_URI: ${{ secrets.MSAL_REDIRECT_URI }}
+          DEBUG_KEYSTORE_PATH: ${{ github.workspace }}/debug.keystore
+          DEBUG_KEYSTORE_PASSWORD: ${{ secrets.DEBUG_KEYSTORE_PASSWORD }}
+          DEBUG_KEY_ALIAS: ${{ secrets.DEBUG_KEY_ALIAS }}
+          DEBUG_KEY_PASSWORD: ${{ secrets.DEBUG_KEY_PASSWORD }}
+        run: ./gradlew assembleRelease
+
       - name: Upload debug APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: synckro-debug-apk-${{ github.run_number }}
           path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: ${{ github.event_name == 'pull_request' && 3 || 14 }}
+
+      - name: Upload testing release APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: synckro-testing-release-apk-${{ github.run_number }}
+          path: app/build/outputs/apk/release/*.apk
           if-no-files-found: error
           retention-days: ${{ github.event_name == 'pull_request' && 3 || 14 }}
 
@@ -188,6 +229,25 @@ jobs:
           if [ -n "$DEBUG_KEYSTORE_BASE64" ]; then
             echo "$DEBUG_KEYSTORE_BASE64" | base64 --decode > "${{ github.workspace }}/debug.keystore"
           fi
+
+      - name: Derive per-build-type MSAL redirect URIs
+        env:
+          MSAL_REDIRECT_URI: ${{ secrets.MSAL_REDIRECT_URI }}
+        run: |
+          # See build-apks job: each build type must see its own applicationId
+          # host because Gradle configures every build type up front.
+          DEBUG_URI="$MSAL_REDIRECT_URI"
+          RELEASE_URI="$MSAL_REDIRECT_URI"
+          if [ -n "$MSAL_REDIRECT_URI" ]; then
+            redirect_without_scheme="${MSAL_REDIRECT_URI#msauth://}"
+            redirect_path="${redirect_without_scheme#*/}"
+            if [ -n "$redirect_path" ] && [ "$redirect_path" != "$redirect_without_scheme" ]; then
+              DEBUG_URI="msauth://com.synckro.debug/$redirect_path"
+              RELEASE_URI="msauth://com.synckro/$redirect_path"
+            fi
+          fi
+          echo "MSAL_REDIRECT_URI_DEBUG=$DEBUG_URI" >> "$GITHUB_ENV"
+          echo "MSAL_REDIRECT_URI_RELEASE=$RELEASE_URI" >> "$GITHUB_ENV"
 
       - name: Install emulator runtime dependencies
         run: |

@@ -89,14 +89,15 @@ The Gradle wrapper is committed in `gradlew`, `gradlew.bat`, and
 
 ```bash
 ./gradlew assembleDebug        # build APK
+./gradlew assembleRelease      # build testing release APK (signed when DEBUG_KEYSTORE_* is set)
 ./gradlew testDebugUnitTest    # run unit tests
 ./gradlew lintDebug            # Android lint
 ```
 
-### Client IDs and signing secrets for debug builds
+### Client IDs and signing secrets for debug + testing release builds
 
-Debug builds read several values from `local.properties` or environment
-variables and expose them in generated code via `BuildConfig`.
+Debug and testing-release builds read several values from `local.properties` or
+environment variables and expose them in generated code via `BuildConfig`.
 If unset, the build still succeeds but cloud auth will not work at runtime.
 In CI, these values come from repository secrets configured under
 **Settings → Secrets and variables → Actions**.
@@ -113,10 +114,15 @@ step-by-step instructions covering:
 
 ## CI / CD
 
-GitHub Actions builds the debug APK on every push, on pull requests, and on
-manual dispatch. Each run uploads the generated APK from
-`app/build/outputs/apk/debug/` as an Actions artifact named
-`synckro-debug-apk-<run_number>`.
+GitHub Actions builds both the debug APK and a testing-only signed release APK
+on every push, on pull requests, and on manual dispatch. Each run uploads:
+
+- `synckro-debug-apk-<run_number>` from `app/build/outputs/apk/debug/`
+- `synckro-testing-release-apk-<run_number>` from `app/build/outputs/apk/release/`
+
+The release artifact is for internal/dev testing only. It reuses the same
+`GOOGLE_WEB_CLIENT_ID`, `MS_CLIENT_ID`, `MSAL_REDIRECT_URI`, and
+`DEBUG_KEYSTORE_*` values already used by debug builds.
 
 ## Roadmap
 
