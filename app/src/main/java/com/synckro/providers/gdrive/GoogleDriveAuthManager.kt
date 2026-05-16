@@ -60,7 +60,11 @@ import kotlin.coroutines.resume
  *     standard Google account chooser for accounts on the device.
  *  2. [Identity.getAuthorizationClient] + [AuthorizationRequest] for
  *     `https://www.googleapis.com/auth/drive` → access token (may show a
- *     consent screen on first use via a [PendingIntent]).
+ *     consent screen on first use via a [PendingIntent]). The interactive
+ *     request is intentionally not pinned to a specific [AndroidAccount] so
+ *     that Sign-In-with-Google credentials (which need not be present in the
+ *     system [android.accounts.AccountManager]) can complete consent without
+ *     the [PendingIntent] returning `RESULT_CANCELED`.
  *
  * Token refresh ([acquireAccessToken]):
  *  - Calls [Identity.getAuthorizationClient] silently (application context, no
@@ -249,11 +253,25 @@ class GoogleDriveAuthManager private constructor(
             }
 
         // Step 2: Request Drive authorization (shows consent screen if needed).
+        //
+        // We intentionally do NOT pin the [AuthorizationRequest] to a specific
+        // [AndroidAccount] here. Credential Manager's [GetSignInWithGoogleOption]
+        // fallback can return a Google account that lives only in Credential
+        // Manager's own credential store and is not registered in the device's
+        // system [android.accounts.AccountManager]. Pinning to such an account via
+        // [AuthorizationRequest.Builder.setAccount] makes the Drive consent
+        // [PendingIntent] return `RESULT_CANCELED` immediately, surfacing as a
+        // misleading "Sign-in was cancelled" snackbar right after the user picks
+        // an account. Letting Play Services pick the account based on the active
+        // Google Sign-In session avoids that failure mode. Silent token
+        // re-acquisition in [acquireAccessToken] still pins to a concrete email
+        // because by then the account has been stored and must not be confused
+        // with another principal on the device.
         val accountEmail = resolveGoogleAccountEmail(idTokenCredential.id, idTokenCredential.idToken)
         val authorizationResult =
             Identity
                 .getAuthorizationClient(activity)
-                .authorize(buildDriveAuthRequest(accountEmail = accountEmail))
+                .authorize(buildDriveAuthRequest())
                 .awaitTask()
                 .getOrElse { e ->
                     Timber.e(e, "GoogleDriveAuthManager.signIn: authorization failed")
@@ -397,11 +415,14 @@ class GoogleDriveAuthManager private constructor(
             .builder()
             .setRequestedScopes(listOf(Scope(DRIVE_SCOPE)))
             .apply {
-                // Interactive sign-in may not yet know which account to pin, but silent
-                // token acquisition always supplies a concrete email to target.
+                // Interactive sign-in (see [signIn]) deliberately omits [accountEmail]
+                // because the user-picked Sign-In-with-Google account may not exist in
+                // the system [android.accounts.AccountManager]; pinning would make the
+                // Drive consent PendingIntent fail with `RESULT_CANCELED`. Silent token
+                // acquisition (see [acquireAccessToken]) always supplies a concrete
+                // email so we never accept a token resolved for a different principal
+                // on the device.
                 if (!accountEmail.isNullOrBlank()) {
-                    // Pin silent authorization to the requested Google account so we never
-                    // accept a token resolved for a different principal on the device.
                     setAccount(AndroidAccount(accountEmail, GoogleAuthUtil.GOOGLE_ACCOUNT_TYPE))
                 }
             }.build()
