@@ -174,10 +174,8 @@ android {
 
     buildTypes {
         release {
-            // This release artifact is only for internal/testing usage in CI.
-            // Keep R8 disabled for now so assembleRelease is reliable in this workflow.
-            isMinifyEnabled = false
-            isShrinkResources = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
@@ -392,6 +390,7 @@ dependencies {
     implementation(libs.androidx.credentials.play.services)
     implementation(libs.googleid)
     implementation(libs.play.services.auth)
+    implementation(libs.spotbugs.annotations)
 
     // Logging
     implementation(libs.timber)

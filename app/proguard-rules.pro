@@ -7,4 +7,8 @@
 -keep class dagger.hilt.** { *; }
 -keep class javax.inject.** { *; }
 
+# Optional annotations / APIs referenced by transitive libraries.
+-dontwarn com.google.auto.value.AutoValue
+-dontwarn com.microsoft.device.display.DisplayMask
+
 # Retrofit / OkHttp defaults are bundled with consumer rules.
