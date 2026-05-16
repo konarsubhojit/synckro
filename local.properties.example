@@ -2,8 +2,16 @@
 # local.properties itself is gitignored.
 sdk.dir=/opt/android/sdk
 
-# OAuth client IDs used by debug builds. Leave blank if you are not
-# exercising cloud auth locally. In CI they come from GitHub Actions
+# OAuth values used by debug + testing-release builds. Leave blank if you are
+# not exercising cloud auth locally. In CI they come from GitHub Actions
 # secrets of the same name. local.properties itself is gitignored.
 GOOGLE_WEB_CLIENT_ID=
 MS_CLIENT_ID=
+MSAL_REDIRECT_URI=
+
+# Keystore values reused by debug and testing-release signing.
+# DEBUG_KEYSTORE_PATH defaults to <repo-root>/debug.keystore when unset.
+DEBUG_KEYSTORE_PATH=
+DEBUG_KEYSTORE_PASSWORD=
+DEBUG_KEY_ALIAS=
+DEBUG_KEY_PASSWORD=

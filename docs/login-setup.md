@@ -275,14 +275,17 @@ The app's `build.gradle.kts` reads these values and passes them as
 </activity>
 ```
 
-**Build-time validation rules (debug builds only):**
+For testing release APK auth, add a second Android platform entry with package
+name `com.synckro` and the same signature hash.
+
+**Build-time validation rules (debug + release builds):**
 
 | State | Result |
 |-------|--------|
 | Both `MS_CLIENT_ID` and `MSAL_REDIRECT_URI` unset | Build succeeds with a `WARNING:` line; OneDrive sign-in shows "not configured in this build" at runtime with no MSAL stack trace. |
 | Exactly one of the two set | **Build fails** with a message naming the missing variable and pointing at `docs/login-setup.md`. |
 | Both set but `MSAL_REDIRECT_URI` missing `msauth://` prefix, empty host, or empty path | **Build fails** with a descriptive error. |
-| Both set, URI valid | Build succeeds normally. |
+| Both set, URI valid, host matches variant application ID (`com.synckro.debug` for debug / `com.synckro` for release) | Build succeeds normally. |
 
 ### 3. Grant API permissions
 
@@ -301,7 +304,7 @@ The app's `build.gradle.kts` reads these values and passes them as
 ### 4. Generated msal_config.json
 
 MSAL still requires a configuration file, but in this repository Gradle
-generates `msal_config.json` for you from `MS_CLIENT_ID` and
+generates a variant-specific `msal_config.json` for you from `MS_CLIENT_ID` and
 `MSAL_REDIRECT_URI`. You do **not** need to create or commit
 `app/src/main/res/raw/msal_config.json` manually.
 

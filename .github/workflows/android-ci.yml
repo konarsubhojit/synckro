@@ -19,8 +19,8 @@ permissions:
   contents: read
 
 jobs:
-  build-debug-apk:
-    name: Build debug APK
+  build-apks:
+    name: Build debug + testing release APKs
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
@@ -101,11 +101,40 @@ jobs:
           DEBUG_KEY_PASSWORD: ${{ secrets.DEBUG_KEY_PASSWORD }}
         run: ./gradlew testDebugUnitTest lintDebug assembleDebug
 
+      - name: Assemble testing release APK
+        env:
+          GOOGLE_WEB_CLIENT_ID: ${{ secrets.GOOGLE_WEB_CLIENT_ID }}
+          MS_CLIENT_ID: ${{ secrets.MS_CLIENT_ID }}
+          MSAL_REDIRECT_URI: ${{ secrets.MSAL_REDIRECT_URI }}
+          DEBUG_KEYSTORE_PATH: ${{ github.workspace }}/debug.keystore
+          DEBUG_KEYSTORE_PASSWORD: ${{ secrets.DEBUG_KEYSTORE_PASSWORD }}
+          DEBUG_KEY_ALIAS: ${{ secrets.DEBUG_KEY_ALIAS }}
+          DEBUG_KEY_PASSWORD: ${{ secrets.DEBUG_KEY_PASSWORD }}
+        run: |
+          RELEASE_MSAL_REDIRECT_URI="$MSAL_REDIRECT_URI"
+          if [ -n "$MSAL_REDIRECT_URI" ]; then
+            redirect_without_scheme="${MSAL_REDIRECT_URI#msauth://}"
+            redirect_path="${redirect_without_scheme#*/}"
+            if [ -n "$redirect_path" ] && [ "$redirect_path" != "$redirect_without_scheme" ]; then
+              RELEASE_MSAL_REDIRECT_URI="msauth://com.synckro/$redirect_path"
+            fi
+          fi
+          echo "Building testing release with MSAL_REDIRECT_URI host set to com.synckro"
+          MSAL_REDIRECT_URI="$RELEASE_MSAL_REDIRECT_URI" ./gradlew assembleRelease
+
       - name: Upload debug APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: synckro-debug-apk-${{ github.run_number }}
           path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: ${{ github.event_name == 'pull_request' && 3 || 14 }}
+
+      - name: Upload testing release APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: synckro-testing-release-apk-${{ github.run_number }}
+          path: app/build/outputs/apk/release/*.apk
           if-no-files-found: error
           retention-days: ${{ github.event_name == 'pull_request' && 3 || 14 }}
 

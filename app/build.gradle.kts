@@ -8,6 +8,15 @@ val localProps =
 
 fun secretOrEmpty(key: String): String = (System.getenv(key) ?: localProps.getProperty(key) ?: "").trim()
 
+data class MsalBuildConfig(
+    val clientId: String,
+    val redirectUri: String,
+    val host: String,
+    val path: String,
+)
+
+val msalConfigByBuildType = mutableMapOf<String, MsalBuildConfig>()
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -59,14 +68,131 @@ android {
         }
     }
 
+    val googleWebClientId = secretOrEmpty("GOOGLE_WEB_CLIENT_ID")
+    val msClientId = secretOrEmpty("MS_CLIENT_ID")
+    val msalRedirect = secretOrEmpty("MSAL_REDIRECT_URI")
+
+    fun configuredMsalForBuildType(
+        buildTypeName: String,
+        expectedHost: String,
+        legacyHost: String? = null,
+    ): MsalBuildConfig {
+        val msClientIdEmpty = msClientId.isEmpty()
+        val msalRedirectEmpty = msalRedirect.isEmpty()
+        when {
+            msClientIdEmpty && msalRedirectEmpty -> {
+                println(
+                    "WARNING: MS_CLIENT_ID and MSAL_REDIRECT_URI are both unset for '$buildTypeName'. " +
+                        "OneDrive sign-in will be disabled at runtime. " +
+                        "See docs/login-setup.md to enable it.",
+                )
+                return MsalBuildConfig(clientId = "", redirectUri = "", host = "", path = "/")
+            }
+            msClientIdEmpty -> {
+                error(
+                    "MS_CLIENT_ID is not set but MSAL_REDIRECT_URI is for '$buildTypeName'. " +
+                        "Both must be provided together. See docs/login-setup.md.",
+                )
+            }
+            msalRedirectEmpty -> {
+                error(
+                    "MSAL_REDIRECT_URI is not set but MS_CLIENT_ID is for '$buildTypeName'. " +
+                        "Both must be provided together. See docs/login-setup.md.",
+                )
+            }
+        }
+
+        check(msalRedirect.startsWith("msauth://")) {
+            "MSAL_REDIRECT_URI must start with 'msauth://'. " +
+                "Got: '$msalRedirect'. See docs/login-setup.md."
+        }
+        val redirectSansScheme = msalRedirect.removePrefix("msauth://")
+        val host = redirectSansScheme.substringBefore("/", "")
+        val pathWithoutSlash = redirectSansScheme.substringAfter("/", "")
+        check(host.isNotEmpty()) {
+            "MSAL_REDIRECT_URI has no host component. " +
+                "Expected 'msauth://<applicationId>/<hash>'. See docs/login-setup.md."
+        }
+        check(pathWithoutSlash.isNotEmpty()) {
+            "MSAL_REDIRECT_URI has no path component after the host. " +
+                "Expected 'msauth://<applicationId>/<hash>'. See docs/login-setup.md."
+        }
+
+        val allowedHosts =
+            buildList {
+                add(expectedHost)
+                legacyHost?.let { add(it) }
+            }
+        check(allowedHosts.contains(host)) {
+            val expectedText =
+                if (legacyHost == null) {
+                    "'$expectedHost' ($buildTypeName applicationId)"
+                } else {
+                    "'$expectedHost' ($buildTypeName applicationId) or the legacy '$legacyHost'"
+                }
+            "MSAL_REDIRECT_URI host '$host' must equal $expectedText. " +
+                "See docs/login-setup.md."
+        }
+        if (legacyHost != null && host == legacyHost) {
+            println(
+                "WARNING: MSAL_REDIRECT_URI uses legacy host '$legacyHost'. " +
+                    "Update CI/local secrets to '$expectedHost' to match the renamed debug applicationId.",
+            )
+        }
+
+        return MsalBuildConfig(
+            clientId = msClientId,
+            redirectUri = msalRedirect,
+            host = host,
+            path = "/$pathWithoutSlash",
+        )
+    }
+
+    fun com.android.build.api.dsl.BuildType.configureAuthForBuildType(
+        expectedHost: String,
+        legacyHost: String? = null,
+    ) {
+        val msalConfig =
+            configuredMsalForBuildType(
+                buildTypeName = name,
+                expectedHost = expectedHost,
+                legacyHost = legacyHost,
+            )
+
+        buildConfigField(
+            "String",
+            "GOOGLE_WEB_CLIENT_ID",
+            "\"$googleWebClientId\"",
+        )
+        buildConfigField("String", "MS_CLIENT_ID", "\"${msalConfig.clientId}\"")
+        buildConfigField("String", "MSAL_REDIRECT_URI", "\"${msalConfig.redirectUri}\"")
+        manifestPlaceholders["msalHost"] = msalConfig.host
+        manifestPlaceholders["msalPath"] = msalConfig.path
+
+        msalConfigByBuildType[name] = msalConfig
+    }
+
     buildTypes {
         release {
-            isMinifyEnabled = true
-            isShrinkResources = true
+            // This release artifact is only for internal/testing usage in CI.
+            // Keep R8 disabled for now so assembleRelease is reliable in this workflow.
+            isMinifyEnabled = false
+            isShrinkResources = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
+            val pinned = signingConfigs.getByName("debugPinned")
+            if (pinned.storeFile != null) {
+                signingConfig = pinned
+            } else {
+                println(
+                    "WARNING: debugPinned signing config is not fully configured. " +
+                        "Release APK will use default unsigned output locally. " +
+                        "Set DEBUG_KEYSTORE_* values to build a signed testing release APK.",
+                )
+            }
+            configureAuthForBuildType(expectedHost = "com.synckro")
         }
         // Benchmark build type: inherits release settings (no debug overhead) but disables
         // R8 minification and resource shrinking so the build completes cleanly on CI.
@@ -89,92 +215,10 @@ android {
                 signingConfig = pinned
             }
             // else: AGP falls back to the default auto-generated debug keystore.
-            buildConfigField(
-                "String",
-                "GOOGLE_WEB_CLIENT_ID",
-                "\"${secretOrEmpty("GOOGLE_WEB_CLIENT_ID")}\"",
+            configureAuthForBuildType(
+                expectedHost = "com.synckro.debug",
+                legacyHost = "com.konarsubhojit.synckro.debug",
             )
-            val msClientId = secretOrEmpty("MS_CLIENT_ID")
-            val msalRedirect = secretOrEmpty("MSAL_REDIRECT_URI")
-
-            // Build-time guard: validate the MSAL config pair before it reaches the
-            // manifest or BuildConfig. The rules mirror OneDriveAuthConfig.validate()
-            // so that build failures and runtime warnings stay in sync.
-            val msClientIdEmpty = msClientId.isEmpty()
-            val msalRedirectEmpty = msalRedirect.isEmpty()
-            when {
-                msClientIdEmpty && msalRedirectEmpty -> {
-                    // Both unset — MSAL is intentionally disabled in this build.
-                    // Emit a visible warning so developers who forgot to add them notice.
-                    println(
-                        "WARNING: MS_CLIENT_ID and MSAL_REDIRECT_URI are both unset. " +
-                            "OneDrive sign-in will be disabled at runtime. " +
-                            "See docs/login-setup.md to enable it.",
-                    )
-                }
-                msClientIdEmpty -> {
-                    error(
-                        "MS_CLIENT_ID is not set but MSAL_REDIRECT_URI is. " +
-                            "Both must be provided together. See docs/login-setup.md.",
-                    )
-                }
-                msalRedirectEmpty -> {
-                    error(
-                        "MSAL_REDIRECT_URI is not set but MS_CLIENT_ID is. " +
-                            "Both must be provided together. See docs/login-setup.md.",
-                    )
-                }
-                else -> {
-                    // Both are set — validate the redirect URI format.
-                    check(msalRedirect.startsWith("msauth://")) {
-                        "MSAL_REDIRECT_URI must start with 'msauth://'. " +
-                            "Got: '$msalRedirect'. See docs/login-setup.md."
-                    }
-                    val host = msalRedirect.substringAfter("msauth://").substringBefore("/")
-                    val expectedHost = "com.synckro.debug"
-                    val legacyHost = "com.konarsubhojit.synckro.debug"
-                    check(host.isNotEmpty()) {
-                        "MSAL_REDIRECT_URI has no host component. " +
-                            "Expected 'msauth://<applicationId>/<hash>'. See docs/login-setup.md."
-                    }
-                    check(msalRedirect.substringAfter("$host/", "").isNotEmpty()) {
-                        "MSAL_REDIRECT_URI has no path component after the host. " +
-                            "Expected 'msauth://<applicationId>/<hash>'. See docs/login-setup.md."
-                    }
-                    check(host == expectedHost || host == legacyHost) {
-                        "MSAL_REDIRECT_URI host '$host' must equal " +
-                            "'$expectedHost' (debug applicationId) or the legacy '$legacyHost'. " +
-                            "See docs/login-setup.md."
-                    }
-                    if (host == legacyHost) {
-                        println(
-                            "WARNING: MSAL_REDIRECT_URI uses legacy host '$legacyHost'. " +
-                                "Update CI/local secrets to '$expectedHost' to match the renamed debug applicationId.",
-                        )
-                    }
-                }
-            }
-
-            // Extract host/path for manifest placeholders (empty when both secrets are unset).
-            val msalHost =
-                msalRedirect
-                    .substringAfter("msauth://", "")
-                    .substringBefore("/", "")
-            val msalPath =
-                if (msalHost.isNotEmpty()) {
-                    "/" + msalRedirect.substringAfter("$msalHost/", "")
-                } else {
-                    "/"
-                }
-
-            buildConfigField("String", "MS_CLIENT_ID", "\"$msClientId\"")
-            buildConfigField(
-                "String",
-                "MSAL_REDIRECT_URI",
-                "\"$msalRedirect\"",
-            )
-            manifestPlaceholders["msalHost"] = msalHost
-            manifestPlaceholders["msalPath"] = msalPath
         }
     }
 
@@ -263,19 +307,25 @@ abstract class GenerateMsalConfigTask : DefaultTask() {
     }
 }
 
-val generateMsalConfig by tasks.registering(GenerateMsalConfigTask::class) {
-    clientId.set(secretOrEmpty("MS_CLIENT_ID"))
-    redirect.set(secretOrEmpty("MSAL_REDIRECT_URI"))
-    outputDir.set(layout.buildDirectory.dir("generated/res/msal"))
-}
-
 androidComponents {
     onVariants { variant ->
+        val buildTypeName = variant.buildType ?: return@onVariants
+        val msalConfig = msalConfigByBuildType[buildTypeName] ?: MsalBuildConfig("", "", "", "/")
+        val variantCap =
+            variant.name.replaceFirstChar { char ->
+                if (char.isLowerCase()) char.titlecase() else char.toString()
+            }
+        val generateMsalConfigForVariant =
+            tasks.register("generate${variantCap}MsalConfig", GenerateMsalConfigTask::class) {
+                clientId.set(msalConfig.clientId)
+                redirect.set(msalConfig.redirectUri)
+                outputDir.set(layout.buildDirectory.dir("generated/res/msal/${variant.name}"))
+            }
         // Use the typed variant API to add the generated dir as a res source and
         // automatically establish the task dependency — no brittle task-name
         // string matching required.
         variant.sources.res?.addGeneratedSourceDirectory(
-            generateMsalConfig,
+            generateMsalConfigForVariant,
             GenerateMsalConfigTask::outputDir,
         )
     }
