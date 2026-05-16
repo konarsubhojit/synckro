@@ -23,6 +23,7 @@ import com.synckro.ui.screens.paireditor.PairEditorViewModel
 import com.synckro.ui.screens.pickfolder.PickLocalFolderScreen
 import com.synckro.ui.screens.pickfolder.PickRemoteFolderScreen
 import com.synckro.ui.screens.pickfolder.PickRemoteFolderViewModel
+import com.synckro.ui.screens.settings.SettingsScreen
 import com.synckro.util.navigation.AppNavEvent
 import com.synckro.util.navigation.AppNavigationDispatcher
 import kotlinx.coroutines.flow.filterNotNull
@@ -32,6 +33,7 @@ object Routes {
     const val HOME = "home"
     const val ACCOUNTS = "accounts"
     const val CONFLICT_INBOX = "conflict_inbox"
+    const val SETTINGS = "settings"
 
     /** Optional query parameter `pairId`; defaults to 0 (create mode). */
     const val PAIR_EDITOR = "pair_editor?pairId={pairId}"
@@ -102,6 +104,9 @@ fun SynckroNavHost(
                 },
                 onOpenConflictInbox = {
                     nav.navigate(Routes.CONFLICT_INBOX) { launchSingleTop = true }
+                },
+                onOpenSettings = {
+                    nav.navigate(Routes.SETTINGS) { launchSingleTop = true }
                 },
             )
         }
@@ -248,6 +253,11 @@ fun SynckroNavHost(
                 onTriggerSync = {
                     nav.popBackStack(Routes.HOME, inclusive = false)
                 },
+            )
+        }
+        composable(Routes.SETTINGS) {
+            SettingsScreen(
+                onBack = { nav.popBackStack() },
             )
         }
     }
