@@ -117,7 +117,6 @@ fun MainScaffold(
                 MainDestination.Pairs -> PairsScreen(
                     onAddSyncPair = onAddSyncPair,
                     onEditSyncPair = onEditSyncPair,
-                    onOpenAccounts = { selected = MainDestination.Accounts },
                     viewModel = homeViewModel,
                 )
                 MainDestination.Conflicts -> ConflictInboxScreen(

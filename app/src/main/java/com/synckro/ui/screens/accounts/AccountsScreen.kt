@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -22,8 +23,6 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -55,6 +54,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.synckro.R
 import com.synckro.domain.auth.Account
 import com.synckro.ui.auth.ActivityAuthUiHost
+import com.synckro.ui.components.SectionCard
 
 /**
  * Lists connected / connectable cloud accounts. This is the "login first"
@@ -111,13 +111,12 @@ fun AccountsScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             // Introductory instruction banner
-            Surface(
-                color = MaterialTheme.colorScheme.secondaryContainer,
-                shape = MaterialTheme.shapes.medium,
+            SectionCard(
                 modifier = Modifier.fillMaxWidth(),
+                containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                contentPadding = PaddingValues(12.dp),
             ) {
                 Row(
-                    modifier = Modifier.padding(12.dp),
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                     verticalAlignment = Alignment.Top,
                 ) {
@@ -167,118 +166,109 @@ private fun AccountProviderCard(
     } else {
         MaterialTheme.colorScheme.surfaceVariant
     }
-    Card(
+    SectionCard(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = cardColor,
-            contentColor = MaterialTheme.colorScheme.onSurface,
-        ),
+        containerColor = cardColor,
+        contentColor = MaterialTheme.colorScheme.onSurface,
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+        // Provider header
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            // Provider header
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = row.providerDisplayName,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface,
+            Text(
+                text = row.providerDisplayName,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            if (row.accounts.isNotEmpty() && !needsReauth) {
+                Icon(
+                    Icons.Default.CheckCircle,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp),
                 )
-                if (row.accounts.isNotEmpty() && !needsReauth) {
+            }
+        }
+
+        if (!row.isConfigured) {
+            Text(
+                text = stringResource(R.string.accounts_not_configured_format, row.providerDisplayName),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
+
+        // Reauth banner — shown at provider level when ANY account needs it
+        if (needsReauth) {
+            Surface(
+                color = MaterialTheme.colorScheme.error.copy(alpha = 0.12f),
+                shape = MaterialTheme.shapes.small,
+            ) {
+                Row(
+                    modifier = Modifier.padding(10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.Top,
+                ) {
                     Icon(
-                        Icons.Default.CheckCircle,
+                        Icons.Default.Warning,
                         contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(20.dp),
+                        tint = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(16.dp),
+                    )
+                    Text(
+                        text = stringResource(R.string.accounts_reauth_required),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
                     )
                 }
             }
+        }
 
-            if (!row.isConfigured) {
-                Text(
-                    text = stringResource(R.string.accounts_not_configured_format, row.providerDisplayName),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
+        // Connected accounts
+        if (row.accounts.isEmpty()) {
+            Text(
+                text = stringResource(R.string.accounts_empty),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        } else {
+            HorizontalDivider()
+            row.accounts.forEach { item ->
+                AccountItemRow(
+                    item = item,
+                    isBusy = row.isBusy,
+                    onDisconnect = { onDisconnect(item.account) },
+                    onReauth = onConnect,
                 )
             }
+        }
 
-            // Reauth banner — shown at provider level when ANY account needs it
-            if (needsReauth) {
-                Surface(
-                    color = MaterialTheme.colorScheme.error.copy(alpha = 0.12f),
-                    shape = MaterialTheme.shapes.small,
-                ) {
-                    Row(
-                        modifier = Modifier.padding(10.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.Top,
-                    ) {
-                        Icon(
-                            Icons.Default.Warning,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.size(16.dp),
-                        )
-                        Text(
-                            text = stringResource(R.string.accounts_reauth_required),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error,
-                        )
-                    }
-                }
-            }
-
-            // Connected accounts
-            if (row.accounts.isEmpty()) {
-                Text(
-                    text = stringResource(R.string.accounts_empty),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+        // Connect / Add another / Re-authenticate button
+        Button(
+            onClick = onConnect,
+            enabled = !row.isBusy && row.isConfigured,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            if (row.isBusy) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(18.dp),
+                    strokeWidth = 2.dp,
+                    color = MaterialTheme.colorScheme.onPrimary,
                 )
             } else {
-                HorizontalDivider()
-                row.accounts.forEach { item ->
-                    AccountItemRow(
-                        item = item,
-                        isBusy = row.isBusy,
-                        onDisconnect = { onDisconnect(item.account) },
-                        onReauth = onConnect,
-                    )
-                }
-            }
-
-            // Connect / Add another / Re-authenticate button
-            Button(
-                onClick = onConnect,
-                enabled = !row.isBusy && row.isConfigured,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                if (row.isBusy) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(18.dp),
-                        strokeWidth = 2.dp,
-                        color = MaterialTheme.colorScheme.onPrimary,
-                    )
-                } else {
-                    val label =
-                        when {
-                            row.accounts.isNotEmpty() && !needsReauth ->
-                                stringResource(R.string.accounts_add_another_format, row.providerDisplayName)
-                            needsReauth ->
-                                stringResource(R.string.accounts_reauth_button, row.providerDisplayName)
-                            else ->
-                                stringResource(R.string.accounts_connect_format, row.providerDisplayName)
-                        }
-                    Text(label, fontWeight = FontWeight.Medium)
-                }
+                val label =
+                    when {
+                        row.accounts.isNotEmpty() && !needsReauth ->
+                            stringResource(R.string.accounts_add_another_format, row.providerDisplayName)
+                        needsReauth ->
+                            stringResource(R.string.accounts_reauth_button, row.providerDisplayName)
+                        else ->
+                            stringResource(R.string.accounts_connect_format, row.providerDisplayName)
+                    }
+                Text(label, fontWeight = FontWeight.Medium)
             }
         }
     }
