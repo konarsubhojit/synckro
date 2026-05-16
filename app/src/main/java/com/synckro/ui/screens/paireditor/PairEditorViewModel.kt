@@ -86,6 +86,11 @@ class PairEditorViewModel
             val isLoading: Boolean = false,
             val displayName: String = "",
             val localTreeUri: String = "",
+            /** Human-readable path under the local-folder field (e.g. `Downloads/Photos`).
+             *  Plumbed from the SAF [DocumentFile] tree by [onLocalFolderPicked] so the
+             *  screen does not have to recompute it on every recomposition. Empty when
+             *  no folder is selected or when no path could be derived. */
+            val localPathDisplay: String = "",
             val provider: CloudProviderType = CloudProviderType.GOOGLE_DRIVE,
             /** The id of the account this pair is bound to; null until the user selects one. */
             val accountId: String? = null,
@@ -96,6 +101,10 @@ class PairEditorViewModel
              *  and picks a folder via [PickRemoteFolderScreen]. Empty when the ID was loaded
              *  from the database (name is not persisted) or typed manually. */
             val remoteFolderName: String = "",
+            /** Joined breadcrumb path from the root of the cloud provider to the selected
+             *  remote folder, e.g. `"My Drive › Backups › Photos"`. Set by
+             *  [onRemoteFolderPicked] when the picker provides it; otherwise empty. */
+            val remoteBreadcrumb: String = "",
             val conflictPolicy: ConflictPolicy = ConflictPolicy.NEWEST_WINS,
             val direction: SyncDirection = SyncDirection.BIDIRECTIONAL,
             val wifiOnly: Boolean = true,
@@ -159,6 +168,14 @@ class PairEditorViewModel
              * before saving.
              */
             val accountDisappeared: Boolean = false,
+            /**
+             * Current wizard step (1..[TOTAL_STEPS]) in create mode. Ignored in
+             * edit mode, which renders all sections in a single scroll. Step 1
+             * collects name + local folder, step 2 collects provider + account +
+             * remote folder, step 3 collects direction + conflict policy +
+             * auto-sync.
+             */
+            val currentStep: Int = 1,
         ) {
             /** Parses [customIntervalText] as a non-negative Long, or 0 if the text is blank/invalid. */
             private val parsedCustomInterval: Long
@@ -193,6 +210,49 @@ class PairEditorViewModel
                         localTreeUri.isNotBlank() &&
                         remoteFolderId.isNotBlank() &&
                         accountId != null
+
+            /**
+             * Wizard step-1 validation: name + local folder. Required so the
+             * "Next" button is disabled until both fields are populated.
+             */
+            val step1Valid: Boolean
+                get() = displayName.isNotBlank() && localTreeUri.isNotBlank()
+
+            /**
+             * Wizard step-2 validation: provider + account + remote folder. The
+             * provider field always has a default so it's effectively just an
+             * account-and-remote-folder check.
+             */
+            val step2Valid: Boolean
+                get() = accountId != null && remoteFolderId.isNotBlank()
+
+            /**
+             * Wizard step-3 validation: direction + conflict policy + auto-sync
+             * + (optional) retention-days range. The first two are enums with
+             * defaults so they always validate; retention only matters for
+             * destructive directions.
+             */
+            val step3Valid: Boolean
+                get() {
+                    if (!direction.isDestructive) return true
+                    if (retentionDaysText.isBlank()) return true
+                    val parsed = retentionDaysText.toIntOrNull() ?: return false
+                    return parsed in 0..MAX_RETENTION_DAYS
+                }
+
+            /**
+             * Whether the wizard's "Next" button (create mode) should be
+             * enabled for the current step. Step 3 has no "Next" — it shows
+             * Save instead — but we still expose the validation result via
+             * [canSave] for that case.
+             */
+            val canGoToNextStep: Boolean
+                get() =
+                    when (currentStep) {
+                        1 -> step1Valid
+                        2 -> step2Valid
+                        else -> false
+                    }
         }
 
         private val _state = MutableStateFlow(UiState())
@@ -204,6 +264,25 @@ class PairEditorViewModel
          * URI that arrived via [onLocalFolderPicked] before the DB load completed.
          */
         private var userPickedFolder: Boolean = false
+
+        /**
+         * Snapshot of the form fields taken once the editor finishes its initial
+         * data load. Used by [isDirty] to detect whether the user has made any
+         * unsaved changes — drives the "discard changes?" confirmation when the
+         * user presses Back. `null` until the initial load completes; while
+         * `null`, [isDirty] returns `false`.
+         */
+        private var initialFingerprint: FormFingerprint? = null
+
+        /** True when [pairId] is zero, i.e. the editor was opened to create a new pair. */
+        val isCreateMode: Boolean get() = pairId == 0L
+
+        /** True when the form has unsaved changes relative to its initial snapshot. */
+        val isDirty: Boolean
+            get() {
+                val baseline = initialFingerprint ?: return false
+                return FormFingerprint.of(_state.value) != baseline
+            }
 
         init {
             // Re-apply any URI restored from process death (the Hilt-injected SavedStateHandle
@@ -219,11 +298,41 @@ class PairEditorViewModel
             // Restore the remote folder pick result across process death in the same way.
             val restoredRemoteId = savedStateHandle.get<String?>(KEY_REMOTE_FOLDER_ID)?.takeIf { it.isNotEmpty() }
             val restoredRemoteName = savedStateHandle.get<String?>(KEY_REMOTE_FOLDER_NAME).orEmpty()
+            val restoredRemoteBreadcrumb = savedStateHandle.get<String?>(KEY_REMOTE_FOLDER_BREADCRUMB).orEmpty()
             if (restoredRemoteId != null) {
-                _state.update { it.copy(remoteFolderId = restoredRemoteId, remoteFolderName = restoredRemoteName) }
+                _state.update {
+                    it.copy(
+                        remoteFolderId = restoredRemoteId,
+                        remoteFolderName = restoredRemoteName,
+                        remoteBreadcrumb = restoredRemoteBreadcrumb,
+                    )
+                }
             }
 
-            if (pairId > 0L) loadExisting(pairId)
+            if (pairId > 0L) {
+                loadExisting(pairId)
+            } else {
+                // Brand-new pair: seed with the user's sync defaults from Settings
+                // so the form reflects their preferences from the start. Captured
+                // once — subsequent changes to the defaults do not retroactively
+                // mutate an in-progress form.
+                viewModelScope.launch {
+                    val wifi = settingsRepository.defaultWifiOnly.first()
+                    val charging = settingsRepository.defaultChargingOnly.first()
+                    val policy = settingsRepository.defaultConflictPolicy.first()
+                    _state.update {
+                        it.copy(
+                            wifiOnly = wifi,
+                            requiresCharging = charging,
+                            conflictPolicy = policy,
+                        )
+                    }
+                    // The empty-form baseline only stabilises after defaults have
+                    // been applied — otherwise the very first defaults would look
+                    // like user edits and incorrectly trip the dirty guard.
+                    initialFingerprint = FormFingerprint.of(_state.value)
+                }
+            }
 
             // Observe accounts for the currently selected provider and update the
             // available accounts list. When the provider changes, the previous
@@ -295,6 +404,10 @@ class PairEditorViewModel
                             retentionDaysText = entity.retentionDays?.toString() ?: "",
                         )
                     }
+                    // Capture the loaded baseline so unsaved-changes detection
+                    // is correct for edit mode (any subsequent mutation counts
+                    // as dirty).
+                    initialFingerprint = FormFingerprint.of(_state.value)
                 } else {
                     Timber.w("PairEditorViewModel: no entity found for id=%d", id)
                     _state.update { it.copy(isLoading = false) }
@@ -307,14 +420,27 @@ class PairEditorViewModel
          * confirmed folder URI. The navigation host observes the back-stack entry's
          * own [SavedStateHandle] (which is a different instance from the Hilt-injected
          * [savedStateHandle] here) and forwards the result through this method.
+         *
+         * @param uri Tree URI returned by SAF.
+         * @param displayPath Optional human-readable path derived from
+         *   [androidx.documentfile.provider.DocumentFile] by the screen (which
+         *   has [android.content.Context] access); shown beneath the local
+         *   folder field so the user knows exactly which directory they
+         *   selected. Pass an empty string to leave the displayed path
+         *   unchanged (e.g. on URI-only restores from process death).
          */
-        fun onLocalFolderPicked(uri: String) {
+        fun onLocalFolderPicked(uri: String, displayPath: String = "") {
             if (uri.isBlank()) return
             userPickedFolder = true
             // Persist into the Hilt-injected SavedStateHandle too so the URI survives
             // process death / configuration changes for this ViewModel.
             savedStateHandle[KEY_LOCAL_TREE_URI] = uri
-            _state.update { it.copy(localTreeUri = uri) }
+            _state.update {
+                it.copy(
+                    localTreeUri = uri,
+                    localPathDisplay = if (displayPath.isNotEmpty()) displayPath else it.localPathDisplay,
+                )
+            }
         }
 
         fun onDisplayNameChange(value: String) =
@@ -331,11 +457,55 @@ class PairEditorViewModel
          * Called by the navigation layer when [PickRemoteFolderScreen] has returned a confirmed
          * cloud folder. Both the folder ID and human-readable name are stored so the editor can
          * display the name while still persisting the opaque provider ID.
+         *
+         * @param breadcrumb Optional joined navigation path from the root of the
+         *   provider to the selected folder (e.g. `"My Drive › Backups › Photos"`).
+         *   Surfaced beneath the cloud folder field so the user has unambiguous
+         *   context about where their data will go. Empty string preserves the
+         *   previously-known breadcrumb (e.g. on process-death restore).
          */
-        fun onRemoteFolderPicked(id: String, name: String) {
+        fun onRemoteFolderPicked(id: String, name: String, breadcrumb: String = "") {
             savedStateHandle[KEY_REMOTE_FOLDER_ID] = id
             savedStateHandle[KEY_REMOTE_FOLDER_NAME] = name
-            _state.update { it.copy(remoteFolderId = id, remoteFolderName = name) }
+            if (breadcrumb.isNotEmpty()) {
+                savedStateHandle[KEY_REMOTE_FOLDER_BREADCRUMB] = breadcrumb
+            }
+            _state.update {
+                it.copy(
+                    remoteFolderId = id,
+                    remoteFolderName = name,
+                    remoteBreadcrumb = if (breadcrumb.isNotEmpty()) breadcrumb else it.remoteBreadcrumb,
+                )
+            }
+        }
+
+        // ---------------------------------------------------------------------
+        // Wizard navigation (create mode)
+        // ---------------------------------------------------------------------
+
+        /**
+         * Advances to the next wizard step if the current step validates. Caps
+         * at [TOTAL_STEPS] so callers can invoke it unconditionally without
+         * worrying about overflow.
+         */
+        fun goToNextStep() {
+            _state.update { s ->
+                if (!s.canGoToNextStep || s.currentStep >= TOTAL_STEPS) s
+                else s.copy(currentStep = s.currentStep + 1)
+            }
+        }
+
+        /** Goes back one wizard step, bottomed out at step 1. */
+        fun goToPreviousStep() {
+            _state.update { s ->
+                if (s.currentStep <= 1) s else s.copy(currentStep = s.currentStep - 1)
+            }
+        }
+
+        /** Jumps directly to [step] (clamped to 1..[TOTAL_STEPS]). Used by tests and previews. */
+        fun goToStep(step: Int) {
+            val clamped = step.coerceIn(1, TOTAL_STEPS)
+            _state.update { it.copy(currentStep = clamped) }
         }
 
         fun onProviderChange(value: CloudProviderType) =
@@ -575,7 +745,67 @@ class PairEditorViewModel
              */
             const val KEY_REMOTE_FOLDER_NAME = "remotePickedFolderName"
 
+            /**
+             * Key used to deliver the joined breadcrumb path of the chosen cloud
+             * folder (e.g. `"My Drive › Backups › Photos"`) alongside
+             * [KEY_REMOTE_FOLDER_ID]. Optional — picker implementations that
+             * don't track a navigation trail may omit it.
+             */
+            const val KEY_REMOTE_FOLDER_BREADCRUMB = "remotePickedFolderBreadcrumb"
+
             /** Maximum retention period accepted by the pair editor. */
             const val MAX_RETENTION_DAYS = 36500
+
+            /** Number of wizard steps when creating a new pair. */
+            const val TOTAL_STEPS = 3
+        }
+
+        /**
+         * Subset of [UiState] used to detect "unsaved changes" via structural
+         * equality. Excludes transient flags ([UiState.isLoading],
+         * [UiState.isSaving], [UiState.saveError], wizard navigation state,
+         * etc.) so they don't spuriously mark the form dirty.
+         */
+        internal data class FormFingerprint(
+            val displayName: String,
+            val localTreeUri: String,
+            val provider: CloudProviderType,
+            val accountId: String?,
+            val remoteFolderId: String,
+            val conflictPolicy: ConflictPolicy,
+            val direction: SyncDirection,
+            val wifiOnly: Boolean,
+            val requiresCharging: Boolean,
+            val autoSyncEnabled: Boolean,
+            val schedulePreset: SyncSchedulePreset,
+            val customIntervalText: String,
+            val includeGlobsText: String,
+            val excludeGlobsText: String,
+            val excludeSubfolders: Boolean,
+            val excludeEmptyFolders: Boolean,
+            val retentionDaysText: String,
+        ) {
+            companion object {
+                fun of(s: UiState) =
+                    FormFingerprint(
+                        displayName = s.displayName,
+                        localTreeUri = s.localTreeUri,
+                        provider = s.provider,
+                        accountId = s.accountId,
+                        remoteFolderId = s.remoteFolderId,
+                        conflictPolicy = s.conflictPolicy,
+                        direction = s.direction,
+                        wifiOnly = s.wifiOnly,
+                        requiresCharging = s.requiresCharging,
+                        autoSyncEnabled = s.autoSyncEnabled,
+                        schedulePreset = s.schedulePreset,
+                        customIntervalText = s.customIntervalText,
+                        includeGlobsText = s.includeGlobsText,
+                        excludeGlobsText = s.excludeGlobsText,
+                        excludeSubfolders = s.excludeSubfolders,
+                        excludeEmptyFolders = s.excludeEmptyFolders,
+                        retentionDaysText = s.retentionDaysText,
+                    )
+            }
         }
     }

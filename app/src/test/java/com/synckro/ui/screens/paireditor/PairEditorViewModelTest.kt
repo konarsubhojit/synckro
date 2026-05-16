@@ -76,6 +76,9 @@ class PairEditorViewModelTest {
         mockSettingsRepository =
             mockk {
                 every { globalAutoSyncEnabled } returns flowOf(true)
+                every { defaultWifiOnly } returns flowOf(true)
+                every { defaultChargingOnly } returns flowOf(false)
+                every { defaultConflictPolicy } returns flowOf(ConflictPolicy.NEWEST_WINS)
             }
     }
 

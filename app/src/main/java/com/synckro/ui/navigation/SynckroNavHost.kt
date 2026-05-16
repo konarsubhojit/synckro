@@ -154,9 +154,14 @@ fun SynckroNavHost(
                         backStackEntry.savedStateHandle
                             .get<String?>(PairEditorViewModel.KEY_REMOTE_FOLDER_NAME)
                             .orEmpty()
-                    editorViewModel.onRemoteFolderPicked(id, name)
+                    val breadcrumb =
+                        backStackEntry.savedStateHandle
+                            .get<String?>(PairEditorViewModel.KEY_REMOTE_FOLDER_BREADCRUMB)
+                            .orEmpty()
+                    editorViewModel.onRemoteFolderPicked(id, name, breadcrumb)
                     backStackEntry.savedStateHandle[PairEditorViewModel.KEY_REMOTE_FOLDER_ID] = null
                     backStackEntry.savedStateHandle[PairEditorViewModel.KEY_REMOTE_FOLDER_NAME] = null
+                    backStackEntry.savedStateHandle[PairEditorViewModel.KEY_REMOTE_FOLDER_BREADCRUMB] = null
                 }
             }
 
@@ -214,7 +219,7 @@ fun SynckroNavHost(
         ) {
             PickRemoteFolderScreen(
                 activity = activity,
-                onFolderPicked = { id, name ->
+                onFolderPicked = { id, name, breadcrumb ->
                     // Pass the chosen folder back to the PairEditorScreen via its
                     // SavedStateHandle so PairEditorViewModel can update its state.
                     nav.previousBackStackEntry
@@ -223,6 +228,9 @@ fun SynckroNavHost(
                     nav.previousBackStackEntry
                         ?.savedStateHandle
                         ?.set(PairEditorViewModel.KEY_REMOTE_FOLDER_NAME, name)
+                    nav.previousBackStackEntry
+                        ?.savedStateHandle
+                        ?.set(PairEditorViewModel.KEY_REMOTE_FOLDER_BREADCRUMB, breadcrumb)
                     nav.popBackStack()
                 },
                 onBack = { nav.popBackStack() },
