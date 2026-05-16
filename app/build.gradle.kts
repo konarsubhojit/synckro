@@ -77,8 +77,14 @@ android {
         expectedHost: String,
         legacyHost: String? = null,
     ): MsalBuildConfig {
+        // Allow callers to pass a build-type-specific redirect URI so that one
+        // build type's validation does not reject another build type's host
+        // when Gradle configures every build type up front. Falls back to the
+        // shared `MSAL_REDIRECT_URI` so single-secret setups keep working.
+        val perBuildTypeRedirect = secretOrEmpty("MSAL_REDIRECT_URI_${buildTypeName.uppercase()}")
+        val effectiveMsalRedirect = perBuildTypeRedirect.ifEmpty { msalRedirect }
         val msClientIdEmpty = msClientId.isEmpty()
-        val msalRedirectEmpty = msalRedirect.isEmpty()
+        val msalRedirectEmpty = effectiveMsalRedirect.isEmpty()
         when {
             msClientIdEmpty && msalRedirectEmpty -> {
                 println(
@@ -102,11 +108,11 @@ android {
             }
         }
 
-        check(msalRedirect.startsWith("msauth://")) {
+        check(effectiveMsalRedirect.startsWith("msauth://")) {
             "MSAL_REDIRECT_URI must start with 'msauth://'. " +
-                "Got: '$msalRedirect'. See docs/login-setup.md."
+                "Got: '$effectiveMsalRedirect'. See docs/login-setup.md."
         }
-        val redirectSansScheme = msalRedirect.removePrefix("msauth://")
+        val redirectSansScheme = effectiveMsalRedirect.removePrefix("msauth://")
         val host = redirectSansScheme.substringBefore("/", "")
         val pathWithoutSlash = redirectSansScheme.substringAfter("/", "")
         check(host.isNotEmpty()) {
@@ -142,7 +148,7 @@ android {
 
         return MsalBuildConfig(
             clientId = msClientId,
-            redirectUri = msalRedirect,
+            redirectUri = effectiveMsalRedirect,
             host = host,
             path = "/$pathWithoutSlash",
         )

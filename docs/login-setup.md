@@ -287,6 +287,19 @@ name `com.synckro` and the same signature hash.
 | Both set but `MSAL_REDIRECT_URI` missing `msauth://` prefix, empty host, or empty path | **Build fails** with a descriptive error. |
 | Both set, URI valid, host matches variant application ID (`com.synckro.debug` for debug / `com.synckro` for release) | Build succeeds normally. |
 
+> **Per-build-type overrides (CI):** Because Gradle configures every build type
+> up front, a single `MSAL_REDIRECT_URI` whose host matches only one build
+> type's `applicationId` will cause the other build type's validation to fail
+> during configuration — even when you only ask Gradle to assemble the matching
+> variant. To support this, the build also reads optional per-build-type
+> overrides which take precedence over `MSAL_REDIRECT_URI`:
+>
+> - `MSAL_REDIRECT_URI_DEBUG` — used when configuring the `debug` build type.
+> - `MSAL_REDIRECT_URI_RELEASE` — used when configuring the `release` build type.
+>
+> The CI workflow derives both URIs from the single `MSAL_REDIRECT_URI` secret
+> (reusing the same base64 hash) so existing setups continue to work unchanged.
+
 ### 3. Grant API permissions
 
 1. In the app registration, go to **API permissions → Add a permission →
