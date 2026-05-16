@@ -16,8 +16,12 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import com.synckro.data.repository.DarkModePreference
+import com.synckro.data.repository.SettingsRepository
 import com.synckro.ui.navigation.SynckroNavHost
 import com.synckro.ui.theme.SynckroTheme
 import com.synckro.util.error.LocalUserMessageReporter
@@ -34,6 +38,7 @@ import javax.inject.Inject
 class MainActivity : ComponentActivity() {
     @Inject lateinit var userMessages: UserMessageReporter
     @Inject lateinit var appNavigationDispatcher: AppNavigationDispatcher
+    @Inject lateinit var settingsRepository: SettingsRepository
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -41,7 +46,19 @@ class MainActivity : ComponentActivity() {
         // Forward any deep-link navigation action present at launch time.
         dispatchNavigationIntent(intent)
         setContent {
-            SynckroTheme {
+            // Observe appearance preferences so theme changes apply immediately
+            // without requiring an app restart. The initial values match the
+            // SettingsRepository defaults so the first composition before the
+            // DataStore flow has emitted does not flash a different theme.
+            val darkMode by settingsRepository.darkMode.collectAsState(initial = DarkModePreference.SYSTEM)
+            val dynamicColor by settingsRepository.dynamicColor.collectAsState(initial = false)
+            val respectFontScale by settingsRepository.respectFontScale.collectAsState(initial = true)
+
+            SynckroTheme(
+                darkMode = darkMode,
+                dynamicColor = dynamicColor,
+                respectFontScale = respectFontScale,
+            ) {
                 val snackbarHostState = remember { SnackbarHostState() }
 
                 // Route every reported UserMessage to the snackbar host. We

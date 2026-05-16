@@ -1,0 +1,191 @@
+package com.synckro.ui.screens.settings
+
+import android.content.Context
+import androidx.datastore.preferences.core.PreferenceDataStoreFactory
+import com.synckro.data.repository.DarkModePreference
+import com.synckro.data.repository.SettingsRepository
+import com.synckro.data.repository.SyncPairRepository
+import com.synckro.data.worker.SyncScheduler
+import com.synckro.domain.model.ConflictPolicy
+import com.synckro.util.logging.LogExporter
+import io.mockk.coEvery
+import io.mockk.mockk
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.setMain
+import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Before
+import org.junit.Rule
+import org.junit.Test
+import org.junit.rules.TemporaryFolder
+
+/**
+ * Unit tests for [SettingsViewModel]. Drives the view-model against a real
+ * (temp-file) DataStore-backed [SettingsRepository] so each toggle's
+ * persistence is exercised end-to-end — mocks would not catch a key-typo or
+ * an enum-name mismatch.
+ *
+ * Side-effect collaborators (sync rescheduling, log export) are mocked because
+ * their own behaviour is unit-tested elsewhere; this file only verifies that
+ * the view-model wires the right preferences and methods together.
+ *
+ * An [UnconfinedTestDispatcher] is shared by [Dispatchers.setMain] and the
+ * DataStore actor's scope so writes launched on `viewModelScope` complete
+ * eagerly without needing to manually coordinate two schedulers.
+ */
+@OptIn(ExperimentalCoroutinesApi::class)
+class SettingsViewModelTest {
+    @get:Rule val tempFolder = TemporaryFolder()
+
+    private val testDispatcher = UnconfinedTestDispatcher()
+    private val testScope = TestScope(testDispatcher)
+
+    private lateinit var repo: SettingsRepository
+    private lateinit var syncPairRepository: SyncPairRepository
+    private lateinit var syncScheduler: SyncScheduler
+    private lateinit var logExporter: LogExporter
+    private lateinit var ctx: Context
+
+    @Before
+    fun setUp() {
+        Dispatchers.setMain(testDispatcher)
+        val dataStore =
+            PreferenceDataStoreFactory.create(
+                scope = testScope.backgroundScope,
+                produceFile = { tempFolder.newFile("settings_test.preferences_pb") },
+            )
+        repo = SettingsRepository(dataStore)
+        syncPairRepository =
+            mockk(relaxed = true) {
+                coEvery { observeAll(any()) } returns flowOf(emptyList())
+            }
+        syncScheduler = mockk(relaxed = true)
+        logExporter = mockk(relaxed = true)
+        ctx = mockk(relaxed = true)
+    }
+
+    @After fun tearDown() = Dispatchers.resetMain()
+
+    private fun newVm(): SettingsViewModel =
+        SettingsViewModel(
+            context = ctx,
+            settingsRepository = repo,
+            syncPairRepository = syncPairRepository,
+            syncScheduler = syncScheduler,
+            logExporter = logExporter,
+        )
+
+    @Test
+    fun `state mirrors repository defaults`() =
+        testScope.runTest {
+            val vm = newVm()
+            // Subscribe to state so stateIn(WhileSubscribed) starts collecting upstream.
+            val s = vm.state.value
+            // After subscribing, the initial value should still match defaults because
+            // each upstream flow's first emission == the repository default.
+            // (We re-read after touching the flow so the value reflects the latest combine.)
+            vm.state.value.let {
+                assertTrue(it.globalAutoSyncEnabled)
+                assertTrue(it.defaultWifiOnly)
+                assertFalse(it.defaultChargingOnly)
+                assertEquals(ConflictPolicy.NEWEST_WINS, it.defaultConflictPolicy)
+                assertEquals(DarkModePreference.SYSTEM, it.darkMode)
+                assertFalse(it.dynamicColor)
+                assertTrue(it.respectFontScale)
+                assertFalse(it.notifyOnSuccess)
+                assertTrue(it.notifyOnFailure)
+                assertEquals(30, it.logRetentionDays)
+            }
+            // Reference s so the linter doesn't complain.
+            @Suppress("UNUSED_EXPRESSION") s
+        }
+
+    @Test
+    fun `setGlobalAutoSync persists value`() =
+        testScope.runTest {
+            val vm = newVm()
+            vm.setGlobalAutoSync(false)
+            assertFalse(repo.globalAutoSyncEnabled.first())
+        }
+
+    @Test
+    fun `setDefaultWifiOnly persists value`() =
+        testScope.runTest {
+            val vm = newVm()
+            vm.setDefaultWifiOnly(false)
+            assertFalse(repo.defaultWifiOnly.first())
+        }
+
+    @Test
+    fun `setDefaultChargingOnly persists value`() =
+        testScope.runTest {
+            val vm = newVm()
+            vm.setDefaultChargingOnly(true)
+            assertTrue(repo.defaultChargingOnly.first())
+        }
+
+    @Test
+    fun `setDefaultConflictPolicy persists enum`() =
+        testScope.runTest {
+            val vm = newVm()
+            vm.setDefaultConflictPolicy(ConflictPolicy.KEEP_BOTH)
+            assertEquals(ConflictPolicy.KEEP_BOTH, repo.defaultConflictPolicy.first())
+        }
+
+    @Test
+    fun `setDarkMode persists enum`() =
+        testScope.runTest {
+            val vm = newVm()
+            vm.setDarkMode(DarkModePreference.DARK)
+            assertEquals(DarkModePreference.DARK, repo.darkMode.first())
+        }
+
+    @Test
+    fun `setDynamicColor persists value`() =
+        testScope.runTest {
+            val vm = newVm()
+            vm.setDynamicColor(true)
+            assertTrue(repo.dynamicColor.first())
+        }
+
+    @Test
+    fun `setRespectFontScale persists value`() =
+        testScope.runTest {
+            val vm = newVm()
+            vm.setRespectFontScale(false)
+            assertFalse(repo.respectFontScale.first())
+        }
+
+    @Test
+    fun `setNotifyOnSuccess persists value`() =
+        testScope.runTest {
+            val vm = newVm()
+            vm.setNotifyOnSuccess(true)
+            assertTrue(repo.notifyOnSuccess.first())
+        }
+
+    @Test
+    fun `setNotifyOnFailure persists value`() =
+        testScope.runTest {
+            val vm = newVm()
+            vm.setNotifyOnFailure(false)
+            assertFalse(repo.notifyOnFailure.first())
+        }
+
+    @Test
+    fun `setLogRetentionDays persists value`() =
+        testScope.runTest {
+            val vm = newVm()
+            vm.setLogRetentionDays(90)
+            assertEquals(90, repo.logRetentionDays.first())
+        }
+}
