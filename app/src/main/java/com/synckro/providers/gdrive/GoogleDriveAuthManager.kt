@@ -11,6 +11,7 @@ import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.credentials.CredentialManager
+import androidx.credentials.CredentialOption
 import androidx.credentials.GetCredentialRequest
 import androidx.credentials.exceptions.GetCredentialCancellationException
 import androidx.credentials.exceptions.GetCredentialException
@@ -24,6 +25,7 @@ import com.google.android.gms.auth.api.identity.Identity
 import com.google.android.gms.common.api.Scope
 import com.google.android.gms.tasks.Task
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
+import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import com.google.android.libraries.identity.googleid.GoogleIdTokenParsingException
 import com.synckro.BuildConfig
@@ -53,6 +55,9 @@ import kotlin.coroutines.resume
  *
  * Sign-in flow:
  *  1. [CredentialManager.getCredential] with [GetGoogleIdOption] → Google ID token.
+ *     If Credential Manager has no eligible credential ([NoCredentialException])
+ *     we fall back to [GetSignInWithGoogleOption], which always presents the
+ *     standard Google account chooser for accounts on the device.
  *  2. [Identity.getAuthorizationClient] + [AuthorizationRequest] for
  *     `https://www.googleapis.com/auth/drive` → access token (may show a
  *     consent screen on first use via a [PendingIntent]).
@@ -187,6 +192,15 @@ class GoogleDriveAuthManager private constructor(
                 }
 
         // Step 1: Obtain Google ID token via Credential Manager.
+        //
+        // We first try [GetGoogleIdOption] which silently returns a Google ID token
+        // for any eligible Google account already known to Credential Manager. On
+        // devices where no such credential is registered (even though one or more
+        // Google accounts may be signed in on the device), Credential Manager raises
+        // [NoCredentialException]. In that case we fall back to
+        // [GetSignInWithGoogleOption], which always presents the standard
+        // "Sign in with Google" account chooser so the user can pick any Google
+        // account that is signed in on the device.
         val googleIdOption =
             GetGoogleIdOption
                 .Builder()
@@ -197,22 +211,35 @@ class GoogleDriveAuthManager private constructor(
 
         val idTokenCredential: GoogleIdTokenCredential =
             try {
-                val response =
-                    credentialManager.getCredential(
-                        context = activity,
-                        request =
-                            GetCredentialRequest
-                                .Builder()
-                                .addCredentialOption(googleIdOption)
-                                .build(),
-                    )
-                GoogleIdTokenCredential.createFrom(response.credential.data)
+                requestGoogleIdTokenCredential(activity, googleIdOption)
             } catch (e: GetCredentialCancellationException) {
                 Timber.i("GoogleDriveAuthManager.signIn: user cancelled credential picker")
                 return AuthResult.Cancelled
             } catch (e: NoCredentialException) {
-                Timber.w(e, "GoogleDriveAuthManager.signIn: no credential available")
-                return AuthResult.Error(context.getString(R.string.gdrive_no_credential), e)
+                Timber.w(
+                    e,
+                    "GoogleDriveAuthManager.signIn: no credential from GetGoogleIdOption, " +
+                        "falling back to GetSignInWithGoogleOption",
+                )
+                val siwgOption =
+                    GetSignInWithGoogleOption
+                        .Builder(webClientId)
+                        .build()
+                try {
+                    requestGoogleIdTokenCredential(activity, siwgOption)
+                } catch (e2: GetCredentialCancellationException) {
+                    Timber.i("GoogleDriveAuthManager.signIn: user cancelled sign-in picker")
+                    return AuthResult.Cancelled
+                } catch (e2: NoCredentialException) {
+                    Timber.w(e2, "GoogleDriveAuthManager.signIn: no credential available after fallback")
+                    return AuthResult.Error(context.getString(R.string.gdrive_no_credential), e2)
+                } catch (e2: GetCredentialException) {
+                    Timber.e(e2, "GoogleDriveAuthManager.signIn: credential exception (fallback)")
+                    return AuthResult.Error(e2.message ?: context.getString(R.string.gdrive_signin_failed), e2)
+                } catch (e2: GoogleIdTokenParsingException) {
+                    Timber.e(e2, "GoogleDriveAuthManager.signIn: failed to parse Google ID token (fallback)")
+                    return AuthResult.Error(e2.message ?: context.getString(R.string.gdrive_signin_failed), e2)
+                }
             } catch (e: GetCredentialException) {
                 Timber.e(e, "GoogleDriveAuthManager.signIn: credential exception")
                 return AuthResult.Error(e.message ?: context.getString(R.string.gdrive_signin_failed), e)
@@ -340,6 +367,29 @@ class GoogleDriveAuthManager private constructor(
     private fun removeStoredAccount(accountId: String) {
         val updatedAccounts = readStoredAccounts().filterNot { it.id == accountId }
         writeStoredAccounts(updatedAccounts)
+    }
+
+    /**
+     * Calls [CredentialManager.getCredential] with the supplied [option] and
+     * converts the returned credential into a [GoogleIdTokenCredential]. Used by
+     * the interactive sign-in flow to share the same conversion/error surface
+     * between [GetGoogleIdOption] (silent-style) and [GetSignInWithGoogleOption]
+     * (account-picker fallback).
+     */
+    private suspend fun requestGoogleIdTokenCredential(
+        activity: Activity,
+        option: CredentialOption,
+    ): GoogleIdTokenCredential {
+        val response =
+            credentialManager.getCredential(
+                context = activity,
+                request =
+                    GetCredentialRequest
+                        .Builder()
+                        .addCredentialOption(option)
+                        .build(),
+            )
+        return GoogleIdTokenCredential.createFrom(response.credential.data)
     }
 
     private fun buildDriveAuthRequest(accountEmail: String? = null): AuthorizationRequest =
