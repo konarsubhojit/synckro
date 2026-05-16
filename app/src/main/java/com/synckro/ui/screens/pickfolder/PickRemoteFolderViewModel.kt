@@ -125,6 +125,36 @@ class PickRemoteFolderViewModel
             loadFolder(_state.value.currentFolderId)
         }
 
+        /** Creates a new folder in the currently displayed location and reloads that location. */
+        fun createFolder(name: String) {
+            val trimmedName = name.trim()
+            if (trimmedName.isEmpty()) return
+
+            val parentId = _state.value.currentFolderId ?: ROOT_FOLDER_ID
+            _state.update { it.copy(isLoading = true, error = null) }
+            viewModelScope.launch {
+                runCatching {
+                    val p = resolveProvider()
+                    p.createFolder(parentId = parentId, name = trimmedName)
+                    p.list(_state.value.currentFolderId)
+                        .filter { it.isFolder }
+                        .sortedBy { it.name.lowercase() }
+                }.onSuccess { folders ->
+                    _state.update { it.copy(isLoading = false, items = folders) }
+                }.onFailure { t ->
+                    Timber.e(t, "PickRemoteFolderViewModel: failed to create folder '%s' in %s", trimmedName, parentId)
+                    if (t is CloudProviderException.AuthenticationRequired) {
+                        _state.update { it.copy(isLoading = true, isReauthenticating = true) }
+                        _reauthEvent.tryEmit(Unit)
+                    } else {
+                        _state.update {
+                            it.copy(isLoading = false, error = t.message ?: "Failed to create folder")
+                        }
+                    }
+                }
+            }
+        }
+
         /**
          * Called by the screen after it has received a [reauthEvent].  Runs the
          * interactive sign-in flow supplied by [launchSignIn] (which has access to
@@ -236,5 +266,6 @@ class PickRemoteFolderViewModel
             /** Navigation argument key for the [CloudProviderType] to browse. */
             const val ARG_PROVIDER = "provider"
             const val ARG_ACCOUNT_ID = "accountId"
+            private const val ROOT_FOLDER_ID = "root"
         }
     }

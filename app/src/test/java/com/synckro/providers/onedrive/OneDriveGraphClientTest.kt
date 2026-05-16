@@ -447,6 +447,8 @@ class OneDriveGraphClientTest {
             assertTrue(req.path!!.contains("parent-id/children"))
             val body = req.body.readUtf8()
             assertTrue(body.contains("\"Documents\""))
+            assertTrue(body.contains("\"folder\""))
+            assertTrue(body.contains("\"@microsoft.graph.conflictBehavior\""))
         }
 
     // -------------------------------------------------------------------------
