@@ -2,6 +2,7 @@ package com.synckro.ui.screens.pairs
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -22,8 +23,6 @@ import androidx.compose.material.icons.filled.FolderOff
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
@@ -36,7 +35,6 @@ import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -56,6 +54,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.synckro.R
 import com.synckro.domain.model.SyncPair
+import com.synckro.ui.components.EmptyState
+import com.synckro.ui.components.SectionCard
 import com.synckro.ui.screens.home.HomeViewModel
 
 /**
@@ -75,7 +75,6 @@ import com.synckro.ui.screens.home.HomeViewModel
 fun PairsScreen(
     onAddSyncPair: () -> Unit,
     onEditSyncPair: (Long) -> Unit,
-    onOpenAccounts: () -> Unit,
     modifier: Modifier = Modifier,
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
@@ -115,7 +114,6 @@ fun PairsScreen(
             onEditSyncPair = onEditSyncPair,
             onRequestDelete = viewModel::requestDelete,
             onSyncNow = viewModel::syncNow,
-            onOpenAccounts = onOpenAccounts,
             onAddSyncPair = onAddSyncPair,
             globalAutoSyncEnabled = state.globalAutoSyncEnabled,
             modifier = Modifier.fillMaxSize().padding(padding),
@@ -129,72 +127,22 @@ private fun PairsList(
     onEditSyncPair: (Long) -> Unit,
     onRequestDelete: (SyncPair) -> Unit,
     onSyncNow: (SyncPair) -> Unit,
-    onOpenAccounts: () -> Unit,
     onAddSyncPair: () -> Unit,
     globalAutoSyncEnabled: Boolean,
     modifier: Modifier = Modifier,
 ) {
     if (!state.isLoading && state.pairs.isEmpty()) {
-        LazyColumn(
-            modifier = modifier.padding(horizontal = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            item { Spacer(Modifier.height(16.dp)) }
-            item {
-                Icon(
-                    Icons.Filled.CloudOff,
-                    contentDescription = null,
-                    modifier = Modifier.size(56.dp),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            item {
-                Text(
-                    text = stringResource(R.string.home_empty_title),
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.SemiBold,
-                )
-            }
-            item {
-                Text(
-                    text = stringResource(R.string.home_empty_body),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            item { HorizontalDivider() }
-            item {
-                Text(
-                    text = stringResource(R.string.home_empty_how_to_start),
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
-                )
-            }
-            item {
-                HomeGuideStep(
-                    number = 1,
-                    text = stringResource(R.string.home_empty_step1),
-                    actionLabel = stringResource(R.string.home_empty_step1_action),
-                    onAction = onOpenAccounts,
-                )
-            }
-            item {
-                HomeGuideStep(
-                    number = 2,
-                    text = stringResource(R.string.home_empty_step2),
-                    actionLabel = stringResource(R.string.home_empty_step2_action),
-                    onAction = onAddSyncPair,
-                )
-            }
-            item {
-                HomeGuideStep(
-                    number = 3,
-                    text = stringResource(R.string.home_empty_step3),
-                )
-            }
-            item { Spacer(Modifier.height(80.dp)) } // leave room for FAB
-        }
+        // Phase 2: replaced the bespoke 3-step LazyColumn empty state with the
+        // shared [EmptyState] component. The deeper onboarding flow lives in
+        // Phase 7.
+        EmptyState(
+            title = stringResource(R.string.home_empty_title),
+            body = stringResource(R.string.home_empty_body),
+            icon = Icons.Filled.CloudOff,
+            primaryActionLabel = stringResource(R.string.home_empty_cta),
+            onPrimaryAction = onAddSyncPair,
+            modifier = modifier,
+        )
     } else {
         LazyColumn(
             modifier = modifier.padding(horizontal = 16.dp, vertical = 8.dp),
@@ -212,55 +160,6 @@ private fun PairsList(
                 )
             }
             item { Spacer(Modifier.height(80.dp)) } // leave room for FAB
-        }
-    }
-}
-
-@Composable
-private fun HomeGuideStep(
-    number: Int,
-    text: String,
-    actionLabel: String? = null,
-    onAction: (() -> Unit)? = null,
-) {
-    Surface(
-        color = MaterialTheme.colorScheme.surfaceVariant,
-        shape = MaterialTheme.shapes.medium,
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Row(
-            modifier = Modifier.padding(12.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Surface(
-                shape = MaterialTheme.shapes.small,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(28.dp),
-            ) {
-                Column(
-                    modifier = Modifier.fillMaxSize(),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center,
-                ) {
-                    Text(
-                        text = number.toString(),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onPrimary,
-                        fontWeight = FontWeight.Bold,
-                    )
-                }
-            }
-            Text(
-                text = text,
-                style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier.weight(1f),
-            )
-            if (actionLabel != null && onAction != null) {
-                TextButton(onClick = onAction) {
-                    Text(actionLabel, style = MaterialTheme.typography.labelMedium)
-                }
-            }
         }
     }
 }
@@ -314,19 +213,13 @@ private fun SyncPairRow(
         else -> MaterialTheme.colorScheme.onSurfaceVariant
     }
 
-    Card(
+    SectionCard(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = cardColor,
-            contentColor = cardContentColor,
-        ),
+        containerColor = cardColor,
+        contentColor = cardContentColor,
+        contentPadding = PaddingValues(12.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -458,7 +351,6 @@ private fun SyncPairRow(
                     )
                 }
             }
-        }
     }
 }
 
