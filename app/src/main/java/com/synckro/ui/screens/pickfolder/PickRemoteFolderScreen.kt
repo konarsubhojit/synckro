@@ -88,6 +88,7 @@ fun PickRemoteFolderScreen(
     val host = remember(activity) { ActivityAuthUiHost(activity) }
     var showCreateFolderDialog by rememberSaveable { mutableStateOf(false) }
     var newFolderName by rememberSaveable { mutableStateOf("") }
+    var pendingCreateFolder by rememberSaveable { mutableStateOf(false) }
 
     // When the ViewModel detects an expired or missing access token it emits a
     // reauthEvent instead of showing an error.  We collect that here and kick off
@@ -97,6 +98,16 @@ fun PickRemoteFolderScreen(
     LaunchedEffect(Unit) {
         viewModel.reauthEvent.collect {
             viewModel.signInAndRetry { manager -> manager.signIn(host) }
+        }
+    }
+
+    LaunchedEffect(state.isLoading, state.error, pendingCreateFolder) {
+        if (pendingCreateFolder && !state.isLoading) {
+            if (state.error == null) {
+                showCreateFolderDialog = false
+                newFolderName = ""
+            }
+            pendingCreateFolder = false
         }
     }
 
@@ -123,7 +134,10 @@ fun PickRemoteFolderScreen(
                 },
                 actions = {
                     IconButton(
-                        onClick = { showCreateFolderDialog = true },
+                        onClick = {
+                            showCreateFolderDialog = true
+                            pendingCreateFolder = false
+                        },
                         enabled = !state.isLoading && !state.isReauthenticating,
                     ) {
                         Icon(
@@ -222,7 +236,10 @@ fun PickRemoteFolderScreen(
 
     if (showCreateFolderDialog) {
         AlertDialog(
-            onDismissRequest = { showCreateFolderDialog = false },
+            onDismissRequest = {
+                showCreateFolderDialog = false
+                pendingCreateFolder = false
+            },
             title = { Text(stringResource(R.string.pick_remote_folder_create_folder_title)) },
             text = {
                 OutlinedTextField(
@@ -236,8 +253,7 @@ fun PickRemoteFolderScreen(
                 TextButton(
                     onClick = {
                         viewModel.createFolder(newFolderName)
-                        showCreateFolderDialog = false
-                        newFolderName = ""
+                        pendingCreateFolder = true
                     },
                     enabled = newFolderName.isNotBlank() && !state.isLoading && !state.isReauthenticating,
                 ) {
@@ -245,7 +261,10 @@ fun PickRemoteFolderScreen(
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showCreateFolderDialog = false }) {
+                TextButton(onClick = {
+                    showCreateFolderDialog = false
+                    pendingCreateFolder = false
+                }) {
                     Text(stringResource(android.R.string.cancel))
                 }
             },
