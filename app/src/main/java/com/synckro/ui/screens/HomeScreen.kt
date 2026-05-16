@@ -35,6 +35,7 @@ import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.FolderOff
 import androidx.compose.material.icons.filled.Inbox
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Warning
@@ -100,6 +101,7 @@ fun HomeScreen(
     onEditSyncPair: (Long) -> Unit,
     onOpenAccounts: () -> Unit,
     onOpenConflictInbox: () -> Unit,
+    onOpenSettings: () -> Unit,
     initialTab: HomeTab = HomeTab.SyncPairs,
     viewModel: HomeViewModel = hiltViewModel(),
     logsViewModel: LogsViewModel = hiltViewModel(),
@@ -240,6 +242,12 @@ fun HomeScreen(
                             contentDescription = stringResource(R.string.accounts_action),
                         )
                     }
+                    IconButton(onClick = onOpenSettings) {
+                        Icon(
+                            Icons.Default.Settings,
+                            contentDescription = stringResource(R.string.settings_action),
+                        )
+                    }
                 },
             )
         },
@@ -279,6 +287,7 @@ fun HomeScreen(
                         onSyncNow = viewModel::syncNow,
                         onOpenAccounts = onOpenAccounts,
                         onAddSyncPair = onAddSyncPair,
+                        globalAutoSyncEnabled = state.globalAutoSyncEnabled,
                     )
                     HomeTab.Logs -> LogsTabContent(
                         state = logsState,
@@ -323,6 +332,7 @@ private fun SyncPairsTabContent(
     onSyncNow: (SyncPair) -> Unit,
     onOpenAccounts: () -> Unit,
     onAddSyncPair: () -> Unit,
+    globalAutoSyncEnabled: Boolean = true,
 ) {
     if (!state.isLoading && state.pairs.isEmpty()) {
         // Guide the user through the 3 steps they need to take.
@@ -405,6 +415,7 @@ private fun SyncPairsTabContent(
                     onEdit = { onEditSyncPair(pair.id) },
                     onDelete = { onRequestDelete(pair) },
                     onSyncNow = { onSyncNow(pair) },
+                    globalAutoSyncEnabled = globalAutoSyncEnabled,
                 )
             }
             item { Spacer(Modifier.height(80.dp)) } // leave room for FAB
@@ -523,6 +534,7 @@ private fun SyncPairRow(
     onEdit: () -> Unit,
     onDelete: () -> Unit,
     onSyncNow: () -> Unit,
+    globalAutoSyncEnabled: Boolean = true,
 ) {
     var showDeleteDialog by remember { mutableStateOf(false) }
 
@@ -650,17 +662,17 @@ private fun SyncPairRow(
             ) {
                 Text(
                     text =
-                        if (pair.autoSyncEnabled) {
-                            stringResource(R.string.home_auto_sync_enabled)
-                        } else {
-                            stringResource(R.string.home_auto_sync_disabled)
+                        when {
+                            !globalAutoSyncEnabled -> stringResource(R.string.home_auto_sync_paused)
+                            pair.autoSyncEnabled -> stringResource(R.string.home_auto_sync_enabled)
+                            else -> stringResource(R.string.home_auto_sync_disabled)
                         },
                     style = MaterialTheme.typography.bodySmall,
                     color =
-                        if (pair.autoSyncEnabled) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
+                        when {
+                            !globalAutoSyncEnabled -> MaterialTheme.colorScheme.onSurfaceVariant
+                            pair.autoSyncEnabled -> MaterialTheme.colorScheme.primary
+                            else -> MaterialTheme.colorScheme.onSurfaceVariant
                         },
                 )
                 val dateFormatter = remember {
