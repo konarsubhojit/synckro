@@ -49,13 +49,6 @@
     <string name="accounts_disconnect_confirm_reassign_format">Reassign &amp; disconnect (%1$s)</string>
     <string name="accounts_disconnect_confirm_cancel">Cancel</string>
 
-    <!-- Add sync pair (placeholder for PR #1; full wizard arrives in PR #2) -->
-    <string name="add_pair_title">Add sync pair</string>
-    <string name="add_pair_needs_account">You need to connect a cloud account before adding a sync pair.</string>
-    <string name="add_pair_go_to_accounts">Go to accounts</string>
-    <string name="add_pair_coming_soon">The folder picker is coming in the next update. For now, connect an account so the sync pair wizard is ready to launch.</string>
-    <string name="add_pair_pick_folder">Pick local folder</string>
-
     <!-- Pair editor (create / edit) -->
     <string name="pair_editor_title_create">New sync pair</string>
     <string name="pair_editor_title_edit">Edit sync pair</string>
@@ -172,6 +165,14 @@
 
     <!-- Navigation -->
     <string name="nav_back">Back</string>
+    <string name="nav_dest_pairs">Pairs</string>
+    <string name="nav_dest_conflicts">Conflicts</string>
+    <string name="nav_dest_logs">Logs</string>
+    <string name="nav_dest_accounts">Accounts</string>
+    <string name="nav_dest_settings">Settings</string>
+    <!-- Content description suffix used for the conflicts nav destination badge.
+         e.g. "Conflicts (3 pending)" -->
+    <string name="nav_dest_conflicts_badge_format">%1$d pending</string>
 
     <!-- Conflict inbox -->
     <string name="conflict_inbox_title">Conflict inbox</string>

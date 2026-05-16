@@ -1,15 +1,5 @@
-package com.synckro.ui.screens
+package com.synckro.ui.screens.pairs
 
-import android.content.ClipData
-import android.content.ClipboardManager
-import android.content.Context
-import android.content.Intent
-import android.net.Uri
-import android.os.Build
-import android.content.ContentValues
-import android.os.Environment
-import android.provider.MediaStore
-import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -21,27 +11,17 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CloudOff
-import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Error
-import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.FolderOff
-import androidx.compose.material.icons.filled.Inbox
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Badge
-import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -57,21 +37,16 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -81,45 +56,32 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.synckro.R
 import com.synckro.domain.model.SyncPair
-import com.synckro.ui.components.EmptyState
 import com.synckro.ui.screens.home.HomeViewModel
-import com.synckro.ui.screens.logs.LogsTabContent
-import com.synckro.ui.screens.logs.LogsViewModel
-import com.synckro.ui.screens.logs.buildLogExportText
-import com.synckro.ui.screens.logs.toLogLine
-import kotlinx.coroutines.launch
-import java.text.SimpleDateFormat
-import java.util.Locale
 
-/** Tabs hosted by [HomeScreen]. */
-enum class HomeTab { SyncPairs, Logs }
-
+/**
+ * Sync-pairs destination — the user's list of configured sync pairs plus a FAB
+ * to create a new one. This screen owns the FAB and the per-pair actions
+ * (sync now / edit / delete with undo).
+ *
+ * Extracted from the legacy 752-line `HomeScreen.kt` in UX Phase 1 so the
+ * bottom-nav scaffold can host it as one of several top-level destinations.
+ *
+ * The `viewModel` is supplied by the caller (the bottom-nav host hands in a
+ * shared instance scoped to the `main` route entry so the conflicts badge and
+ * the pair list stay in lock-step).
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen(
+fun PairsScreen(
     onAddSyncPair: () -> Unit,
     onEditSyncPair: (Long) -> Unit,
     onOpenAccounts: () -> Unit,
-    onOpenConflictInbox: () -> Unit,
-    onOpenSettings: () -> Unit,
-    initialTab: HomeTab = HomeTab.SyncPairs,
+    modifier: Modifier = Modifier,
     viewModel: HomeViewModel = hiltViewModel(),
-    logsViewModel: LogsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    val logsState by logsViewModel.state.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    val dateFormat = remember { SimpleDateFormat("MM-dd HH:mm:ss.SSS", Locale.US) }
 
-    val pagerState = rememberPagerState(
-        initialPage = initialTab.ordinal,
-        pageCount = { HomeTab.entries.size },
-    )
-    val selectedTab = HomeTab.entries[pagerState.currentPage]
-
-    // Surface a snackbar with an Undo action when a delete is pending.
     val pendingDelete = state.pendingDelete
     val undoLabel = stringResource(R.string.home_delete_undo_action)
     val undoMessageFmt = stringResource(R.string.home_delete_undo_message_format)
@@ -136,211 +98,45 @@ fun HomeScreen(
         }
     }
 
-    // Logs export side-effect handling (mirrors the standalone LogsScreen).
-    val rowCopiedMsg = stringResource(R.string.logs_row_copy_done)
-    val copiedMsg = stringResource(R.string.logs_copied)
-    val exportSavedMsg = stringResource(R.string.logs_export_saved)
-    val exportFailedMsg = stringResource(R.string.logs_export_failed)
-    val exportSubject = stringResource(R.string.logs_export_subject)
-    val exportChooser = stringResource(R.string.logs_export_chooser)
-    val exportMediaStoreError = stringResource(R.string.logs_export_mediastore_error)
-    val exportIoError = stringResource(R.string.logs_export_io_error)
-    LaunchedEffect(Unit) {
-        logsViewModel.exportResult.collect { result ->
-            result.fold(
-                onSuccess = { uri ->
-                    handleHomeExportUri(
-                        context = context,
-                        uri = uri,
-                        savedMsg = exportSavedMsg,
-                        failedMsg = exportFailedMsg,
-                        mediaStoreError = exportMediaStoreError,
-                        ioError = exportIoError,
-                        subject = exportSubject,
-                        chooser = exportChooser,
-                    )
-                },
-                onFailure = { e ->
-                    snackbarHostState.showSnackbar(
-                        exportFailedMsg.format(e.message ?: e.javaClass.simpleName),
-                    )
-                },
-            )
-        }
-    }
-
     Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(stringResource(R.string.app_name)) },
-                actions = {
-                    if (selectedTab == HomeTab.Logs) {
-                        IconButton(onClick = {
-                            val text = buildLogExportText(logsState.events, dateFormat)
-                            val clipboard =
-                                context.getSystemService(Context.CLIPBOARD_SERVICE)
-                                    as ClipboardManager
-                            clipboard.setPrimaryClip(
-                                ClipData.newPlainText(
-                                    context.getString(R.string.logs_title),
-                                    text,
-                                ),
-                            )
-                            scope.launch { snackbarHostState.showSnackbar(copiedMsg) }
-                        }) {
-                            Icon(
-                                Icons.Default.ContentCopy,
-                                contentDescription = stringResource(R.string.logs_copy),
-                            )
-                        }
-                        IconButton(onClick = {
-                            val text = buildLogExportText(logsState.events, dateFormat)
-                            val intent = Intent(Intent.ACTION_SEND).apply {
-                                type = "text/plain"
-                                putExtra(Intent.EXTRA_TEXT, text)
-                                putExtra(
-                                    Intent.EXTRA_SUBJECT,
-                                    context.getString(R.string.logs_share_subject),
-                                )
-                            }
-                            context.startActivity(
-                                Intent.createChooser(
-                                    intent,
-                                    context.getString(R.string.logs_share_chooser),
-                                ),
-                            )
-                        }) {
-                            Icon(
-                                Icons.Default.Share,
-                                contentDescription = stringResource(R.string.logs_share),
-                            )
-                        }
-                        IconButton(onClick = { logsViewModel.exportLogs() }) {
-                            Icon(
-                                Icons.Default.FileDownload,
-                                contentDescription = stringResource(R.string.logs_export),
-                            )
-                        }
-                    }
-                    IconButton(onClick = onOpenConflictInbox) {
-                        BadgedBox(
-                            badge = {
-                                if (state.pendingConflictCount > 0) {
-                                    Badge { Text(state.pendingConflictCount.toString()) }
-                                }
-                            },
-                        ) {
-                            Icon(
-                                Icons.Default.Inbox,
-                                contentDescription = stringResource(R.string.conflict_inbox_title),
-                            )
-                        }
-                    }
-                    IconButton(onClick = onOpenAccounts) {
-                        Icon(
-                            Icons.Default.AccountCircle,
-                            contentDescription = stringResource(R.string.accounts_action),
-                        )
-                    }
-                    IconButton(onClick = onOpenSettings) {
-                        Icon(
-                            Icons.Default.Settings,
-                            contentDescription = stringResource(R.string.settings_action),
-                        )
-                    }
-                },
-            )
-        },
+        modifier = modifier,
         floatingActionButton = {
-            // FAB is scoped to the Sync pairs tab only.
-            if (selectedTab == HomeTab.SyncPairs) {
-                FloatingActionButton(onClick = onAddSyncPair) {
-                    Icon(Icons.Default.Add, contentDescription = stringResource(R.string.add_sync_pair))
-                }
+            FloatingActionButton(onClick = onAddSyncPair) {
+                Icon(
+                    Icons.Default.Add,
+                    contentDescription = stringResource(R.string.add_sync_pair),
+                )
             }
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { padding ->
-        Column(modifier = Modifier.fillMaxSize().padding(padding)) {
-            TabRow(selectedTabIndex = pagerState.currentPage) {
-                HomeTab.entries.forEachIndexed { index, tab ->
-                    val label = when (tab) {
-                        HomeTab.SyncPairs -> stringResource(R.string.home_tab_sync_pairs)
-                        HomeTab.Logs -> stringResource(R.string.home_tab_logs)
-                    }
-                    Tab(
-                        selected = pagerState.currentPage == index,
-                        onClick = { scope.launch { pagerState.animateScrollToPage(index) } },
-                        text = { Text(label) },
-                    )
-                }
-            }
-            HorizontalPager(
-                state = pagerState,
-                modifier = Modifier.fillMaxSize(),
-            ) { page ->
-                when (HomeTab.entries[page]) {
-                    HomeTab.SyncPairs -> SyncPairsTabContent(
-                        state = state,
-                        onEditSyncPair = onEditSyncPair,
-                        onRequestDelete = viewModel::requestDelete,
-                        onSyncNow = viewModel::syncNow,
-                        onOpenAccounts = onOpenAccounts,
-                        onAddSyncPair = onAddSyncPair,
-                        globalAutoSyncEnabled = state.globalAutoSyncEnabled,
-                    )
-                    HomeTab.Logs -> LogsTabContent(
-                        state = logsState,
-                        onSearchQueryChange = logsViewModel::setSearchQuery,
-                        onLevelFilterChange = logsViewModel::setLevelFilter,
-                        onTagFilterChange = logsViewModel::setTagFilter,
-                        onProviderFilterChange = logsViewModel::setProviderFilter,
-                        onAccountFilterChange = logsViewModel::setAccountFilter,
-                        onClearFilters = logsViewModel::clearFilters,
-                        onTriggerSync = {
-                            // Switch to the Sync pairs tab so the user can act on a pair.
-                            scope.launch {
-                                pagerState.animateScrollToPage(HomeTab.SyncPairs.ordinal)
-                            }
-                        },
-                        dateFormat = dateFormat,
-                        onRowLongPress = { event ->
-                            val text = event.toLogLine(dateFormat)
-                            val clipboard =
-                                context.getSystemService(Context.CLIPBOARD_SERVICE)
-                                    as ClipboardManager
-                            clipboard.setPrimaryClip(
-                                ClipData.newPlainText(
-                                    context.getString(R.string.logs_title),
-                                    text,
-                                ),
-                            )
-                            scope.launch { snackbarHostState.showSnackbar(rowCopiedMsg) }
-                        },
-                    )
-                }
-            }
-        }
+        PairsList(
+            state = state,
+            onEditSyncPair = onEditSyncPair,
+            onRequestDelete = viewModel::requestDelete,
+            onSyncNow = viewModel::syncNow,
+            onOpenAccounts = onOpenAccounts,
+            onAddSyncPair = onAddSyncPair,
+            globalAutoSyncEnabled = state.globalAutoSyncEnabled,
+            modifier = Modifier.fillMaxSize().padding(padding),
+        )
     }
 }
 
 @Composable
-private fun SyncPairsTabContent(
+private fun PairsList(
     state: HomeViewModel.UiState,
     onEditSyncPair: (Long) -> Unit,
     onRequestDelete: (SyncPair) -> Unit,
     onSyncNow: (SyncPair) -> Unit,
     onOpenAccounts: () -> Unit,
     onAddSyncPair: () -> Unit,
-    globalAutoSyncEnabled: Boolean = true,
+    globalAutoSyncEnabled: Boolean,
+    modifier: Modifier = Modifier,
 ) {
     if (!state.isLoading && state.pairs.isEmpty()) {
-        // Guide the user through the 3 steps they need to take.
         LazyColumn(
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 24.dp),
+            modifier = modifier.padding(horizontal = 24.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
@@ -401,10 +197,7 @@ private fun SyncPairsTabContent(
         }
     } else {
         LazyColumn(
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
+            modifier = modifier.padding(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             items(state.pairs, key = { it.id }) { pair ->
@@ -420,60 +213,6 @@ private fun SyncPairsTabContent(
             }
             item { Spacer(Modifier.height(80.dp)) } // leave room for FAB
         }
-    }
-}
-
-/**
- * Mirrors [com.synckro.ui.screens.logs.handleExportUri] but lives in this file so the
- * Home Logs tab can write into MediaStore Downloads or share via [Intent.ACTION_SEND]
- * without depending on a function that is private to [com.synckro.ui.screens.logs].
- */
-private fun handleHomeExportUri(
-    context: Context,
-    uri: Uri,
-    savedMsg: String,
-    failedMsg: String,
-    mediaStoreError: String,
-    ioError: String,
-    subject: String,
-    chooser: String,
-) {
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-        val resolver = context.contentResolver
-        val fileName = uri.lastPathSegment ?: "synckro-logs.zip"
-        val values = ContentValues().apply {
-            put(MediaStore.Downloads.DISPLAY_NAME, fileName)
-            put(MediaStore.Downloads.MIME_TYPE, "application/zip")
-            put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
-            put(MediaStore.Downloads.IS_PENDING, 1)
-        }
-        val collection = MediaStore.Downloads.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
-        val itemUri = resolver.insert(collection, values) ?: run {
-            Toast.makeText(context, mediaStoreError, Toast.LENGTH_LONG).show()
-            return
-        }
-        try {
-            val out = resolver.openOutputStream(itemUri)
-                ?: throw IllegalStateException("Failed to open output stream for MediaStore Downloads entry: $itemUri")
-            val ins = resolver.openInputStream(uri)
-                ?: throw IllegalStateException("Failed to open input stream for export zip: $uri")
-            out.use { o -> ins.use { i -> i.copyTo(o) } }
-            values.clear()
-            values.put(MediaStore.Downloads.IS_PENDING, 0)
-            resolver.update(itemUri, values, null, null)
-            Toast.makeText(context, savedMsg.format(fileName), Toast.LENGTH_LONG).show()
-        } catch (e: Exception) {
-            runCatching { resolver.delete(itemUri, null, null) }
-            Toast.makeText(context, failedMsg.format(e.localizedMessage ?: ioError), Toast.LENGTH_LONG).show()
-        }
-    } else {
-        val intent = Intent(Intent.ACTION_SEND).apply {
-            type = "application/zip"
-            putExtra(Intent.EXTRA_STREAM, uri)
-            putExtra(Intent.EXTRA_SUBJECT, subject)
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        }
-        context.startActivity(Intent.createChooser(intent, chooser))
     }
 }
 
@@ -534,7 +273,7 @@ private fun SyncPairRow(
     onEdit: () -> Unit,
     onDelete: () -> Unit,
     onSyncNow: () -> Unit,
-    globalAutoSyncEnabled: Boolean = true,
+    globalAutoSyncEnabled: Boolean,
 ) {
     var showDeleteDialog by remember { mutableStateOf(false) }
 
@@ -564,7 +303,6 @@ private fun SyncPairRow(
         )
     }
 
-    // Determine card appearance from pair health.
     val needsReauth = pair.lastSyncResult == "NEEDS_REAUTH"
     val cardColor = when {
         pair.needsReLink -> MaterialTheme.colorScheme.errorContainer
@@ -578,7 +316,10 @@ private fun SyncPairRow(
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = cardColor, contentColor = cardContentColor),
+        colors = CardDefaults.cardColors(
+            containerColor = cardColor,
+            contentColor = cardContentColor,
+        ),
     ) {
         Column(
             modifier = Modifier
@@ -586,7 +327,6 @@ private fun SyncPairRow(
                 .padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            // Header: name + status icon
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -640,7 +380,6 @@ private fun SyncPairRow(
                 }
             }
 
-            // Status banner when action is needed
             when {
                 pair.needsReLink -> StatusBanner(
                     text = stringResource(R.string.home_needs_relink),
@@ -654,7 +393,6 @@ private fun SyncPairRow(
 
             HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
 
-            // Metadata row: auto-sync + last sync
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -696,7 +434,6 @@ private fun SyncPairRow(
                 )
             }
 
-            // Action buttons
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End,
@@ -749,4 +486,3 @@ private fun StatusBanner(
         )
     }
 }
-

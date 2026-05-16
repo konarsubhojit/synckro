@@ -1,15 +1,9 @@
 package com.synckro.ui.screens.logs
 
-import android.content.ContentValues
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
-import android.net.Uri
-import android.os.Build
-import android.os.Environment
-import android.provider.MediaStore
-import android.widget.Toast
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
@@ -64,6 +58,7 @@ import com.synckro.domain.model.SyncEvent
 import com.synckro.domain.model.SyncEventLevel
 import com.synckro.domain.model.SyncEventTag
 import com.synckro.ui.components.EmptyState
+import com.synckro.util.logging.LogExportSink
 import com.synckro.util.logging.LogVisibilityConfig
 import androidx.compose.material.icons.filled.History
 import kotlinx.coroutines.launch
@@ -74,8 +69,8 @@ import java.util.Locale
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LogsScreen(
-    onBack: () -> Unit,
-    onTriggerSync: () -> Unit = onBack,
+    onBack: (() -> Unit)? = null,
+    onTriggerSync: () -> Unit = { onBack?.invoke() },
     viewModel: LogsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -98,7 +93,7 @@ fun LogsScreen(
         viewModel.exportResult.collect { result ->
             result.fold(
                 onSuccess = { uri ->
-                    handleExportUri(
+                    LogExportSink.handleExportUri(
                         context = context,
                         uri = uri,
                         savedMsg = exportSavedMsg,
@@ -127,59 +122,23 @@ fun LogsScreen(
             TopAppBar(
                 title = { Text(stringResource(R.string.logs_title)) },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = stringResource(R.string.nav_back),
-                        )
+                    if (onBack != null) {
+                        IconButton(onClick = onBack) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = stringResource(R.string.nav_back),
+                            )
+                        }
                     }
                 },
                 actions = {
-                    IconButton(onClick = {
-                        val text = buildLogText()
-                        val clipboard =
-                            context.getSystemService(Context.CLIPBOARD_SERVICE)
-                                as ClipboardManager
-                        clipboard.setPrimaryClip(
-                            ClipData.newPlainText(context.getString(R.string.logs_title), text),
-                        )
-                        scope.launch {
-                            snackbarHostState.showSnackbar(copiedMsg)
-                        }
-                    }) {
-                        Icon(
-                            Icons.Default.ContentCopy,
-                            contentDescription = stringResource(R.string.logs_copy),
-                        )
-                    }
-                    IconButton(onClick = {
-                        val text = buildLogText()
-                        val intent =
-                            Intent(Intent.ACTION_SEND).apply {
-                                type = "text/plain"
-                                putExtra(Intent.EXTRA_TEXT, text)
-                                putExtra(
-                                    Intent.EXTRA_SUBJECT,
-                                    context.getString(R.string.logs_share_subject),
-                                )
-                            }
-                        context.startActivity(
-                            Intent.createChooser(intent, context.getString(R.string.logs_share_chooser)),
-                        )
-                    }) {
-                        Icon(
-                            Icons.Default.Share,
-                            contentDescription = stringResource(R.string.logs_share),
-                        )
-                    }
-                    // Export action: bundles structured events + Timber logs into a zip.
-                    // Always available in both debug and release builds.
-                    IconButton(onClick = { viewModel.exportLogs() }) {
-                        Icon(
-                            Icons.Default.FileDownload,
-                            contentDescription = stringResource(R.string.logs_export),
-                        )
-                    }
+                    LogsActions(
+                        events = state.events,
+                        dateFormat = dateFormat,
+                        snackbarHostState = snackbarHostState,
+                        copiedMsg = copiedMsg,
+                        onExport = { viewModel.exportLogs() },
+                    )
                 },
                 colors = TopAppBarDefaults.topAppBarColors(),
             )
@@ -210,6 +169,65 @@ fun LogsScreen(
                 scope.launch { snackbarHostState.showSnackbar(rowCopiedMsg) }
             },
             modifier = Modifier.padding(padding),
+        )
+    }
+}
+
+/**
+ * The copy / share / export action cluster used in the Logs top-app-bar.
+ *
+ * Exposed (internal) so the bottom-nav host ([com.synckro.ui.navigation.MainScaffold])
+ * can render the same actions in its own scaffold when the Logs tab is selected.
+ */
+@Composable
+internal fun LogsActions(
+    events: List<SyncEvent>,
+    dateFormat: SimpleDateFormat,
+    snackbarHostState: SnackbarHostState,
+    copiedMsg: String,
+    onExport: () -> Unit,
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    IconButton(onClick = {
+        val text = buildLogExportText(events, dateFormat)
+        val clipboard =
+            context.getSystemService(Context.CLIPBOARD_SERVICE)
+                as ClipboardManager
+        clipboard.setPrimaryClip(
+            ClipData.newPlainText(context.getString(R.string.logs_title), text),
+        )
+        scope.launch { snackbarHostState.showSnackbar(copiedMsg) }
+    }) {
+        Icon(
+            Icons.Default.ContentCopy,
+            contentDescription = stringResource(R.string.logs_copy),
+        )
+    }
+    IconButton(onClick = {
+        val text = buildLogExportText(events, dateFormat)
+        val intent =
+            Intent(Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(Intent.EXTRA_TEXT, text)
+                putExtra(
+                    Intent.EXTRA_SUBJECT,
+                    context.getString(R.string.logs_share_subject),
+                )
+            }
+        context.startActivity(
+            Intent.createChooser(intent, context.getString(R.string.logs_share_chooser)),
+        )
+    }) {
+        Icon(
+            Icons.Default.Share,
+            contentDescription = stringResource(R.string.logs_share),
+        )
+    }
+    IconButton(onClick = onExport) {
+        Icon(
+            Icons.Default.FileDownload,
+            contentDescription = stringResource(R.string.logs_export),
         )
     }
 }
@@ -430,64 +448,6 @@ fun LogsTabContent(
                 }
             }
         }
-    }
-}
-
-/**
- * Handles a successfully created export zip URI.
- *
- * On API 29+, copies the zip into MediaStore Downloads (no permission required).
- * On API 26–28, fires an [Intent.ACTION_SEND] share-chooser via [FileProvider].
- */
-private fun handleExportUri(
-    context: Context,
-    uri: Uri,
-    savedMsg: String,
-    failedMsg: String,
-    mediaStoreError: String,
-    ioError: String,
-    subject: String,
-    chooser: String,
-) {
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-        val resolver = context.contentResolver
-        val fileName = uri.lastPathSegment ?: "synckro-logs.zip"
-        val values =
-            ContentValues().apply {
-                put(MediaStore.Downloads.DISPLAY_NAME, fileName)
-                put(MediaStore.Downloads.MIME_TYPE, "application/zip")
-                put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
-                put(MediaStore.Downloads.IS_PENDING, 1)
-            }
-        val collection = MediaStore.Downloads.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
-        val itemUri =
-            resolver.insert(collection, values) ?: run {
-                Toast.makeText(context, mediaStoreError, Toast.LENGTH_LONG).show()
-                return
-            }
-        try {
-            val out = resolver.openOutputStream(itemUri)
-                ?: throw IllegalStateException("Failed to open output stream for MediaStore Downloads entry: $itemUri")
-            val ins = resolver.openInputStream(uri)
-                ?: throw IllegalStateException("Failed to open input stream for export zip: $uri")
-            out.use { o -> ins.use { i -> i.copyTo(o) } }
-            values.clear()
-            values.put(MediaStore.Downloads.IS_PENDING, 0)
-            resolver.update(itemUri, values, null, null)
-            Toast.makeText(context, savedMsg.format(fileName), Toast.LENGTH_LONG).show()
-        } catch (e: Exception) {
-            runCatching { resolver.delete(itemUri, null, null) }
-            Toast.makeText(context, failedMsg.format(e.localizedMessage ?: ioError), Toast.LENGTH_LONG).show()
-        }
-    } else {
-        val intent =
-            Intent(Intent.ACTION_SEND).apply {
-                type = "application/zip"
-                putExtra(Intent.EXTRA_STREAM, uri)
-                putExtra(Intent.EXTRA_SUBJECT, subject)
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            }
-        context.startActivity(Intent.createChooser(intent, chooser))
     }
 }
 
