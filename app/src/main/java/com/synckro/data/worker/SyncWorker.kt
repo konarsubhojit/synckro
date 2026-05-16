@@ -687,20 +687,39 @@ class SyncScheduler(
     }
 
     /**
-     * Schedules or cancels periodic sync work for [pair] depending on [SyncPair.autoSyncEnabled].
+     * Schedules or cancels periodic sync work for [pair] depending on [SyncPair.autoSyncEnabled]
+     * and the [globalAutoSyncEnabled] flag.
      *
-     * When [SyncPair.autoSyncEnabled] is `true` this delegates to [schedulePeriodic] with the
-     * pair's stored [SyncPair.scheduleIntervalMinutes].  When `false` any existing periodic job
-     * is cancelled so the pair no longer runs automatically; manual "Sync now" is unaffected.
+     * A pair is scheduled only when **both** [globalAutoSyncEnabled] and
+     * [SyncPair.autoSyncEnabled] are `true`.  When either is `false` any existing
+     * periodic job is cancelled; manual "Sync now" is unaffected.
      *
      * @param pair The SyncPair whose periodic work should be scheduled or cancelled.
+     * @param globalAutoSyncEnabled Whether the global auto-sync setting is enabled.
+     *   Defaults to `true` so callers that have not yet adopted the global setting
+     *   preserve the previous per-pair-only behaviour.
      */
-    fun scheduleOrCancel(pair: SyncPair) {
-        if (pair.autoSyncEnabled) {
+    fun scheduleOrCancel(pair: SyncPair, globalAutoSyncEnabled: Boolean = true) {
+        if (globalAutoSyncEnabled && pair.autoSyncEnabled) {
             schedulePeriodic(pair, pair.scheduleIntervalMinutes)
         } else {
             cancel(pair.id)
         }
+    }
+
+    /**
+     * Batch-schedules or cancels periodic sync work for all [pairs].
+     *
+     * When [globalAutoSyncEnabled] is `true` each pair is individually scheduled or
+     * cancelled according to its own [SyncPair.autoSyncEnabled] flag (preserving
+     * per-pair pausing).  When [globalAutoSyncEnabled] is `false` all periodic sync
+     * jobs are cancelled immediately; manual "Sync now" is unaffected.
+     *
+     * @param pairs The full list of SyncPairs to process.
+     * @param globalAutoSyncEnabled The current value of the global auto-sync setting.
+     */
+    fun scheduleOrCancelAll(pairs: List<SyncPair>, globalAutoSyncEnabled: Boolean) {
+        pairs.forEach { scheduleOrCancel(it, globalAutoSyncEnabled) }
     }
 
     companion object {

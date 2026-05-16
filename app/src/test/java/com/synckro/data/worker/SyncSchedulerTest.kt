@@ -288,4 +288,98 @@ class SyncSchedulerTest {
             infos.isEmpty() || infos.all { it.state == WorkInfo.State.CANCELLED },
         )
     }
+
+    @Test
+    fun `scheduleOrCancel with globalAutoSyncEnabled false cancels work even when pair auto-sync is on`() {
+        val p = pair(id = 12L, autoSyncEnabled = true)
+        // Schedule first, then disable via global flag.
+        scheduler.scheduleOrCancel(p)
+
+        scheduler.scheduleOrCancel(p, globalAutoSyncEnabled = false)
+
+        val infos =
+            workManager
+                .getWorkInfosForUniqueWork(SyncWorker.uniqueName(p.id))
+                .get()
+        assertTrue(
+            "Work should be CANCELLED or absent when globalAutoSyncEnabled=false",
+            infos.isEmpty() || infos.all { it.state == WorkInfo.State.CANCELLED },
+        )
+    }
+
+    @Test
+    fun `scheduleOrCancel with globalAutoSyncEnabled true and pair auto-sync on schedules work`() {
+        val p = pair(id = 13L, autoSyncEnabled = true)
+        scheduler.scheduleOrCancel(p, globalAutoSyncEnabled = true)
+
+        val infos =
+            workManager
+                .getWorkInfosForUniqueWork(SyncWorker.uniqueName(p.id))
+                .get()
+        assertFalse(
+            "Expected work to be enqueued when both global and pair auto-sync are enabled",
+            infos.isEmpty(),
+        )
+    }
+
+    // -------------------------------------------------------------------------
+    // scheduleOrCancelAll
+    // -------------------------------------------------------------------------
+
+    @Test
+    fun `scheduleOrCancelAll with globalEnabled true schedules all eligible pairs`() {
+        val p1 = pair(id = 20L, autoSyncEnabled = true)
+        val p2 = pair(id = 21L, autoSyncEnabled = true)
+
+        scheduler.scheduleOrCancelAll(listOf(p1, p2), globalAutoSyncEnabled = true)
+
+        assertFalse(
+            "p1 should be enqueued",
+            workManager.getWorkInfosForUniqueWork(SyncWorker.uniqueName(p1.id)).get().isEmpty(),
+        )
+        assertFalse(
+            "p2 should be enqueued",
+            workManager.getWorkInfosForUniqueWork(SyncWorker.uniqueName(p2.id)).get().isEmpty(),
+        )
+    }
+
+    @Test
+    fun `scheduleOrCancelAll with globalEnabled false cancels all pairs`() {
+        val p1 = pair(id = 22L, autoSyncEnabled = true)
+        val p2 = pair(id = 23L, autoSyncEnabled = true)
+        // Pre-schedule both so there is work to cancel.
+        scheduler.schedulePeriodic(p1)
+        scheduler.schedulePeriodic(p2)
+
+        scheduler.scheduleOrCancelAll(listOf(p1, p2), globalAutoSyncEnabled = false)
+
+        val infos1 = workManager.getWorkInfosForUniqueWork(SyncWorker.uniqueName(p1.id)).get()
+        val infos2 = workManager.getWorkInfosForUniqueWork(SyncWorker.uniqueName(p2.id)).get()
+        assertTrue(
+            "p1 should be CANCELLED or absent when global is off",
+            infos1.isEmpty() || infos1.all { it.state == WorkInfo.State.CANCELLED },
+        )
+        assertTrue(
+            "p2 should be CANCELLED or absent when global is off",
+            infos2.isEmpty() || infos2.all { it.state == WorkInfo.State.CANCELLED },
+        )
+    }
+
+    @Test
+    fun `scheduleOrCancelAll with globalEnabled true respects per-pair autoSyncEnabled=false`() {
+        val enabled = pair(id = 24L, autoSyncEnabled = true)
+        val disabled = pair(id = 25L, autoSyncEnabled = false)
+
+        scheduler.scheduleOrCancelAll(listOf(enabled, disabled), globalAutoSyncEnabled = true)
+
+        assertFalse(
+            "Enabled pair should be enqueued",
+            workManager.getWorkInfosForUniqueWork(SyncWorker.uniqueName(enabled.id)).get().isEmpty(),
+        )
+        val disabledInfos = workManager.getWorkInfosForUniqueWork(SyncWorker.uniqueName(disabled.id)).get()
+        assertTrue(
+            "Disabled pair should be CANCELLED or absent even when global is on",
+            disabledInfos.isEmpty() || disabledInfos.all { it.state == WorkInfo.State.CANCELLED },
+        )
+    }
 }

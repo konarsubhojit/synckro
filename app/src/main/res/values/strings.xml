@@ -302,4 +302,11 @@
     <string name="conflict_inbox_keep_local_hint">Overwrite the cloud copy with your local file</string>
     <string name="conflict_inbox_keep_remote_hint">Overwrite the local copy with the cloud file</string>
     <string name="conflict_inbox_keep_both_hint">Rename one copy and keep both versions</string>
+
+    <!-- Settings screen -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_action">Settings</string>
+    <string name="settings_global_auto_sync_title">Auto-sync</string>
+    <string name="settings_global_auto_sync_body">Automatically keep all sync pairs up to date in the background. Disable to pause all periodic syncing; manual "Sync now" still works.</string>
+    <string name="home_auto_sync_paused">Auto-sync paused</string>
 </resources>

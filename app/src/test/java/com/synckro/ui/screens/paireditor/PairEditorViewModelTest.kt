@@ -3,6 +3,7 @@ package com.synckro.ui.screens.paireditor
 import androidx.lifecycle.SavedStateHandle
 import com.synckro.R
 import com.synckro.data.repository.AccountRepository
+import com.synckro.data.repository.SettingsRepository
 import com.synckro.data.repository.SyncEventRepository
 import com.synckro.data.repository.SyncPairRepository
 import com.synckro.data.worker.SyncScheduler
@@ -40,6 +41,7 @@ class PairEditorViewModelTest {
     private lateinit var mockSyncScheduler: SyncScheduler
     private lateinit var mockEventRepository: SyncEventRepository
     private lateinit var mockAccountRepository: AccountRepository
+    private lateinit var mockSettingsRepository: SettingsRepository
 
     @Before
     fun setUp() {
@@ -71,6 +73,10 @@ class PairEditorViewModelTest {
                         ),
                     )
             }
+        mockSettingsRepository =
+            mockk {
+                every { globalAutoSyncEnabled } returns flowOf(true)
+            }
     }
 
     @After
@@ -86,6 +92,7 @@ class PairEditorViewModelTest {
             syncScheduler = mockSyncScheduler,
             syncEventRepository = mockEventRepository,
             accountRepository = mockAccountRepository,
+            settingsRepository = mockSettingsRepository,
         )
 
     /**
@@ -111,6 +118,7 @@ class PairEditorViewModelTest {
             syncScheduler = mockSyncScheduler,
             syncEventRepository = mockEventRepository,
             accountRepository = mockAccountRepository,
+            settingsRepository = mockSettingsRepository,
         )
 
     // -------------------------------------------------------------------------
@@ -473,6 +481,7 @@ class PairEditorViewModelTest {
                     syncScheduler = mockSyncScheduler,
                     syncEventRepository = mockEventRepository,
                     accountRepository = mockAccountRepository,
+                    settingsRepository = mockSettingsRepository,
                 )
             advanceUntilIdle()
 
@@ -508,6 +517,7 @@ class PairEditorViewModelTest {
                     syncScheduler = mockSyncScheduler,
                     syncEventRepository = mockEventRepository,
                     accountRepository = mockAccountRepository,
+                    settingsRepository = mockSettingsRepository,
                 )
             advanceUntilIdle()
 

@@ -2,6 +2,10 @@ package com.synckro.di
 
 import android.content.ContentResolver
 import android.content.Context
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.preferencesDataStoreFile
+import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.room.Room
 import androidx.work.WorkManager
 import com.synckro.data.local.dao.AccountDao
@@ -35,6 +39,9 @@ import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import dagger.multibindings.IntoMap
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import okhttp3.OkHttpClient
 import javax.inject.Singleton
 
@@ -144,6 +151,23 @@ object AppModule {
      */
     @Provides @Singleton
     fun provideSyncScheduler(workManager: WorkManager): SyncScheduler = SyncScheduler(workManager)
+
+    /**
+     * Provides the singleton [DataStore]<[Preferences]> used by [SettingsRepository].
+     *
+     * Using [PreferenceDataStoreFactory] rather than the `preferencesDataStore` property
+     * delegate keeps the DataStore strictly singleton within the Hilt component — the
+     * delegate would create a fresh instance each time the extension property is accessed
+     * on a new [Context] in a non-component-scoped context.
+     */
+    @Provides @Singleton
+    fun provideSettingsDataStore(
+        @ApplicationContext ctx: Context,
+    ): DataStore<Preferences> =
+        PreferenceDataStoreFactory.create(
+            scope = CoroutineScope(Dispatchers.IO + SupervisorJob()),
+            produceFile = { ctx.preferencesDataStoreFile("settings") },
+        )
 
     /**
      * Provides the application's synchronization engine used to coordinate sync tasks.

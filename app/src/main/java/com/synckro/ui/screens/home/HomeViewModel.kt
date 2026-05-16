@@ -13,6 +13,7 @@ import androidx.work.workDataOf
 import java.util.concurrent.TimeUnit
 import com.synckro.data.repository.AccountRepository
 import com.synckro.data.repository.ConflictRepository
+import com.synckro.data.repository.SettingsRepository
 import com.synckro.data.repository.SyncPairRepository
 import com.synckro.data.worker.SyncScheduler
 import com.synckro.data.worker.SyncWorker
@@ -48,6 +49,7 @@ class HomeViewModel
         private val workManager: WorkManager,
         private val syncScheduler: SyncScheduler,
         private val accountRepository: AccountRepository,
+        private val settingsRepository: SettingsRepository,
     ) : ViewModel() {
         /**
          * Soft-deleted pair waiting for the undo grace window to expire. Surfaced via
@@ -67,6 +69,8 @@ class HomeViewModel
             val pendingDelete: PendingDelete? = null,
             /** Maps account ID → display email/name for showing account context on each pair card. */
             val accountEmailById: Map<String, String> = emptyMap(),
+            /** Whether global auto-sync is currently enabled. */
+            val globalAutoSyncEnabled: Boolean = true,
         )
 
         /** Pair IDs that have an active "sync now" run; updated optimistically. */
@@ -101,6 +105,8 @@ class HomeViewModel
                 )
             }.combine(accountEmailById) { uiState, emailMap ->
                 uiState.copy(accountEmailById = emailMap)
+            }.combine(settingsRepository.globalAutoSyncEnabled) { uiState, globalEnabled ->
+                uiState.copy(globalAutoSyncEnabled = globalEnabled)
             }.stateIn(
                 scope = viewModelScope,
                 started = SharingStarted.WhileSubscribed(5_000),

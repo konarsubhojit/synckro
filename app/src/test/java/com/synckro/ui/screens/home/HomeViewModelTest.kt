@@ -8,6 +8,7 @@ import androidx.work.OneTimeWorkRequest
 import androidx.work.WorkManager
 import com.synckro.data.repository.AccountRepository
 import com.synckro.data.repository.ConflictRepository
+import com.synckro.data.repository.SettingsRepository
 import com.synckro.data.repository.SyncPairRepository
 import com.synckro.data.worker.SyncScheduler
 import com.synckro.data.worker.SyncWorker
@@ -55,6 +56,7 @@ class HomeViewModelTest {
     private lateinit var mockWorkManager: WorkManager
     private lateinit var mockScheduler: SyncScheduler
     private lateinit var mockAccountRepository: AccountRepository
+    private lateinit var mockSettingsRepository: SettingsRepository
     private lateinit var context: Context
     private val pairsFlow = MutableStateFlow<List<SyncPair>>(emptyList())
 
@@ -68,6 +70,10 @@ class HomeViewModelTest {
         mockAccountRepository =
             mockk {
                 every { observeAll() } returns flowOf(emptyList())
+            }
+        mockSettingsRepository =
+            mockk {
+                every { globalAutoSyncEnabled } returns flowOf(true)
             }
         context = ApplicationProvider.getApplicationContext()
         every { mockRepo.observeAll(any()) } returns pairsFlow
@@ -92,6 +98,7 @@ class HomeViewModelTest {
             workManager = mockWorkManager,
             syncScheduler = mockScheduler,
             accountRepository = mockAccountRepository,
+            settingsRepository = mockSettingsRepository,
         )
 
     private fun pair(

@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.synckro.R
 import com.synckro.data.repository.AccountRepository
+import com.synckro.data.repository.SettingsRepository
 import com.synckro.data.repository.SyncEventRepository
 import com.synckro.data.repository.SyncPairRepository
 import com.synckro.data.worker.SyncScheduler
@@ -22,6 +23,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
@@ -76,6 +78,7 @@ class PairEditorViewModel
         private val syncScheduler: SyncScheduler,
         private val syncEventRepository: SyncEventRepository,
         private val accountRepository: AccountRepository,
+        private val settingsRepository: SettingsRepository,
     ) : ViewModel() {
         private val pairId: Long = savedStateHandle.get<Long>("pairId") ?: 0L
 
@@ -499,13 +502,15 @@ class PairEditorViewModel
                             retentionDays = retentionDays,
                         )
                     val savedId = syncPairRepository.upsert(pair)
-                    // Schedule or cancel depending on autoSyncEnabled.
-                    syncScheduler.scheduleOrCancel(pair.copy(id = savedId))
+                    // Schedule or cancel depending on both the global setting and
+                    // the pair's own autoSyncEnabled flag.
+                    val globalEnabled = settingsRepository.globalAutoSyncEnabled.first()
+                    syncScheduler.scheduleOrCancel(pair.copy(id = savedId), globalEnabled)
                     syncEventRepository.log(
                         pairId = savedId,
                         level = SyncEventLevel.INFO,
                         tag = SyncEventTag.Scheduler,
-                        message = "scheduleOrCancel pairId=$savedId autoSync=${s.autoSyncEnabled} interval=${s.scheduleIntervalMinutes}min",
+                        message = "scheduleOrCancel pairId=$savedId globalAutoSync=$globalEnabled pairAutoSync=${s.autoSyncEnabled} interval=${s.scheduleIntervalMinutes}min",
                     )
                     savedId
                 }.onSuccess { savedId ->
