@@ -5,6 +5,9 @@ import androidx.activity.ComponentActivity
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavType
@@ -13,27 +16,26 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.synckro.domain.model.CloudProviderType
-import com.synckro.ui.screens.HomeScreen
 import com.synckro.ui.screens.OnboardingScreen
-import com.synckro.ui.screens.accounts.AccountsScreen
-import com.synckro.ui.screens.conflictinbox.ConflictInboxScreen
-import com.synckro.ui.screens.logs.LogsScreen
 import com.synckro.ui.screens.paireditor.PairEditorScreen
 import com.synckro.ui.screens.paireditor.PairEditorViewModel
 import com.synckro.ui.screens.pickfolder.PickLocalFolderScreen
 import com.synckro.ui.screens.pickfolder.PickRemoteFolderScreen
 import com.synckro.ui.screens.pickfolder.PickRemoteFolderViewModel
-import com.synckro.ui.screens.settings.SettingsScreen
 import com.synckro.util.navigation.AppNavEvent
 import com.synckro.util.navigation.AppNavigationDispatcher
 import kotlinx.coroutines.flow.filterNotNull
 
 object Routes {
     const val ONBOARDING = "onboarding"
-    const val HOME = "home"
-    const val ACCOUNTS = "accounts"
-    const val CONFLICT_INBOX = "conflict_inbox"
-    const val SETTINGS = "settings"
+
+    /**
+     * The top-level host route. Renders [MainScaffold] with its bottom-nav /
+     * navigation-rail destinations (Pairs / Conflicts / Logs / Accounts /
+     * Settings). Replaces the legacy `home`, `accounts`, `conflict_inbox`,
+     * `settings`, and `logs` standalone routes that used to live here.
+     */
+    const val MAIN = "main"
 
     /** Optional query parameter `pairId`; defaults to 0 (create mode). */
     const val PAIR_EDITOR = "pair_editor?pairId={pairId}"
@@ -45,9 +47,6 @@ object Routes {
             "?${PickRemoteFolderViewModel.ARG_PROVIDER}={${PickRemoteFolderViewModel.ARG_PROVIDER}}" +
             "&${PickRemoteFolderViewModel.ARG_ACCOUNT_ID}={${PickRemoteFolderViewModel.ARG_ACCOUNT_ID}}"
 
-    /** Optional query parameter `pairId`; defaults to 0 (show all pairs). */
-    const val LOGS = "logs?pairId={pairId}"
-
     fun pairEditor(pairId: Long = 0L) = "pair_editor?pairId=$pairId"
 
     fun pickRemoteFolder(provider: CloudProviderType, accountId: String?): String {
@@ -58,8 +57,6 @@ object Routes {
             "$base&${PickRemoteFolderViewModel.ARG_ACCOUNT_ID}=${Uri.encode(accountId)}"
         }
     }
-
-    fun logs(pairId: Long = 0L) = "logs?pairId=$pairId"
 }
 
 @Composable
@@ -69,6 +66,11 @@ fun SynckroNavHost(
 ) {
     val nav = rememberNavController()
 
+    // One-shot tab selection forwarded to MainScaffold when an external deep-link
+    // (e.g. re-auth notification) requests a specific destination. Cleared by
+    // MainScaffold via [onPendingDestinationHandled].
+    var pendingMainDestination by remember { mutableStateOf<MainDestination?>(null) }
+
     // Observe navigation commands dispatched from outside the Compose tree
     // (e.g. from a re-auth notification tap handled in MainActivity.onNewIntent).
     LaunchedEffect(appNavigationDispatcher) {
@@ -77,8 +79,13 @@ fun SynckroNavHost(
             ?.collect { event ->
                 appNavigationDispatcher.consumeEvent()
                 when (event) {
-                    AppNavEvent.OpenAccounts ->
-                        nav.navigate(Routes.ACCOUNTS) { launchSingleTop = true }
+                    AppNavEvent.OpenAccounts -> {
+                        // Pop any full-screen routes (pair editor, folder pickers)
+                        // back to the MainScaffold, then tell MainScaffold to
+                        // select the Accounts tab.
+                        pendingMainDestination = MainDestination.Accounts
+                        nav.popBackStack(Routes.MAIN, inclusive = false)
+                    }
                 }
             }
     }
@@ -86,34 +93,22 @@ fun SynckroNavHost(
     NavHost(navController = nav, startDestination = Routes.ONBOARDING) {
         composable(Routes.ONBOARDING) {
             OnboardingScreen(onContinue = {
-                nav.navigate(Routes.HOME) {
+                nav.navigate(Routes.MAIN) {
                     popUpTo(Routes.ONBOARDING) { inclusive = true }
                 }
             })
         }
-        composable(Routes.HOME) {
-            HomeScreen(
+        composable(Routes.MAIN) {
+            MainScaffold(
+                activity = activity,
                 onAddSyncPair = {
                     nav.navigate(Routes.pairEditor()) { launchSingleTop = true }
                 },
                 onEditSyncPair = { pairId ->
                     nav.navigate(Routes.pairEditor(pairId)) { launchSingleTop = true }
                 },
-                onOpenAccounts = {
-                    nav.navigate(Routes.ACCOUNTS) { launchSingleTop = true }
-                },
-                onOpenConflictInbox = {
-                    nav.navigate(Routes.CONFLICT_INBOX) { launchSingleTop = true }
-                },
-                onOpenSettings = {
-                    nav.navigate(Routes.SETTINGS) { launchSingleTop = true }
-                },
-            )
-        }
-        composable(Routes.ACCOUNTS) {
-            AccountsScreen(
-                activity = activity,
-                onBack = { nav.popBackStack() },
+                pendingDestination = pendingMainDestination,
+                onPendingDestinationHandled = { pendingMainDestination = null },
             )
         }
         composable(
@@ -201,11 +196,6 @@ fun SynckroNavHost(
                 onBack = { nav.popBackStack() },
             )
         }
-        composable(Routes.CONFLICT_INBOX) {
-            ConflictInboxScreen(
-                onBack = { nav.popBackStack() },
-            )
-        }
         composable(
             route = Routes.PICK_REMOTE_FOLDER,
             arguments =
@@ -235,28 +225,6 @@ fun SynckroNavHost(
                         ?.set(PairEditorViewModel.KEY_REMOTE_FOLDER_NAME, name)
                     nav.popBackStack()
                 },
-                onBack = { nav.popBackStack() },
-            )
-        }
-        composable(
-            route = Routes.LOGS,
-            arguments =
-                listOf(
-                    navArgument("pairId") {
-                        type = NavType.LongType
-                        defaultValue = 0L
-                    },
-                ),
-        ) {
-            LogsScreen(
-                onBack = { nav.popBackStack() },
-                onTriggerSync = {
-                    nav.popBackStack(Routes.HOME, inclusive = false)
-                },
-            )
-        }
-        composable(Routes.SETTINGS) {
-            SettingsScreen(
                 onBack = { nav.popBackStack() },
             )
         }

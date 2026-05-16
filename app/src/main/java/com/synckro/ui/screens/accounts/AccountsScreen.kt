@@ -69,7 +69,7 @@ import com.synckro.ui.auth.ActivityAuthUiHost
 @Composable
 fun AccountsScreen(
     activity: ComponentActivity,
-    onBack: () -> Unit,
+    onBack: (() -> Unit)? = null,
     viewModel: AccountsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -89,11 +89,13 @@ fun AccountsScreen(
             TopAppBar(
                 title = { Text(stringResource(R.string.accounts_title)) },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = stringResource(R.string.nav_back),
-                        )
+                    if (onBack != null) {
+                        IconButton(onClick = onBack) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = stringResource(R.string.nav_back),
+                            )
+                        }
                     }
                 },
             )

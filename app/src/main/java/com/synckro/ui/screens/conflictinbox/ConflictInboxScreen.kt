@@ -64,7 +64,7 @@ import java.util.Date
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ConflictInboxScreen(
-    onBack: () -> Unit,
+    onBack: (() -> Unit)? = null,
     viewModel: ConflictInboxViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -74,11 +74,13 @@ fun ConflictInboxScreen(
             TopAppBar(
                 title = { Text(stringResource(R.string.conflict_inbox_title)) },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = stringResource(R.string.nav_back),
-                        )
+                    if (onBack != null) {
+                        IconButton(onClick = onBack) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = stringResource(R.string.nav_back),
+                            )
+                        }
                     }
                 },
             )
@@ -98,7 +100,7 @@ fun ConflictInboxScreen(
                     title = stringResource(R.string.conflict_inbox_empty_title),
                     body = stringResource(R.string.conflict_inbox_empty_body),
                     icon = Icons.Filled.Inbox,
-                    primaryActionLabel = stringResource(R.string.conflict_inbox_empty_cta),
+                    primaryActionLabel = onBack?.let { stringResource(R.string.conflict_inbox_empty_cta) },
                     onPrimaryAction = onBack,
                     modifier = Modifier
                         .fillMaxSize()
