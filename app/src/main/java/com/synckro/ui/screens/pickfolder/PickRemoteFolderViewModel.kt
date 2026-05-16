@@ -148,7 +148,7 @@ class PickRemoteFolderViewModel
                         _reauthEvent.tryEmit(Unit)
                     } else {
                         _state.update {
-                            it.copy(isLoading = false, error = t.message ?: "Failed to load folders")
+                            it.copy(isLoading = false, error = t.message ?: "Failed to create folder")
                         }
                     }
                 }

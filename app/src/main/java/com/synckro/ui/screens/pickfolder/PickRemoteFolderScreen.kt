@@ -239,6 +239,7 @@ fun PickRemoteFolderScreen(
             onDismissRequest = {
                 showCreateFolderDialog = false
                 pendingCreateFolder = false
+                newFolderName = ""
             },
             title = { Text(stringResource(R.string.pick_remote_folder_create_folder_title)) },
             text = {
@@ -264,6 +265,7 @@ fun PickRemoteFolderScreen(
                 TextButton(onClick = {
                     showCreateFolderDialog = false
                     pendingCreateFolder = false
+                    newFolderName = ""
                 }) {
                     Text(stringResource(android.R.string.cancel))
                 }
