@@ -580,4 +580,96 @@ class HomeViewModelTest {
             assertEquals(2, summaries[2L]?.errors)
             collectJob.cancel()
         }
+
+    // -------------------------------------------------------------------------
+    // Phase 5b — syncAllNow (bulk sync + pull-to-refresh)
+    // -------------------------------------------------------------------------
+
+    @Test
+    fun `partitionForSyncAll skips unhealthy pairs and pairs already in flight`() {
+        val healthy = pair(1L)
+        val needsReLink = pair(2L).copy(needsReLink = true)
+        val needsReauth = pair(3L).copy(lastSyncResult = "NEEDS_REAUTH")
+        val inFlight = pair(4L)
+        val (eligible, skipped) = HomeViewModel.partitionForSyncAll(
+            pairs = listOf(healthy, needsReLink, needsReauth, inFlight),
+            syncingPairIds = setOf(inFlight.id),
+        )
+        assertEquals(listOf(1L), eligible.map { it.id })
+        assertEquals(3, skipped)
+    }
+
+    @Test
+    fun `partitionForSyncAll returns empty when no pairs exist`() {
+        val (eligible, skipped) = HomeViewModel.partitionForSyncAll(emptyList(), emptySet())
+        assertTrue(eligible.isEmpty())
+        assertEquals(0, skipped)
+    }
+
+    @Test
+    fun `syncAllNow enqueues a one-shot for each healthy pair and emits a result`() =
+        runTest {
+            val healthy1 = pair(1L)
+            val healthy2 = pair(2L)
+            val needsReauth = pair(3L).copy(lastSyncResult = "NEEDS_REAUTH")
+            pairsFlow.value = listOf(healthy1, healthy2, needsReauth)
+            val vm = createVm()
+            val collectJob = launch { vm.state.collect {} }
+            advanceUntilIdle()
+
+            val results = mutableListOf<HomeViewModel.SyncAllResult>()
+            val resultsJob = launch { vm.syncAllResults.collect { results += it } }
+            // Give the collector a chance to subscribe before we emit, otherwise the
+            // SharedFlow's buffered value lands without a live subscriber.
+            advanceUntilIdle()
+
+            vm.syncAllNow()
+            advanceUntilIdle()
+
+            verify {
+                mockWorkManager.enqueueUniqueWork(
+                    SyncWorker.syncNowUniqueName(1L), ExistingWorkPolicy.KEEP, any<OneTimeWorkRequest>(),
+                )
+            }
+            verify {
+                mockWorkManager.enqueueUniqueWork(
+                    SyncWorker.syncNowUniqueName(2L), ExistingWorkPolicy.KEEP, any<OneTimeWorkRequest>(),
+                )
+            }
+            io.mockk.verify(exactly = 0) {
+                mockWorkManager.enqueueUniqueWork(
+                    SyncWorker.syncNowUniqueName(3L), any(), any<OneTimeWorkRequest>(),
+                )
+            }
+            assertEquals(1, results.size)
+            assertEquals(2, results[0].synced)
+            assertEquals(1, results[0].skipped)
+            resultsJob.cancel()
+            collectJob.cancel()
+        }
+
+    @Test
+    fun `syncAllNow on an empty list emits a zero result without enqueuing`() =
+        runTest {
+            pairsFlow.value = emptyList()
+            val vm = createVm()
+            val collectJob = launch { vm.state.collect {} }
+            advanceUntilIdle()
+
+            val results = mutableListOf<HomeViewModel.SyncAllResult>()
+            val resultsJob = launch { vm.syncAllResults.collect { results += it } }
+            advanceUntilIdle()
+
+            vm.syncAllNow()
+            advanceUntilIdle()
+
+            io.mockk.verify(exactly = 0) {
+                mockWorkManager.enqueueUniqueWork(any<String>(), any(), any<OneTimeWorkRequest>())
+            }
+            assertEquals(1, results.size)
+            assertEquals(0, results[0].synced)
+            assertEquals(0, results[0].skipped)
+            resultsJob.cancel()
+            collectJob.cancel()
+        }
 }

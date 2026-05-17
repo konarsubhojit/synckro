@@ -42,6 +42,9 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -104,8 +107,46 @@ fun PairsScreen(
         }
     }
 
+    // Phase 5b: surface a snackbar after a "Sync all now" / pull-to-refresh.
+    val syncedFmt = stringResource(R.string.home_sync_all_result_synced_format)
+    val skippedFmt = stringResource(R.string.home_sync_all_result_skipped_format)
+    val noneMsg = stringResource(R.string.home_sync_all_result_none)
+    LaunchedEffect(viewModel) {
+        viewModel.syncAllResults.collect { result ->
+            val message = when {
+                result.synced == 0 && result.skipped == 0 -> noneMsg
+                result.skipped == 0 -> String.format(syncedFmt, result.synced)
+                else ->
+                    String.format(syncedFmt, result.synced) +
+                        " · " + String.format(skippedFmt, result.skipped)
+            }
+            snackbarHostState.showSnackbar(message = message, duration = SnackbarDuration.Short)
+        }
+    }
+
     Scaffold(
         modifier = modifier,
+        topBar = {
+            TopAppBar(
+                title = { Text(stringResource(R.string.home_title)) },
+                actions = {
+                    val syncAllLabel = stringResource(R.string.home_sync_all_now)
+                    IconButton(
+                        onClick = { viewModel.syncAllNow() },
+                        enabled = state.pairs.any { p ->
+                            !p.needsReLink &&
+                                p.lastSyncResult != "NEEDS_REAUTH" &&
+                                p.id !in state.syncingPairIds
+                        },
+                    ) {
+                        Icon(
+                            Icons.Default.Sync,
+                            contentDescription = syncAllLabel,
+                        )
+                    }
+                },
+            )
+        },
         floatingActionButton = {
             FloatingActionButton(onClick = onAddSyncPair) {
                 Icon(
@@ -121,6 +162,7 @@ fun PairsScreen(
             onEditSyncPair = onEditSyncPair,
             onRequestDelete = viewModel::requestDelete,
             onSyncNow = viewModel::syncNow,
+            onSyncAllNow = viewModel::syncAllNow,
             onAddSyncPair = onAddSyncPair,
             globalAutoSyncEnabled = state.globalAutoSyncEnabled,
             modifier = Modifier.fillMaxSize().padding(padding),
@@ -128,12 +170,14 @@ fun PairsScreen(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun PairsList(
     state: HomeViewModel.UiState,
     onEditSyncPair: (Long) -> Unit,
     onRequestDelete: (SyncPair) -> Unit,
     onSyncNow: (SyncPair) -> Unit,
+    onSyncAllNow: () -> Unit,
     onAddSyncPair: () -> Unit,
     globalAutoSyncEnabled: Boolean,
     modifier: Modifier = Modifier,
@@ -151,24 +195,48 @@ private fun PairsList(
             modifier = modifier,
         )
     } else {
-        LazyColumn(
-            modifier = modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            items(state.pairs, key = { it.id }) { pair ->
-                SyncPairRow(
-                    pair = pair,
-                    accountEmail = pair.accountId?.let { state.accountEmailById[it] },
-                    isSyncing = pair.id in state.syncingPairIds,
-                    nextRunAtMs = state.nextRunByPairId[pair.id],
-                    lastSummary = state.lastSummaryByPairId[pair.id],
-                    onEdit = { onEditSyncPair(pair.id) },
-                    onDelete = { onRequestDelete(pair) },
-                    onSyncNow = { onSyncNow(pair) },
-                    globalAutoSyncEnabled = globalAutoSyncEnabled,
-                )
+        // Phase 5b: PullToRefreshBox triggers a "sync all now" on drag-release.
+        // The indicator is owned by Material 3 and dismisses itself as soon as
+        // [isRefreshing] flips back to false (we toggle it through a brief
+        // LaunchedEffect so the user sees the spinner even though the actual
+        // work happens off-thread inside WorkManager).
+        val pullState = rememberPullToRefreshState()
+        var refreshing by remember { mutableStateOf(false) }
+        LaunchedEffect(refreshing) {
+            if (refreshing) {
+                onSyncAllNow()
+                // Dismiss quickly; the per-pair spinners take over from here.
+                kotlinx.coroutines.delay(400L)
+                refreshing = false
             }
-            item { Spacer(Modifier.height(80.dp)) } // leave room for FAB
+        }
+        PullToRefreshBox(
+            isRefreshing = refreshing,
+            onRefresh = { refreshing = true },
+            modifier = modifier,
+            state = pullState,
+        ) {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                items(state.pairs, key = { it.id }) { pair ->
+                    SyncPairRow(
+                        pair = pair,
+                        accountEmail = pair.accountId?.let { state.accountEmailById[it] },
+                        isSyncing = pair.id in state.syncingPairIds,
+                        nextRunAtMs = state.nextRunByPairId[pair.id],
+                        lastSummary = state.lastSummaryByPairId[pair.id],
+                        onEdit = { onEditSyncPair(pair.id) },
+                        onDelete = { onRequestDelete(pair) },
+                        onSyncNow = { onSyncNow(pair) },
+                        globalAutoSyncEnabled = globalAutoSyncEnabled,
+                    )
+                }
+                item { Spacer(Modifier.height(80.dp)) } // leave room for FAB
+            }
         }
     }
 }

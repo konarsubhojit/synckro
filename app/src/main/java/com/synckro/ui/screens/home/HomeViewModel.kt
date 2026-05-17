@@ -23,9 +23,12 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
@@ -237,6 +240,52 @@ class HomeViewModel
         }
 
         /**
+         * Result of a [syncAllNow] invocation, emitted via [syncAllResults] so the
+         * UI can surface a snackbar with synced/skipped counts after the user taps
+         * "Sync all now" or pulls-to-refresh.
+         *
+         * @param synced  Number of pairs that were enqueued for sync.
+         * @param skipped Number of pairs skipped because they require user action
+         *   (needs re-link or re-auth) or are already syncing.
+         */
+        data class SyncAllResult(val synced: Int, val skipped: Int)
+
+        private val _syncAllResults = MutableSharedFlow<SyncAllResult>(extraBufferCapacity = 1)
+
+        /**
+         * One-shot stream of [SyncAllResult]s, emitted whenever [syncAllNow]
+         * finishes enqueuing. The Pairs screen collects this and shows a snackbar.
+         */
+        val syncAllResults: SharedFlow<SyncAllResult> = _syncAllResults.asSharedFlow()
+
+        /**
+         * Enqueues a one-shot [SyncWorker] for every healthy pair currently in
+         * the UiState (Phase 5b — "Sync all now" + pull-to-refresh).
+         *
+         * Pairs are skipped when they require user intervention:
+         * - [SyncPair.needsReLink] is `true` (SAF folder access lost), or
+         * - [SyncPair.lastSyncResult] is `"NEEDS_REAUTH"` (token revoked).
+         * Pairs already in [UiState.syncingPairIds] are also skipped so a rapid
+         * pull-to-refresh does not stack duplicate one-shot jobs on top of a
+         * worker that WorkManager is about to coalesce away anyway.
+         *
+         * Emits a [SyncAllResult] on [syncAllResults] so the caller can render a
+         * "Started sync for N pair(s)" snackbar after the function returns. The
+         * same exponential-backoff policy as [syncNow] is applied so a transient
+         * failure for one pair backs off in line with the periodic schedule.
+         */
+        fun syncAllNow() {
+            val current = state.value
+            val (eligible, skipped) = partitionForSyncAll(current.pairs, current.syncingPairIds)
+            Timber.i(
+                "HomeViewModel.syncAllNow: enqueuing %d pair(s), skipping %d unhealthy/in-flight",
+                eligible.size, skipped,
+            )
+            eligible.forEach { syncNow(it) }
+            _syncAllResults.tryEmit(SyncAllResult(synced = eligible.size, skipped = skipped))
+        }
+
+        /**
          * Enqueues a one-shot [SyncWorker] for [pair]. Any in-flight one-shot run for
          * the same pair is kept so the user never interrupts an ongoing sync.
          *
@@ -340,5 +389,33 @@ class HomeViewModel
              * even for users with many pairs and noisy retries.
              */
             const val SUMMARY_EVENT_LIMIT: Int = 200
+
+            /**
+             * Pure-Kotlin filter used by [syncAllNow] (Phase 5b). Returns the
+             * pairs that should be enqueued as the first component, and the number
+             * that were skipped because they require user intervention or are
+             * already syncing as the second.
+             *
+             * Exposed in the companion object so unit tests can exercise the
+             * filtering rules without touching WorkManager.
+             */
+            fun partitionForSyncAll(
+                pairs: List<SyncPair>,
+                syncingPairIds: Set<Long>,
+            ): Pair<List<SyncPair>, Int> {
+                if (pairs.isEmpty()) return emptyList<SyncPair>() to 0
+                val eligible = ArrayList<SyncPair>(pairs.size)
+                var skipped = 0
+                for (p in pairs) {
+                    val unhealthy = p.needsReLink || p.lastSyncResult == "NEEDS_REAUTH"
+                    val inFlight = p.id in syncingPairIds
+                    if (unhealthy || inFlight) {
+                        skipped++
+                    } else {
+                        eligible.add(p)
+                    }
+                }
+                return eligible to skipped
+            }
         }
     }
