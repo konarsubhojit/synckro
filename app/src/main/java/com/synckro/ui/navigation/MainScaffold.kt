@@ -86,6 +86,7 @@ fun MainScaffold(
     activity: ComponentActivity,
     onAddSyncPair: () -> Unit,
     onEditSyncPair: (Long) -> Unit,
+    onOpenPairDetail: (Long) -> Unit = {},
     pendingDestination: MainDestination? = null,
     onPendingDestinationHandled: () -> Unit = {},
     // The conflicts badge reads from the shared HomeViewModel (which already
@@ -117,6 +118,7 @@ fun MainScaffold(
                 MainDestination.Pairs -> PairsScreen(
                     onAddSyncPair = onAddSyncPair,
                     onEditSyncPair = onEditSyncPair,
+                    onOpenPairDetail = onOpenPairDetail,
                     viewModel = homeViewModel,
                 )
                 MainDestination.Conflicts -> ConflictInboxScreen(

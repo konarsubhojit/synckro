@@ -39,6 +39,10 @@ object Routes {
 
     /** Optional query parameter `pairId`; defaults to 0 (create mode). */
     const val PAIR_EDITOR = "pair_editor?pairId={pairId}"
+
+    /** Per-pair detail screen (Phase 5c). Requires a `pairId` path arg. */
+    const val PAIR_DETAIL = "pair_detail/{pairId}"
+
     const val PICK_FOLDER = "pick_folder"
 
     /** Route template for the remote folder browser; requires a `provider` query parameter. */
@@ -48,6 +52,8 @@ object Routes {
             "&${PickRemoteFolderViewModel.ARG_ACCOUNT_ID}={${PickRemoteFolderViewModel.ARG_ACCOUNT_ID}}"
 
     fun pairEditor(pairId: Long = 0L) = "pair_editor?pairId=$pairId"
+
+    fun pairDetail(pairId: Long) = "pair_detail/$pairId"
 
     fun pickRemoteFolder(provider: CloudProviderType, accountId: String?): String {
         val base = "pick_remote_folder?${PickRemoteFolderViewModel.ARG_PROVIDER}=${provider.name}"
@@ -106,6 +112,9 @@ fun SynckroNavHost(
                 },
                 onEditSyncPair = { pairId ->
                     nav.navigate(Routes.pairEditor(pairId)) { launchSingleTop = true }
+                },
+                onOpenPairDetail = { pairId ->
+                    nav.navigate(Routes.pairDetail(pairId)) { launchSingleTop = true }
                 },
                 pendingDestination = pendingMainDestination,
                 onPendingDestinationHandled = { pendingMainDestination = null },
@@ -234,6 +243,44 @@ fun SynckroNavHost(
                     nav.popBackStack()
                 },
                 onBack = { nav.popBackStack() },
+            )
+        }
+        composable(
+            route = Routes.PAIR_DETAIL,
+            arguments =
+                listOf(
+                    navArgument("pairId") {
+                        type = NavType.LongType
+                    },
+                ),
+        ) { backStackEntry ->
+            // pairId is read by PairDetailViewModel from its SavedStateHandle.
+            // The HomeViewModel scoped to the MAIN nav entry owns syncNow / requestDelete
+            // so triggering Sync now / Delete from the detail screen reuses the
+            // existing optimistic-spinner and undo flows.
+            val mainEntry = remember(nav) { nav.getBackStackEntry(Routes.MAIN) }
+            val sharedHomeViewModel: com.synckro.ui.screens.home.HomeViewModel = hiltViewModel(mainEntry)
+            com.synckro.ui.screens.pairdetail.PairDetailScreen(
+                onBack = { nav.popBackStack() },
+                onEdit = { id -> nav.navigate(Routes.pairEditor(id)) { launchSingleTop = true } },
+                onSyncNow = { id ->
+                    val current = sharedHomeViewModel.state.value.pairs.firstOrNull { it.id == id }
+                    if (current != null) sharedHomeViewModel.syncNow(current)
+                },
+                onDelete = { id ->
+                    val current = sharedHomeViewModel.state.value.pairs.firstOrNull { it.id == id }
+                    if (current != null) {
+                        sharedHomeViewModel.requestDelete(current)
+                        nav.popBackStack()
+                    }
+                },
+                onOpenConflicts = {
+                    // Drop back to MainScaffold so the user can see the global Conflicts inbox.
+                    nav.popBackStack(Routes.MAIN, inclusive = false)
+                },
+                onOpenLogs = {
+                    nav.popBackStack(Routes.MAIN, inclusive = false)
+                },
             )
         }
     }

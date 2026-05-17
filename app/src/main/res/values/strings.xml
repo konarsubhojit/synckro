@@ -40,6 +40,23 @@
     <string name="home_last_result_needs_reauth">Last run: re-authentication required</string>
     <string name="home_last_result_needs_relink">Last run: folder access lost</string>
     <string name="home_card_status_stripe">Status indicator</string>
+
+    <!-- Pair detail screen (Phase 5c) -->
+    <string name="pair_detail_title">Sync pair</string>
+    <string name="pair_detail_loading">Loading sync pair…</string>
+    <string name="pair_detail_missing">This sync pair is no longer available.</string>
+    <string name="pair_detail_status_success">Healthy</string>
+    <string name="pair_detail_status_failure">Last run failed</string>
+    <string name="pair_detail_status_needs_reauth">Re-authentication required</string>
+    <string name="pair_detail_status_needs_relink">Folder access lost</string>
+    <string name="pair_detail_status_idle">Not yet synced</string>
+    <string name="pair_detail_recent_events">Recent activity</string>
+    <string name="pair_detail_no_events">No events recorded yet for this pair.</string>
+    <string name="pair_detail_open_logs">Open in Logs</string>
+    <string name="pair_detail_no_conflicts">No conflicts</string>
+    <string name="pair_detail_conflicts_count_format">%1$d conflict(s)</string>
+    <string name="pair_detail_resolve_reauth">Re-authenticate</string>
+    <string name="pair_detail_resolve_relink">Re-link folder</string>
     <string name="home_delete_title">Delete sync pair?</string>
     <string name="home_delete_body_format">"%1$s" will be removed. This cannot be undone.</string>
     <string name="home_delete_confirm">Delete</string>

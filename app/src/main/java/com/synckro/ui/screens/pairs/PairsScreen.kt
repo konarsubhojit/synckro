@@ -1,6 +1,7 @@
 package com.synckro.ui.screens.pairs
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -86,6 +87,7 @@ fun PairsScreen(
     onAddSyncPair: () -> Unit,
     onEditSyncPair: (Long) -> Unit,
     modifier: Modifier = Modifier,
+    onOpenPairDetail: (Long) -> Unit = {},
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -164,6 +166,7 @@ fun PairsScreen(
             onSyncNow = viewModel::syncNow,
             onSyncAllNow = viewModel::syncAllNow,
             onAddSyncPair = onAddSyncPair,
+            onOpenPairDetail = onOpenPairDetail,
             globalAutoSyncEnabled = state.globalAutoSyncEnabled,
             modifier = Modifier.fillMaxSize().padding(padding),
         )
