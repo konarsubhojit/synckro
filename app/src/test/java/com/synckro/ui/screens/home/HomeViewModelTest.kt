@@ -9,6 +9,7 @@ import androidx.work.WorkManager
 import com.synckro.data.repository.AccountRepository
 import com.synckro.data.repository.ConflictRepository
 import com.synckro.data.repository.SettingsRepository
+import com.synckro.data.repository.SyncEventRepository
 import com.synckro.data.repository.SyncPairRepository
 import com.synckro.data.worker.SyncScheduler
 import com.synckro.data.worker.SyncWorker
@@ -57,8 +58,10 @@ class HomeViewModelTest {
     private lateinit var mockScheduler: SyncScheduler
     private lateinit var mockAccountRepository: AccountRepository
     private lateinit var mockSettingsRepository: SettingsRepository
+    private lateinit var mockSyncEventRepository: SyncEventRepository
     private lateinit var context: Context
     private val pairsFlow = MutableStateFlow<List<SyncPair>>(emptyList())
+    private val eventsFlow = MutableStateFlow<List<com.synckro.domain.model.SyncEvent>>(emptyList())
 
     @Before
     fun setUp() {
@@ -74,6 +77,10 @@ class HomeViewModelTest {
         mockSettingsRepository =
             mockk {
                 every { globalAutoSyncEnabled } returns flowOf(true)
+            }
+        mockSyncEventRepository =
+            mockk {
+                every { observeAll(any()) } returns eventsFlow
             }
         context = ApplicationProvider.getApplicationContext()
         every { mockRepo.observeAll(any()) } returns pairsFlow
@@ -99,6 +106,7 @@ class HomeViewModelTest {
             syncScheduler = mockScheduler,
             accountRepository = mockAccountRepository,
             settingsRepository = mockSettingsRepository,
+            syncEventRepository = mockSyncEventRepository,
         )
 
     private fun pair(
@@ -514,6 +522,62 @@ class HomeViewModelTest {
             advanceUntilIdle()
             coVerify(exactly = 1) { mockRepo.delete(1L) }
             io.mockk.verify(exactly = 1) { mockScheduler.cancel(1L) }
+            collectJob.cancel()
+        }
+
+    // -------------------------------------------------------------------------
+    // Phase 5a — pair-card maps (nextRunByPairId, lastSummaryByPairId)
+    // -------------------------------------------------------------------------
+
+    @Test
+    fun `nextRunByPairId is populated for healthy pairs from observed events`() =
+        runTest {
+            val healthy = pair(1L).copy(lastSyncAtMs = 0L, scheduleIntervalMinutes = 30L)
+            val paused = pair(2L).copy(lastSyncAtMs = 0L, autoSyncEnabled = false)
+            pairsFlow.value = listOf(healthy, paused)
+            val vm = createVm()
+            val collectJob = launch { vm.state.collect {} }
+            advanceUntilIdle()
+
+            val nextRun = vm.state.value.nextRunByPairId
+            // Healthy pair has an ETA, paused pair is absent from the map.
+            assertTrue(1L in nextRun)
+            assertFalse(2L in nextRun)
+            collectJob.cancel()
+        }
+
+    @Test
+    fun `lastSummaryByPairId is parsed from the newest terminal SyncWorker event per pair`() =
+        runTest {
+            pairsFlow.value = listOf(pair(1L), pair(2L))
+            val vm = createVm()
+            val collectJob = launch { vm.state.collect {} }
+            advanceUntilIdle()
+
+            eventsFlow.value = listOf(
+                com.synckro.domain.model.SyncEvent(
+                    pairId = 1L,
+                    timestampMs = 200L,
+                    level = com.synckro.domain.model.SyncEventLevel.INFO,
+                    tag = com.synckro.domain.model.SyncEventTag.SyncWorker,
+                    message = "Sync succeeded: 12 applied, 3 conflicts",
+                ),
+                com.synckro.domain.model.SyncEvent(
+                    pairId = 2L,
+                    timestampMs = 100L,
+                    level = com.synckro.domain.model.SyncEventLevel.WARN,
+                    tag = com.synckro.domain.model.SyncEventTag.SyncWorker,
+                    message = "Sync partial failure: 5 applied, 2 errors — boom",
+                ),
+            )
+            advanceUntilIdle()
+
+            val summaries = vm.state.value.lastSummaryByPairId
+            assertEquals(PairSummary.Outcome.SUCCESS, summaries[1L]?.outcome)
+            assertEquals(12, summaries[1L]?.applied)
+            assertEquals(3, summaries[1L]?.conflicts)
+            assertEquals(PairSummary.Outcome.PARTIAL_FAILURE, summaries[2L]?.outcome)
+            assertEquals(2, summaries[2L]?.errors)
             collectJob.cancel()
         }
 }

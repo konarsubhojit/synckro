@@ -382,4 +382,49 @@ class SyncSchedulerTest {
             disabledInfos.isEmpty() || disabledInfos.all { it.state == WorkInfo.State.CANCELLED },
         )
     }
+
+    // -------------------------------------------------------------------------
+    // estimateNextRunAtMs (Phase 5a — pair-card ETA helper)
+    // -------------------------------------------------------------------------
+
+    @Test
+    fun `estimateNextRunAtMs returns lastSync + interval for a healthy pair`() {
+        val p = pair(id = 30L, autoSyncEnabled = true)
+            .copy(lastSyncAtMs = 1_000L, scheduleIntervalMinutes = 60L)
+        val next = SyncScheduler.estimateNextRunAtMs(pair = p, nowMs = 5_000L, globalAutoSyncEnabled = true)
+        assertEquals(1_000L + 60L * 60_000L, next)
+    }
+
+    @Test
+    fun `estimateNextRunAtMs clamps interval below 15 minutes to the WorkManager floor`() {
+        val p = pair(id = 31L).copy(lastSyncAtMs = 0L, scheduleIntervalMinutes = 5L)
+        val next = SyncScheduler.estimateNextRunAtMs(pair = p, nowMs = 0L)
+        assertEquals(15L * 60_000L, next)
+    }
+
+    @Test
+    fun `estimateNextRunAtMs returns now when the pair has never synced`() {
+        val p = pair(id = 32L).copy(lastSyncAtMs = null)
+        assertEquals(7_777L, SyncScheduler.estimateNextRunAtMs(pair = p, nowMs = 7_777L))
+    }
+
+    @Test
+    fun `estimateNextRunAtMs returns null when pair auto-sync is disabled`() {
+        val p = pair(id = 33L, autoSyncEnabled = false)
+        assertEquals(null, SyncScheduler.estimateNextRunAtMs(pair = p, nowMs = 0L))
+    }
+
+    @Test
+    fun `estimateNextRunAtMs returns null when global auto-sync is disabled`() {
+        val p = pair(id = 34L, autoSyncEnabled = true)
+        assertEquals(null, SyncScheduler.estimateNextRunAtMs(pair = p, nowMs = 0L, globalAutoSyncEnabled = false))
+    }
+
+    @Test
+    fun `estimateNextRunAtMs returns null for pairs stuck in NEEDS_REAUTH or NEEDS_RELINK`() {
+        val reauth = pair(id = 35L).copy(lastSyncResult = "NEEDS_REAUTH", lastSyncAtMs = 1_000L)
+        val relink = pair(id = 36L).copy(lastSyncResult = "NEEDS_RELINK", lastSyncAtMs = 1_000L)
+        assertEquals(null, SyncScheduler.estimateNextRunAtMs(pair = reauth, nowMs = 0L))
+        assertEquals(null, SyncScheduler.estimateNextRunAtMs(pair = relink, nowMs = 0L))
+    }
 }

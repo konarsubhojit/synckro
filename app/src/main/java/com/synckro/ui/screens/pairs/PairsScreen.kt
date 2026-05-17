@@ -1,15 +1,20 @@
 package com.synckro.ui.screens.pairs
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -45,6 +50,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -57,6 +63,7 @@ import com.synckro.domain.model.SyncPair
 import com.synckro.ui.components.EmptyState
 import com.synckro.ui.components.SectionCard
 import com.synckro.ui.screens.home.HomeViewModel
+import com.synckro.ui.screens.home.PairSummary
 
 /**
  * Sync-pairs destination — the user's list of configured sync pairs plus a FAB
@@ -153,6 +160,8 @@ private fun PairsList(
                     pair = pair,
                     accountEmail = pair.accountId?.let { state.accountEmailById[it] },
                     isSyncing = pair.id in state.syncingPairIds,
+                    nextRunAtMs = state.nextRunByPairId[pair.id],
+                    lastSummary = state.lastSummaryByPairId[pair.id],
                     onEdit = { onEditSyncPair(pair.id) },
                     onDelete = { onRequestDelete(pair) },
                     onSyncNow = { onSyncNow(pair) },
@@ -169,6 +178,8 @@ private fun SyncPairRow(
     pair: SyncPair,
     accountEmail: String?,
     isSyncing: Boolean,
+    nextRunAtMs: Long?,
+    lastSummary: PairSummary?,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
     onSyncNow: () -> Unit,
@@ -202,155 +213,256 @@ private fun SyncPairRow(
         )
     }
 
+    val status = pairCardStatus(pair = pair, isSyncing = isSyncing, summary = lastSummary)
     val needsReauth = pair.lastSyncResult == "NEEDS_REAUTH"
-    val cardColor = when {
-        pair.needsReLink -> MaterialTheme.colorScheme.errorContainer
-        needsReauth -> MaterialTheme.colorScheme.errorContainer
+    val cardColor = when (status) {
+        PairCardStatus.NEEDS_ACTION -> MaterialTheme.colorScheme.errorContainer
         else -> MaterialTheme.colorScheme.surfaceVariant
     }
-    val cardContentColor = when {
-        pair.needsReLink || needsReauth -> MaterialTheme.colorScheme.onErrorContainer
+    val cardContentColor = when (status) {
+        PairCardStatus.NEEDS_ACTION -> MaterialTheme.colorScheme.onErrorContainer
         else -> MaterialTheme.colorScheme.onSurfaceVariant
     }
+    val stripeColor: Color = when (status) {
+        PairCardStatus.SUCCESS -> MaterialTheme.colorScheme.primary
+        PairCardStatus.SYNCING -> MaterialTheme.colorScheme.tertiary
+        PairCardStatus.NEEDS_ACTION -> MaterialTheme.colorScheme.error
+        PairCardStatus.IDLE -> MaterialTheme.colorScheme.outline
+    }
+    val stripeDescription = stringResource(R.string.home_card_status_stripe)
 
     SectionCard(
         modifier = Modifier.fillMaxWidth(),
         containerColor = cardColor,
         contentColor = cardContentColor,
-        contentPadding = PaddingValues(12.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
+        // Stripe sits flush to the left edge of the card; reserve zero left padding
+        // and add it back inside the content column so the stripe runs full-height.
+        contentPadding = PaddingValues(0.dp),
+        verticalArrangement = Arrangement.spacedBy(0.dp),
     ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
+        // Phase 5a: full-height color stripe communicating status at-a-glance.
+        Row(modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
+            Box(
+                modifier = Modifier
+                    .width(4.dp)
+                    .fillMaxHeight()
+                    .background(stripeColor)
+                    .semantics { contentDescription = stripeDescription },
+            )
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = pair.displayName,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                    val providerLabel = when (pair.provider.name) {
-                        "GOOGLE_DRIVE" -> stringResource(R.string.provider_label_google_drive)
-                        "ONEDRIVE" -> stringResource(R.string.provider_label_onedrive)
-                        else -> pair.provider.name
-                    }
-                    Text(
-                        text = if (accountEmail != null) "$providerLabel · $accountEmail" else providerLabel,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary,
-                    )
-                }
-                when {
-                    isSyncing -> {
-                        val label = stringResource(R.string.sync_now_in_progress)
-                        CircularProgressIndicator(
-                            modifier = Modifier
-                                .size(20.dp)
-                                .semantics { contentDescription = label },
-                            strokeWidth = 2.dp,
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = pair.displayName,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        val providerLabel = when (pair.provider.name) {
+                            "GOOGLE_DRIVE" -> stringResource(R.string.provider_label_google_drive)
+                            "ONEDRIVE" -> stringResource(R.string.provider_label_onedrive)
+                            else -> pair.provider.name
+                        }
+                        Text(
+                            text = if (accountEmail != null) "$providerLabel · $accountEmail" else providerLabel,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
                         )
                     }
-                    pair.needsReLink -> Icon(
-                        Icons.Default.FolderOff,
-                        contentDescription = stringResource(R.string.home_needs_relink),
-                        tint = MaterialTheme.colorScheme.error,
-                    )
-                    needsReauth -> Icon(
-                        Icons.Default.Error,
-                        contentDescription = stringResource(R.string.home_needs_reauth_hint),
-                        tint = MaterialTheme.colorScheme.error,
-                    )
-                    pair.lastSyncResult == "SUCCESS" -> Icon(
-                        Icons.Default.CheckCircle,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(20.dp),
-                    )
-                    else -> Unit
-                }
-            }
-
-            when {
-                pair.needsReLink -> StatusBanner(
-                    text = stringResource(R.string.home_needs_relink),
-                    isError = true,
-                )
-                needsReauth -> StatusBanner(
-                    text = stringResource(R.string.home_needs_reauth_hint),
-                    isError = true,
-                )
-            }
-
-            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text =
-                        when {
-                            !globalAutoSyncEnabled -> stringResource(R.string.home_auto_sync_paused)
-                            pair.autoSyncEnabled -> stringResource(R.string.home_auto_sync_enabled)
-                            else -> stringResource(R.string.home_auto_sync_disabled)
-                        },
-                    style = MaterialTheme.typography.bodySmall,
-                    color =
-                        when {
-                            !globalAutoSyncEnabled -> MaterialTheme.colorScheme.onSurfaceVariant
-                            pair.autoSyncEnabled -> MaterialTheme.colorScheme.primary
-                            else -> MaterialTheme.colorScheme.onSurfaceVariant
-                        },
-                )
-                val dateFormatter = remember {
-                    java.text.DateFormat.getDateTimeInstance(
-                        java.text.DateFormat.SHORT,
-                        java.text.DateFormat.SHORT,
-                    )
-                }
-                Text(
-                    text =
-                        if (pair.lastSyncAtMs != null) {
-                            stringResource(
-                                R.string.home_last_sync_format,
-                                dateFormatter.format(java.util.Date(pair.lastSyncAtMs)),
+                    when {
+                        isSyncing -> {
+                            val label = stringResource(R.string.sync_now_in_progress)
+                            CircularProgressIndicator(
+                                modifier = Modifier
+                                    .size(20.dp)
+                                    .semantics { contentDescription = label },
+                                strokeWidth = 2.dp,
                             )
-                        } else {
-                            stringResource(R.string.home_never_synced)
-                        },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+                        }
+                        pair.needsReLink -> Icon(
+                            Icons.Default.FolderOff,
+                            contentDescription = stringResource(R.string.home_needs_relink),
+                            tint = MaterialTheme.colorScheme.error,
+                        )
+                        needsReauth -> Icon(
+                            Icons.Default.Error,
+                            contentDescription = stringResource(R.string.home_needs_reauth_hint),
+                            tint = MaterialTheme.colorScheme.error,
+                        )
+                        pair.lastSyncResult == "SUCCESS" -> Icon(
+                            Icons.Default.CheckCircle,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp),
+                        )
+                        else -> Unit
+                    }
+                }
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End,
-            ) {
-                IconButton(onClick = onSyncNow, enabled = !isSyncing) {
-                    Icon(
-                        Icons.Default.Sync,
-                        contentDescription = stringResource(R.string.sync_now),
+                when {
+                    pair.needsReLink -> StatusBanner(
+                        text = stringResource(R.string.home_needs_relink),
+                        isError = true,
+                    )
+                    needsReauth -> StatusBanner(
+                        text = stringResource(R.string.home_needs_reauth_hint),
+                        isError = true,
                     )
                 }
-                IconButton(onClick = onEdit) {
-                    Icon(
-                        Icons.Default.Edit,
-                        contentDescription = stringResource(R.string.home_edit_pair),
+
+                // Phase 5a: last-result summary (parsed from the latest terminal SyncEvent).
+                lastSummary?.let { summary ->
+                    Text(
+                        text = lastSummaryLabel(summary),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = summaryColor(summary.outcome),
                     )
                 }
-                IconButton(onClick = { showDeleteDialog = true }) {
-                    Icon(
-                        Icons.Default.Delete,
-                        contentDescription = stringResource(R.string.home_delete_pair),
-                        tint = MaterialTheme.colorScheme.error,
+
+                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    // Phase 5a: replaced the standalone "Auto-sync on/off" label with
+                    // the next-run ETA, which subsumes the on/off state (paused = no ETA).
+                    Text(
+                        text = nextRunLabel(
+                            nextRunAtMs = nextRunAtMs,
+                            globalAutoSyncEnabled = globalAutoSyncEnabled,
+                            autoSyncEnabled = pair.autoSyncEnabled,
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color =
+                            if (nextRunAtMs == null) {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            } else {
+                                MaterialTheme.colorScheme.primary
+                            },
                     )
+                    val dateFormatter = remember {
+                        java.text.DateFormat.getDateTimeInstance(
+                            java.text.DateFormat.SHORT,
+                            java.text.DateFormat.SHORT,
+                        )
+                    }
+                    Text(
+                        text =
+                            if (pair.lastSyncAtMs != null) {
+                                stringResource(
+                                    R.string.home_last_sync_format,
+                                    dateFormatter.format(java.util.Date(pair.lastSyncAtMs)),
+                                )
+                            } else {
+                                stringResource(R.string.home_never_synced)
+                            },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                ) {
+                    IconButton(onClick = onSyncNow, enabled = !isSyncing) {
+                        Icon(
+                            Icons.Default.Sync,
+                            contentDescription = stringResource(R.string.sync_now),
+                        )
+                    }
+                    IconButton(onClick = onEdit) {
+                        Icon(
+                            Icons.Default.Edit,
+                            contentDescription = stringResource(R.string.home_edit_pair),
+                        )
+                    }
+                    IconButton(onClick = { showDeleteDialog = true }) {
+                        Icon(
+                            Icons.Default.Delete,
+                            contentDescription = stringResource(R.string.home_delete_pair),
+                            tint = MaterialTheme.colorScheme.error,
+                        )
+                    }
                 }
             }
+        }
+    }
+}
+
+/**
+ * Coarse status used to colour the left-edge stripe on a pair card. Derived
+ * once at composition time so the stripe colour and the icon/banner choices
+ * stay in lock-step.
+ */
+private enum class PairCardStatus { SUCCESS, SYNCING, NEEDS_ACTION, IDLE }
+
+private fun pairCardStatus(
+    pair: SyncPair,
+    isSyncing: Boolean,
+    summary: PairSummary?,
+): PairCardStatus = when {
+    isSyncing -> PairCardStatus.SYNCING
+    pair.needsReLink -> PairCardStatus.NEEDS_ACTION
+    pair.lastSyncResult == "NEEDS_REAUTH" -> PairCardStatus.NEEDS_ACTION
+    pair.lastSyncResult == "FAILURE" -> PairCardStatus.NEEDS_ACTION
+    pair.lastSyncResult == "SUCCESS" -> PairCardStatus.SUCCESS
+    summary?.outcome == PairSummary.Outcome.SUCCESS -> PairCardStatus.SUCCESS
+    else -> PairCardStatus.IDLE
+}
+
+@Composable
+private fun summaryColor(outcome: PairSummary.Outcome): Color = when (outcome) {
+    PairSummary.Outcome.SUCCESS -> MaterialTheme.colorScheme.primary
+    PairSummary.Outcome.PARTIAL_FAILURE -> MaterialTheme.colorScheme.tertiary
+    else -> MaterialTheme.colorScheme.error
+}
+
+@Composable
+private fun lastSummaryLabel(summary: PairSummary): String = when (summary.outcome) {
+    PairSummary.Outcome.SUCCESS ->
+        stringResource(R.string.home_last_result_success_format, summary.applied, summary.conflicts)
+    PairSummary.Outcome.PARTIAL_FAILURE ->
+        stringResource(R.string.home_last_result_partial_format, summary.applied, summary.errors)
+    PairSummary.Outcome.FAILURE -> stringResource(R.string.home_last_result_failure)
+    PairSummary.Outcome.NEEDS_REAUTH -> stringResource(R.string.home_last_result_needs_reauth)
+    PairSummary.Outcome.NEEDS_RELINK -> stringResource(R.string.home_last_result_needs_relink)
+}
+
+@Composable
+private fun nextRunLabel(
+    nextRunAtMs: Long?,
+    globalAutoSyncEnabled: Boolean,
+    autoSyncEnabled: Boolean,
+): String {
+    if (nextRunAtMs == null) {
+        return if (!globalAutoSyncEnabled) {
+            stringResource(R.string.home_auto_sync_paused)
+        } else if (!autoSyncEnabled) {
+            stringResource(R.string.home_next_sync_paused)
+        } else {
+            stringResource(R.string.home_next_sync_overdue)
+        }
+    }
+    val deltaMs = nextRunAtMs - System.currentTimeMillis()
+    if (deltaMs <= 60_000L) return stringResource(R.string.home_next_sync_due_now)
+    val minutes = (deltaMs + 30_000L) / 60_000L
+    return if (minutes < 90L) {
+        stringResource(R.string.home_next_sync_in_minutes_format, minutes.toInt())
+    } else {
+        val hours = ((deltaMs + 30L * 60_000L) / (60L * 60_000L)).toInt()
+        stringResource(R.string.home_next_sync_in_hours_format, hours)
     }
 }
 

@@ -23,6 +23,18 @@
     <string name="home_auto_sync_disabled">Auto-sync off</string>
     <string name="home_last_sync_format">Last sync: %1$s</string>
     <string name="home_never_synced">Never synced</string>
+    <!-- Phase 5a: next-run ETA and last-result summary surfaced on each pair card. -->
+    <string name="home_next_sync_due_now">Next sync due now</string>
+    <string name="home_next_sync_overdue">Next sync overdue</string>
+    <string name="home_next_sync_in_minutes_format">Next sync in ~%1$d min</string>
+    <string name="home_next_sync_in_hours_format">Next sync in ~%1$d h</string>
+    <string name="home_next_sync_paused">Auto-sync paused for this pair</string>
+    <string name="home_last_result_success_format">%1$d applied · %2$d conflicts</string>
+    <string name="home_last_result_partial_format">%1$d applied · %2$d errors</string>
+    <string name="home_last_result_failure">Last run failed</string>
+    <string name="home_last_result_needs_reauth">Last run: re-authentication required</string>
+    <string name="home_last_result_needs_relink">Last run: folder access lost</string>
+    <string name="home_card_status_stripe">Status indicator</string>
     <string name="home_delete_title">Delete sync pair?</string>
     <string name="home_delete_body_format">"%1$s" will be removed. This cannot be undone.</string>
     <string name="home_delete_confirm">Delete</string>

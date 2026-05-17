@@ -14,6 +14,7 @@ import java.util.concurrent.TimeUnit
 import com.synckro.data.repository.AccountRepository
 import com.synckro.data.repository.ConflictRepository
 import com.synckro.data.repository.SettingsRepository
+import com.synckro.data.repository.SyncEventRepository
 import com.synckro.data.repository.SyncPairRepository
 import com.synckro.data.worker.SyncScheduler
 import com.synckro.data.worker.SyncWorker
@@ -50,6 +51,7 @@ class HomeViewModel
         private val syncScheduler: SyncScheduler,
         private val accountRepository: AccountRepository,
         private val settingsRepository: SettingsRepository,
+        private val syncEventRepository: SyncEventRepository,
     ) : ViewModel() {
         /**
          * Soft-deleted pair waiting for the undo grace window to expire. Surfaced via
@@ -71,6 +73,17 @@ class HomeViewModel
             val accountEmailById: Map<String, String> = emptyMap(),
             /** Whether global auto-sync is currently enabled. */
             val globalAutoSyncEnabled: Boolean = true,
+            /**
+             * Map of `pairId` → estimated epoch-ms of the next periodic run, used to
+             * render the "Next sync in ~N min" line on each pair card. Pairs whose
+             * auto-sync is paused (globally or per-pair) are absent from the map.
+             */
+            val nextRunByPairId: Map<Long, Long> = emptyMap(),
+            /**
+             * Map of `pairId` → most-recent terminal [PairSummary] (parsed from the
+             * `sync_event` table). Pairs that have never completed a run are absent.
+             */
+            val lastSummaryByPairId: Map<Long, PairSummary> = emptyMap(),
         )
 
         /** Pair IDs that have an active "sync now" run; updated optimistically. */
@@ -87,6 +100,15 @@ class HomeViewModel
 
         /** Maps accountId → display email/name, kept in sync with the accounts table. */
         private val accountEmailById = MutableStateFlow<Map<String, String>>(emptyMap())
+
+        /**
+         * Stream of recent terminal sync events used to compute
+         * [UiState.lastSummaryByPairId]. We cap the query at [SUMMARY_EVENT_LIMIT]
+         * rows because we only need the newest terminal entry per pair; pulling the
+         * full 5 000-row log into memory on every pair-card recomposition would be
+         * wasteful.
+         */
+        private val recentEvents = syncEventRepository.observeAll(SUMMARY_EVENT_LIMIT)
 
         val state: StateFlow<UiState> =
             combine(
@@ -106,7 +128,12 @@ class HomeViewModel
             }.combine(accountEmailById) { uiState, emailMap ->
                 uiState.copy(accountEmailById = emailMap)
             }.combine(settingsRepository.globalAutoSyncEnabled) { uiState, globalEnabled ->
-                uiState.copy(globalAutoSyncEnabled = globalEnabled)
+                uiState.copy(
+                    globalAutoSyncEnabled = globalEnabled,
+                    nextRunByPairId = computeNextRunMap(uiState.pairs, globalEnabled),
+                )
+            }.combine(recentEvents) { uiState, events ->
+                uiState.copy(lastSummaryByPairId = aggregatePairSummaries(events))
             }.stateIn(
                 scope = viewModelScope,
                 started = SharingStarted.WhileSubscribed(5_000),
@@ -276,6 +303,27 @@ class HomeViewModel
             }
         }
 
+        /**
+         * Pure helper that computes the [UiState.nextRunByPairId] map from the
+         * currently observed pairs and the global auto-sync flag. Extracted so it
+         * can be reused (and unit-tested) without spinning up the full StateFlow
+         * pipeline.
+         */
+        private fun computeNextRunMap(pairs: List<SyncPair>, globalAutoSyncEnabled: Boolean): Map<Long, Long> {
+            if (pairs.isEmpty()) return emptyMap()
+            val now = System.currentTimeMillis()
+            val out = LinkedHashMap<Long, Long>(pairs.size)
+            for (p in pairs) {
+                val next = SyncScheduler.estimateNextRunAtMs(
+                    pair = p,
+                    nowMs = now,
+                    globalAutoSyncEnabled = globalAutoSyncEnabled,
+                )
+                if (next != null) out[p.id] = next
+            }
+            return out
+        }
+
         companion object {
             /**
              * Length of the undo grace window for soft-deleted sync pairs, in
@@ -284,5 +332,13 @@ class HomeViewModel
              * but the user still has time to react.
              */
             const val UNDO_WINDOW_MS: Long = 5_000L
+
+            /**
+             * Upper bound on the number of recent events streamed for computing
+             * [UiState.lastSummaryByPairId]. The newest terminal event per pair is
+             * picked from the head of this list, so a few hundred rows is plenty
+             * even for users with many pairs and noisy retries.
+             */
+            const val SUMMARY_EVENT_LIMIT: Int = 200
         }
     }
