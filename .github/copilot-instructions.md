@@ -6,7 +6,7 @@
   `./gradlew testDebugUnitTest`, `./gradlew assembleDebug`, and
   `./gradlew lintDebug`.
 - Keep sync-domain logic platform-free when possible. `SyncDiffer` in
-  `app/src/main/java/com/konarsubhojit/synckro/domain/sync/` is intentionally
+  `app/src/main/java/com/synckro/domain/sync/` is intentionally
   pure Kotlin and should stay unit-testable without Android dependencies.
 - Cloud providers implement `CloudProvider`; `FakeCloudProvider` is the in-memory
   reference implementation for tests and offline development.

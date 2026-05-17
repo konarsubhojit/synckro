@@ -72,15 +72,17 @@ import com.synckro.ui.components.LoadingState
  * @param activity The host [ComponentActivity] needed to launch interactive sign-in
  *   flows (Credential Manager / consent intents). Kept here — not in the ViewModel —
  *   to avoid leaking Activity references.
- * @param onFolderPicked Called with the selected folder's ID and display name.
- *   An empty [id] means the root level was chosen.
+ * @param onFolderPicked Called with the selected folder's ID, display name,
+ *   and breadcrumb path string (e.g. `"My Drive › Backups"`). An empty [id]
+ *   means the root level was chosen; an empty breadcrumb means only the root
+ *   was visited.
  * @param onBack Called when the user cancels without making a selection.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PickRemoteFolderScreen(
     activity: ComponentActivity,
-    onFolderPicked: (id: String, name: String) -> Unit,
+    onFolderPicked: (id: String, name: String, breadcrumb: String) -> Unit,
     onBack: () -> Unit,
     viewModel: PickRemoteFolderViewModel = hiltViewModel(),
 ) {
@@ -220,7 +222,15 @@ fun PickRemoteFolderScreen(
                 Button(
                     onClick = {
                         val folderId = state.currentFolderId ?: ""
-                        onFolderPicked(folderId, currentName)
+                        // Join breadcrumb names with " › " for a compact path
+                        // string. Drop the root entry (its name is `"/"`) for
+                        // readability — the destination folder's own name is
+                        // the last entry of the trail.
+                        val breadcrumb =
+                            state.breadcrumbs
+                                .drop(1)
+                                .joinToString(separator = " › ") { it.folderName }
+                        onFolderPicked(folderId, currentName, breadcrumb)
                     },
                     enabled = !state.isLoading && !state.isReauthenticating && state.error == null,
                     modifier =
