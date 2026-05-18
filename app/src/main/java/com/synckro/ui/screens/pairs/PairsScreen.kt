@@ -182,6 +182,7 @@ private fun PairsList(
     onSyncNow: (SyncPair) -> Unit,
     onSyncAllNow: () -> Unit,
     onAddSyncPair: () -> Unit,
+    onOpenPairDetail: (Long) -> Unit,
     globalAutoSyncEnabled: Boolean,
     modifier: Modifier = Modifier,
 ) {
@@ -235,6 +236,7 @@ private fun PairsList(
                         onEdit = { onEditSyncPair(pair.id) },
                         onDelete = { onRequestDelete(pair) },
                         onSyncNow = { onSyncNow(pair) },
+                        onOpenDetail = { onOpenPairDetail(pair.id) },
                         globalAutoSyncEnabled = globalAutoSyncEnabled,
                     )
                 }
@@ -254,6 +256,7 @@ private fun SyncPairRow(
     onEdit: () -> Unit,
     onDelete: () -> Unit,
     onSyncNow: () -> Unit,
+    onOpenDetail: () -> Unit,
     globalAutoSyncEnabled: Boolean,
 ) {
     var showDeleteDialog by remember { mutableStateOf(false) }
@@ -303,7 +306,7 @@ private fun SyncPairRow(
     val stripeDescription = stringResource(R.string.home_card_status_stripe)
 
     SectionCard(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onOpenDetail),
         containerColor = cardColor,
         contentColor = cardContentColor,
         // Stripe sits flush to the left edge of the card; reserve zero left padding
