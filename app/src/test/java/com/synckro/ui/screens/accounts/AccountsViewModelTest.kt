@@ -28,6 +28,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -195,6 +196,79 @@ class AccountsViewModelTest {
             every { this@mockk.providerType } returns providerType
             coEvery { isConfigured() } returns true
             coEvery { currentAccounts() } returns accounts
+        }
+
+    @Test
+    fun `setHighlight stores the account id and auto-clears after the highlight duration`() =
+        runTest {
+            val account = account("gd-1", CloudProviderType.GOOGLE_DRIVE, "alpha@gmail.com")
+            val registry =
+                AuthManagerRegistry(
+                    mapOf(
+                        CloudProviderType.GOOGLE_DRIVE to manager("Google Drive", CloudProviderType.GOOGLE_DRIVE, listOf(account)),
+                    ),
+                )
+            val vm = createVm(registry)
+            advanceUntilIdle()
+
+            vm.setHighlight(account.id)
+            // The flag is observable immediately so the UI can animate the highlight.
+            assertEquals(account.id, vm.state.value.highlightedAccountId)
+
+            // After HIGHLIGHT_DURATION_MS the timer fires and the flag is cleared.
+            dispatcher.scheduler.advanceTimeBy(AccountsViewModel.HIGHLIGHT_DURATION_MS + 50L)
+            dispatcher.scheduler.runCurrent()
+            assertNull(vm.state.value.highlightedAccountId)
+        }
+
+    @Test
+    fun `setHighlight with null clears the current highlight immediately`() =
+        runTest {
+            val account = account("gd-1", CloudProviderType.GOOGLE_DRIVE, "alpha@gmail.com")
+            val registry =
+                AuthManagerRegistry(
+                    mapOf(
+                        CloudProviderType.GOOGLE_DRIVE to manager("Google Drive", CloudProviderType.GOOGLE_DRIVE, listOf(account)),
+                    ),
+                )
+            val vm = createVm(registry)
+            advanceUntilIdle()
+
+            vm.setHighlight(account.id)
+            assertEquals(account.id, vm.state.value.highlightedAccountId)
+
+            vm.setHighlight(null)
+            assertNull(vm.state.value.highlightedAccountId)
+        }
+
+    @Test
+    fun `setHighlight cancels the previous auto-clear timer when called again`() =
+        runTest {
+            val first = account("gd-1", CloudProviderType.GOOGLE_DRIVE, "alpha@gmail.com")
+            val second = account("gd-2", CloudProviderType.GOOGLE_DRIVE, "beta@gmail.com")
+            val registry =
+                AuthManagerRegistry(
+                    mapOf(
+                        CloudProviderType.GOOGLE_DRIVE to
+                            manager("Google Drive", CloudProviderType.GOOGLE_DRIVE, listOf(first, second)),
+                    ),
+                )
+            val vm = createVm(registry)
+            advanceUntilIdle()
+
+            vm.setHighlight(first.id)
+            // Advance most of the way through the first highlight window…
+            dispatcher.scheduler.advanceTimeBy(AccountsViewModel.HIGHLIGHT_DURATION_MS - 200L)
+            // …then start a new highlight; the first timer must NOT clear the new id.
+            vm.setHighlight(second.id)
+            dispatcher.scheduler.advanceTimeBy(300L)
+            dispatcher.scheduler.runCurrent()
+            assertEquals(second.id, vm.state.value.highlightedAccountId)
+
+            // The new timer still fires on its own schedule.
+            dispatcher.scheduler.advanceTimeBy(AccountsViewModel.HIGHLIGHT_DURATION_MS)
+            dispatcher.scheduler.runCurrent()
+            assertNull(vm.state.value.highlightedAccountId)
         }
 
     private fun account(

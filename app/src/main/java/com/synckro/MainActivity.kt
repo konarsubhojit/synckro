@@ -128,7 +128,8 @@ class MainActivity : ComponentActivity() {
      */
     private fun dispatchNavigationIntent(intent: Intent) {
         if (intent.action == ReauthNotificationHelper.ACTION_OPEN_ACCOUNTS) {
-            appNavigationDispatcher.navigateTo(AppNavEvent.OpenAccounts)
+            val accountId = intent.getStringExtra(ReauthNotificationHelper.EXTRA_ACCOUNT_ID)
+            appNavigationDispatcher.navigateTo(AppNavEvent.OpenAccounts(accountId = accountId))
         }
     }
 }

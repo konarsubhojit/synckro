@@ -1,6 +1,9 @@
 package com.synckro.ui.screens.accounts
 
 import androidx.activity.ComponentActivity
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -13,6 +16,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
@@ -38,6 +43,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -70,10 +76,22 @@ import com.synckro.ui.components.SectionCard
 fun AccountsScreen(
     activity: ComponentActivity,
     onBack: (() -> Unit)? = null,
+    highlightAccountId: String? = null,
+    onHighlightConsumed: () -> Unit = {},
     viewModel: AccountsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val host = remember(activity) { ActivityAuthUiHost(activity) }
+
+    // Phase 5d: forward deep-link requests into the ViewModel as a one-shot, then
+    // immediately tell the host it has been consumed so the same id doesn't keep
+    // re-triggering on every recomposition.
+    LaunchedEffect(highlightAccountId) {
+        if (highlightAccountId != null) {
+            viewModel.setHighlight(highlightAccountId)
+            onHighlightConsumed()
+        }
+    }
 
     state.pendingDisconnect?.let { pending ->
         DisconnectConfirmDialog(
@@ -144,6 +162,7 @@ fun AccountsScreen(
             state.rows.forEach { row ->
                 AccountProviderCard(
                     row = row,
+                    highlightedAccountId = state.highlightedAccountId,
                     onConnect = {
                         viewModel.connect(row.providerKey) { manager -> manager.signIn(host) }
                     },
@@ -159,6 +178,7 @@ private fun AccountProviderCard(
     row: AccountsViewModel.AccountRow,
     onConnect: () -> Unit,
     onDisconnect: (Account) -> Unit,
+    highlightedAccountId: String? = null,
 ) {
     val needsReauth = row.needsReauth
     val cardColor = if (needsReauth) {
@@ -240,6 +260,7 @@ private fun AccountProviderCard(
                 AccountItemRow(
                     item = item,
                     isBusy = row.isBusy,
+                    isHighlighted = item.account.id == highlightedAccountId,
                     onDisconnect = { onDisconnect(item.account) },
                     onReauth = onConnect,
                 )
@@ -278,18 +299,53 @@ private fun AccountProviderCard(
  * A single row showing an account's avatar initials, email / display name,
  * an optional per-account Re-authenticate button, and a Disconnect button.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun AccountItemRow(
     item: AccountsViewModel.AccountItem,
     isBusy: Boolean,
     onDisconnect: () -> Unit,
     onReauth: () -> Unit,
+    isHighlighted: Boolean = false,
 ) {
     val label = item.account.email ?: item.account.displayName
     val initial = label.firstOrNull()?.uppercaseChar()?.toString() ?: "?"
 
+    // Phase 5d: animate a brief background tint when this row is the target of a
+    // reauth deep-link, then fade back to the default. The VM clears
+    // highlightedAccountId after ~2 s, which drives [isHighlighted] back to false
+    // and animates the colour out via [animateColorAsState].
+    val highlightColor =
+        animateColorAsState(
+            targetValue =
+                if (isHighlighted) {
+                    MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
+                } else {
+                    androidx.compose.ui.graphics.Color.Transparent
+                },
+            animationSpec = tween(durationMillis = 350),
+            label = "AccountItemRow.highlight",
+        )
+
+    val bringIntoViewRequester = remember { BringIntoViewRequester() }
+    LaunchedEffect(isHighlighted) {
+        if (isHighlighted) {
+            // Auto-scroll the surrounding scroll container so the highlighted row is
+            // visible even when it was off-screen at deep-link time.
+            runCatching { bringIntoViewRequester.bringIntoView() }
+        }
+    }
+
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .bringIntoViewRequester(bringIntoViewRequester)
+                .background(
+                    color = highlightColor.value,
+                    shape = MaterialTheme.shapes.small,
+                )
+                .padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {

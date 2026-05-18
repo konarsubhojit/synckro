@@ -8,8 +8,14 @@ import javax.inject.Singleton
 
 /** Navigation destinations that can be requested from outside the Compose tree (e.g. from a notification). */
 sealed class AppNavEvent {
-    /** Open the Accounts screen so the user can reconnect a cloud account. */
-    data object OpenAccounts : AppNavEvent()
+    /**
+     * Open the Accounts screen so the user can reconnect a cloud account.
+     *
+     * @param accountId Optional id of the account that should be brought into view and
+     *   briefly highlighted on arrival (Phase 5d reauth deep-link). `null` opens the
+     *   Accounts tab without any specific highlight (the original Phase 1 behaviour).
+     */
+    data class OpenAccounts(val accountId: String? = null) : AppNavEvent()
 }
 
 /**

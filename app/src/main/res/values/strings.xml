@@ -326,6 +326,7 @@
 
     <!-- Home pair card status messages -->
     <string name="home_needs_reauth_hint">Sign-in expired — go to Accounts to re-authenticate and resume syncing.</string>
+    <string name="home_needs_reauth_action_description">Open Accounts to re-authenticate this pair</string>
 
     <!-- Accounts screen additional hints -->
     <string name="accounts_body_hint">After connecting an account, tap the + button on the home screen to add your first sync pair.</string>

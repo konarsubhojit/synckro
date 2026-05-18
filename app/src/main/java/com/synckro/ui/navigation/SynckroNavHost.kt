@@ -77,6 +77,11 @@ fun SynckroNavHost(
     // MainScaffold via [onPendingDestinationHandled].
     var pendingMainDestination by remember { mutableStateOf<MainDestination?>(null) }
 
+    // Phase 5d: one-shot accountId that, paired with [pendingMainDestination], asks
+    // the AccountsScreen to briefly highlight (and scroll to) the matching row.
+    // Cleared by MainScaffold via [onPendingAccountHighlightHandled].
+    var pendingAccountHighlight by remember { mutableStateOf<String?>(null) }
+
     // Observe navigation commands dispatched from outside the Compose tree
     // (e.g. from a re-auth notification tap handled in MainActivity.onNewIntent).
     LaunchedEffect(appNavigationDispatcher) {
@@ -85,11 +90,12 @@ fun SynckroNavHost(
             ?.collect { event ->
                 appNavigationDispatcher.consumeEvent()
                 when (event) {
-                    AppNavEvent.OpenAccounts -> {
+                    is AppNavEvent.OpenAccounts -> {
                         // Pop any full-screen routes (pair editor, folder pickers)
                         // back to the MainScaffold, then tell MainScaffold to
                         // select the Accounts tab.
                         pendingMainDestination = MainDestination.Accounts
+                        pendingAccountHighlight = event.accountId
                         nav.popBackStack(Routes.MAIN, inclusive = false)
                     }
                 }
@@ -118,6 +124,8 @@ fun SynckroNavHost(
                 },
                 pendingDestination = pendingMainDestination,
                 onPendingDestinationHandled = { pendingMainDestination = null },
+                pendingAccountHighlight = pendingAccountHighlight,
+                onPendingAccountHighlightHandled = { pendingAccountHighlight = null },
             )
         }
         composable(

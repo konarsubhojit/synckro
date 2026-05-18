@@ -88,6 +88,7 @@ fun PairsScreen(
     onEditSyncPair: (Long) -> Unit,
     modifier: Modifier = Modifier,
     onOpenPairDetail: (Long) -> Unit = {},
+    onOpenReauth: (accountId: String?) -> Unit = {},
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -167,6 +168,7 @@ fun PairsScreen(
             onSyncAllNow = viewModel::syncAllNow,
             onAddSyncPair = onAddSyncPair,
             onOpenPairDetail = onOpenPairDetail,
+            onOpenReauth = onOpenReauth,
             globalAutoSyncEnabled = state.globalAutoSyncEnabled,
             modifier = Modifier.fillMaxSize().padding(padding),
         )
@@ -183,6 +185,7 @@ private fun PairsList(
     onSyncAllNow: () -> Unit,
     onAddSyncPair: () -> Unit,
     onOpenPairDetail: (Long) -> Unit,
+    onOpenReauth: (accountId: String?) -> Unit,
     globalAutoSyncEnabled: Boolean,
     modifier: Modifier = Modifier,
 ) {
@@ -237,6 +240,7 @@ private fun PairsList(
                         onDelete = { onRequestDelete(pair) },
                         onSyncNow = { onSyncNow(pair) },
                         onOpenDetail = { onOpenPairDetail(pair.id) },
+                        onOpenReauth = { onOpenReauth(pair.accountId) },
                         globalAutoSyncEnabled = globalAutoSyncEnabled,
                     )
                 }
@@ -257,6 +261,7 @@ private fun SyncPairRow(
     onDelete: () -> Unit,
     onSyncNow: () -> Unit,
     onOpenDetail: () -> Unit,
+    onOpenReauth: () -> Unit,
     globalAutoSyncEnabled: Boolean,
 ) {
     var showDeleteDialog by remember { mutableStateOf(false) }
@@ -304,6 +309,7 @@ private fun SyncPairRow(
         PairCardStatus.IDLE -> MaterialTheme.colorScheme.outline
     }
     val stripeDescription = stringResource(R.string.home_card_status_stripe)
+    val reauthDeepLinkDescription = stringResource(R.string.home_needs_reauth_action_description)
 
     SectionCard(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onOpenDetail),
@@ -390,6 +396,15 @@ private fun SyncPairRow(
                     needsReauth -> StatusBanner(
                         text = stringResource(R.string.home_needs_reauth_hint),
                         isError = true,
+                        // Phase 5d: deep-link to the Accounts tab and highlight the
+                        // affected account. The card's outer Modifier.clickable would
+                        // otherwise open Pair Detail — clickable here consumes the
+                        // click first so the more-specific recovery action wins.
+                        modifier = Modifier
+                            .clickable(onClick = onOpenReauth)
+                            .semantics {
+                                contentDescription = reauthDeepLinkDescription
+                            },
                     )
                 }
 

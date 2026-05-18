@@ -89,6 +89,8 @@ fun MainScaffold(
     onOpenPairDetail: (Long) -> Unit = {},
     pendingDestination: MainDestination? = null,
     onPendingDestinationHandled: () -> Unit = {},
+    pendingAccountHighlight: String? = null,
+    onPendingAccountHighlightHandled: () -> Unit = {},
     // The conflicts badge reads from the shared HomeViewModel (which already
     // exposes pendingConflictCount). hiltViewModel() here is scoped to the
     // MainScaffold's NavBackStackEntry so the inner PairsScreen gets the same
@@ -97,11 +99,23 @@ fun MainScaffold(
 ) {
     var selected by rememberSaveable { mutableStateOf(MainDestination.Pairs) }
 
+    // Phase 5d: the account id (if any) that AccountsScreen should briefly highlight
+    // on its next composition. Set either by an external deep-link
+    // ([pendingAccountHighlight]) or by an internal request from PairsScreen's reauth
+    // banner — both paths land on the same AccountsScreen consumer.
+    var currentAccountHighlight by remember { mutableStateOf<String?>(null) }
+
     // Honour external deep-links (e.g. re-auth notification → Accounts).
     LaunchedEffect(pendingDestination) {
         if (pendingDestination != null) {
             selected = pendingDestination
             onPendingDestinationHandled()
+        }
+    }
+    LaunchedEffect(pendingAccountHighlight) {
+        if (pendingAccountHighlight != null) {
+            currentAccountHighlight = pendingAccountHighlight
+            onPendingAccountHighlightHandled()
         }
     }
 
@@ -119,6 +133,12 @@ fun MainScaffold(
                     onAddSyncPair = onAddSyncPair,
                     onEditSyncPair = onEditSyncPair,
                     onOpenPairDetail = onOpenPairDetail,
+                    onOpenReauth = { accountId ->
+                        // Phase 5d: switch to the Accounts tab and ask it to
+                        // highlight the affected account (if known).
+                        currentAccountHighlight = accountId
+                        selected = MainDestination.Accounts
+                    },
                     viewModel = homeViewModel,
                 )
                 MainDestination.Conflicts -> ConflictInboxScreen(
@@ -132,6 +152,8 @@ fun MainScaffold(
                 MainDestination.Accounts -> AccountsScreen(
                     activity = activity,
                     onBack = null,
+                    highlightAccountId = currentAccountHighlight,
+                    onHighlightConsumed = { currentAccountHighlight = null },
                 )
                 MainDestination.Settings -> SettingsScreen(
                     onBack = null,
