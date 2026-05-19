@@ -14,6 +14,7 @@ import java.util.concurrent.TimeUnit
 import com.synckro.data.repository.AccountRepository
 import com.synckro.data.repository.ConflictRepository
 import com.synckro.data.repository.SettingsRepository
+import com.synckro.data.repository.SyncEventRepository
 import com.synckro.data.repository.SyncPairRepository
 import com.synckro.data.worker.SyncScheduler
 import com.synckro.data.worker.SyncWorker
@@ -22,9 +23,12 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
@@ -50,6 +54,7 @@ class HomeViewModel
         private val syncScheduler: SyncScheduler,
         private val accountRepository: AccountRepository,
         private val settingsRepository: SettingsRepository,
+        private val syncEventRepository: SyncEventRepository,
     ) : ViewModel() {
         /**
          * Soft-deleted pair waiting for the undo grace window to expire. Surfaced via
@@ -71,6 +76,17 @@ class HomeViewModel
             val accountEmailById: Map<String, String> = emptyMap(),
             /** Whether global auto-sync is currently enabled. */
             val globalAutoSyncEnabled: Boolean = true,
+            /**
+             * Map of `pairId` → estimated epoch-ms of the next periodic run, used to
+             * render the "Next sync in ~N min" line on each pair card. Pairs whose
+             * auto-sync is paused (globally or per-pair) are absent from the map.
+             */
+            val nextRunByPairId: Map<Long, Long> = emptyMap(),
+            /**
+             * Map of `pairId` → most-recent terminal [PairSummary] (parsed from the
+             * `sync_event` table). Pairs that have never completed a run are absent.
+             */
+            val lastSummaryByPairId: Map<Long, PairSummary> = emptyMap(),
         )
 
         /** Pair IDs that have an active "sync now" run; updated optimistically. */
@@ -87,6 +103,15 @@ class HomeViewModel
 
         /** Maps accountId → display email/name, kept in sync with the accounts table. */
         private val accountEmailById = MutableStateFlow<Map<String, String>>(emptyMap())
+
+        /**
+         * Stream of recent terminal sync events used to compute
+         * [UiState.lastSummaryByPairId]. We cap the query at [SUMMARY_EVENT_LIMIT]
+         * rows because we only need the newest terminal entry per pair; pulling the
+         * full 5 000-row log into memory on every pair-card recomposition would be
+         * wasteful.
+         */
+        private val recentEvents = syncEventRepository.observeAll(SUMMARY_EVENT_LIMIT)
 
         val state: StateFlow<UiState> =
             combine(
@@ -106,7 +131,12 @@ class HomeViewModel
             }.combine(accountEmailById) { uiState, emailMap ->
                 uiState.copy(accountEmailById = emailMap)
             }.combine(settingsRepository.globalAutoSyncEnabled) { uiState, globalEnabled ->
-                uiState.copy(globalAutoSyncEnabled = globalEnabled)
+                uiState.copy(
+                    globalAutoSyncEnabled = globalEnabled,
+                    nextRunByPairId = computeNextRunMap(uiState.pairs, globalEnabled),
+                )
+            }.combine(recentEvents) { uiState, events ->
+                uiState.copy(lastSummaryByPairId = aggregatePairSummaries(events))
             }.stateIn(
                 scope = viewModelScope,
                 started = SharingStarted.WhileSubscribed(5_000),
@@ -210,6 +240,52 @@ class HomeViewModel
         }
 
         /**
+         * Result of a [syncAllNow] invocation, emitted via [syncAllResults] so the
+         * UI can surface a snackbar with synced/skipped counts after the user taps
+         * "Sync all now" or pulls-to-refresh.
+         *
+         * @param synced  Number of pairs that were enqueued for sync.
+         * @param skipped Number of pairs skipped because they require user action
+         *   (needs re-link or re-auth) or are already syncing.
+         */
+        data class SyncAllResult(val synced: Int, val skipped: Int)
+
+        private val _syncAllResults = MutableSharedFlow<SyncAllResult>(extraBufferCapacity = 1)
+
+        /**
+         * One-shot stream of [SyncAllResult]s, emitted whenever [syncAllNow]
+         * finishes enqueuing. The Pairs screen collects this and shows a snackbar.
+         */
+        val syncAllResults: SharedFlow<SyncAllResult> = _syncAllResults.asSharedFlow()
+
+        /**
+         * Enqueues a one-shot [SyncWorker] for every healthy pair currently in
+         * the UiState (Phase 5b — "Sync all now" + pull-to-refresh).
+         *
+         * Pairs are skipped when they require user intervention:
+         * - [SyncPair.needsReLink] is `true` (SAF folder access lost), or
+         * - [SyncPair.lastSyncResult] is `"NEEDS_REAUTH"` (token revoked).
+         * Pairs already in [UiState.syncingPairIds] are also skipped so a rapid
+         * pull-to-refresh does not stack duplicate one-shot jobs on top of a
+         * worker that WorkManager is about to coalesce away anyway.
+         *
+         * Emits a [SyncAllResult] on [syncAllResults] so the caller can render a
+         * "Started sync for N pair(s)" snackbar after the function returns. The
+         * same exponential-backoff policy as [syncNow] is applied so a transient
+         * failure for one pair backs off in line with the periodic schedule.
+         */
+        fun syncAllNow() {
+            val current = state.value
+            val (eligible, skipped) = partitionForSyncAll(current.pairs, current.syncingPairIds)
+            Timber.i(
+                "HomeViewModel.syncAllNow: enqueuing %d pair(s), skipping %d unhealthy/in-flight",
+                eligible.size, skipped,
+            )
+            eligible.forEach { syncNow(it) }
+            _syncAllResults.tryEmit(SyncAllResult(synced = eligible.size, skipped = skipped))
+        }
+
+        /**
          * Enqueues a one-shot [SyncWorker] for [pair]. Any in-flight one-shot run for
          * the same pair is kept so the user never interrupts an ongoing sync.
          *
@@ -276,6 +352,27 @@ class HomeViewModel
             }
         }
 
+        /**
+         * Pure helper that computes the [UiState.nextRunByPairId] map from the
+         * currently observed pairs and the global auto-sync flag. Extracted so it
+         * can be reused (and unit-tested) without spinning up the full StateFlow
+         * pipeline.
+         */
+        private fun computeNextRunMap(pairs: List<SyncPair>, globalAutoSyncEnabled: Boolean): Map<Long, Long> {
+            if (pairs.isEmpty()) return emptyMap()
+            val now = System.currentTimeMillis()
+            val out = LinkedHashMap<Long, Long>(pairs.size)
+            for (p in pairs) {
+                val next = SyncScheduler.estimateNextRunAtMs(
+                    pair = p,
+                    nowMs = now,
+                    globalAutoSyncEnabled = globalAutoSyncEnabled,
+                )
+                if (next != null) out[p.id] = next
+            }
+            return out
+        }
+
         companion object {
             /**
              * Length of the undo grace window for soft-deleted sync pairs, in
@@ -284,5 +381,41 @@ class HomeViewModel
              * but the user still has time to react.
              */
             const val UNDO_WINDOW_MS: Long = 5_000L
+
+            /**
+             * Upper bound on the number of recent events streamed for computing
+             * [UiState.lastSummaryByPairId]. The newest terminal event per pair is
+             * picked from the head of this list, so a few hundred rows is plenty
+             * even for users with many pairs and noisy retries.
+             */
+            const val SUMMARY_EVENT_LIMIT: Int = 200
+
+            /**
+             * Pure-Kotlin filter used by [syncAllNow] (Phase 5b). Returns the
+             * pairs that should be enqueued as the first component, and the number
+             * that were skipped because they require user intervention or are
+             * already syncing as the second.
+             *
+             * Exposed in the companion object so unit tests can exercise the
+             * filtering rules without touching WorkManager.
+             */
+            fun partitionForSyncAll(
+                pairs: List<SyncPair>,
+                syncingPairIds: Set<Long>,
+            ): Pair<List<SyncPair>, Int> {
+                if (pairs.isEmpty()) return emptyList<SyncPair>() to 0
+                val eligible = ArrayList<SyncPair>(pairs.size)
+                var skipped = 0
+                for (p in pairs) {
+                    val unhealthy = p.needsReLink || p.lastSyncResult == "NEEDS_REAUTH"
+                    val inFlight = p.id in syncingPairIds
+                    if (unhealthy || inFlight) {
+                        skipped++
+                    } else {
+                        eligible.add(p)
+                    }
+                }
+                return eligible to skipped
+            }
         }
     }

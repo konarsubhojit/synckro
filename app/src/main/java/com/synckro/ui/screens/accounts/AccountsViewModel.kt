@@ -108,6 +108,13 @@ class AccountsViewModel
              * confirmation (i.e. the account currently owns one or more sync pairs).
              */
             val pendingDisconnect: PendingDisconnect? = null,
+            /**
+             * Phase 5d: the account id (if any) that should be visually highlighted
+             * and brought into view after a deep-link from the pair card or the
+             * reauth notification. Cleared automatically by [setHighlight] after
+             * [HIGHLIGHT_DURATION_MS] so the highlight fades on its own.
+             */
+            val highlightedAccountId: String? = null,
         )
 
         private val _state = MutableStateFlow(UiState())
@@ -115,6 +122,9 @@ class AccountsViewModel
 
         /** Latest snapshot of accounts that have a pair stuck in NEEDS_REAUTH. */
         private var accountsNeedingReauth: Set<AccountKey> = emptySet()
+
+        /** Tracks the pending auto-clear timer for the active highlight, if any. */
+        private var clearHighlightJob: kotlinx.coroutines.Job? = null
 
         init {
             // Observe re-auth signals from sync_pair so the CTA appears as soon as
@@ -181,7 +191,40 @@ class AccountsViewModel
                             needsReauth = manager.providerType in flaggedProviders,
                         )
                     }
-                _state.value = UiState(rows = rows, isLoading = false)
+                _state.update { cur ->
+                    // Preserve highlightedAccountId across refresh — Phase 5d deep-links
+                    // can race against reconcile. All other fields default-reset to
+                    // their UiState() initial values, matching the previous behaviour.
+                    UiState(
+                        rows = rows,
+                        isLoading = false,
+                        highlightedAccountId = cur.highlightedAccountId,
+                    )
+                }
+            }
+        }
+
+        /**
+         * Phase 5d: marks [accountId] as the row to briefly highlight after a deep-link
+         * (from the pair card or the reauth notification). The flag is cleared
+         * automatically after [HIGHLIGHT_DURATION_MS]; calling again with a different
+         * id cancels the previous timer and restarts the window. Passing `null`
+         * clears the highlight immediately.
+         */
+        fun setHighlight(accountId: String?) {
+            clearHighlightJob?.cancel()
+            clearHighlightJob = null
+            _state.update { it.copy(highlightedAccountId = accountId) }
+            if (accountId != null) {
+                clearHighlightJob = viewModelScope.launch {
+                    kotlinx.coroutines.delay(HIGHLIGHT_DURATION_MS)
+                    _state.update {
+                        // Only clear if the same id is still highlighted — guards against
+                        // races where the user manually triggered a new highlight.
+                        if (it.highlightedAccountId == accountId) it.copy(highlightedAccountId = null) else it
+                    }
+                    clearHighlightJob = null
+                }
             }
         }
 
@@ -587,5 +630,14 @@ class AccountsViewModel
             _state.update { cur ->
                 cur.copy(rows = cur.rows.map { if (it.providerKey == providerKey) it.copy(isBusy = busy) else it })
             }
+        }
+
+        companion object {
+            /**
+             * Phase 5d: how long an account row stays visually highlighted after a
+             * deep-link from the pair card / reauth notification before the highlight
+             * auto-fades.
+             */
+            const val HIGHLIGHT_DURATION_MS: Long = 2_000L
         }
     }

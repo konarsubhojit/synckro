@@ -724,5 +724,41 @@ class SyncScheduler(
 
     companion object {
         const val MIN_PERIODIC_INTERVAL_MINUTES: Long = 15
+
+        /**
+         * Pure-Kotlin helper that estimates the wall-clock time of the next periodic
+         * sync run for [pair], given the current time [nowMs].
+         *
+         * Returns `null` when no auto-sync is expected:
+         * - [SyncPair.autoSyncEnabled] is false
+         * - [globalAutoSyncEnabled] is false
+         * - the pair is in a terminal failure state ("NEEDS_REAUTH" / "NEEDS_RELINK")
+         *
+         * When the pair has never synced (`lastSyncAtMs == null`) the next-run time is
+         * reported as [nowMs] so the UI can say "due soon".
+         *
+         * The interval is clamped to [MIN_PERIODIC_INTERVAL_MINUTES] to match the actual
+         * WorkManager schedule. No Android types are referenced so this helper is
+         * unit-testable in pure-JVM tests.
+         *
+         * @param pair                  The sync pair whose next run should be estimated.
+         * @param nowMs                 Current epoch-milliseconds (defaults to [System.currentTimeMillis]).
+         * @param globalAutoSyncEnabled Current value of the global auto-sync setting.
+         * @return Epoch-milliseconds of the next expected run, or `null` when auto-sync
+         *   is paused for this pair.
+         */
+        fun estimateNextRunAtMs(
+            pair: SyncPair,
+            nowMs: Long = System.currentTimeMillis(),
+            globalAutoSyncEnabled: Boolean = true,
+        ): Long? {
+            if (!globalAutoSyncEnabled || !pair.autoSyncEnabled) return null
+            // Terminal states cancel the periodic schedule, so the user shouldn't see
+            // a fictitious countdown that will never elapse.
+            if (pair.lastSyncResult == "NEEDS_REAUTH" || pair.lastSyncResult == "NEEDS_RELINK") return null
+            val lastSync = pair.lastSyncAtMs ?: return nowMs
+            val intervalMin = pair.scheduleIntervalMinutes.coerceAtLeast(MIN_PERIODIC_INTERVAL_MINUTES)
+            return lastSync + intervalMin * 60_000L
+        }
     }
 }

@@ -58,6 +58,13 @@ object ReauthNotificationHelper {
      */
     const val ACTION_OPEN_ACCOUNTS = "com.synckro.ACTION_OPEN_ACCOUNTS"
 
+    /**
+     * Optional intent extra carrying the account id whose row should be highlighted on
+     * arrival at the Accounts screen (Phase 5d reauth deep-link). Absent when the
+     * notification doesn't have a specific account associated (e.g. the group summary).
+     */
+    const val EXTRA_ACCOUNT_ID = "com.synckro.EXTRA_ACCOUNT_ID"
+
     /** Notification channel ID for re-auth alerts. Registered in [com.synckro.SynckroApp]. */
     const val REAUTH_CHANNEL_ID = "synckro_reauth"
 
@@ -113,7 +120,7 @@ object ReauthNotificationHelper {
         val providerName = PROVIDER_DISPLAY_NAMES[pair.provider] ?: pair.provider.name
         val notificationId = notificationIdForAccount(pair.accountId ?: pair.provider.name)
 
-        val pendingIntent = buildOpenAccountsPendingIntent(context, notificationId)
+        val pendingIntent = buildOpenAccountsPendingIntent(context, notificationId, pair.accountId)
 
         val notification =
             NotificationCompat
@@ -166,11 +173,15 @@ object ReauthNotificationHelper {
     private fun buildOpenAccountsPendingIntent(
         context: Context,
         requestCode: Int,
+        accountId: String? = null,
     ): PendingIntent {
         val intent =
             Intent(context, MainActivity::class.java).apply {
                 action = ACTION_OPEN_ACCOUNTS
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                if (accountId != null) {
+                    putExtra(EXTRA_ACCOUNT_ID, accountId)
+                }
             }
         val flags =
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
