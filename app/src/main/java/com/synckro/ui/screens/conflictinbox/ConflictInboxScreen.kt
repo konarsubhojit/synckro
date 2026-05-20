@@ -1,8 +1,12 @@
 package com.synckro.ui.screens.conflictinbox
 
+import android.net.Uri
+import android.provider.DocumentsContract
 import android.text.format.DateUtils
 import android.text.format.Formatter
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -13,6 +17,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.InsertDriveFile
@@ -38,16 +43,26 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import coil.ImageLoader
+import coil.compose.AsyncImage
+import coil.compose.AsyncImagePainter
+import coil.memory.MemoryCache
+import coil.request.ImageRequest
 import com.synckro.R
 import com.synckro.domain.model.ConflictRecord
 import com.synckro.ui.components.EmptyState
@@ -160,12 +175,30 @@ private fun ConflictCard(
     onKeepLocal: () -> Unit,
     onKeepRemote: () -> Unit,
     onKeepBoth: () -> Unit,
+    imageLoader: ImageLoader = ImageLoader(LocalContext.current),
 ) {
     val ctx = LocalContext.current
     val fmt = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT)
     val resolved = conflict.resolution != null
     val fileTypeLabel = stringResource(fileTypeLabelRes(conflict.fileType))
     val fileTypeIcon = fileTypeIcon(conflict.fileType)
+
+    // Build the local thumbnail URI from the SAF tree URI + document ID.
+    // This is done in the UI layer so the ViewModel stays platform-agnostic.
+    val localThumbnailUri =
+        remember(conflict.localDocumentId, conflict.localTreeUri) {
+            if (conflict.localDocumentId != null && conflict.localTreeUri != null) {
+                runCatching {
+                    DocumentsContract
+                        .buildDocumentUriUsingTree(
+                            Uri.parse(conflict.localTreeUri),
+                            conflict.localDocumentId,
+                        ).toString()
+                }.getOrNull()
+            } else {
+                null
+            }
+        }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -186,11 +219,20 @@ private fun ConflictCard(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(
-                    imageVector = fileTypeIcon,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                if (localThumbnailUri != null) {
+                    ConflictThumbnail(
+                        thumbnailUri = localThumbnailUri,
+                        fallbackIcon = fileTypeIcon,
+                        imageLoader = imageLoader,
+                        contentDescription = null,
+                    )
+                } else {
+                    Icon(
+                        imageVector = fileTypeIcon,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 Text(
                     text = conflict.relativePath,
                     style = MaterialTheme.typography.titleSmall,
@@ -203,7 +245,7 @@ private fun ConflictCard(
 
             HorizontalDivider()
 
-            // File metadata for both sides
+            // File metadata for both sides, with thumbnails for image conflicts
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -214,6 +256,14 @@ private fun ConflictCard(
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                    if (localThumbnailUri != null) {
+                        ConflictThumbnail(
+                            thumbnailUri = localThumbnailUri,
+                            fallbackIcon = fileTypeIcon,
+                            imageLoader = imageLoader,
+                            contentDescription = stringResource(R.string.conflict_inbox_local_label),
+                        )
+                    }
                     Text(
                         text = stringResource(R.string.conflict_inbox_file_type_value, fileTypeLabel),
                         style = MaterialTheme.typography.bodySmall,
@@ -246,6 +296,14 @@ private fun ConflictCard(
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                    if (conflict.remoteThumbnailUrl != null) {
+                        ConflictThumbnail(
+                            thumbnailUri = conflict.remoteThumbnailUrl,
+                            fallbackIcon = fileTypeIcon,
+                            imageLoader = imageLoader,
+                            contentDescription = stringResource(R.string.conflict_inbox_remote_label),
+                        )
+                    }
                     Text(
                         text = stringResource(R.string.conflict_inbox_file_type_value, fileTypeLabel),
                         style = MaterialTheme.typography.bodySmall,
@@ -402,3 +460,124 @@ private fun fileTypeIcon(fileTypeIcon: ConflictInboxViewModel.FileTypeIcon): Ima
         ConflictInboxViewModel.FileTypeIcon.DOCUMENT -> Icons.Default.Description
         ConflictInboxViewModel.FileTypeIcon.GENERIC -> Icons.AutoMirrored.Filled.InsertDriveFile
     }
+
+/**
+ * Displays a 48×48dp thumbnail for an image conflict side.
+ *
+ * Attempts to load [thumbnailUri] via Coil. On any load failure (network error,
+ * permission denied, unsupported format) the composable silently falls back to
+ * the material [fallbackIcon] so the card never shows an empty space.
+ *
+ * @param thumbnailUri   `content://` SAF URI or HTTP(S) URL to load.
+ * @param fallbackIcon   Icon shown while loading or on failure (the file-type icon).
+ * @param imageLoader    Coil [ImageLoader] to use; defaults to the app-singleton loader.
+ *                       Pass a stub loader in Compose previews and screenshot tests.
+ * @param contentDescription Accessibility description for the image; null if decorative.
+ */
+@Composable
+private fun ConflictThumbnail(
+    thumbnailUri: String,
+    fallbackIcon: ImageVector,
+    imageLoader: ImageLoader,
+    contentDescription: String?,
+    modifier: Modifier = Modifier,
+) {
+    val ctx = LocalContext.current
+    val size = 48.dp
+    val request =
+        ImageRequest
+            .Builder(ctx)
+            .data(thumbnailUri)
+            .crossfade(true)
+            .size(coil.size.Size(128, 128))
+            .build()
+
+    // Track whether the most recent load attempt failed so we can show the
+    // fallback icon without leaving an empty/blank space in the card.
+    val loadFailed = remember { mutableStateOf(false) }
+
+    Box(
+        modifier =
+            modifier
+                .size(size)
+                .clip(RoundedCornerShape(6.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant),
+        contentAlignment = Alignment.Center,
+    ) {
+        AsyncImage(
+            model = request,
+            imageLoader = imageLoader,
+            contentDescription = contentDescription,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.matchParentSize(),
+            onState = { state ->
+                loadFailed.value = state is AsyncImagePainter.State.Error
+            },
+        )
+        // Show the fallback icon when the image is unavailable or fails to load.
+        if (loadFailed.value) {
+            Icon(
+                imageVector = fallbackIcon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(24.dp),
+            )
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Previews
+// ---------------------------------------------------------------------------
+
+/**
+ * Compose preview for a conflict card that has image thumbnails.
+ *
+ * Uses [coil.test.FakeImageLoader] would be ideal, but since coil-test is not
+ * on the classpath we use a plain [ImageLoader] that always fails to load
+ * (because there is no real URI in a preview context). The fallback icon is
+ * shown in that case, which is exactly the behaviour we want to verify.
+ */
+@Preview(showBackground = true, widthDp = 360)
+@Composable
+private fun ConflictCardImagePreview() {
+    val ctx = LocalContext.current
+    val stubImageLoader =
+        ImageLoader
+            .Builder(ctx)
+            .memoryCache {
+                MemoryCache
+                    .Builder(ctx)
+                    .maxSizePercent(0.02)
+                    .build()
+            }
+            .build()
+
+    val imageConflict =
+        ConflictInboxViewModel.ConflictRow(
+            id = 1L,
+            pairId = 1L,
+            relativePath = "Photos/vacation.jpg",
+            localLastModifiedMs = System.currentTimeMillis() - 3_600_000L,
+            remoteLastModifiedMs = System.currentTimeMillis() - 7_200_000L,
+            localSizeBytes = 2_048_576L,
+            remoteSizeBytes = 3_145_728L,
+            detectedAtMs = System.currentTimeMillis() - 1_800_000L,
+            resolution = null,
+            remoteAccountEmail = "user@example.com",
+            fileType = ConflictInboxViewModel.FileTypeIcon.IMAGE,
+            localDocumentId = "primary:Photos/vacation.jpg",
+            localTreeUri = "content://com.android.externalstorage.documents/tree/primary%3APhotos",
+            remoteThumbnailUrl = "https://example.com/thumbnail.jpg",
+        )
+
+    MaterialTheme {
+        ConflictCard(
+            conflict = imageConflict,
+            onKeepLocal = {},
+            onKeepRemote = {},
+            onKeepBoth = {},
+            imageLoader = stubImageLoader,
+        )
+    }
+}

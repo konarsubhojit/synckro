@@ -41,6 +41,26 @@ class ConflictInboxViewModel
             val resolution: String?,
             val remoteAccountEmail: String?,
             val fileType: FileTypeIcon,
+            /**
+             * SAF document ID of the local copy, non-null only for
+             * [FileTypeIcon.IMAGE] conflicts when the file-index entry has been
+             * populated by the local scanner.  The Screen combines this with
+             * [localTreeUri] to build the full `content://` thumbnail URI.
+             */
+            val localDocumentId: String? = null,
+            /**
+             * SAF tree URI of the sync-pair root, used together with
+             * [localDocumentId] to build the thumbnail URI in the Screen.
+             * Non-null when [localDocumentId] is non-null.
+             */
+            val localTreeUri: String? = null,
+            /**
+             * Provider-supplied thumbnail URL for the remote copy (e.g. Google Drive
+             * `thumbnailLink` or OneDrive pre-signed download URL). Non-null only when
+             * [com.synckro.data.local.entity.FileIndexEntity.remoteThumbnailUrl] is set and
+             * [fileType] == [FileTypeIcon.IMAGE].
+             */
+            val remoteThumbnailUrl: String? = null,
         )
 
         enum class FileTypeIcon {
@@ -109,6 +129,17 @@ class ConflictInboxViewModel
                 val index = indexByPair[conflict.pairId]?.get(conflict.relativePath)
                 val accountId = pairById[conflict.pairId]?.accountId
                 val remoteEmail = accountId?.let { id -> accountsById[id]?.email }
+                val fileType = fileTypeIconForPath(conflict.relativePath)
+                val (localDocumentId, localTreeUri) =
+                    if (fileType == FileTypeIcon.IMAGE) {
+                        val docId = index?.localDocumentId
+                        val treeUri = if (docId != null) pairById[conflict.pairId]?.localTreeUri else null
+                        docId to treeUri
+                    } else {
+                        null to null
+                    }
+                val remoteThumbnailUrl =
+                    if (fileType == FileTypeIcon.IMAGE) index?.remoteThumbnailUrl else null
                 ConflictRow(
                     id = conflict.id,
                     pairId = conflict.pairId,
@@ -120,7 +151,10 @@ class ConflictInboxViewModel
                     detectedAtMs = conflict.detectedAtMs,
                     resolution = conflict.resolution,
                     remoteAccountEmail = remoteEmail,
-                    fileType = fileTypeIconForPath(conflict.relativePath),
+                    fileType = fileType,
+                    localDocumentId = localDocumentId,
+                    localTreeUri = localTreeUri,
+                    remoteThumbnailUrl = remoteThumbnailUrl,
                 )
             }
         }

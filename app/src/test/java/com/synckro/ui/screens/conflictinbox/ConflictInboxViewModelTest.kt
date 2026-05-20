@@ -114,6 +114,131 @@ class ConflictInboxViewModelTest {
             assertEquals(20_000L, row.remoteLastModifiedMs)
             assertEquals("docs@example.com", row.remoteAccountEmail)
             assertEquals(ConflictInboxViewModel.FileTypeIcon.DOCUMENT, row.fileType)
+            // PDF is not an image type: thumbnail fields should be null
+            assertEquals(null, row.localDocumentId)
+            assertEquals(null, row.localTreeUri)
+            assertEquals(null, row.remoteThumbnailUrl)
+
+            collectJob.cancel()
+        }
+
+    @Test
+    fun `image conflict exposes local thumbnail uri when localDocumentId is available`() =
+        runTest {
+            val conflicts =
+                MutableStateFlow(
+                    listOf(
+                        ConflictRecord(
+                            id = 8L,
+                            pairId = 99L,
+                            relativePath = "photos/sunset.jpg",
+                            localLastModifiedMs = 1_000L,
+                            remoteLastModifiedMs = 2_000L,
+                            detectedAtMs = 3_000L,
+                        ),
+                    ),
+                )
+            every { conflictRepository.observeUnresolved() } returns conflicts
+            coEvery { fileIndexDao.getForPair(99L) } returns
+                listOf(
+                    FileIndexEntity(
+                        pairId = 99L,
+                        relativePath = "photos/sunset.jpg",
+                        localSize = 512_000L,
+                        localLastModifiedMs = 1_000L,
+                        localHash = null,
+                        remoteId = "drive-img-1",
+                        remoteETag = null,
+                        remoteSize = 520_000L,
+                        remoteLastModifiedMs = 2_000L,
+                        mimeType = "image/jpeg",
+                        localDocumentId = "primary:Photos/sunset.jpg",
+                        remoteThumbnailUrl = "https://example.com/thumb.jpg",
+                    ),
+                )
+            coEvery { syncPairRepository.getById(99L) } returns
+                SyncPair(
+                    id = 99L,
+                    displayName = "Photos",
+                    localTreeUri = "content://com.android.externalstorage.documents/tree/primary%3APhotos",
+                    provider = CloudProviderType.GOOGLE_DRIVE,
+                    accountId = "acc-2",
+                    remoteFolderId = "root",
+                )
+            coEvery { accountRepository.getAll() } returns emptyList()
+
+            val vm = createVm()
+            val collectJob = launch { vm.state.collect {} }
+            advanceUntilIdle()
+
+            val row = vm.state.value.conflicts.single()
+            assertEquals(ConflictInboxViewModel.FileTypeIcon.IMAGE, row.fileType)
+            // localDocumentId and localTreeUri should be populated for image types
+            assertEquals("primary:Photos/sunset.jpg", row.localDocumentId)
+            assertEquals(
+                "content://com.android.externalstorage.documents/tree/primary%3APhotos",
+                row.localTreeUri,
+            )
+            // remoteThumbnailUrl should be passed through unchanged
+            assertEquals("https://example.com/thumb.jpg", row.remoteThumbnailUrl)
+
+            collectJob.cancel()
+        }
+
+    @Test
+    fun `image conflict without localDocumentId has null localThumbnailUri`() =
+        runTest {
+            val conflicts =
+                MutableStateFlow(
+                    listOf(
+                        ConflictRecord(
+                            id = 9L,
+                            pairId = 77L,
+                            relativePath = "images/photo.png",
+                            localLastModifiedMs = 1_000L,
+                            remoteLastModifiedMs = 2_000L,
+                            detectedAtMs = 3_000L,
+                        ),
+                    ),
+                )
+            every { conflictRepository.observeUnresolved() } returns conflicts
+            coEvery { fileIndexDao.getForPair(77L) } returns
+                listOf(
+                    FileIndexEntity(
+                        pairId = 77L,
+                        relativePath = "images/photo.png",
+                        localSize = 100_000L,
+                        localLastModifiedMs = 1_000L,
+                        localHash = null,
+                        remoteId = "remote-img",
+                        remoteETag = null,
+                        remoteSize = null,
+                        remoteLastModifiedMs = null,
+                        mimeType = "image/png",
+                        localDocumentId = null,
+                        remoteThumbnailUrl = null,
+                    ),
+                )
+            coEvery { syncPairRepository.getById(77L) } returns
+                SyncPair(
+                    id = 77L,
+                    displayName = "Images",
+                    localTreeUri = "content://tree/images",
+                    provider = CloudProviderType.ONEDRIVE,
+                    accountId = "acc-3",
+                    remoteFolderId = "root",
+                )
+            coEvery { accountRepository.getAll() } returns emptyList()
+
+            val vm = createVm()
+            val collectJob = launch { vm.state.collect {} }
+            advanceUntilIdle()
+
+            val row = vm.state.value.conflicts.single()
+            assertEquals(ConflictInboxViewModel.FileTypeIcon.IMAGE, row.fileType)
+            assertEquals(null, row.localDocumentId)
+            assertEquals(null, row.localTreeUri)
+            assertEquals(null, row.remoteThumbnailUrl)
 
             collectJob.cancel()
         }
