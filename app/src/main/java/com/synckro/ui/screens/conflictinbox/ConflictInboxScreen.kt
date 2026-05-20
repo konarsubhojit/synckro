@@ -1,5 +1,7 @@
 package com.synckro.ui.screens.conflictinbox
 
+import android.text.format.DateUtils
+import android.text.format.Formatter
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -13,10 +15,14 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.InsertDriveFile
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Inbox
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -35,6 +41,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -149,13 +156,16 @@ fun ConflictInboxScreen(
 
 @Composable
 private fun ConflictCard(
-    conflict: ConflictRecord,
+    conflict: ConflictInboxViewModel.ConflictRow,
     onKeepLocal: () -> Unit,
     onKeepRemote: () -> Unit,
     onKeepBoth: () -> Unit,
 ) {
+    val ctx = LocalContext.current
     val fmt = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT)
     val resolved = conflict.resolution != null
+    val fileTypeLabel = stringResource(fileTypeLabelRes(conflict.fileType))
+    val fileTypeIcon = fileTypeIcon(conflict.fileType)
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -171,17 +181,29 @@ private fun ConflictCard(
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             // File path
-            Text(
-                text = conflict.relativePath,
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    imageVector = fileTypeIcon,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    text = conflict.relativePath,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+            }
 
             HorizontalDivider()
 
-            // Timestamps for both sides
+            // File metadata for both sides
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -193,7 +215,28 @@ private fun ConflictCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Text(
-                        text = fmt.format(Date(conflict.localLastModifiedMs)),
+                        text = stringResource(R.string.conflict_inbox_file_type_value, fileTypeLabel),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Text(
+                        text =
+                            stringResource(
+                                R.string.conflict_inbox_file_size_value,
+                                conflict.localSizeBytes?.let { Formatter.formatShortFileSize(ctx, it) }
+                                    ?: stringResource(R.string.conflict_inbox_unknown_value),
+                            ),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Text(
+                        text =
+                            stringResource(
+                                R.string.conflict_inbox_file_modified_value,
+                                DateUtils.getRelativeTimeSpanString(
+                                    conflict.localLastModifiedMs,
+                                    System.currentTimeMillis(),
+                                    DateUtils.MINUTE_IN_MILLIS,
+                                ),
+                            ),
                         style = MaterialTheme.typography.bodySmall,
                     )
                 }
@@ -204,7 +247,36 @@ private fun ConflictCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Text(
-                        text = fmt.format(Date(conflict.remoteLastModifiedMs)),
+                        text = stringResource(R.string.conflict_inbox_file_type_value, fileTypeLabel),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Text(
+                        text =
+                            stringResource(
+                                R.string.conflict_inbox_file_size_value,
+                                conflict.remoteSizeBytes?.let { Formatter.formatShortFileSize(ctx, it) }
+                                    ?: stringResource(R.string.conflict_inbox_unknown_value),
+                            ),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Text(
+                        text =
+                            stringResource(
+                                R.string.conflict_inbox_file_modified_value,
+                                DateUtils.getRelativeTimeSpanString(
+                                    conflict.remoteLastModifiedMs,
+                                    System.currentTimeMillis(),
+                                    DateUtils.MINUTE_IN_MILLIS,
+                                ),
+                            ),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Text(
+                        text =
+                            stringResource(
+                                R.string.conflict_inbox_remote_account_value,
+                                conflict.remoteAccountEmail ?: stringResource(R.string.conflict_inbox_unknown_value),
+                            ),
                         style = MaterialTheme.typography.bodySmall,
                     )
                 }
@@ -315,4 +387,18 @@ private fun resolutionLabel(resolution: String): String =
         else -> resolution
     }
 
+private fun fileTypeLabelRes(fileTypeIcon: ConflictInboxViewModel.FileTypeIcon): Int =
+    when (fileTypeIcon) {
+        ConflictInboxViewModel.FileTypeIcon.FOLDER -> R.string.conflict_inbox_file_type_folder
+        ConflictInboxViewModel.FileTypeIcon.IMAGE -> R.string.conflict_inbox_file_type_image
+        ConflictInboxViewModel.FileTypeIcon.DOCUMENT -> R.string.conflict_inbox_file_type_document
+        ConflictInboxViewModel.FileTypeIcon.GENERIC -> R.string.conflict_inbox_file_type_generic
+    }
 
+private fun fileTypeIcon(fileTypeIcon: ConflictInboxViewModel.FileTypeIcon): ImageVector =
+    when (fileTypeIcon) {
+        ConflictInboxViewModel.FileTypeIcon.FOLDER -> Icons.Default.Folder
+        ConflictInboxViewModel.FileTypeIcon.IMAGE -> Icons.Default.Image
+        ConflictInboxViewModel.FileTypeIcon.DOCUMENT -> Icons.Default.Description
+        ConflictInboxViewModel.FileTypeIcon.GENERIC -> Icons.AutoMirrored.Filled.InsertDriveFile
+    }
