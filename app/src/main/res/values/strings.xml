@@ -217,6 +217,15 @@
     <string name="conflict_inbox_detected_at">Detected: %1$s</string>
     <string name="conflict_inbox_timestamps">Local: %1$s · Remote: %2$s</string>
     <string name="conflict_inbox_pending_resolution">Queued: %1$s (will apply on next sync)</string>
+    <string name="conflict_inbox_file_type_value">Type: %1$s</string>
+    <string name="conflict_inbox_file_size_value">Size: %1$s</string>
+    <string name="conflict_inbox_file_modified_value">Modified: %1$s</string>
+    <string name="conflict_inbox_remote_account_value">Account: %1$s</string>
+    <string name="conflict_inbox_unknown_value">Unknown</string>
+    <string name="conflict_inbox_file_type_folder">Folder</string>
+    <string name="conflict_inbox_file_type_image">Image</string>
+    <string name="conflict_inbox_file_type_document">Document</string>
+    <string name="conflict_inbox_file_type_generic">File</string>
 
     <!-- Sync notification (shown when a transfer runs as a foreground service) -->
     <string name="sync_channel_name">Sync progress</string>
