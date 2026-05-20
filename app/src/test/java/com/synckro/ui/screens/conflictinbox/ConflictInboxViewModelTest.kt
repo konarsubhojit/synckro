@@ -90,12 +90,14 @@ class ConflictInboxViewModelTest {
                     accountId = "acc-1",
                     remoteFolderId = "root",
                 )
-            coEvery { accountRepository.getById("acc-1") } returns
-                Account(
-                    id = "acc-1",
-                    provider = CloudProviderType.GOOGLE_DRIVE,
-                    displayName = "Docs account",
-                    email = "docs@example.com",
+            coEvery { accountRepository.getAll() } returns
+                listOf(
+                    Account(
+                        id = "acc-1",
+                        provider = CloudProviderType.GOOGLE_DRIVE,
+                        displayName = "Docs account",
+                        email = "docs@example.com",
+                    ),
                 )
 
             val vm = createVm()
@@ -120,6 +122,7 @@ class ConflictInboxViewModelTest {
     fun `fileTypeIconForPath maps extensions into expected icon groups`() {
         assertEquals(ConflictInboxViewModel.FileTypeIcon.IMAGE, fileTypeIconForPath("images/photo.JPG"))
         assertEquals(ConflictInboxViewModel.FileTypeIcon.DOCUMENT, fileTypeIconForPath("notes/readme.md"))
+        assertEquals(ConflictInboxViewModel.FileTypeIcon.DOCUMENT, fileTypeIconForPath("README"))
         assertEquals(ConflictInboxViewModel.FileTypeIcon.FOLDER, fileTypeIconForPath("photos/"))
         assertEquals(ConflictInboxViewModel.FileTypeIcon.GENERIC, fileTypeIconForPath("archive.bin"))
     }

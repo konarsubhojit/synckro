@@ -103,19 +103,12 @@ class ConflictInboxViewModel
                         .associateBy { it.relativePath }
                 }
             val pairById = pairIds.associateWith { pairId -> syncPairRepository.getById(pairId) }
-            val accountEmailById = mutableMapOf<String, String?>()
+            val accountsById = accountRepository.getAll().associateBy { it.id }
 
             return conflicts.map { conflict ->
                 val index = indexByPair[conflict.pairId]?.get(conflict.relativePath)
                 val accountId = pairById[conflict.pairId]?.accountId
-                val remoteEmail =
-                    accountId?.let { id ->
-                        if (accountEmailById.containsKey(id)) {
-                            accountEmailById[id]
-                        } else {
-                            accountRepository.getById(id)?.email.also { accountEmailById[id] = it }
-                        }
-                    }
+                val remoteEmail = accountId?.let { id -> accountsById[id]?.email }
                 ConflictRow(
                     id = conflict.id,
                     pairId = conflict.pairId,
@@ -138,11 +131,15 @@ internal fun fileTypeIconForPath(relativePath: String): ConflictInboxViewModel.F
     if (trimmedPath.endsWith("/")) {
         return ConflictInboxViewModel.FileTypeIcon.FOLDER
     }
-    val extension = trimmedPath.substringAfterLast('.', "").lowercase()
+    val fileNameSegment = trimmedPath.substringAfterLast('/').trim()
+    val extension = fileNameSegment.substringAfterLast('.', "").lowercase()
     if (extension in IMAGE_EXTENSIONS) {
         return ConflictInboxViewModel.FileTypeIcon.IMAGE
     }
     if (extension in DOCUMENT_EXTENSIONS) {
+        return ConflictInboxViewModel.FileTypeIcon.DOCUMENT
+    }
+    if (extension.isEmpty() && fileNameSegment.lowercase() in NO_EXTENSION_DOCUMENT_NAMES) {
         return ConflictInboxViewModel.FileTypeIcon.DOCUMENT
     }
     return ConflictInboxViewModel.FileTypeIcon.GENERIC
@@ -165,3 +162,4 @@ private val DOCUMENT_EXTENSIONS =
         "rtf",
         "csv",
     )
+private val NO_EXTENSION_DOCUMENT_NAMES = setOf("readme", "license", "changelog", "authors")

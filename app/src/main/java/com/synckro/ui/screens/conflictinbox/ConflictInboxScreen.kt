@@ -49,6 +49,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.synckro.R
+import com.synckro.domain.model.ConflictRecord
 import com.synckro.ui.components.EmptyState
 import com.synckro.ui.components.LoadingState
 import java.text.DateFormat
@@ -380,9 +381,9 @@ private fun ConflictActionButton(
 @Composable
 private fun resolutionLabel(resolution: String): String =
     when (resolution) {
-        com.synckro.domain.model.ConflictRecord.RESOLUTION_KEEP_LOCAL -> stringResource(R.string.conflict_inbox_keep_local)
-        com.synckro.domain.model.ConflictRecord.RESOLUTION_KEEP_REMOTE -> stringResource(R.string.conflict_inbox_keep_remote)
-        com.synckro.domain.model.ConflictRecord.RESOLUTION_KEEP_BOTH -> stringResource(R.string.conflict_inbox_keep_both)
+        ConflictRecord.RESOLUTION_KEEP_LOCAL -> stringResource(R.string.conflict_inbox_keep_local)
+        ConflictRecord.RESOLUTION_KEEP_REMOTE -> stringResource(R.string.conflict_inbox_keep_remote)
+        ConflictRecord.RESOLUTION_KEEP_BOTH -> stringResource(R.string.conflict_inbox_keep_both)
         else -> resolution
     }
 
