@@ -191,6 +191,8 @@ class LocalFolderScannerImpl internal constructor(
                                     remoteSize = existingEntry?.remoteSize,
                                     remoteLastModifiedMs = existingEntry?.remoteLastModifiedMs,
                                     mimeType = child.mimeType,
+                                    localDocumentId = child.docId,
+                                    remoteThumbnailUrl = existingEntry?.remoteThumbnailUrl,
                                 )
 
                             scannedCount++

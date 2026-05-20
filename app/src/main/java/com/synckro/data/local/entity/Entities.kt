@@ -120,6 +120,19 @@ data class FileIndexEntity(
     val remoteLastModifiedMs: Long?,
     /** MIME type as reported by the SAF content provider. Null for directories or when unknown. */
     val mimeType: String? = null,
+    /**
+     * SAF document ID of the local file, used to build a `content://` URI for thumbnail loading.
+     * Populated by [com.synckro.data.scanner.LocalFolderScannerImpl] on each scan.
+     * Null for directories or when the entry has not been re-scanned since this column was added.
+     */
+    val localDocumentId: String? = null,
+    /**
+     * Provider-supplied thumbnail URL for the remote copy of this file.
+     * Google Drive: the `thumbnailLink` field from the Files API.
+     * OneDrive: the `@microsoft.graph.downloadUrl` pre-signed URL.
+     * Null until populated by the remote enumerator after a sync.
+     */
+    val remoteThumbnailUrl: String? = null,
 )
 
 /**

@@ -204,6 +204,7 @@ internal fun GraphDriveItem.toRemoteChange(pathCache: Map<String, String> = empt
             mtimeMs = lastModifiedDateTime?.let { parseIso8601(it) },
             etag = eTag?.trim('"'),
             isFolder = folder != null,
+            thumbnailUrl = if (folder == null) downloadUrl else null,
         )
     }
 }

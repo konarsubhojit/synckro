@@ -470,6 +470,9 @@ dependencies {
     // Logging
     implementation(libs.timber)
 
+    // Image loading
+    implementation(libs.coil.compose)
+
     // Macrobenchmark: baseline-profile precompilation support.
     implementation(libs.profileinstaller)
 

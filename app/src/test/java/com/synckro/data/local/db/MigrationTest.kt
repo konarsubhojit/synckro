@@ -440,6 +440,113 @@ class MigrationTest {
     }
 
     // -------------------------------------------------------------------------
+    // MIGRATION_12_13 – localDocumentId + remoteThumbnailUrl columns on file_index
+    // -------------------------------------------------------------------------
+
+    /** Brings [db] from the test bootstrap (v6) up to v12 in one shot. */
+    private fun migrateToV12(db: SupportSQLiteDatabase) {
+        migrateToV11(db)
+        SynckroDatabase.MIGRATION_11_12.migrate(db)
+    }
+
+    @Test
+    fun `MIGRATION_12_13 adds localDocumentId column to file_index`() {
+        migrateToV12(db)
+
+        SynckroDatabase.MIGRATION_12_13.migrate(db)
+
+        assertTrue(
+            "localDocumentId column must exist in file_index after migration",
+            "localDocumentId" in columnNames(db, "file_index"),
+        )
+    }
+
+    @Test
+    fun `MIGRATION_12_13 adds remoteThumbnailUrl column to file_index`() {
+        migrateToV12(db)
+
+        SynckroDatabase.MIGRATION_12_13.migrate(db)
+
+        assertTrue(
+            "remoteThumbnailUrl column must exist in file_index after migration",
+            "remoteThumbnailUrl" in columnNames(db, "file_index"),
+        )
+    }
+
+    @Test
+    fun `MIGRATION_12_13 existing file_index rows have null thumbnail columns after migration`() {
+        migrateToV12(db)
+
+        // Insert a sync_pair and a file_index entry at v12 (no thumbnail columns yet).
+        db.execSQL(
+            "INSERT INTO sync_pair (displayName, localTreeUri, provider, remoteFolderId, " +
+                "direction, conflictPolicy, includeGlobs, excludeGlobs, wifiOnly, " +
+                "requiresCharging, scheduleIntervalMinutes, autoSyncEnabled, " +
+                "excludeSubfolders, excludeEmptyFolders) VALUES " +
+                "('Test', 'content://tree/test', 'ONEDRIVE', 'root', " +
+                "'BIDIRECTIONAL', 'NEWEST_WINS', '', '', 1, 0, 60, 1, 0, 0)",
+        )
+        val pairId =
+            db.query("SELECT id FROM sync_pair LIMIT 1", emptyArray<Any?>()).use {
+                it.moveToFirst(); it.getLong(0)
+            }
+        db.execSQL(
+            "INSERT INTO file_index (pairId, relativePath, localSize, localLastModifiedMs) " +
+                "VALUES ($pairId, 'photo.jpg', 1024, 1000)",
+        )
+
+        SynckroDatabase.MIGRATION_12_13.migrate(db)
+
+        val cursor =
+            db.query(
+                "SELECT localDocumentId, remoteThumbnailUrl FROM file_index " +
+                    "WHERE pairId = $pairId AND relativePath = 'photo.jpg'",
+                emptyArray<Any?>(),
+            )
+        cursor.use {
+            assertTrue("Expected one row", it.moveToFirst())
+            assertTrue("localDocumentId should be NULL", it.isNull(0))
+            assertTrue("remoteThumbnailUrl should be NULL", it.isNull(1))
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Full migration chain v1 → v13
+    // -------------------------------------------------------------------------
+
+    @Test
+    fun `all migrations from v1 to v13 run without error`() {
+        val v1Db = openAtV1(context)
+        try {
+            SynckroDatabase.MIGRATION_1_2.migrate(v1Db)
+            SynckroDatabase.MIGRATION_2_3.migrate(v1Db)
+            SynckroDatabase.MIGRATION_3_4.migrate(v1Db)
+            SynckroDatabase.MIGRATION_4_5.migrate(v1Db)
+            SynckroDatabase.MIGRATION_5_6.migrate(v1Db)
+            SynckroDatabase.MIGRATION_6_7.migrate(v1Db)
+            SynckroDatabase.MIGRATION_7_8.migrate(v1Db)
+            SynckroDatabase.MIGRATION_8_9.migrate(v1Db)
+            SynckroDatabase.MIGRATION_9_10.migrate(v1Db)
+            SynckroDatabase.MIGRATION_10_11.migrate(v1Db)
+            SynckroDatabase.MIGRATION_11_12.migrate(v1Db)
+            SynckroDatabase.MIGRATION_12_13.migrate(v1Db)
+
+            val fileIndexCols = columnNames(v1Db, "file_index")
+            assertTrue(
+                "localDocumentId must exist in file_index after full v1→v13 migration chain",
+                "localDocumentId" in fileIndexCols,
+            )
+            assertTrue(
+                "remoteThumbnailUrl must exist in file_index after full v1→v13 migration chain",
+                "remoteThumbnailUrl" in fileIndexCols,
+            )
+        } finally {
+            v1Db.close()
+            context.deleteDatabase("${TEST_DB}_v1")
+        }
+    }
+
+    // -------------------------------------------------------------------------
     // Full migration chain v1 → v12
     // -------------------------------------------------------------------------
 

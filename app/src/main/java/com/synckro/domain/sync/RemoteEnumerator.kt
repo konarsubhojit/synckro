@@ -54,6 +54,16 @@ data class RemoteChange(
      * is enabled.
      */
     val isFolder: Boolean = false,
+    /**
+     * Provider-supplied thumbnail URL for this remote item. Stored as
+     * [com.synckro.data.local.entity.FileIndexEntity.remoteThumbnailUrl] so the
+     * conflict inbox can display a thumbnail without a separate network call.
+     *
+     * Google Drive: `thumbnailLink` from the Files API response.
+     * OneDrive: `@microsoft.graph.downloadUrl` pre-signed URL.
+     * Null for folders, deletions, or when the provider did not include a thumbnail.
+     */
+    val thumbnailUrl: String? = null,
 )
 
 /**
