@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -23,32 +24,37 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Clear
-import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.ErrorOutline
-import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.outlined.BugReport
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -65,6 +71,7 @@ import com.synckro.domain.model.SyncEventLevel
 import com.synckro.domain.model.SyncEventTag
 import com.synckro.ui.components.EmptyState
 import com.synckro.ui.theme.SynckroTheme
+import com.synckro.util.logging.LogExportConfig
 import com.synckro.util.logging.LogExportSink
 import com.synckro.util.logging.LogVisibilityConfig
 import androidx.compose.material.icons.filled.History
@@ -84,6 +91,7 @@ fun LogsScreen(
     viewModel: LogsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val exportConfig by viewModel.exportConfig.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -130,10 +138,6 @@ fun LogsScreen(
         }
     }
 
-    val buildLogText: () -> String = {
-        buildLogExportText(state.events, dateFormat)
-    }
-
     Scaffold(
         topBar = {
             TopAppBar(
@@ -154,6 +158,9 @@ fun LogsScreen(
                         dateFormat = dateFormat,
                         snackbarHostState = snackbarHostState,
                         copiedMsg = copiedMsg,
+                        exportConfig = exportConfig,
+                        onRedactPathsChanged = viewModel::setExportRedactPaths,
+                        onRedactAccountIdsChanged = viewModel::setExportRedactAccountIds,
                         onExport = { viewModel.exportLogs() },
                     )
                 },
@@ -198,17 +205,23 @@ fun LogsScreen(
  * can render the same actions in its own scaffold when the Logs tab is selected.
  */
 @Composable
+@OptIn(ExperimentalMaterial3Api::class)
 internal fun LogsActions(
     events: List<SyncEvent>,
     dateFormat: SimpleDateFormat,
     snackbarHostState: SnackbarHostState,
     copiedMsg: String,
+    exportConfig: LogExportConfig,
+    onRedactPathsChanged: (Boolean) -> Unit,
+    onRedactAccountIdsChanged: (Boolean) -> Unit,
     onExport: () -> Unit,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    IconButton(onClick = {
-        val text = buildLogExportText(events, dateFormat)
+    var showSheet by rememberSaveable { mutableStateOf(false) }
+
+    fun copyLogs() {
+        val text = buildLogExportText(events, dateFormat, exportConfig)
         val clipboard =
             context.getSystemService(Context.CLIPBOARD_SERVICE)
                 as ClipboardManager
@@ -216,14 +229,10 @@ internal fun LogsActions(
             ClipData.newPlainText(context.getString(R.string.logs_title), text),
         )
         scope.launch { snackbarHostState.showSnackbar(copiedMsg) }
-    }) {
-        Icon(
-            Icons.Default.ContentCopy,
-            contentDescription = stringResource(R.string.logs_copy),
-        )
     }
-    IconButton(onClick = {
-        val text = buildLogExportText(events, dateFormat)
+
+    fun shareLogsAsText() {
+        val text = buildLogExportText(events, dateFormat, exportConfig)
         val intent =
             Intent(Intent.ACTION_SEND).apply {
                 type = "text/plain"
@@ -236,16 +245,88 @@ internal fun LogsActions(
         context.startActivity(
             Intent.createChooser(intent, context.getString(R.string.logs_share_chooser)),
         )
-    }) {
+    }
+
+    TextButton(onClick = { showSheet = true }) {
         Icon(
             Icons.Default.Share,
-            contentDescription = stringResource(R.string.logs_share),
+            contentDescription = stringResource(R.string.logs_share_export),
         )
+        Spacer(Modifier.width(8.dp))
+        Text(stringResource(R.string.logs_share_export))
     }
-    IconButton(onClick = onExport) {
-        Icon(
-            Icons.Default.FileDownload,
-            contentDescription = stringResource(R.string.logs_export),
+
+    if (showSheet) {
+        ModalBottomSheet(onDismissRequest = { showSheet = false }) {
+            Column(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text(
+                    text = stringResource(R.string.logs_share_export),
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                ExportToggleRow(
+                    label = stringResource(R.string.logs_redact_paths),
+                    checked = exportConfig.redactPaths,
+                    onCheckedChange = onRedactPathsChanged,
+                )
+                ExportToggleRow(
+                    label = stringResource(R.string.logs_redact_account_ids),
+                    checked = exportConfig.redactAccountIds,
+                    onCheckedChange = onRedactAccountIdsChanged,
+                )
+                Button(
+                    onClick = {
+                        copyLogs()
+                        showSheet = false
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(stringResource(R.string.logs_copy))
+                }
+                Button(
+                    onClick = {
+                        shareLogsAsText()
+                        showSheet = false
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(stringResource(R.string.logs_share_text))
+                }
+                Button(
+                    onClick = {
+                        onExport()
+                        showSheet = false
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(stringResource(R.string.logs_export))
+                }
+                Spacer(Modifier.height(12.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun ExportToggleRow(
+    label: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Text(text = label, style = MaterialTheme.typography.bodyLarge)
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
         )
     }
 }
@@ -657,15 +738,18 @@ internal const val MAX_COPY_SHARE_ENTRIES: Int = 1_000
 internal fun buildLogExportText(
     events: List<SyncEvent>,
     dateFormat: SimpleDateFormat,
+    config: LogExportConfig = LogExportConfig(),
 ): String {
     val total = events.size
     if (total <= MAX_COPY_SHARE_ENTRIES) {
-        return events.joinToString("\n") { it.toLogLine(dateFormat) }
+        val text = events.joinToString("\n") { it.toLogLine(dateFormat) }
+        return LogVisibilityConfig.redactForExport(text, config)
     }
     val omitted = total - MAX_COPY_SHARE_ENTRIES
     val recent = events.subList(total - MAX_COPY_SHARE_ENTRIES, total)
-    return buildString {
+    val text = buildString {
         append("… $omitted earlier entries omitted (showing most recent $MAX_COPY_SHARE_ENTRIES)\n")
         recent.joinTo(this, separator = "\n") { it.toLogLine(dateFormat) }
     }
+    return LogVisibilityConfig.redactForExport(text, config)
 }

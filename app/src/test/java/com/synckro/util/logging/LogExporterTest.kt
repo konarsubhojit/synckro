@@ -77,6 +77,22 @@ class LogExporterTest {
         assertTrue("PairId should be written as '42'", dataLine.startsWith("5,42,"))
     }
 
+    @Test
+    fun `buildCsvBytes applies export redaction config`() {
+        val events = listOf(event(id = 1, message = "path=/storage/emulated/0/Pictures/cat.jpg accountId=abc123"))
+
+        val csv =
+            LogExporter.buildCsvBytes(
+                events = events,
+                config = LogExportConfig(redactPaths = true, redactAccountIds = true),
+            ).toString(Charsets.UTF_8)
+
+        assertTrue(csv.contains("<path>"))
+        assertTrue(csv.contains("accountId=<account>"))
+        assertFalse(csv.contains("/storage/emulated/0/Pictures/cat.jpg"))
+        assertFalse(csv.contains("accountId=abc123"))
+    }
+
     // -------------------------------------------------------------------------
     // buildExportZip
     // -------------------------------------------------------------------------
@@ -164,6 +180,34 @@ class LogExporterTest {
             val entry = zip.getEntry("synckro-debug.log")
             val content = zip.getInputStream(entry).bufferedReader().readText()
             assertEquals("Log file content must be preserved verbatim", expectedContent, content)
+        }
+    }
+
+    @Test
+    fun `buildExportZip applies redaction to log files`() {
+        val logDir = tmpFolder.newFolder("logs")
+        val logFile =
+            logDir.resolve("synckro-debug.log").also {
+                it.writeText("read /storage/emulated/0/Pictures/cat.jpg for accountId=abc123")
+            }
+        val outputDir = tmpFolder.newFolder("output")
+
+        val zipFile =
+            LogExporter.buildExportZip(
+                events = emptyList(),
+                logFiles = listOf(logFile),
+                outputDir = outputDir,
+                timestamp = "ts",
+                config = LogExportConfig(redactPaths = true, redactAccountIds = true),
+            )
+
+        ZipFile(zipFile).use { zip ->
+            val entry = zip.getEntry("synckro-debug.log")
+            val content = zip.getInputStream(entry).bufferedReader().readText()
+            assertTrue(content.contains("<path>"))
+            assertTrue(content.contains("accountId=<account>"))
+            assertFalse(content.contains("/storage/emulated/0/Pictures/cat.jpg"))
+            assertFalse(content.contains("accountId=abc123"))
         }
     }
 

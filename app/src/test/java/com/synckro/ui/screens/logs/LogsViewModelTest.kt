@@ -9,6 +9,7 @@ import com.synckro.domain.model.SyncEvent
 import com.synckro.domain.model.SyncEventLevel
 import com.synckro.ui.screens.logs.TimeWindow
 import com.synckro.util.logging.LogExporter
+import com.synckro.util.logging.LogExportConfig
 import com.synckro.util.logging.LogVisibilityConfig
 import io.mockk.every
 import io.mockk.mockk
@@ -246,5 +247,30 @@ class LogsViewModelTest {
 
             // Only recent WARN events should survive both filters
             assertEquals(listOf(4L), vm.state.value.events.map { it.id })
+        }
+
+    @Test
+    fun `export redaction toggles update export config state`() =
+        runTest(dispatcher) {
+            val vm = newViewModel()
+            backgroundScope.launch { vm.state.collect {} }
+
+            assertEquals(LogExportConfig(), vm.exportConfig.value)
+
+            vm.setExportRedactPaths(true)
+            vm.setExportRedactAccountIds(true)
+            advanceUntilIdle()
+
+            assertEquals(
+                LogExportConfig(redactPaths = true, redactAccountIds = true),
+                vm.exportConfig.value,
+            )
+
+            vm.setExportRedactPaths(false)
+            advanceUntilIdle()
+            assertEquals(
+                LogExportConfig(redactPaths = false, redactAccountIds = true),
+                vm.exportConfig.value,
+            )
         }
 }

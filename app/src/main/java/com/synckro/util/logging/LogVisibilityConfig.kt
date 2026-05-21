@@ -47,4 +47,29 @@ object LogVisibilityConfig {
     fun resetForTests() {
         minVisibleLevel = defaultMinVisibleLevel
     }
+
+    /** Applies optional export redactions to [text]. */
+    fun redactForExport(
+        text: String,
+        config: LogExportConfig,
+    ): String {
+        var redacted = text
+        if (config.redactPaths) {
+            redacted = storagePathRegex.replace(redacted, "<path>")
+        }
+        if (config.redactAccountIds) {
+            redacted = accountIdEqualsRegex.replace(redacted, "$1=<account>")
+            redacted = accountIdJsonRegex.replace(redacted, "\"$1\":\"<account>\"")
+        }
+        return redacted
+    }
+
+    private val storagePathRegex = Regex("/storage/emulated/\\d+/[^\\s,;)\\]\"']*")
+    private val accountIdEqualsRegex = Regex("(?i)\\b(accountId|account_id)\\s*=\\s*[^\\s,;)\\]]+")
+    private val accountIdJsonRegex = Regex("(?i)\"(accountId|account_id)\"\\s*:\\s*\"[^\"]+\"")
 }
+
+data class LogExportConfig(
+    val redactPaths: Boolean = false,
+    val redactAccountIds: Boolean = false,
+)

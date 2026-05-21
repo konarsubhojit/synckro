@@ -50,7 +50,7 @@ class LogExporter
          * @return A `content://` URI that can be passed to [android.content.Intent.ACTION_SEND]
          *         or written to [android.provider.MediaStore] Downloads.
          */
-        suspend fun export(): android.net.Uri =
+        suspend fun export(config: LogExportConfig = LogExportConfig()): android.net.Uri =
             withContext(Dispatchers.IO) {
                 // Apply the build-variant visibility gate so DEBUG entries are excluded
                 // from release-build exports (parity with the on-screen Logs tab).
@@ -58,7 +58,7 @@ class LogExporter
                 val logFiles = collectLogFiles(context)
                 val timestamp = timestampFormat.format(Date())
                 val outDir = File(context.cacheDir, CACHE_SUBDIR).also { it.mkdirs() }
-                val zipFile = buildExportZip(events, logFiles, outDir, timestamp)
+                val zipFile = buildExportZip(events, logFiles, outDir, timestamp, config)
                 FileProvider.getUriForFile(
                     context,
                     "${context.packageName}.fileprovider",
@@ -108,18 +108,21 @@ class LogExporter
                 logFiles: List<File>,
                 outputDir: File,
                 timestamp: String,
+                config: LogExportConfig = LogExportConfig(),
             ): File {
                 val zipFile = File(outputDir, "synckro-logs-$timestamp.zip")
                 ZipOutputStream(BufferedOutputStream(FileOutputStream(zipFile))).use { zip ->
                     // Structured events as CSV.
                     zip.putNextEntry(ZipEntry("synckro-events-$timestamp.csv"))
-                    zip.write(buildCsvBytes(events))
+                    zip.write(buildCsvBytes(events, config))
                     zip.closeEntry()
 
-                    // Timber log files — copied verbatim.
+                    // Timber log files.
                     for (logFile in logFiles) {
                         zip.putNextEntry(ZipEntry(logFile.name))
-                        logFile.inputStream().use { it.copyTo(zip) }
+                        val content = logFile.readText()
+                        val redacted = LogVisibilityConfig.redactForExport(content, config)
+                        zip.write(redacted.toByteArray(Charsets.UTF_8))
                         zip.closeEntry()
                     }
                 }
@@ -137,16 +140,21 @@ class LogExporter
              * String fields (`tag`, `message`) are always double-quoted and internal
              * double-quotes are escaped by doubling them.
              */
-            internal fun buildCsvBytes(events: List<SyncEvent>): ByteArray =
+            internal fun buildCsvBytes(
+                events: List<SyncEvent>,
+                config: LogExportConfig = LogExportConfig(),
+            ): ByteArray =
                 buildString {
                     appendLine("id,pairId,timestampMs,level,tag,message")
                     for (e in events) {
+                        val redactedTag = LogVisibilityConfig.redactForExport(e.tag, config)
+                        val redactedMessage = LogVisibilityConfig.redactForExport(e.message, config)
                         append(e.id).append(',')
                         append(e.pairId ?: "").append(',')
                         append(e.timestampMs).append(',')
                         append(e.level.name).append(',')
-                        append('"').append(e.tag.csvEscape()).append('"').append(',')
-                        append('"').append(e.message.csvEscape()).append('"')
+                        append('"').append(redactedTag.csvEscape()).append('"').append(',')
+                        append('"').append(redactedMessage.csvEscape()).append('"')
                         appendLine()
                     }
                 }.toByteArray(Charsets.UTF_8)
