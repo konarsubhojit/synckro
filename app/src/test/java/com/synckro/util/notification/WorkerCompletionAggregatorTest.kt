@@ -8,6 +8,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -37,14 +38,14 @@ class WorkerCompletionAggregatorTest {
     @Test
     fun `record coalesces completions that arrive within the aggregation window`() =
         runTest(dispatcher) {
-            val aggregator = WorkerCompletionAggregator(backgroundScope)
+            val aggregator = WorkerCompletionAggregator(this)
             val flushed = mutableListOf<List<WorkerCompletionAggregator.Completion>>()
 
             aggregator.record(pair(1L, "Docs"), 3) { flushed += it }
             aggregator.record(pair(2L, "Photos"), 2) { flushed += it }
+            runCurrent()
 
             advanceTimeBy(WorkerCompletionAggregator.DEFAULT_WINDOW_MS - 1)
-            advanceUntilIdle()
             assertTrue(flushed.isEmpty())
 
             advanceTimeBy(1)
@@ -58,11 +59,12 @@ class WorkerCompletionAggregatorTest {
     @Test
     fun `record merges repeated completions for the same pair before flush`() =
         runTest(dispatcher) {
-            val aggregator = WorkerCompletionAggregator(backgroundScope)
+            val aggregator = WorkerCompletionAggregator(this)
             val flushed = mutableListOf<List<WorkerCompletionAggregator.Completion>>()
 
             aggregator.record(pair(1L, "Docs"), 1) { flushed += it }
             aggregator.record(pair(1L, "Docs"), 4) { flushed += it }
+            runCurrent()
             advanceTimeBy(WorkerCompletionAggregator.DEFAULT_WINDOW_MS)
             advanceUntilIdle()
 

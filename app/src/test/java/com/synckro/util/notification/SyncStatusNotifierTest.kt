@@ -15,10 +15,12 @@ import com.synckro.domain.model.ConflictPolicy
 import com.synckro.domain.model.SyncDirection
 import com.synckro.domain.model.SyncPair
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -68,11 +70,12 @@ class SyncStatusNotifierTest {
     private fun buildNotifier(
         context: Context,
         repository: SettingsRepository,
+        scope: CoroutineScope,
     ): SyncStatusNotifier =
         SyncStatusNotifier(
             context = context,
             settingsRepository = repository,
-            workerCompletionAggregator = WorkerCompletionAggregator(testScope.backgroundScope),
+            workerCompletionAggregator = WorkerCompletionAggregator(scope),
         )
 
     @Test
@@ -92,7 +95,7 @@ class SyncStatusNotifierTest {
             val context = ApplicationProvider.getApplicationContext<Context>()
             val nm = context.getSystemService(NotificationManager::class.java)
             val repo = buildRepository().also { it.setNotifyOnFailure(false) }
-            val notifier = buildNotifier(context, repo)
+            val notifier = buildNotifier(context, repo, this)
 
             notifier.notifyFailure(fakePair, "boom")
 
@@ -107,7 +110,7 @@ class SyncStatusNotifierTest {
             shadowOf(context.applicationContext as Application)
                 .grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
             val repo = buildRepository().also { it.setNotifyOnFailure(true) }
-            val notifier = buildNotifier(context, repo)
+            val notifier = buildNotifier(context, repo, this)
 
             notifier.notifyFailure(fakePair, "Authentication failed: timeout during token refresh")
             notifier.notifyFailure(fakePair, "Rate limited (retry in 5000 ms)")
@@ -139,9 +142,10 @@ class SyncStatusNotifierTest {
             shadowOf(context.applicationContext as Application)
                 .grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
             val repo = buildRepository().also { it.setNotifyOnSuccess(false) }
-            val notifier = buildNotifier(context, repo)
+            val notifier = buildNotifier(context, repo, this)
 
             notifier.notifySuccessSummary(fakePair, 3, 1)
+            runCurrent()
             advanceTimeBy(WorkerCompletionAggregator.DEFAULT_WINDOW_MS)
             advanceUntilIdle()
 
@@ -156,9 +160,10 @@ class SyncStatusNotifierTest {
             shadowOf(context.applicationContext as Application)
                 .grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
             val repo = buildRepository().also { it.setNotifyOnSuccess(true) }
-            val notifier = buildNotifier(context, repo)
+            val notifier = buildNotifier(context, repo, this)
 
             notifier.notifySuccessSummary(fakePair, 0, 0)
+            runCurrent()
             advanceTimeBy(WorkerCompletionAggregator.DEFAULT_WINDOW_MS)
             advanceUntilIdle()
 
@@ -173,11 +178,12 @@ class SyncStatusNotifierTest {
             shadowOf(context.applicationContext as Application)
                 .grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
             val repo = buildRepository().also { it.setNotifyOnSuccess(true) }
-            val notifier = buildNotifier(context, repo)
+            val notifier = buildNotifier(context, repo, this)
             val secondPair = fakePair.copy(id = 2L, displayName = "Work Files")
 
             notifier.notifySuccessSummary(fakePair, 3, 0)
             notifier.notifySuccessSummary(secondPair, 2, 0)
+            runCurrent()
             advanceTimeBy(WorkerCompletionAggregator.DEFAULT_WINDOW_MS)
             advanceUntilIdle()
 
