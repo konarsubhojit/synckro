@@ -2,6 +2,7 @@ package com.synckro.ui.screens.logs
 
 import com.synckro.domain.model.SyncEvent
 import com.synckro.domain.model.SyncEventLevel
+import com.synckro.util.logging.LogExportConfig
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -69,5 +70,50 @@ class LogsScreenExportTest {
         // The very oldest entries must be gone, the newest must be present.
         assertFalse("Oldest entry must be omitted", text.contains("msg-1 "))
         assertTrue("Newest entry must be present", text.contains("msg-$total"))
+    }
+
+    @Test
+    fun `redact paths masks storage path when enabled`() {
+        val events = listOf(event(1, message = "Uploading /storage/emulated/0/Pictures/cat.jpg"))
+
+        val text =
+            buildLogExportText(
+                events = events,
+                dateFormat = dateFormat,
+                config = LogExportConfig(redactPaths = true),
+            )
+
+        assertFalse(text.contains("/storage/emulated/0/Pictures/cat.jpg"))
+        assertTrue(text.contains("<path>"))
+    }
+
+    @Test
+    fun `redact paths leaves storage path untouched when disabled`() {
+        val events = listOf(event(1, message = "Uploading /storage/emulated/0/Pictures/cat.jpg"))
+
+        val text =
+            buildLogExportText(
+                events = events,
+                dateFormat = dateFormat,
+                config = LogExportConfig(redactPaths = false),
+            )
+
+        assertTrue(text.contains("/storage/emulated/0/Pictures/cat.jpg"))
+        assertFalse(text.contains("<path>"))
+    }
+
+    @Test
+    fun `redact account ids masks accountId value when enabled`() {
+        val events = listOf(event(1, message = "Auth failed for accountId=abc123"))
+
+        val text =
+            buildLogExportText(
+                events = events,
+                dateFormat = dateFormat,
+                config = LogExportConfig(redactAccountIds = true),
+            )
+
+        assertTrue(text.contains("accountId=<account>"))
+        assertFalse(text.contains("accountId=abc123"))
     }
 }

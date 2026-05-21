@@ -13,6 +13,7 @@ import com.synckro.domain.model.SyncEvent
 import com.synckro.domain.model.SyncEventLevel
 import com.synckro.domain.model.SyncEventTag
 import com.synckro.util.logging.LogExporter
+import com.synckro.util.logging.LogExportConfig
 import com.synckro.util.logging.LogVisibilityConfig
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -102,6 +103,9 @@ class LogsViewModel
         private val _providerFilter = MutableStateFlow<CloudProviderType?>(null)
         private val _timeWindowFilter = MutableStateFlow<TimeWindow?>(null)
         private val _searchQuery = MutableStateFlow("")
+        private val _exportConfig = MutableStateFlow(LogExportConfig())
+
+        val exportConfig: StateFlow<LogExportConfig> = _exportConfig
 
         private val eventsFlow =
             _pairIdFilter.flatMapLatest { pairId ->
@@ -237,7 +241,7 @@ class LogsViewModel
                     tag = SyncEventTag.Export,
                     message = "Export started",
                 )
-                val result = runCatching { logExporter.export() }
+                val result = runCatching { logExporter.export(_exportConfig.value) }
                 result.fold(
                     onSuccess = {
                         syncEventRepository.log(
@@ -295,6 +299,14 @@ class LogsViewModel
         /** Updates the free-text search query (case-insensitive over message + tag). */
         fun setSearchQuery(query: String) {
             _searchQuery.value = query
+        }
+
+        fun setExportRedactPaths(enabled: Boolean) {
+            _exportConfig.value = _exportConfig.value.copy(redactPaths = enabled)
+        }
+
+        fun setExportRedactAccountIds(enabled: Boolean) {
+            _exportConfig.value = _exportConfig.value.copy(redactAccountIds = enabled)
         }
 
         /** Clears every active filter and resets the search query. */
