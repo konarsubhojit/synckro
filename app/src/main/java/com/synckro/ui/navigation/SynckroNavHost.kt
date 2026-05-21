@@ -381,13 +381,21 @@ internal fun topLevelPopEnterTransition(): EnterTransition = fadeIn()
 internal fun topLevelPopExitTransition(): ExitTransition = fadeOut()
 
 internal fun detailEnterTransition(): EnterTransition =
-    slideInHorizontally(initialOffsetX = { width -> width })
+    slideInHorizontally(initialOffsetX = ::detailEnterInitialOffset)
 
 internal fun detailExitTransition(): ExitTransition =
-    slideOutHorizontally(targetOffsetX = { width -> -width })
+    slideOutHorizontally(targetOffsetX = ::detailExitTargetOffset)
 
 internal fun detailPopEnterTransition(): EnterTransition =
-    slideInHorizontally(initialOffsetX = { width -> -width })
+    slideInHorizontally(initialOffsetX = ::detailPopEnterInitialOffset)
 
 internal fun detailPopExitTransition(): ExitTransition =
-    slideOutHorizontally(targetOffsetX = { width -> width })
+    slideOutHorizontally(targetOffsetX = ::detailPopExitTargetOffset)
+
+internal fun detailEnterInitialOffset(width: Int): Int = width
+
+internal fun detailExitTargetOffset(width: Int): Int = -width
+
+internal fun detailPopEnterInitialOffset(width: Int): Int = -width
+
+internal fun detailPopExitTargetOffset(width: Int): Int = width
