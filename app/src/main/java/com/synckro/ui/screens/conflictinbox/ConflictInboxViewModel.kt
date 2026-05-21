@@ -82,7 +82,7 @@ class ConflictInboxViewModel
             val selectedCount: Int get() = selectedIds.size
         }
 
-        private val _selectionState = MutableStateFlow(Pair(false, emptySet<Long>()))
+        private val _selectionState = MutableStateFlow(Pair(false, linkedSetOf<Long>()))
 
         val state: StateFlow<UiState> =
             combine(
@@ -127,17 +127,23 @@ class ConflictInboxViewModel
          */
         fun enterSelectionMode(id: Long) {
             Timber.i("ConflictInboxViewModel.enterSelectionMode(id=$id)")
-            _selectionState.value = Pair(true, setOf(id))
+            _selectionState.value = Pair(true, linkedSetOf(id))
         }
 
         /**
          * Toggles the selection state of the conflict with [id] while in selection mode.
-         * If [id] is already selected it will be deselected; otherwise it will be selected.
+         * If [id] is already selected it will be deselected; otherwise it will be added at
+         * the end of the selection set (preserving insertion order for bulk-apply sequencing).
          */
         fun toggleSelection(id: Long) {
             _selectionState.update { (isSelectionMode, selectedIds) ->
                 if (!isSelectionMode) return@update Pair(isSelectionMode, selectedIds)
-                val updated = if (id in selectedIds) selectedIds - id else selectedIds + id
+                val updated: LinkedHashSet<Long> =
+                    if (id in selectedIds) {
+                        LinkedHashSet(selectedIds).also { it.remove(id) }
+                    } else {
+                        LinkedHashSet(selectedIds).also { it.add(id) }
+                    }
                 Pair(true, updated)
             }
         }
@@ -147,7 +153,7 @@ class ConflictInboxViewModel
          */
         fun exitSelectionMode() {
             Timber.i("ConflictInboxViewModel.exitSelectionMode()")
-            _selectionState.value = Pair(false, emptySet())
+            _selectionState.value = Pair(false, linkedSetOf())
         }
 
         /**

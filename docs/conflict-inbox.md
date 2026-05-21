@@ -51,7 +51,13 @@ data class ConflictRecord(
     val remoteLastModifiedMs: Long,
     val detectedAtMs: Long,
     val resolution: String? = null,   // null = pending; one of the RESOLUTION_* constants = resolved
-)
+) {
+    companion object {
+        const val RESOLUTION_KEEP_LOCAL  = "KEEP_LOCAL"
+        const val RESOLUTION_KEEP_REMOTE = "KEEP_REMOTE"
+        const val RESOLUTION_KEEP_BOTH   = "KEEP_BOTH"
+    }
+}
 ```
 
 ---
@@ -105,6 +111,7 @@ Tapping one of the three icon buttons in the contextual bar calls the correspond
 | Requirement                            | Implementation                                                      |
 |:---------------------------------------|:--------------------------------------------------------------------|
 | TalkBack selection announcement        | `Modifier.semantics { stateDescription = "selected" / "not selected" }` on each card |
+| TalkBack long-press discoverability    | `combinedClickable(onLongClickLabel = "Enter selection mode")` — TalkBack exposes this as an action in its actions menu, so users who cannot perform a physical long-press can still enter selection mode |
 | Contextual bar actions are icon-only   | Each `IconButton` has a `contentDescription` (the action label string) |
 | Close button                           | `contentDescription = stringResource(R.string.conflict_inbox_cancel_selection)` |
 

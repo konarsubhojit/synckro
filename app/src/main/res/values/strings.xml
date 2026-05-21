@@ -357,6 +357,7 @@
     <string name="conflict_inbox_cancel_selection">Cancel</string>
     <string name="conflict_inbox_selected">selected</string>
     <string name="conflict_inbox_not_selected">not selected</string>
+    <string name="conflict_inbox_enter_selection_mode">Enter selection mode</string>
 
     <!-- Settings screen -->
     <string name="settings_title">Settings</string>

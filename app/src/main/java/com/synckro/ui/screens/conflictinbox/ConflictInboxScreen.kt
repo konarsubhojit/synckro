@@ -298,6 +298,11 @@ private fun ConflictCard(
                     onLongClick = {
                         if (!isSelectionMode) onLongPress()
                     },
+                    onLongClickLabel = if (!isSelectionMode) {
+                        stringResource(R.string.conflict_inbox_enter_selection_mode)
+                    } else {
+                        null
+                    },
                 ),
         colors =
             when {
