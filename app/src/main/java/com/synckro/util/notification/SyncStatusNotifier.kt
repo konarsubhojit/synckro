@@ -22,6 +22,7 @@ class SyncStatusNotifier
     constructor(
         @ApplicationContext private val context: Context,
         private val settingsRepository: SettingsRepository,
+        private val workerCompletionAggregator: WorkerCompletionAggregator,
     ) {
         suspend fun notifyFailure(
             pair: SyncPair,
@@ -52,11 +53,17 @@ class SyncStatusNotifier
         }
 
         suspend fun notifySuccessSummary(
-            _pair: SyncPair,
-            _applied: Int,
+            pair: SyncPair,
+            applied: Int,
             _conflicts: Int,
         ) {
             if (!settingsRepository.notifyOnSuccess.first()) return
+            if (!SyncWorker.canPostNotifications(context)) return
+            if (applied <= 0) return
+
+            workerCompletionAggregator.record(pair, applied) { completions ->
+                postSuccessSummary(completions)
+            }
         }
 
         companion object {
@@ -65,6 +72,8 @@ class SyncStatusNotifier
             const val ACTION_OPEN_LOGS = "com.synckro.ACTION_OPEN_LOGS"
             const val EXTRA_PAIR_ID = "com.synckro.EXTRA_PAIR_ID"
             private const val MAX_SUMMARY_LENGTH = 120
+            private const val SUCCESS_GROUP_KEY = "com.synckro.SYNC_SUCCESS_GROUP"
+            private const val SUCCESS_GROUP_SUMMARY_ID = 0
         }
 
         private fun summarizeFailure(reason: String): String {
@@ -103,5 +112,78 @@ class SyncStatusNotifier
                     PendingIntent.FLAG_UPDATE_CURRENT
                 }
             return PendingIntent.getActivity(context, pairId.toInt(), intent, flags)
+        }
+
+        private suspend fun postSuccessSummary(completions: List<WorkerCompletionAggregator.Completion>) {
+            if (completions.isEmpty()) return
+            if (!settingsRepository.notifyOnSuccess.first()) return
+            if (!SyncWorker.canPostNotifications(context)) return
+
+            val notificationManager = context.getSystemService(NotificationManager::class.java)
+            val totalPairs = completions.size
+            val totalFiles = completions.sumOf { it.transferredFiles }
+            val summaryText =
+                context.getString(
+                    R.string.sync_success_notification_summary,
+                    totalPairs,
+                    totalFiles,
+                )
+
+            completions.forEach { completion ->
+                val childText =
+                    context.getString(
+                        R.string.sync_success_notification_child_text,
+                        completion.transferredFiles,
+                    )
+                val childNotification =
+                    NotificationCompat
+                        .Builder(context, SYNC_STATUS_CHANNEL_ID)
+                        .setSmallIcon(android.R.drawable.stat_sys_upload_done)
+                        .setContentTitle(completion.pair.displayName)
+                        .setContentText(childText)
+                        .setStyle(NotificationCompat.BigTextStyle().bigText(childText))
+                        .setContentIntent(buildOpenLogsPendingIntent(completion.pair.id))
+                        .setAutoCancel(true)
+                        .setCategory(NotificationCompat.CATEGORY_STATUS)
+                        .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+                        .setOnlyAlertOnce(true)
+                        .setGroup(SUCCESS_GROUP_KEY)
+                        .setGroupAlertBehavior(NotificationCompat.GROUP_ALERT_SUMMARY)
+                        .build()
+
+                notificationManager.notify(completion.pair.id.toInt(), childNotification)
+            }
+
+            val inboxStyle =
+                NotificationCompat
+                    .InboxStyle()
+                    .setSummaryText(summaryText)
+                    .also { style ->
+                        completions.forEach { completion ->
+                            style.addLine(
+                                context.getString(
+                                    R.string.sync_success_notification_inbox_line,
+                                    completion.pair.displayName,
+                                    completion.transferredFiles,
+                                ),
+                            )
+                        }
+                    }
+
+            val summaryNotification =
+                NotificationCompat
+                    .Builder(context, SYNC_STATUS_CHANNEL_ID)
+                    .setSmallIcon(android.R.drawable.stat_sys_upload_done)
+                    .setContentTitle(summaryText)
+                    .setContentText(summaryText)
+                    .setStyle(inboxStyle)
+                    .setAutoCancel(true)
+                    .setCategory(NotificationCompat.CATEGORY_STATUS)
+                    .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+                    .setGroup(SUCCESS_GROUP_KEY)
+                    .setGroupSummary(true)
+                    .build()
+
+            notificationManager.notify(SUCCESS_GROUP_SUMMARY_ID, summaryNotification)
         }
     }

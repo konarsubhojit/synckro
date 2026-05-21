@@ -238,7 +238,7 @@
     <string name="sync_channel_name">Sync progress</string>
     <string name="sync_channel_description">Shows progress while Synckro is transferring files in the background.</string>
     <string name="sync_status_channel_name">Sync status</string>
-    <string name="sync_status_channel_description">Alerts when a sync pair needs attention after a background run.</string>
+    <string name="sync_status_channel_description">Alerts when background sync finishes or needs attention.</string>
     <string name="sync_notification_title">Syncing %1$s</string>
     <string name="sync_notification_content">Transfer in progress…</string>
     <string name="sync_failure_unknown_summary">Sync failed. Open Logs for details.</string>
@@ -246,6 +246,9 @@
     <string name="sync_failure_rate_limited_summary">Cloud provider rate limit hit. Try again later.</string>
     <string name="sync_failure_not_configured_summary">Cloud provider is not configured in this build.</string>
     <string name="sync_failure_reauth_summary">Sign-in expired. Reconnect your account.</string>
+    <string name="sync_success_notification_summary">Synckro: %1$d pairs synced, %2$d files transferred</string>
+    <string name="sync_success_notification_child_text">%1$d files transferred</string>
+    <string name="sync_success_notification_inbox_line">%1$s — %2$d files transferred</string>
 
     <!-- Re-authentication notification (shown when a cloud account needs to be reconnected) -->
     <string name="reauth_channel_name">Account sign-in required</string>
@@ -412,7 +415,7 @@
 
     <!-- Settings: notifications -->
     <string name="settings_notify_success_title">Notify when sync completes</string>
-    <string name="settings_notify_success_body">Posts a notification after each successful sync run.</string>
+    <string name="settings_notify_success_body">Posts a grouped notification after successful background syncs that moved files.</string>
     <string name="settings_notify_failure_title">Notify on sync failure</string>
     <string name="settings_notify_failure_body">Posts a notification when a sync run fails after retries.</string>
     <string name="settings_notification_channels_title">Notification channels</string>
