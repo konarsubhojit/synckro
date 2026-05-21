@@ -26,6 +26,13 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+/** Quick time-window presets for the Logs filter row. */
+enum class TimeWindow(val durationMs: Long) {
+    LAST_HOUR(60 * 60 * 1_000L),
+    LAST_24H(24 * 60 * 60 * 1_000L),
+    LAST_7D(7 * 24 * 60 * 60 * 1_000L),
+}
+
 /**
  * ViewModel for the [LogsScreen].
  *
@@ -33,9 +40,9 @@ import javax.inject.Inject
  * to that pair; otherwise all events are shown (global view).
  *
  * The screen-level filters ([levelFilter], [tagFilter], [accountFilter],
- * [providerFilter], [searchQuery]) are applied in-memory on top of the
- * already-observed event list — no extra DB queries fire when the user
- * toggles a chip or types in the search box.
+ * [providerFilter], [searchQuery], [timeWindowFilter]) are applied in-memory on
+ * top of the already-observed event list — no extra DB queries fire when the
+ * user toggles a chip or types in the search box.
  *
  * Account / provider filtering relies on a side-channel mapping
  * `pairId → (provider, accountId)` derived from the `sync_pair` table.
@@ -53,6 +60,12 @@ class LogsViewModel
         accountRepository: AccountRepository,
         syncPairDao: SyncPairDao,
     ) : ViewModel() {
+        /**
+         * Time source (millis since epoch). Defaults to [System.currentTimeMillis].
+         * Exposed as `internal var` so unit tests can inject a fixed clock without
+         * requiring a Hilt binding for [() -> Long].
+         */
+        internal var clock: () -> Long = System::currentTimeMillis
         /** 0 means "show all pairs". */
         val pairId: Long = savedStateHandle[KEY_PAIR_ID] ?: 0L
 
@@ -67,6 +80,8 @@ class LogsViewModel
             val accountFilter: String? = null,
             /** Active provider filter; null means show all providers. */
             val providerFilter: CloudProviderType? = null,
+            /** Active time-window filter; null means show all time. */
+            val timeWindowFilter: TimeWindow? = null,
             /** Free-text search applied to message + tag (case-insensitive). */
             val searchQuery: String = "",
             /** All known accounts, used to populate the Account filter chip row. */
@@ -79,6 +94,7 @@ class LogsViewModel
         private val _tagFilter = MutableStateFlow<String?>(null)
         private val _accountFilter = MutableStateFlow<String?>(null)
         private val _providerFilter = MutableStateFlow<CloudProviderType?>(null)
+        private val _timeWindowFilter = MutableStateFlow<TimeWindow?>(null)
         private val _searchQuery = MutableStateFlow("")
 
         /** Maps pairId → (provider, accountId). Used to resolve account/provider filters. */
@@ -96,9 +112,11 @@ class LogsViewModel
         val state: StateFlow<UiState> =
             combine(
                 if (pairId != 0L) syncEventRepository.observeForPair(pairId) else syncEventRepository.observeAll(),
-                combine(_levelFilter, _tagFilter, _accountFilter, _providerFilter, _searchQuery) {
-                    level, tag, account, provider, query ->
-                    Filters(level, tag, account, provider, query)
+                combine(_levelFilter, _tagFilter, _accountFilter, _providerFilter, _timeWindowFilter) {
+                    level, tag, account, provider, timeWindow ->
+                    PartialFilters(level, tag, account, provider, timeWindow)
+                }.combine(_searchQuery) { pf, query ->
+                    Filters(pf.level, pf.tag, pf.account, pf.provider, query, pf.timeWindow)
                 },
                 pairContexts,
                 accountsFlow,
@@ -112,6 +130,7 @@ class LogsViewModel
                     tagFilter = filters.tag,
                     accountFilter = filters.account,
                     providerFilter = filters.provider,
+                    timeWindowFilter = filters.timeWindow,
                     searchQuery = filters.query,
                     knownAccounts = accounts,
                     hasActiveFilters =
@@ -119,6 +138,7 @@ class LogsViewModel
                             filters.tag != null ||
                             filters.account != null ||
                             filters.provider != null ||
+                            filters.timeWindow != null ||
                             q.isNotEmpty(),
                 )
             }.stateIn(
@@ -127,12 +147,21 @@ class LogsViewModel
                 initialValue = UiState(),
             )
 
+        private data class PartialFilters(
+            val level: SyncEventLevel?,
+            val tag: String?,
+            val account: String?,
+            val provider: CloudProviderType?,
+            val timeWindow: TimeWindow?,
+        )
+
         private data class Filters(
             val level: SyncEventLevel?,
             val tag: String?,
             val account: String?,
             val provider: CloudProviderType?,
             val query: String,
+            val timeWindow: TimeWindow?,
         )
 
         private fun matches(
@@ -148,6 +177,10 @@ class LogsViewModel
             if (!LogVisibilityConfig.isVisible(e.level)) return false
             if (f.level != null && e.level != f.level) return false
             if (f.tag != null && e.tag != f.tag) return false
+            if (f.timeWindow != null) {
+                val cutoff = clock() - f.timeWindow.durationMs
+                if (e.timestampMs < cutoff) return false
+            }
             if (f.account != null) {
                 val accId = e.pairId?.let { contexts[it]?.second }
                 if (accId != f.account) return false
@@ -229,6 +262,11 @@ class LogsViewModel
             _providerFilter.value = provider
         }
 
+        /** Sets (or clears, when [window] is null) the active time-window filter. */
+        fun setTimeWindowFilter(window: TimeWindow?) {
+            _timeWindowFilter.value = window
+        }
+
         /** Updates the free-text search query (case-insensitive over message + tag). */
         fun setSearchQuery(query: String) {
             _searchQuery.value = query
@@ -240,6 +278,7 @@ class LogsViewModel
             _tagFilter.value = null
             _accountFilter.value = null
             _providerFilter.value = null
+            _timeWindowFilter.value = null
             _searchQuery.value = ""
         }
 
