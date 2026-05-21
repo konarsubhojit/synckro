@@ -10,6 +10,7 @@ import com.synckro.providers.onedrive.OneDriveMultiAccountStartupProbe
 import com.synckro.data.worker.SyncWorker
 import com.synckro.util.logging.FileLoggingTree
 import com.synckro.util.notification.ReauthNotificationHelper
+import com.synckro.util.notification.SyncStatusNotifier
 import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -67,9 +68,10 @@ class SynckroApp :
      * | Channel ID                        | Importance | Purpose                                           |
      * |:----------------------------------|:-----------|:--------------------------------------------------|
      * | [SyncWorker.SYNC_CHANNEL_ID]      | LOW        | Foreground-service progress bar while syncing.    |
+     * | [SyncStatusNotifier.SYNC_STATUS_CHANNEL_ID] | DEFAULT | Reserved for sync result notifications.           |
      * | [ReauthNotificationHelper.REAUTH_CHANNEL_ID] | HIGH | Persistent alert when a cloud account needs re-authentication. |
      *
-     * Both channels are created here at app startup.  Channels cannot be deleted at runtime
+     * All channels are created here at app startup.  Channels cannot be deleted at runtime
      * (the user controls their settings in System Settings), so this is the canonical place to
      * register new ones.  See `docs/notifications.md` for the full notification strategy.
      */
@@ -89,6 +91,18 @@ class SynckroApp :
                     setShowBadge(false)
                 }
 
+            // Sync-result channel — default importance: future success/failure summaries live
+            // here, but Phase 8a only registers the channel and does not post notifications yet.
+            val syncStatusChannel =
+                NotificationChannel(
+                    SyncStatusNotifier.SYNC_STATUS_CHANNEL_ID,
+                    getString(R.string.sync_status_channel_name),
+                    NotificationManager.IMPORTANCE_DEFAULT,
+                ).apply {
+                    description = getString(R.string.sync_status_channel_description)
+                    setShowBadge(true)
+                }
+
             // Re-auth alert channel — high importance: heads-up banner, badge, sound.
             // Users must notice this alert because sync is fully stopped until they act.
             val reauthChannel =
@@ -101,7 +115,7 @@ class SynckroApp :
                     setShowBadge(true)
                 }
 
-            nm.createNotificationChannels(listOf(syncChannel, reauthChannel))
+            nm.createNotificationChannels(listOf(syncChannel, syncStatusChannel, reauthChannel))
         }
     }
 

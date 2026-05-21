@@ -51,6 +51,21 @@ Because a syncing animation is already visible in the Home screen, low importanc
 
 ---
 
+### 3. `sync_status` — Sync results (reserved)
+
+| Property      | Value                                                   |
+|:--------------|:--------------------------------------------------------|
+| Constant      | `SyncStatusNotifier.SYNC_STATUS_CHANNEL_ID`             |
+| Importance    | `IMPORTANCE_DEFAULT`                                    |
+| Badge         | Enabled                                                 |
+| Registered in | `SynckroApp.createNotificationChannels()`               |
+
+**Purpose:** Reserved for future sync result notifications (success summaries and terminal failures).
+
+**Current behaviour (Phase 8a):** The channel is registered on app start so it appears in system notification settings, but `SyncStatusNotifier` does not post anything yet. Its `notifyFailure(...)` and `notifySuccessSummary(...)` methods are wiring-only stubs gated by `SettingsRepository.notifyOnFailure` / `notifyOnSuccess`.
+
+---
+
 ## Notification ID Ranges
 
 | Range               | Owner                          | Purpose                                   |
@@ -59,7 +74,7 @@ Because a syncing animation is already visible in the Home screen, low importanc
 | 99,999              | `ReauthNotificationHelper`     | Reauth group summary                      |
 | 100,000 – 104,095   | `ReauthNotificationHelper`     | Per-account reauth alerts (`MAX_ACCOUNTS = 4,096`) |
 
-Keep ranges non-overlapping when adding new notification types.
+`SyncStatusNotifier` does not allocate notification IDs yet because Phase 8a only registers the channel; reserve a non-overlapping range when actual posts are added in later phases.
 
 ---
 

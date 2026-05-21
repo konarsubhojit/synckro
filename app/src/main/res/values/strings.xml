@@ -237,6 +237,8 @@
     <!-- Sync notification (shown when a transfer runs as a foreground service) -->
     <string name="sync_channel_name">Sync progress</string>
     <string name="sync_channel_description">Shows progress while Synckro is transferring files in the background.</string>
+    <string name="sync_status_channel_name">Sync status</string>
+    <string name="sync_status_channel_description">Reserved for sync success and failure result notifications.</string>
     <string name="sync_notification_title">Syncing %1$s</string>
     <string name="sync_notification_content">Transfer in progress…</string>
 
