@@ -1,6 +1,10 @@
 package com.synckro.ui.navigation
 
 import androidx.activity.ComponentActivity
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -137,38 +141,47 @@ fun MainScaffold(
 
     val body: @Composable (Modifier) -> Unit = { bodyModifier ->
         Box(modifier = bodyModifier) {
-            when (selected) {
-                MainDestination.Pairs -> PairsScreen(
-                    onAddSyncPair = onAddSyncPair,
-                    onEditSyncPair = onEditSyncPair,
-                    onOpenPairDetail = onOpenPairDetail,
-                    onOpenReauth = { accountId ->
-                        // Phase 5d: switch to the Accounts tab and ask it to
-                        // highlight the affected account (if known).
-                        currentAccountHighlight = accountId
-                        selected = MainDestination.Accounts
-                    },
-                    viewModel = homeViewModel,
-                )
-                MainDestination.Conflicts -> ConflictInboxScreen(
-                    // No back arrow — hosted as a tab.
-                    onBack = null,
-                )
-                MainDestination.Logs -> LogsScreen(
-                    onBack = null,
-                    onTriggerSync = { selected = MainDestination.Pairs },
-                    requestedPairId = currentLogsPairId,
-                    onRequestedPairIdHandled = { currentLogsPairId = null },
-                )
-                MainDestination.Accounts -> AccountsScreen(
-                    activity = activity,
-                    onBack = null,
-                    highlightAccountId = currentAccountHighlight,
-                    onHighlightConsumed = { currentAccountHighlight = null },
-                )
-                MainDestination.Settings -> SettingsScreen(
-                    onBack = null,
-                )
+            AnimatedContent(
+                targetState = selected,
+                modifier = Modifier.fillMaxSize(),
+                transitionSpec = {
+                    fadeIn() togetherWith fadeOut()
+                },
+                label = "main_tab_transition",
+            ) { destination ->
+                when (destination) {
+                    MainDestination.Pairs -> PairsScreen(
+                        onAddSyncPair = onAddSyncPair,
+                        onEditSyncPair = onEditSyncPair,
+                        onOpenPairDetail = onOpenPairDetail,
+                        onOpenReauth = { accountId ->
+                            // Phase 5d: switch to the Accounts tab and ask it to
+                            // highlight the affected account (if known).
+                            currentAccountHighlight = accountId
+                            selected = MainDestination.Accounts
+                        },
+                        viewModel = homeViewModel,
+                    )
+                    MainDestination.Conflicts -> ConflictInboxScreen(
+                        // No back arrow — hosted as a tab.
+                        onBack = null,
+                    )
+                    MainDestination.Logs -> LogsScreen(
+                        onBack = null,
+                        onTriggerSync = { selected = MainDestination.Pairs },
+                        requestedPairId = currentLogsPairId,
+                        onRequestedPairIdHandled = { currentLogsPairId = null },
+                    )
+                    MainDestination.Accounts -> AccountsScreen(
+                        activity = activity,
+                        onBack = null,
+                        highlightAccountId = currentAccountHighlight,
+                        onHighlightConsumed = { currentAccountHighlight = null },
+                    )
+                    MainDestination.Settings -> SettingsScreen(
+                        onBack = null,
+                    )
+                }
             }
         }
     }
