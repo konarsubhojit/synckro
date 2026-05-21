@@ -7,11 +7,11 @@ import com.synckro.data.repository.AccountRepository
 import com.synckro.data.repository.SyncEventRepository
 import com.synckro.domain.model.SyncEvent
 import com.synckro.domain.model.SyncEventLevel
+import com.synckro.ui.screens.logs.TimeWindow
 import com.synckro.util.logging.LogExporter
 import com.synckro.util.logging.LogVisibilityConfig
 import io.mockk.every
 import io.mockk.mockk
-import com.synckro.ui.screens.logs.TimeWindow
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow

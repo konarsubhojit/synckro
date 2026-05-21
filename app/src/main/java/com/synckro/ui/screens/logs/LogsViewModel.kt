@@ -112,10 +112,12 @@ class LogsViewModel
         val state: StateFlow<UiState> =
             combine(
                 if (pairId != 0L) syncEventRepository.observeForPair(pairId) else syncEventRepository.observeAll(),
-                combine(_levelFilter, _tagFilter, _accountFilter, _providerFilter, _searchQuery) {
-                    level, tag, account, provider, query ->
-                    Filters(level, tag, account, provider, query, null)
-                }.combine(_timeWindowFilter) { f, tw -> f.copy(timeWindow = tw) },
+                combine(_levelFilter, _tagFilter, _accountFilter, _providerFilter, _timeWindowFilter) {
+                    level, tag, account, provider, timeWindow ->
+                    PartialFilters(level, tag, account, provider, timeWindow)
+                }.combine(_searchQuery) { pf, query ->
+                    Filters(pf.level, pf.tag, pf.account, pf.provider, query, pf.timeWindow)
+                },
                 pairContexts,
                 accountsFlow,
             ) { events, filters, contexts, accounts ->
@@ -144,6 +146,14 @@ class LogsViewModel
                 started = SharingStarted.WhileSubscribed(5_000),
                 initialValue = UiState(),
             )
+
+        private data class PartialFilters(
+            val level: SyncEventLevel?,
+            val tag: String?,
+            val account: String?,
+            val provider: CloudProviderType?,
+            val timeWindow: TimeWindow?,
+        )
 
         private data class Filters(
             val level: SyncEventLevel?,
