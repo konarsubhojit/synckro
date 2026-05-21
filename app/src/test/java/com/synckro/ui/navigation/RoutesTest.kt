@@ -31,4 +31,12 @@ class RoutesTest {
             Routes.pickRemoteFolder(CloudProviderType.GOOGLE_DRIVE, "user@example.com"),
         )
     }
+
+    @Test
+    fun `detail transition offsets use forward and reverse widths`() {
+        assertEquals(320, detailEnterInitialOffset(320))
+        assertEquals(-320, detailExitTargetOffset(320))
+        assertEquals(-320, detailPopEnterInitialOffset(320))
+        assertEquals(320, detailPopExitTargetOffset(320))
+    }
 }

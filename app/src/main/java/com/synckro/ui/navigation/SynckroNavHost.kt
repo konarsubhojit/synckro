@@ -2,6 +2,12 @@ package com.synckro.ui.navigation
 
 import android.net.Uri
 import androidx.activity.ComponentActivity
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -112,7 +118,13 @@ fun SynckroNavHost(
     }
 
     NavHost(navController = nav, startDestination = Routes.ONBOARDING) {
-        composable(Routes.ONBOARDING) {
+        composable(
+            route = Routes.ONBOARDING,
+            enterTransition = { topLevelEnterTransition() },
+            exitTransition = { topLevelExitTransition() },
+            popEnterTransition = { topLevelPopEnterTransition() },
+            popExitTransition = { topLevelPopExitTransition() },
+        ) {
             val onboardingVm: OnboardingViewModel = hiltViewModel()
             val shouldShow by onboardingVm.shouldShowOnboarding.collectAsStateWithLifecycle()
 
@@ -148,7 +160,13 @@ fun SynckroNavHost(
                 }
             }
         }
-        composable(Routes.MAIN) {
+        composable(
+            route = Routes.MAIN,
+            enterTransition = { topLevelEnterTransition() },
+            exitTransition = { topLevelExitTransition() },
+            popEnterTransition = { topLevelPopEnterTransition() },
+            popExitTransition = { topLevelPopExitTransition() },
+        ) {
             MainScaffold(
                 activity = activity,
                 onAddSyncPair = {
@@ -170,6 +188,10 @@ fun SynckroNavHost(
         }
         composable(
             route = Routes.PAIR_EDITOR,
+            enterTransition = { detailEnterTransition() },
+            exitTransition = { detailExitTransition() },
+            popEnterTransition = { detailPopEnterTransition() },
+            popExitTransition = { detailPopExitTransition() },
             arguments =
                 listOf(
                     navArgument("pairId") {
@@ -238,7 +260,13 @@ fun SynckroNavHost(
                 viewModel = editorViewModel,
             )
         }
-        composable(Routes.PICK_FOLDER) {
+        composable(
+            route = Routes.PICK_FOLDER,
+            enterTransition = { detailEnterTransition() },
+            exitTransition = { detailExitTransition() },
+            popEnterTransition = { detailPopEnterTransition() },
+            popExitTransition = { detailPopExitTransition() },
+        ) {
             // Read the current folder URI stored by PairEditorScreen before navigating here,
             // so the picker can show the already-selected folder.
             val initialUri =
@@ -260,6 +288,10 @@ fun SynckroNavHost(
         }
         composable(
             route = Routes.PICK_REMOTE_FOLDER,
+            enterTransition = { detailEnterTransition() },
+            exitTransition = { detailExitTransition() },
+            popEnterTransition = { detailPopEnterTransition() },
+            popExitTransition = { detailPopExitTransition() },
             arguments =
                 listOf(
                     navArgument(PickRemoteFolderViewModel.ARG_PROVIDER) {
@@ -295,6 +327,10 @@ fun SynckroNavHost(
         }
         composable(
             route = Routes.PAIR_DETAIL,
+            enterTransition = { detailEnterTransition() },
+            exitTransition = { detailExitTransition() },
+            popEnterTransition = { detailPopEnterTransition() },
+            popExitTransition = { detailPopExitTransition() },
             arguments =
                 listOf(
                     navArgument("pairId") {
@@ -335,3 +371,31 @@ fun SynckroNavHost(
         }
     }
 }
+
+internal fun topLevelEnterTransition(): EnterTransition = fadeIn()
+
+internal fun topLevelExitTransition(): ExitTransition = fadeOut()
+
+internal fun topLevelPopEnterTransition(): EnterTransition = fadeIn()
+
+internal fun topLevelPopExitTransition(): ExitTransition = fadeOut()
+
+internal fun detailEnterTransition(): EnterTransition =
+    slideInHorizontally(initialOffsetX = ::detailEnterInitialOffset)
+
+internal fun detailExitTransition(): ExitTransition =
+    slideOutHorizontally(targetOffsetX = ::detailExitTargetOffset)
+
+internal fun detailPopEnterTransition(): EnterTransition =
+    slideInHorizontally(initialOffsetX = ::detailPopEnterInitialOffset)
+
+internal fun detailPopExitTransition(): ExitTransition =
+    slideOutHorizontally(targetOffsetX = ::detailPopExitTargetOffset)
+
+internal fun detailEnterInitialOffset(width: Int): Int = width
+
+internal fun detailExitTargetOffset(width: Int): Int = -width
+
+internal fun detailPopEnterInitialOffset(width: Int): Int = -width
+
+internal fun detailPopExitTargetOffset(width: Int): Int = width
