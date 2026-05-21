@@ -15,12 +15,14 @@ import com.synckro.domain.model.SyncEventTag
 import com.synckro.util.logging.LogExporter
 import com.synckro.util.logging.LogVisibilityConfig
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -43,6 +45,7 @@ import javax.inject.Inject
  * when the relevant filter is null, so toggling an Account or Provider
  * filter narrows the view to that scope without dropping pair-level events.
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class LogsViewModel
     @Inject
@@ -53,8 +56,7 @@ class LogsViewModel
         accountRepository: AccountRepository,
         syncPairDao: SyncPairDao,
     ) : ViewModel() {
-        /** 0 means "show all pairs". */
-        val pairId: Long = savedStateHandle[KEY_PAIR_ID] ?: 0L
+        private val initialPairId: Long = savedStateHandle[KEY_PAIR_ID] ?: 0L
 
         data class UiState(
             val events: List<SyncEvent> = emptyList(),
@@ -71,15 +73,27 @@ class LogsViewModel
             val searchQuery: String = "",
             /** All known accounts, used to populate the Account filter chip row. */
             val knownAccounts: List<Account> = emptyList(),
+            /** Active pair filter; null means show all pairs. */
+            val pairIdFilter: Long? = null,
             /** True when no user filters or search are active. */
             val hasActiveFilters: Boolean = false,
         )
 
+        private val _pairIdFilter = MutableStateFlow(initialPairId.takeIf { it != 0L })
         private val _levelFilter = MutableStateFlow<SyncEventLevel?>(null)
         private val _tagFilter = MutableStateFlow<String?>(null)
         private val _accountFilter = MutableStateFlow<String?>(null)
         private val _providerFilter = MutableStateFlow<CloudProviderType?>(null)
         private val _searchQuery = MutableStateFlow("")
+
+        private val eventsFlow =
+            _pairIdFilter.flatMapLatest { pairId ->
+                if (pairId != null) {
+                    syncEventRepository.observeForPair(pairId)
+                } else {
+                    syncEventRepository.observeAll()
+                }
+            }
 
         /** Maps pairId → (provider, accountId). Used to resolve account/provider filters. */
         private val pairContexts: StateFlow<Map<Long, Pair<CloudProviderType, String?>>> =
@@ -95,14 +109,15 @@ class LogsViewModel
 
         val state: StateFlow<UiState> =
             combine(
-                if (pairId != 0L) syncEventRepository.observeForPair(pairId) else syncEventRepository.observeAll(),
+                eventsFlow,
                 combine(_levelFilter, _tagFilter, _accountFilter, _providerFilter, _searchQuery) {
                     level, tag, account, provider, query ->
                     Filters(level, tag, account, provider, query)
                 },
+                _pairIdFilter,
                 pairContexts,
                 accountsFlow,
-            ) { events, filters, contexts, accounts ->
+            ) { events, filters, pairIdFilter, contexts, accounts ->
                 val q = filters.query.trim()
                 val filtered = events.filter { e -> matches(e, filters, contexts, q) }
                 UiState(
@@ -114,7 +129,9 @@ class LogsViewModel
                     providerFilter = filters.provider,
                     searchQuery = filters.query,
                     knownAccounts = accounts,
+                    pairIdFilter = pairIdFilter,
                     hasActiveFilters =
+                        pairIdFilter != null ||
                         filters.level != null ||
                             filters.tag != null ||
                             filters.account != null ||
@@ -229,6 +246,11 @@ class LogsViewModel
             _providerFilter.value = provider
         }
 
+        /** Sets (or clears, when [pairId] is null/invalid) the active pair filter. */
+        fun setPairFilter(pairId: Long?) {
+            _pairIdFilter.value = pairId?.takeIf { it > 0L }
+        }
+
         /** Updates the free-text search query (case-insensitive over message + tag). */
         fun setSearchQuery(query: String) {
             _searchQuery.value = query
@@ -236,6 +258,7 @@ class LogsViewModel
 
         /** Clears every active filter and resets the search query. */
         fun clearFilters() {
+            _pairIdFilter.value = null
             _levelFilter.value = null
             _tagFilter.value = null
             _accountFilter.value = null

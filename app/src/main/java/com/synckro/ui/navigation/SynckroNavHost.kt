@@ -56,6 +56,8 @@ object Routes {
 
     fun pairDetail(pairId: Long) = "pair_detail/$pairId"
 
+    fun logs(pairId: Long) = "main?destination=logs&pairId=$pairId"
+
     fun pickRemoteFolder(provider: CloudProviderType, accountId: String?): String {
         val base = "pick_remote_folder?${PickRemoteFolderViewModel.ARG_PROVIDER}=${provider.name}"
         return if (accountId.isNullOrBlank()) {
@@ -82,6 +84,7 @@ fun SynckroNavHost(
     // the AccountsScreen to briefly highlight (and scroll to) the matching row.
     // Cleared by MainScaffold via [onPendingAccountHighlightHandled].
     var pendingAccountHighlight by remember { mutableStateOf<String?>(null) }
+    var pendingLogsPairId by remember { mutableStateOf<Long?>(null) }
 
     // Observe navigation commands dispatched from outside the Compose tree
     // (e.g. from a re-auth notification tap handled in MainActivity.onNewIntent).
@@ -97,6 +100,11 @@ fun SynckroNavHost(
                         // select the Accounts tab.
                         pendingMainDestination = MainDestination.Accounts
                         pendingAccountHighlight = event.accountId
+                        nav.popBackStack(Routes.MAIN, inclusive = false)
+                    }
+                    is AppNavEvent.OpenLogs -> {
+                        pendingMainDestination = MainDestination.Logs
+                        pendingLogsPairId = event.pairId
                         nav.popBackStack(Routes.MAIN, inclusive = false)
                     }
                 }
@@ -156,6 +164,8 @@ fun SynckroNavHost(
                 onPendingDestinationHandled = { pendingMainDestination = null },
                 pendingAccountHighlight = pendingAccountHighlight,
                 onPendingAccountHighlightHandled = { pendingAccountHighlight = null },
+                pendingLogsPairId = pendingLogsPairId,
+                onPendingLogsPairHandled = { pendingLogsPairId = null },
             )
         }
         composable(
@@ -316,7 +326,9 @@ fun SynckroNavHost(
                     // Drop back to MainScaffold so the user can see the global Conflicts inbox.
                     nav.popBackStack(Routes.MAIN, inclusive = false)
                 },
-                onOpenLogs = {
+                onOpenLogs = { pairId ->
+                    pendingMainDestination = MainDestination.Logs
+                    pendingLogsPairId = pairId
                     nav.popBackStack(Routes.MAIN, inclusive = false)
                 },
             )

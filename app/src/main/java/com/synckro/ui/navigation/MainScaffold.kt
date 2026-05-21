@@ -91,6 +91,8 @@ fun MainScaffold(
     onPendingDestinationHandled: () -> Unit = {},
     pendingAccountHighlight: String? = null,
     onPendingAccountHighlightHandled: () -> Unit = {},
+    pendingLogsPairId: Long? = null,
+    onPendingLogsPairHandled: () -> Unit = {},
     // The conflicts badge reads from the shared HomeViewModel (which already
     // exposes pendingConflictCount). hiltViewModel() here is scoped to the
     // MainScaffold's NavBackStackEntry so the inner PairsScreen gets the same
@@ -104,6 +106,7 @@ fun MainScaffold(
     // ([pendingAccountHighlight]) or by an internal request from PairsScreen's reauth
     // banner — both paths land on the same AccountsScreen consumer.
     var currentAccountHighlight by remember { mutableStateOf<String?>(null) }
+    var currentLogsPairId by remember { mutableStateOf<Long?>(null) }
 
     // Honour external deep-links (e.g. re-auth notification → Accounts).
     LaunchedEffect(pendingDestination) {
@@ -116,6 +119,12 @@ fun MainScaffold(
         if (pendingAccountHighlight != null) {
             currentAccountHighlight = pendingAccountHighlight
             onPendingAccountHighlightHandled()
+        }
+    }
+    LaunchedEffect(pendingLogsPairId) {
+        if (pendingLogsPairId != null) {
+            currentLogsPairId = pendingLogsPairId
+            onPendingLogsPairHandled()
         }
     }
 
@@ -148,6 +157,8 @@ fun MainScaffold(
                 MainDestination.Logs -> LogsScreen(
                     onBack = null,
                     onTriggerSync = { selected = MainDestination.Pairs },
+                    requestedPairId = currentLogsPairId,
+                    onRequestedPairIdHandled = { currentLogsPairId = null },
                 )
                 MainDestination.Accounts -> AccountsScreen(
                     activity = activity,

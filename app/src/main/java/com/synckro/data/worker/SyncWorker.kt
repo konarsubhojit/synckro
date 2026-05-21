@@ -275,17 +275,12 @@ class SyncWorker
                             }
                             is SyncEngine.Result.Retriable -> {
                                 if (runAttemptCount + 1 >= MAX_RETRY_ATTEMPTS) {
-                                    Timber.w(
-                                        "Sync for pair %d exhausted %d attempt(s): %s",
-                                        pairId, MAX_RETRY_ATTEMPTS, r.reason,
+                                    handleRetriableExhaustion(
+                                        pair = pair,
+                                        pairId = pairId,
+                                        tag = LOG_TAG,
+                                        reason = r.reason,
                                     )
-                                    syncPairDao.updateLastSyncResult(pairId, System.currentTimeMillis(), RESULT_FAILURE)
-                                    syncEventRepository.log(
-                                        pairId, SyncEventLevel.ERROR, LOG_TAG,
-                                        "Sync failed after $MAX_RETRY_ATTEMPTS attempt(s), giving up: ${r.reason}",
-                                    )
-                                    WorkManager.getInstance(applicationContext).cancelUniqueWork(uniqueName(pairId))
-                                    Result.failure()
                                 } else {
                                     Timber.i(
                                         "Retrying sync for pair %d (attempt %d/%d): %s",
@@ -363,18 +358,13 @@ class SyncWorker
                                 // are still tagged `auth` so the user can find them in LogsScreen.
                                 val tag = if (e is CloudProviderException.AuthenticationFailed) LOG_TAG_AUTH else LOG_TAG
                                 if (runAttemptCount + 1 >= MAX_RETRY_ATTEMPTS) {
-                                    Timber.w(
-                                        e,
-                                        "Sync for pair %d exhausted %d attempt(s): %s",
-                                        pairId, MAX_RETRY_ATTEMPTS, mapped.reason,
+                                    handleRetriableExhaustion(
+                                        pair = pair,
+                                        pairId = pairId,
+                                        tag = tag,
+                                        reason = mapped.reason,
+                                        cause = e,
                                     )
-                                    syncPairDao.updateLastSyncResult(pairId, System.currentTimeMillis(), RESULT_FAILURE)
-                                    syncEventRepository.log(
-                                        pairId, SyncEventLevel.ERROR, tag,
-                                        "Sync failed after $MAX_RETRY_ATTEMPTS attempt(s), giving up: ${mapped.reason}",
-                                    )
-                                    WorkManager.getInstance(applicationContext).cancelUniqueWork(uniqueName(pairId))
-                                    Result.failure()
                                 } else {
                                     Timber.i(
                                         e,
@@ -425,6 +415,32 @@ class SyncWorker
 
                 workerResult
             }
+        }
+
+        internal suspend fun handleRetriableExhaustion(
+            pair: SyncPair,
+            pairId: Long,
+            tag: String,
+            reason: String,
+            cause: Throwable? = null,
+        ): Result {
+            Timber.w(
+                cause,
+                "Sync for pair %d exhausted %d attempt(s): %s",
+                pairId,
+                MAX_RETRY_ATTEMPTS,
+                reason,
+            )
+            syncPairDao.updateLastSyncResult(pairId, System.currentTimeMillis(), RESULT_FAILURE)
+            syncEventRepository.log(
+                pairId,
+                SyncEventLevel.ERROR,
+                tag,
+                "Sync failed after $MAX_RETRY_ATTEMPTS attempt(s), giving up: $reason",
+            )
+            syncStatusNotifier.notifyFailure(pair, reason)
+            WorkManager.getInstance(applicationContext).cancelUniqueWork(uniqueName(pairId))
+            return Result.failure()
         }
 
         private fun buildForegroundInfo(

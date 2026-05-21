@@ -238,9 +238,14 @@
     <string name="sync_channel_name">Sync progress</string>
     <string name="sync_channel_description">Shows progress while Synckro is transferring files in the background.</string>
     <string name="sync_status_channel_name">Sync status</string>
-    <string name="sync_status_channel_description">Reserved for sync success and failure result notifications.</string>
+    <string name="sync_status_channel_description">Alerts when a sync pair needs attention after a background run.</string>
     <string name="sync_notification_title">Syncing %1$s</string>
     <string name="sync_notification_content">Transfer in progress…</string>
+    <string name="sync_failure_unknown_summary">Sync failed. Open Logs for details.</string>
+    <string name="sync_failure_auth_summary">Sign-in failed during sync.</string>
+    <string name="sync_failure_rate_limited_summary">Cloud provider rate limit hit. Try again later.</string>
+    <string name="sync_failure_not_configured_summary">Cloud provider is not configured in this build.</string>
+    <string name="sync_failure_reauth_summary">Sign-in expired. Reconnect your account.</string>
 
     <!-- Re-authentication notification (shown when a cloud account needs to be reconnected) -->
     <string name="reauth_channel_name">Account sign-in required</string>
