@@ -16,7 +16,9 @@ import com.synckro.domain.model.SyncDirection
 import com.synckro.domain.model.SyncPair
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
-import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -36,7 +38,7 @@ class SyncStatusNotifierTest {
     @get:Rule
     val tempFolder = TemporaryFolder()
 
-    private val testDispatcher = UnconfinedTestDispatcher()
+    private val testDispatcher = StandardTestDispatcher()
     private val testScope = TestScope(testDispatcher)
 
     private val fakePair =
@@ -63,6 +65,16 @@ class SyncStatusNotifierTest {
         return SettingsRepository(dataStore)
     }
 
+    private fun buildNotifier(
+        context: Context,
+        repository: SettingsRepository,
+    ): SyncStatusNotifier =
+        SyncStatusNotifier(
+            context = context,
+            settingsRepository = repository,
+            workerCompletionAggregator = WorkerCompletionAggregator(testScope.backgroundScope),
+        )
+
     @Test
     fun `app startup registers sync status channel`() {
         val app = ApplicationProvider.getApplicationContext<SynckroApp>()
@@ -80,7 +92,7 @@ class SyncStatusNotifierTest {
             val context = ApplicationProvider.getApplicationContext<Context>()
             val nm = context.getSystemService(NotificationManager::class.java)
             val repo = buildRepository().also { it.setNotifyOnFailure(false) }
-            val notifier = SyncStatusNotifier(context, repo)
+            val notifier = buildNotifier(context, repo)
 
             notifier.notifyFailure(fakePair, "boom")
 
@@ -95,7 +107,7 @@ class SyncStatusNotifierTest {
             shadowOf(context.applicationContext as Application)
                 .grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
             val repo = buildRepository().also { it.setNotifyOnFailure(true) }
-            val notifier = SyncStatusNotifier(context, repo)
+            val notifier = buildNotifier(context, repo)
 
             notifier.notifyFailure(fakePair, "Authentication failed: timeout during token refresh")
             notifier.notifyFailure(fakePair, "Rate limited (retry in 5000 ms)")
@@ -120,15 +132,76 @@ class SyncStatusNotifierTest {
         }
 
     @Test
-    fun `notifySuccessSummary remains a no-op when enabled`() =
+    fun `notifySuccessSummary does not post notification when disabled`() =
         testScope.runTest {
             val context = ApplicationProvider.getApplicationContext<Context>()
             val nm = context.getSystemService(NotificationManager::class.java)
-            val repo = buildRepository().also { it.setNotifyOnSuccess(true) }
-            val notifier = SyncStatusNotifier(context, repo)
+            shadowOf(context.applicationContext as Application)
+                .grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
+            val repo = buildRepository().also { it.setNotifyOnSuccess(false) }
+            val notifier = buildNotifier(context, repo)
 
             notifier.notifySuccessSummary(fakePair, 3, 1)
+            advanceTimeBy(WorkerCompletionAggregator.DEFAULT_WINDOW_MS)
+            advanceUntilIdle()
 
             assertEquals(0, Shadows.shadowOf(nm).size())
+        }
+
+    @Test
+    fun `notifySuccessSummary suppresses no-op runs`() =
+        testScope.runTest {
+            val context = ApplicationProvider.getApplicationContext<Context>()
+            val nm = context.getSystemService(NotificationManager::class.java)
+            shadowOf(context.applicationContext as Application)
+                .grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
+            val repo = buildRepository().also { it.setNotifyOnSuccess(true) }
+            val notifier = buildNotifier(context, repo)
+
+            notifier.notifySuccessSummary(fakePair, 0, 0)
+            advanceTimeBy(WorkerCompletionAggregator.DEFAULT_WINDOW_MS)
+            advanceUntilIdle()
+
+            assertEquals(0, Shadows.shadowOf(nm).size())
+        }
+
+    @Test
+    fun `notifySuccessSummary groups multiple pair completions into one summary`() =
+        testScope.runTest {
+            val context = ApplicationProvider.getApplicationContext<Context>()
+            val nm = context.getSystemService(NotificationManager::class.java)
+            shadowOf(context.applicationContext as Application)
+                .grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
+            val repo = buildRepository().also { it.setNotifyOnSuccess(true) }
+            val notifier = buildNotifier(context, repo)
+            val secondPair = fakePair.copy(id = 2L, displayName = "Work Files")
+
+            notifier.notifySuccessSummary(fakePair, 3, 0)
+            notifier.notifySuccessSummary(secondPair, 2, 0)
+            advanceTimeBy(WorkerCompletionAggregator.DEFAULT_WINDOW_MS)
+            advanceUntilIdle()
+
+            val shadowNm = Shadows.shadowOf(nm)
+            assertEquals(3, shadowNm.size())
+
+            val summary = requireNotNull(shadowNm.getNotification(0))
+            assertEquals(
+                context.getString(R.string.sync_success_notification_summary, 2, 5),
+                summary.extras.getString(Notification.EXTRA_TITLE),
+            )
+
+            val firstChild = requireNotNull(shadowNm.getNotification(fakePair.id.toInt()))
+            assertEquals(fakePair.displayName, firstChild.extras.getString(Notification.EXTRA_TITLE))
+            assertEquals(
+                context.getString(R.string.sync_success_notification_child_text, 3),
+                firstChild.extras.getString(Notification.EXTRA_TEXT),
+            )
+
+            val secondChild = requireNotNull(shadowNm.getNotification(secondPair.id.toInt()))
+            assertEquals(secondPair.displayName, secondChild.extras.getString(Notification.EXTRA_TITLE))
+            assertEquals(
+                context.getString(R.string.sync_success_notification_child_text, 2),
+                secondChild.extras.getString(Notification.EXTRA_TEXT),
+            )
         }
 }

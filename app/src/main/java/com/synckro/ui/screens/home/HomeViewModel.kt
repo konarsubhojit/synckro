@@ -310,7 +310,12 @@ class HomeViewModel
             val req =
                 OneTimeWorkRequestBuilder<SyncWorker>()
                     .setConstraints(constraints)
-                    .setInputData(workDataOf(SyncWorker.KEY_PAIR_ID to pair.id))
+                    .setInputData(
+                        workDataOf(
+                            SyncWorker.KEY_PAIR_ID to pair.id,
+                            SyncWorker.KEY_IS_PERIODIC to false,
+                        ),
+                    )
                     // Same exponential-backoff policy as the periodic schedule so a
                     // manual "Sync now" that hits a transient network/auth blip retries
                     // on a sane curve instead of WorkManager's default 10s linear.

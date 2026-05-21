@@ -60,9 +60,9 @@ Because a syncing animation is already visible in the Home screen, low importanc
 | Badge         | Enabled                                                 |
 | Registered in | `SynckroApp.createNotificationChannels()`               |
 
-**Purpose:** Sync result notifications (currently terminal failure after retry exhaustion; success summaries remain reserved for a later phase).
+**Purpose:** Sync result notifications for terminal failures and opt-in grouped success summaries after background runs.
 
-**Current behaviour:** `SyncStatusNotifier.notifyFailure(...)` posts a notification for the affected pair on terminal retry exhaustion, reusing the pair id as the notification id so later failures replace earlier ones. Tapping the notification launches `MainActivity`, which forwards an `OpenLogs(pairId)` navigation event into the Compose tree so the Logs destination opens filtered to that pair.
+**Current behaviour:** `SyncStatusNotifier.notifyFailure(...)` posts a notification for the affected pair on terminal retry exhaustion, reusing the pair id as the notification id so later failures replace earlier ones. When `SettingsRepository.notifyOnSuccess` is enabled, `SyncWorker` also forwards non-empty periodic successes to `SyncStatusNotifier.notifySuccessSummary(...)`; a short in-memory aggregation window collapses burst completions into one grouped `InboxStyle` summary (`id = 0`) plus one child notification per pair (`id = pairId`). No-op runs do not post success notifications.
 
 ---
 

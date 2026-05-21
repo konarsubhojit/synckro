@@ -110,6 +110,7 @@ class SyncWorker
          */
         override suspend fun doWork(): Result {
             val pairId = inputData.getLong(KEY_PAIR_ID, -1L)
+            val isPeriodicRun = inputData.getBoolean(KEY_IS_PERIODIC, true)
             if (pairId < 0) {
                 Timber.w("SyncWorker enqueued without a valid %s; failing permanently.", KEY_PAIR_ID)
                 return Result.failure()
@@ -257,6 +258,9 @@ class SyncWorker
                                     "Sync succeeded: ${r.applied} applied, ${r.conflicts} conflicts",
                                 )
                                 Timber.i("SyncWorker.doWork: success pairId=%d applied=%d conflicts=%d", pairId, r.applied, r.conflicts)
+                                if (isPeriodicRun && r.applied > 0) {
+                                    syncStatusNotifier.notifySuccessSummary(pair, r.applied, r.conflicts)
+                                }
                                 Result.success()
                             }
                             is SyncEngine.Result.PartialFailure -> {
@@ -509,6 +513,7 @@ class SyncWorker
 
         companion object {
             const val KEY_PAIR_ID = "pair_id"
+            const val KEY_IS_PERIODIC = "is_periodic"
 
             /** Notification channel ID for sync progress. Created by SynckroApp.createNotificationChannels(). */
             const val SYNC_CHANNEL_ID = "synckro_sync"
@@ -667,10 +672,15 @@ class SyncScheduler(
                 .setRequiresStorageNotLow(true)
                 .build()
 
-        val req =
-            PeriodicWorkRequestBuilder<SyncWorker>(interval, TimeUnit.MINUTES)
-                .setConstraints(constraints)
-                .setInputData(workDataOf(SyncWorker.KEY_PAIR_ID to pair.id))
+            val req =
+                PeriodicWorkRequestBuilder<SyncWorker>(interval, TimeUnit.MINUTES)
+                    .setConstraints(constraints)
+                    .setInputData(
+                        workDataOf(
+                            SyncWorker.KEY_PAIR_ID to pair.id,
+                            SyncWorker.KEY_IS_PERIODIC to true,
+                        ),
+                    )
                 // Exponential backoff (sub-issue #142): transient retriable failures
                 // (network blips, Retriable CloudProviderException) re-enter the queue
                 // with WorkManager's exponential schedule starting at 30s, capped at
