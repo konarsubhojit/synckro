@@ -250,7 +250,7 @@ internal fun LogsActions(
     TextButton(onClick = { showSheet = true }) {
         Icon(
             Icons.Default.Share,
-            contentDescription = null,
+            contentDescription = stringResource(R.string.logs_share_export),
         )
         Spacer(Modifier.width(8.dp))
         Text(stringResource(R.string.logs_share_export))

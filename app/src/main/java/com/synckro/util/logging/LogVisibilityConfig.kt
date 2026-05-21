@@ -65,8 +65,8 @@ object LogVisibilityConfig {
     }
 
     private val storagePathRegex = Regex("/storage/emulated/\\d+/[^\\s,;)\\]\"']*")
-    private val accountIdEqualsRegex = Regex("(?i)\\b(accountId|account_id)\\s*=\\s*([^\\s,;)\\]]+)")
-    private val accountIdJsonRegex = Regex("(?i)\"(accountId|account_id)\"\\s*:\\s*\"([^\"]+)\"")
+    private val accountIdEqualsRegex = Regex("(?i)\\b(accountId|account_id)\\s*=\\s*[^\\s,;)\\]]+")
+    private val accountIdJsonRegex = Regex("(?i)\"(accountId|account_id)\"\\s*:\\s*\"[^\"]+\"")
 }
 
 data class LogExportConfig(
