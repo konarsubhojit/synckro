@@ -5,6 +5,13 @@
     <string name="onboarding_title">Welcome to Synckro</string>
     <string name="onboarding_body">Keep a folder on your phone in sync with OneDrive or Google Drive.</string>
     <string name="onboarding_cta">Get started</string>
+    <string name="onboarding_skip">Skip</string>
+    <string name="onboarding_next">Next</string>
+    <string name="onboarding_create_first_pair">Create my first sync pair</string>
+    <string name="onboarding_page2_title">Connect an account</string>
+    <string name="onboarding_page2_body">Sign in to Google Drive or OneDrive. You can connect more than one account.</string>
+    <string name="onboarding_page3_title">Pick your first folders</string>
+    <string name="onboarding_page3_body">Choose a local folder on your device and a cloud folder to keep in sync. You can add more pairs anytime.</string>
 
     <!-- Home -->
     <string name="home_title">Sync pairs</string>
