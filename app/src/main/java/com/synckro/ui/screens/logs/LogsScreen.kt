@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -23,8 +24,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.FileDownload
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.outlined.BugReport
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -58,9 +64,11 @@ import com.synckro.domain.model.SyncEvent
 import com.synckro.domain.model.SyncEventLevel
 import com.synckro.domain.model.SyncEventTag
 import com.synckro.ui.components.EmptyState
+import com.synckro.ui.theme.SynckroTheme
 import com.synckro.util.logging.LogExportSink
 import com.synckro.util.logging.LogVisibilityConfig
 import androidx.compose.material.icons.filled.History
+import androidx.compose.ui.tooling.preview.Preview
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -465,6 +473,13 @@ private fun LogEntryRow(
             SyncEventLevel.WARN -> Color(0xFFF59E0B) // Amber-500
             SyncEventLevel.ERROR -> MaterialTheme.colorScheme.error
         }
+    val levelIcon: ImageVector =
+        when (event.level) {
+            SyncEventLevel.DEBUG -> Icons.Outlined.BugReport
+            SyncEventLevel.INFO -> Icons.Default.Info
+            SyncEventLevel.WARN -> Icons.Default.Warning
+            SyncEventLevel.ERROR -> Icons.Default.ErrorOutline
+        }
     Surface(
         modifier =
             Modifier
@@ -478,6 +493,13 @@ private fun LogEntryRow(
     ) {
         Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = levelIcon,
+                    contentDescription = null,
+                    tint = levelColor,
+                    modifier = Modifier.size(14.dp),
+                )
+                Spacer(Modifier.width(4.dp))
                 Text(
                     text = dateFormat.format(Date(event.timestampMs)),
                     style = MaterialTheme.typography.labelSmall,
@@ -512,6 +534,50 @@ private fun LogEntryRow(
 internal fun SyncEvent.toLogLine(dateFormat: SimpleDateFormat): String {
     val ts = dateFormat.format(Date(timestampMs))
     return "$ts ${level.name.padEnd(5)} [$tag] $message"
+}
+
+@Preview(name = "LogEntryRow — all levels (light)", showBackground = true, widthDp = 360)
+@Preview(
+    name = "LogEntryRow — all levels (dark)",
+    showBackground = true,
+    widthDp = 360,
+    uiMode = android.content.res.Configuration.UI_MODE_NIGHT_YES,
+)
+@Composable
+private fun LogEntryRowPreview() {
+    val fmt = remember { SimpleDateFormat("HH:mm:ss.SSS", Locale.US) }
+    val baseMs = 1_700_000_000_000L
+    val events = listOf(
+        SyncEvent(
+            id = 1, pairId = null, timestampMs = baseMs,
+            level = SyncEventLevel.DEBUG, tag = SyncEventTag.SyncWorker,
+            message = "Enumerating remote files…",
+        ),
+        SyncEvent(
+            id = 2, pairId = null, timestampMs = baseMs + 1_000,
+            level = SyncEventLevel.INFO, tag = SyncEventTag.OpApplier,
+            message = "Uploaded 3 files successfully.",
+        ),
+        SyncEvent(
+            id = 3, pairId = null, timestampMs = baseMs + 2_000,
+            level = SyncEventLevel.WARN, tag = SyncEventTag.Auth,
+            message = "Token nearing expiry, refreshing.",
+        ),
+        SyncEvent(
+            id = 4, pairId = null, timestampMs = baseMs + 3_000,
+            level = SyncEventLevel.ERROR, tag = SyncEventTag.SyncWorker,
+            message = "Upload failed: quota exceeded.",
+        ),
+    )
+    SynckroTheme {
+        Surface {
+            Column {
+                events.forEach { event ->
+                    LogEntryRow(event = event, dateFormat = fmt)
+                }
+            }
+        }
+    }
 }
 
 /**
