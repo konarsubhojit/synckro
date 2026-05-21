@@ -74,7 +74,7 @@ class EnumConverters {
 
 @Database(
     entities = [AccountEntity::class, SyncPairEntity::class, FileIndexEntity::class, SyncEventEntity::class, ConflictRecordEntity::class, LocalIndexEntity::class],
-    version = 12,
+    version = 13,
     exportSchema = true,
 )
 @TypeConverters(EnumConverters::class)
@@ -344,6 +344,27 @@ abstract class SynckroDatabase : RoomDatabase() {
                         "CREATE INDEX IF NOT EXISTS `index_sync_pair_accountId` " +
                             "ON `sync_pair` (`accountId`)",
                     )
+                }
+            }
+
+        /**
+         * Migrates the database from version 12 to 13:
+         * - Adds `localDocumentId` nullable column to `file_index`.
+         *   Stores the SAF document ID of the local file so a `content://` thumbnail
+         *   URI can be built at display time using
+         *   `DocumentsContract.buildDocumentUriUsingTree(treeUri, docId)`.
+         *   Populated by [com.synckro.data.scanner.LocalFolderScannerImpl] on each scan.
+         *   Existing rows receive NULL; they will be backfilled on the next local scan.
+         * - Adds `remoteThumbnailUrl` nullable column to `file_index`.
+         *   Stores the provider-supplied thumbnail URL (Google Drive `thumbnailLink`,
+         *   OneDrive pre-signed `@microsoft.graph.downloadUrl`) for conflict-card display.
+         *   Existing rows receive NULL; populated by the remote enumerator after sync.
+         */
+        val MIGRATION_12_13 =
+            object : Migration(12, 13) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL("ALTER TABLE `file_index` ADD COLUMN `localDocumentId` TEXT")
+                    db.execSQL("ALTER TABLE `file_index` ADD COLUMN `remoteThumbnailUrl` TEXT")
                 }
             }
     }

@@ -7,7 +7,7 @@ internal const val FOLDER_MIME_TYPE = "application/vnd.google-apps.folder"
 
 /** Fields requested when fetching a single file or a list of files. */
 internal const val DRIVE_FILE_FIELDS =
-    "id,name,parents,mimeType,size,modifiedTime,md5Checksum"
+    "id,name,parents,mimeType,size,modifiedTime,md5Checksum,thumbnailLink"
 
 /** Fields parameter used in files.list responses. */
 internal const val DRIVE_LIST_FIELDS = "nextPageToken,files($DRIVE_FILE_FIELDS)"
@@ -38,6 +38,12 @@ internal data class DriveFile(
     val modifiedTime: String? = null,
     val md5Checksum: String? = null,
     val trashed: Boolean? = null,
+    /**
+     * Short-lived thumbnail URL returned by the Drive Files API.
+     * Requires a Bearer token when fetched; used as [FileIndexEntity.remoteThumbnailUrl]
+     * for in-app conflict-card thumbnail display.
+     */
+    val thumbnailLink: String? = null,
 )
 
 /** Paged list response from files.list. */
