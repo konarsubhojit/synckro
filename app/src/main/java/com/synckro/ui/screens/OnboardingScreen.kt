@@ -403,10 +403,9 @@ private fun OnboardingStep(
                         .wrapContentHeight()
                         .sizeIn(minWidth = 36.dp, minHeight = 36.dp),
             ) {
-                Column(
+                Box(
                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center,
+                    contentAlignment = Alignment.Center,
                 ) {
                     Text(
                         text = stepNumber.toString(),
