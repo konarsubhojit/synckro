@@ -10,6 +10,7 @@ import com.synckro.domain.model.CloudProviderType
 import com.synckro.domain.model.ConflictRecord
 import com.synckro.domain.model.SyncPair
 import io.mockk.coEvery
+import io.mockk.coVerifyOrder
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
@@ -24,6 +25,7 @@ import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
@@ -251,6 +253,250 @@ class ConflictInboxViewModelTest {
         assertEquals(ConflictInboxViewModel.FileTypeIcon.FOLDER, fileTypeIconForPath("photos/"))
         assertEquals(ConflictInboxViewModel.FileTypeIcon.GENERIC, fileTypeIconForPath("archive.bin"))
     }
+
+    // -------------------------------------------------------------------------
+    // Selection-mode state transitions
+    // -------------------------------------------------------------------------
+
+    @Test
+    fun `initial state is not in selection mode with empty selection`() =
+        runTest {
+            every { conflictRepository.observeUnresolved() } returns MutableStateFlow(emptyList())
+            val vm = createVm()
+            val collectJob = launch { vm.state.collect {} }
+            advanceUntilIdle()
+
+            assertFalse(vm.state.value.isSelectionMode)
+            assertTrue(vm.state.value.selectedIds.isEmpty())
+            assertEquals(0, vm.state.value.selectedCount)
+
+            collectJob.cancel()
+        }
+
+    @Test
+    fun `enterSelectionMode sets isSelectionMode true and selects the given id`() =
+        runTest {
+            every { conflictRepository.observeUnresolved() } returns
+                MutableStateFlow(listOf(makeConflict(id = 1L)))
+            coEvery { fileIndexDao.getForPair(any()) } returns emptyList()
+            coEvery { syncPairRepository.getById(any()) } returns null
+            coEvery { accountRepository.getAll() } returns emptyList()
+
+            val vm = createVm()
+            val collectJob = launch { vm.state.collect {} }
+            advanceUntilIdle()
+
+            vm.enterSelectionMode(1L)
+            advanceUntilIdle()
+
+            assertTrue(vm.state.value.isSelectionMode)
+            assertEquals(setOf(1L), vm.state.value.selectedIds)
+            assertEquals(1, vm.state.value.selectedCount)
+
+            collectJob.cancel()
+        }
+
+    @Test
+    fun `toggleSelection adds an unselected id while in selection mode`() =
+        runTest {
+            every { conflictRepository.observeUnresolved() } returns
+                MutableStateFlow(listOf(makeConflict(id = 1L), makeConflict(id = 2L)))
+            coEvery { fileIndexDao.getForPair(any()) } returns emptyList()
+            coEvery { syncPairRepository.getById(any()) } returns null
+            coEvery { accountRepository.getAll() } returns emptyList()
+
+            val vm = createVm()
+            val collectJob = launch { vm.state.collect {} }
+            advanceUntilIdle()
+
+            vm.enterSelectionMode(1L)
+            advanceUntilIdle()
+            vm.toggleSelection(2L)
+            advanceUntilIdle()
+
+            assertEquals(setOf(1L, 2L), vm.state.value.selectedIds)
+
+            collectJob.cancel()
+        }
+
+    @Test
+    fun `toggleSelection removes an already-selected id`() =
+        runTest {
+            every { conflictRepository.observeUnresolved() } returns
+                MutableStateFlow(listOf(makeConflict(id = 1L), makeConflict(id = 2L)))
+            coEvery { fileIndexDao.getForPair(any()) } returns emptyList()
+            coEvery { syncPairRepository.getById(any()) } returns null
+            coEvery { accountRepository.getAll() } returns emptyList()
+
+            val vm = createVm()
+            val collectJob = launch { vm.state.collect {} }
+            advanceUntilIdle()
+
+            vm.enterSelectionMode(1L)
+            advanceUntilIdle()
+            vm.toggleSelection(2L)
+            advanceUntilIdle()
+            vm.toggleSelection(1L)
+            advanceUntilIdle()
+
+            assertEquals(setOf(2L), vm.state.value.selectedIds)
+
+            collectJob.cancel()
+        }
+
+    @Test
+    fun `toggleSelection is a no-op when not in selection mode`() =
+        runTest {
+            every { conflictRepository.observeUnresolved() } returns
+                MutableStateFlow(listOf(makeConflict(id = 1L)))
+            coEvery { fileIndexDao.getForPair(any()) } returns emptyList()
+            coEvery { syncPairRepository.getById(any()) } returns null
+            coEvery { accountRepository.getAll() } returns emptyList()
+
+            val vm = createVm()
+            val collectJob = launch { vm.state.collect {} }
+            advanceUntilIdle()
+
+            vm.toggleSelection(1L)
+            advanceUntilIdle()
+
+            assertFalse(vm.state.value.isSelectionMode)
+            assertTrue(vm.state.value.selectedIds.isEmpty())
+
+            collectJob.cancel()
+        }
+
+    @Test
+    fun `exitSelectionMode clears selection and returns to normal mode`() =
+        runTest {
+            every { conflictRepository.observeUnresolved() } returns
+                MutableStateFlow(listOf(makeConflict(id = 1L), makeConflict(id = 2L)))
+            coEvery { fileIndexDao.getForPair(any()) } returns emptyList()
+            coEvery { syncPairRepository.getById(any()) } returns null
+            coEvery { accountRepository.getAll() } returns emptyList()
+
+            val vm = createVm()
+            val collectJob = launch { vm.state.collect {} }
+            advanceUntilIdle()
+
+            vm.enterSelectionMode(1L)
+            advanceUntilIdle()
+            vm.toggleSelection(2L)
+            advanceUntilIdle()
+
+            vm.exitSelectionMode()
+            advanceUntilIdle()
+
+            assertFalse(vm.state.value.isSelectionMode)
+            assertTrue(vm.state.value.selectedIds.isEmpty())
+
+            collectJob.cancel()
+        }
+
+    // -------------------------------------------------------------------------
+    // Bulk resolution
+    // -------------------------------------------------------------------------
+
+    @Test
+    fun `applyBulkResolution resolves selected conflicts sequentially and exits selection mode`() =
+        runTest {
+            every { conflictRepository.observeUnresolved() } returns
+                MutableStateFlow(
+                    listOf(makeConflict(id = 10L), makeConflict(id = 20L), makeConflict(id = 30L)),
+                )
+            coEvery { fileIndexDao.getForPair(any()) } returns emptyList()
+            coEvery { syncPairRepository.getById(any()) } returns null
+            coEvery { accountRepository.getAll() } returns emptyList()
+
+            val vm = createVm()
+            val collectJob = launch { vm.state.collect {} }
+            advanceUntilIdle()
+
+            vm.enterSelectionMode(10L)
+            advanceUntilIdle()
+            vm.toggleSelection(30L)
+            advanceUntilIdle()
+
+            vm.bulkKeepLocal()
+            advanceUntilIdle()
+
+            // Selection mode should have been exited immediately
+            assertFalse(vm.state.value.isSelectionMode)
+            assertTrue(vm.state.value.selectedIds.isEmpty())
+
+            // Resolutions should have been applied in the order ids were captured
+            coVerifyOrder {
+                conflictRepository.resolve(10L, ConflictRecord.RESOLUTION_KEEP_LOCAL)
+                conflictRepository.resolve(30L, ConflictRecord.RESOLUTION_KEEP_LOCAL)
+            }
+
+            collectJob.cancel()
+        }
+
+    @Test
+    fun `bulkKeepRemote applies KEEP_REMOTE resolution to all selected conflicts`() =
+        runTest {
+            every { conflictRepository.observeUnresolved() } returns
+                MutableStateFlow(listOf(makeConflict(id = 5L), makeConflict(id = 6L)))
+            coEvery { fileIndexDao.getForPair(any()) } returns emptyList()
+            coEvery { syncPairRepository.getById(any()) } returns null
+            coEvery { accountRepository.getAll() } returns emptyList()
+
+            val vm = createVm()
+            val collectJob = launch { vm.state.collect {} }
+            advanceUntilIdle()
+
+            vm.enterSelectionMode(5L)
+            advanceUntilIdle()
+            vm.toggleSelection(6L)
+            advanceUntilIdle()
+
+            vm.bulkKeepRemote()
+            advanceUntilIdle()
+
+            coVerifyOrder {
+                conflictRepository.resolve(5L, ConflictRecord.RESOLUTION_KEEP_REMOTE)
+                conflictRepository.resolve(6L, ConflictRecord.RESOLUTION_KEEP_REMOTE)
+            }
+
+            collectJob.cancel()
+        }
+
+    @Test
+    fun `bulkKeepBoth applies KEEP_BOTH resolution to all selected conflicts`() =
+        runTest {
+            every { conflictRepository.observeUnresolved() } returns
+                MutableStateFlow(listOf(makeConflict(id = 7L)))
+            coEvery { fileIndexDao.getForPair(any()) } returns emptyList()
+            coEvery { syncPairRepository.getById(any()) } returns null
+            coEvery { accountRepository.getAll() } returns emptyList()
+
+            val vm = createVm()
+            val collectJob = launch { vm.state.collect {} }
+            advanceUntilIdle()
+
+            vm.enterSelectionMode(7L)
+            advanceUntilIdle()
+
+            vm.bulkKeepBoth()
+            advanceUntilIdle()
+
+            coVerifyOrder {
+                conflictRepository.resolve(7L, ConflictRecord.RESOLUTION_KEEP_BOTH)
+            }
+
+            collectJob.cancel()
+        }
+
+    private fun makeConflict(id: Long, pairId: Long = 1L) =
+        ConflictRecord(
+            id = id,
+            pairId = pairId,
+            relativePath = "file_$id.txt",
+            localLastModifiedMs = 1_000L,
+            remoteLastModifiedMs = 2_000L,
+            detectedAtMs = 3_000L,
+        )
 
     private fun createVm() =
         ConflictInboxViewModel(

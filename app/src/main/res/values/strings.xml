@@ -352,6 +352,13 @@
     <string name="conflict_inbox_keep_remote_hint">Overwrite the local copy with the cloud file</string>
     <string name="conflict_inbox_keep_both_hint">Rename one copy and keep both versions</string>
 
+    <!-- Conflict inbox: bulk selection mode -->
+    <string name="conflict_inbox_selection_count_format">%1$d selected</string>
+    <string name="conflict_inbox_cancel_selection">Cancel</string>
+    <string name="conflict_inbox_selected">selected</string>
+    <string name="conflict_inbox_not_selected">not selected</string>
+    <string name="conflict_inbox_enter_selection_mode">Enter selection mode</string>
+
     <!-- Settings screen -->
     <string name="settings_title">Settings</string>
     <string name="settings_action">Settings</string>

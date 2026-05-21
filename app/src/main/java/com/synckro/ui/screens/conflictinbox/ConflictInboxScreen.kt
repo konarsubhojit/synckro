@@ -4,7 +4,10 @@ import android.net.Uri
 import android.provider.DocumentsContract
 import android.text.format.DateUtils
 import android.text.format.Formatter
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,6 +24,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.InsertDriveFile
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.ContentCopy
@@ -52,6 +57,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
@@ -81,6 +88,11 @@ import java.util.Date
  *
  * Resolved conflicts are automatically removed after the next sync run.
  *
+ * Long-pressing a conflict row enters **selection mode**. While in selection mode
+ * the top app bar swaps to a contextual bar showing the selection count and bulk
+ * resolution actions (Keep local / Keep remote / Keep both / Cancel).  A system
+ * back gesture exits selection mode without popping the screen.
+ *
  * @param onBack Called when the user presses the back / up button.
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -91,21 +103,76 @@ fun ConflictInboxScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
 
+    // Intercept system back while in selection mode to exit without popping the screen.
+    BackHandler(enabled = state.isSelectionMode) {
+        viewModel.exitSelectionMode()
+    }
+
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text(stringResource(R.string.conflict_inbox_title)) },
-                navigationIcon = {
-                    if (onBack != null) {
-                        IconButton(onClick = onBack) {
+            if (state.isSelectionMode) {
+                TopAppBar(
+                    title = {
+                        Text(
+                            stringResource(
+                                R.string.conflict_inbox_selection_count_format,
+                                state.selectedCount,
+                            ),
+                        )
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = { viewModel.exitSelectionMode() }) {
                             Icon(
-                                Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = stringResource(R.string.nav_back),
+                                Icons.Default.Close,
+                                contentDescription = stringResource(R.string.conflict_inbox_cancel_selection),
                             )
                         }
-                    }
-                },
-            )
+                    },
+                    actions = {
+                        IconButton(
+                            onClick = { viewModel.bulkKeepLocal() },
+                            enabled = state.selectedCount > 0,
+                        ) {
+                            Icon(
+                                Icons.Default.CloudUpload,
+                                contentDescription = stringResource(R.string.conflict_inbox_keep_local),
+                            )
+                        }
+                        IconButton(
+                            onClick = { viewModel.bulkKeepRemote() },
+                            enabled = state.selectedCount > 0,
+                        ) {
+                            Icon(
+                                Icons.Default.CloudDownload,
+                                contentDescription = stringResource(R.string.conflict_inbox_keep_remote),
+                            )
+                        }
+                        IconButton(
+                            onClick = { viewModel.bulkKeepBoth() },
+                            enabled = state.selectedCount > 0,
+                        ) {
+                            Icon(
+                                Icons.Default.ContentCopy,
+                                contentDescription = stringResource(R.string.conflict_inbox_keep_both),
+                            )
+                        }
+                    },
+                )
+            } else {
+                TopAppBar(
+                    title = { Text(stringResource(R.string.conflict_inbox_title)) },
+                    navigationIcon = {
+                        if (onBack != null) {
+                            IconButton(onClick = onBack) {
+                                Icon(
+                                    Icons.AutoMirrored.Filled.ArrowBack,
+                                    contentDescription = stringResource(R.string.nav_back),
+                                )
+                            }
+                        }
+                    },
+                )
+            }
         },
     ) { padding ->
         when {
@@ -138,28 +205,35 @@ fun ConflictInboxScreen(
                             .padding(horizontal = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    item {
-                        Spacer(Modifier.height(4.dp))
-                        // Explain what a conflict is and how to resolve it
-                        Surface(
-                            color = MaterialTheme.colorScheme.secondaryContainer,
-                            shape = MaterialTheme.shapes.medium,
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Text(
-                                text = stringResource(R.string.conflict_inbox_explainer),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSecondaryContainer,
-                                modifier = Modifier.padding(12.dp),
-                            )
+                    if (!state.isSelectionMode) {
+                        item {
+                            Spacer(Modifier.height(4.dp))
+                            // Explain what a conflict is and how to resolve it
+                            Surface(
+                                color = MaterialTheme.colorScheme.secondaryContainer,
+                                shape = MaterialTheme.shapes.medium,
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.conflict_inbox_explainer),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                    modifier = Modifier.padding(12.dp),
+                                )
+                            }
                         }
                     }
                     items(state.conflicts, key = { it.id }) { conflict ->
+                        val isSelected = conflict.id in state.selectedIds
                         ConflictCard(
                             conflict = conflict,
+                            isSelectionMode = state.isSelectionMode,
+                            isSelected = isSelected,
                             onKeepLocal = { viewModel.keepLocal(conflict.id) },
                             onKeepRemote = { viewModel.keepRemote(conflict.id) },
                             onKeepBoth = { viewModel.keepBoth(conflict.id) },
+                            onLongPress = { viewModel.enterSelectionMode(conflict.id) },
+                            onToggleSelection = { viewModel.toggleSelection(conflict.id) },
                         )
                     }
                     item { Spacer(Modifier.height(8.dp)) }
@@ -169,12 +243,17 @@ fun ConflictInboxScreen(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun ConflictCard(
     conflict: ConflictInboxViewModel.ConflictRow,
+    isSelectionMode: Boolean,
+    isSelected: Boolean,
     onKeepLocal: () -> Unit,
     onKeepRemote: () -> Unit,
     onKeepBoth: () -> Unit,
+    onLongPress: () -> Unit,
+    onToggleSelection: () -> Unit,
     imageLoader: ImageLoader = ImageLoader(LocalContext.current),
 ) {
     val ctx = LocalContext.current
@@ -182,6 +261,9 @@ private fun ConflictCard(
     val resolved = conflict.resolution != null
     val fileTypeLabel = stringResource(fileTypeLabelRes(conflict.fileType))
     val fileTypeIcon = fileTypeIcon(conflict.fileType)
+
+    val selectedDescription = stringResource(R.string.conflict_inbox_selected)
+    val notSelectedDescription = stringResource(R.string.conflict_inbox_not_selected)
 
     // Build the local thumbnail URI from the SAF tree URI + document ID.
     // This is done in the UI layer so the ViewModel stays platform-agnostic.
@@ -201,25 +283,55 @@ private fun ConflictCard(
         }
 
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .semantics {
+                    if (isSelectionMode) {
+                        stateDescription = if (isSelected) selectedDescription else notSelectedDescription
+                    }
+                }
+                .combinedClickable(
+                    onClick = {
+                        if (isSelectionMode) onToggleSelection()
+                    },
+                    onLongClick = {
+                        if (!isSelectionMode) onLongPress()
+                    },
+                    onLongClickLabel = if (!isSelectionMode) {
+                        stringResource(R.string.conflict_inbox_enter_selection_mode)
+                    } else {
+                        null
+                    },
+                ),
         colors =
-            if (resolved) {
-                CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-            } else {
-                CardDefaults.cardColors()
+            when {
+                isSelected -> CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+                resolved -> CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                else -> CardDefaults.cardColors()
             },
     ) {
         Column(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            // File path
+            // File path — show a selection check icon when in selection mode
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                if (localThumbnailUri != null) {
+                if (isSelectionMode) {
+                    Icon(
+                        imageVector = Icons.Default.CheckCircle,
+                        contentDescription = null,
+                        tint = if (isSelected) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                        },
+                    )
+                } else if (localThumbnailUri != null) {
                     ConflictThumbnail(
                         thumbnailUri = localThumbnailUri,
                         fallbackIcon = fileTypeIcon,
@@ -367,8 +479,8 @@ private fun ConflictCard(
                 }
             }
 
-            // Resolution action buttons with icons and descriptions
-            if (!resolved) {
+            // Resolution action buttons with icons and descriptions — hidden in selection mode
+            if (!resolved && !isSelectionMode) {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     ConflictActionButton(
                         icon = Icons.Default.CloudUpload,
@@ -574,9 +686,13 @@ private fun ConflictCardImagePreview() {
     MaterialTheme {
         ConflictCard(
             conflict = imageConflict,
+            isSelectionMode = false,
+            isSelected = false,
             onKeepLocal = {},
             onKeepRemote = {},
             onKeepBoth = {},
+            onLongPress = {},
+            onToggleSelection = {},
             imageLoader = stubImageLoader,
         )
     }

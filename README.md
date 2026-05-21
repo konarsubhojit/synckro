@@ -23,6 +23,7 @@ a folder on **OneDrive** or **Google Drive**.
   charging-only, etc.).
 - Manual "Sync now".
 - Conflict inbox, per-pair logs, retries with exponential backoff.
+- **Bulk conflict resolution** — long-press to enter selection mode; resolve many conflicts at once with Keep local / Keep remote / Keep both. See [docs/conflict-inbox.md](docs/conflict-inbox.md).
 
 ## Tech stack
 
@@ -135,7 +136,7 @@ Near-term work:
    + resumable upload sessions).
 4. Implement Google Drive provider (OAuth + Drive v3 `changes.list` + resumable
    upload).
-5. Conflict inbox UI and per-pair settings.
+5. Per-pair settings screen.
 
 ## License
 
