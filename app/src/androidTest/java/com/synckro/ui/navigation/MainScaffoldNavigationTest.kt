@@ -7,9 +7,9 @@ import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.synckro.MainActivity
 import com.synckro.R
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
-import org.junit.Assert.assertTrue
 import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
