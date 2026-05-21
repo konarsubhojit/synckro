@@ -32,6 +32,7 @@ import com.synckro.domain.sync.CloudExceptionMapper
 import com.synckro.domain.sync.SyncEngine
 import com.synckro.domain.sync.TransferProgress
 import com.synckro.util.notification.ReauthNotificationHelper
+import com.synckro.util.notification.SyncStatusNotifier
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import kotlinx.coroutines.CancellationException
@@ -66,6 +67,7 @@ class SyncWorker
         private val providerFactories: Map<CloudProviderType, @JvmSuppressWildcards CloudProviderFactory>,
         private val engine: SyncEngine,
         private val syncEventRepository: SyncEventRepository,
+        private val syncStatusNotifier: SyncStatusNotifier,
     ) : CoroutineWorker(appContext, params) {
         /**
          * Returns the [ForegroundInfo] used when WorkManager promotes this worker to a foreground
