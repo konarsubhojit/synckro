@@ -102,6 +102,6 @@ class SyncStatusNotifier
                 } else {
                     PendingIntent.FLAG_UPDATE_CURRENT
                 }
-            return PendingIntent.getActivity(context, pairId.hashCode(), intent, flags)
+            return PendingIntent.getActivity(context, pairId.toInt(), intent, flags)
         }
     }
