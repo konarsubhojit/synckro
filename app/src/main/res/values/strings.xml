@@ -285,6 +285,10 @@
     <string name="logs_filter_tag_label">Tag</string>
     <string name="logs_filter_account_label">Account</string>
     <string name="logs_filter_provider_label">Provider</string>
+    <string name="logs_filter_time_label">Time</string>
+    <string name="logs_filter_time_1h">Last 1h</string>
+    <string name="logs_filter_time_24h">Last 24h</string>
+    <string name="logs_filter_time_7d">Last 7d</string>
     <string name="logs_search_placeholder">Search messages…</string>
     <string name="logs_search_clear">Clear search</string>
     <string name="logs_empty_filtered_title">No matching log entries</string>
