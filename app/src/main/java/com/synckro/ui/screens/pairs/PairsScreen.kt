@@ -108,6 +108,8 @@ fun PairsScreen(
     onEditSyncPair: (Long) -> Unit,
     modifier: Modifier = Modifier,
     onOpenPairDetail: (Long) -> Unit = {},
+    onOpenConflicts: () -> Unit = {},
+    onOpenLogs: (Long) -> Unit = {},
     onOpenReauth: (accountId: String?) -> Unit = {},
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
@@ -235,8 +237,8 @@ fun PairsScreen(
                             selectedPairId = null
                             coroutineScope.launch { scaffoldNavigator.navigateBack() }
                         },
-                        onOpenConflicts = {},
-                        onOpenLogs = {},
+                        onOpenConflicts = onOpenConflicts,
+                        onOpenLogs = onOpenLogs,
                         onBack = {
                             selectedPairId = null
                             coroutineScope.launch { scaffoldNavigator.navigateBack() }

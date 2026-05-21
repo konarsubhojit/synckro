@@ -154,6 +154,11 @@ fun MainScaffold(
                         onAddSyncPair = onAddSyncPair,
                         onEditSyncPair = onEditSyncPair,
                         onOpenPairDetail = onOpenPairDetail,
+                        onOpenConflicts = { selected = MainDestination.Conflicts },
+                        onOpenLogs = { pairId ->
+                            currentLogsPairId = pairId
+                            selected = MainDestination.Logs
+                        },
                         onOpenReauth = { accountId ->
                             // Phase 5d: switch to the Accounts tab and ask it to
                             // highlight the affected account (if known).

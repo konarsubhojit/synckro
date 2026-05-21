@@ -329,7 +329,7 @@ private fun ConflictListPane(
                 onKeepBoth = { onKeepBoth(conflict.id) },
                 onLongPress = { onLongPress(conflict.id) },
                 onToggleSelection = { onToggleSelection(conflict.id) },
-                onOpenConflict = onOpenConflict?.let { open -> { open(conflict.id) } },
+                onOpenConflict = onOpenConflict?.let { { it(conflict.id) } },
             )
         }
         item { Spacer(Modifier.height(8.dp)) }
