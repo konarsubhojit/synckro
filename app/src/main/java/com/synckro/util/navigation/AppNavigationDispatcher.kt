@@ -16,6 +16,9 @@ sealed class AppNavEvent {
      *   Accounts tab without any specific highlight (the original Phase 1 behaviour).
      */
     data class OpenAccounts(val accountId: String? = null) : AppNavEvent()
+
+    /** Open the Logs destination filtered to the given sync pair. */
+    data class OpenLogs(val pairId: Long) : AppNavEvent()
 }
 
 /**

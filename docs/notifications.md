@@ -51,7 +51,7 @@ Because a syncing animation is already visible in the Home screen, low importanc
 
 ---
 
-### 3. `sync_status` — Sync results (reserved)
+### 3. `sync_status` — Sync results
 
 | Property      | Value                                                   |
 |:--------------|:--------------------------------------------------------|
@@ -60,9 +60,9 @@ Because a syncing animation is already visible in the Home screen, low importanc
 | Badge         | Enabled                                                 |
 | Registered in | `SynckroApp.createNotificationChannels()`               |
 
-**Purpose:** Reserved for future sync result notifications (success summaries and terminal failures).
+**Purpose:** Sync result notifications (currently terminal failure after retry exhaustion; success summaries remain reserved for a later phase).
 
-**Current behaviour (Phase 8a):** The channel is registered on app start so it appears in system notification settings, but `SyncStatusNotifier` does not post anything yet. Its `notifyFailure(...)` and `notifySuccessSummary(...)` methods are wiring-only stubs gated by `SettingsRepository.notifyOnFailure` / `notifyOnSuccess`.
+**Current behaviour:** `SyncStatusNotifier.notifyFailure(...)` posts a notification for the affected pair on terminal retry exhaustion, reusing the pair id as the notification id so later failures replace earlier ones. Tapping the notification launches `MainActivity`, which forwards an `OpenLogs(pairId)` navigation event into the Compose tree so the Logs destination opens filtered to that pair.
 
 ---
 

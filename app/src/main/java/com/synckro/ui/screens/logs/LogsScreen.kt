@@ -79,6 +79,8 @@ import java.util.Locale
 fun LogsScreen(
     onBack: (() -> Unit)? = null,
     onTriggerSync: () -> Unit = { onBack?.invoke() },
+    requestedPairId: Long? = null,
+    onRequestedPairIdHandled: () -> Unit = {},
     viewModel: LogsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -95,6 +97,13 @@ fun LogsScreen(
     val exportChooser = stringResource(R.string.logs_export_chooser)
     val exportMediaStoreError = stringResource(R.string.logs_export_mediastore_error)
     val exportIoError = stringResource(R.string.logs_export_io_error)
+
+    LaunchedEffect(requestedPairId) {
+        if (requestedPairId != null) {
+            viewModel.setPairFilter(requestedPairId)
+            onRequestedPairIdHandled()
+        }
+    }
 
     // Observe one-shot export results from the ViewModel.
     LaunchedEffect(Unit) {

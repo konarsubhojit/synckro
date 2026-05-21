@@ -124,12 +124,22 @@ class MainActivity : ComponentActivity() {
 
     /**
      * Extracts a navigation destination from [intent] and posts it to [appNavigationDispatcher].
-     * Currently handles [ReauthNotificationHelper.ACTION_OPEN_ACCOUNTS].
+     * Currently handles [ReauthNotificationHelper.ACTION_OPEN_ACCOUNTS] and
+     * [com.synckro.util.notification.SyncStatusNotifier.ACTION_OPEN_LOGS].
      */
     private fun dispatchNavigationIntent(intent: Intent) {
-        if (intent.action == ReauthNotificationHelper.ACTION_OPEN_ACCOUNTS) {
-            val accountId = intent.getStringExtra(ReauthNotificationHelper.EXTRA_ACCOUNT_ID)
-            appNavigationDispatcher.navigateTo(AppNavEvent.OpenAccounts(accountId = accountId))
+        when (intent.action) {
+            ReauthNotificationHelper.ACTION_OPEN_ACCOUNTS -> {
+                val accountId = intent.getStringExtra(ReauthNotificationHelper.EXTRA_ACCOUNT_ID)
+                appNavigationDispatcher.navigateTo(AppNavEvent.OpenAccounts(accountId = accountId))
+            }
+
+            com.synckro.util.notification.SyncStatusNotifier.ACTION_OPEN_LOGS -> {
+                val pairId = intent.getLongExtra(com.synckro.util.notification.SyncStatusNotifier.EXTRA_PAIR_ID, 0L)
+                if (pairId > 0L) {
+                    appNavigationDispatcher.navigateTo(AppNavEvent.OpenLogs(pairId = pairId))
+                }
+            }
         }
     }
 }
