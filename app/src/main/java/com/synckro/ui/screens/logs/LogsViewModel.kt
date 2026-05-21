@@ -63,6 +63,7 @@ class LogsViewModel
         accountRepository: AccountRepository,
         syncPairDao: SyncPairDao,
     ) : ViewModel() {
+        /** 0 means "show all pairs". */
         private val savedStatePairId: Long = savedStateHandle[KEY_PAIR_ID] ?: 0L
         /**
          * Time source (millis since epoch). Defaults to [System.currentTimeMillis].
@@ -70,8 +71,6 @@ class LogsViewModel
          * requiring a Hilt binding for [() -> Long].
          */
         internal var clock: () -> Long = System::currentTimeMillis
-        /** 0 means "show all pairs". */
-        val pairId: Long = savedStateHandle[KEY_PAIR_ID] ?: 0L
 
         data class UiState(
             val events: List<SyncEvent> = emptyList(),
