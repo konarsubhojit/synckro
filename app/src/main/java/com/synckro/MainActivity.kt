@@ -20,6 +20,9 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import com.synckro.data.repository.DarkModePreference
 import com.synckro.data.repository.SettingsRepository
 import com.synckro.ui.navigation.SynckroNavHost
@@ -88,7 +91,12 @@ class MainActivity : ComponentActivity() {
                     Scaffold(
                         modifier = Modifier.fillMaxSize(),
                         snackbarHost = {
-                            SnackbarHost(hostState = snackbarHostState) { data ->
+                            SnackbarHost(
+                                hostState = snackbarHostState,
+                                modifier = Modifier.semantics {
+                                    liveRegion = LiveRegionMode.Polite
+                                },
+                            ) { data ->
                                 // Using the default snackbar with Material3 theming;
                                 // colors are driven by the explicit dark/light scheme.
                                 Snackbar(snackbarData = data)

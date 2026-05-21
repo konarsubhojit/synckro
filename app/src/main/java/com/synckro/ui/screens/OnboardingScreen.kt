@@ -13,6 +13,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.sizeIn
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
@@ -396,12 +398,14 @@ private fun OnboardingStep(
             Surface(
                 shape = MaterialTheme.shapes.small,
                 color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(36.dp),
+                modifier =
+                    Modifier
+                        .wrapContentHeight()
+                        .sizeIn(minWidth = 36.dp, minHeight = 36.dp),
             ) {
-                Column(
-                    modifier = Modifier.fillMaxSize(),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center,
+                Box(
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                    contentAlignment = Alignment.Center,
                 ) {
                     Text(
                         text = stepNumber.toString(),
@@ -440,4 +444,3 @@ private fun OnboardingStep(
         }
     }
 }
-
