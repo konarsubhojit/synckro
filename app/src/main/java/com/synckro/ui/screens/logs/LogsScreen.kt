@@ -160,6 +160,7 @@ fun LogsScreen(
             onTagFilterChange = viewModel::setTagFilter,
             onProviderFilterChange = viewModel::setProviderFilter,
             onAccountFilterChange = viewModel::setAccountFilter,
+            onTimeWindowFilterChange = viewModel::setTimeWindowFilter,
             onClearFilters = viewModel::clearFilters,
             onTriggerSync = onTriggerSync,
             dateFormat = dateFormat,
@@ -258,6 +259,7 @@ fun LogsTabContent(
     onTagFilterChange: (String?) -> Unit,
     onProviderFilterChange: (CloudProviderType?) -> Unit,
     onAccountFilterChange: (String?) -> Unit,
+    onTimeWindowFilterChange: (TimeWindow?) -> Unit,
     onClearFilters: () -> Unit,
     onTriggerSync: () -> Unit,
     dateFormat: SimpleDateFormat,
@@ -291,6 +293,52 @@ fun LogsTabContent(
                 }
             },
         )
+        // ── Time-window filter chips ─────────────────────────────────────
+        Row(
+            modifier =
+                Modifier
+                    .horizontalScroll(rememberScrollState())
+                    .padding(horizontal = 8.dp, vertical = 2.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Text(
+                text = stringResource(R.string.logs_filter_time_label),
+                style = MaterialTheme.typography.labelSmall,
+                modifier = Modifier.align(Alignment.CenterVertically),
+            )
+            FilterChip(
+                selected = state.timeWindowFilter == null,
+                onClick = { onTimeWindowFilterChange(null) },
+                label = { Text(stringResource(R.string.logs_filter_all)) },
+            )
+            FilterChip(
+                selected = state.timeWindowFilter == TimeWindow.LAST_HOUR,
+                onClick = {
+                    onTimeWindowFilterChange(
+                        if (state.timeWindowFilter == TimeWindow.LAST_HOUR) null else TimeWindow.LAST_HOUR,
+                    )
+                },
+                label = { Text(stringResource(R.string.logs_filter_time_1h)) },
+            )
+            FilterChip(
+                selected = state.timeWindowFilter == TimeWindow.LAST_24H,
+                onClick = {
+                    onTimeWindowFilterChange(
+                        if (state.timeWindowFilter == TimeWindow.LAST_24H) null else TimeWindow.LAST_24H,
+                    )
+                },
+                label = { Text(stringResource(R.string.logs_filter_time_24h)) },
+            )
+            FilterChip(
+                selected = state.timeWindowFilter == TimeWindow.LAST_7D,
+                onClick = {
+                    onTimeWindowFilterChange(
+                        if (state.timeWindowFilter == TimeWindow.LAST_7D) null else TimeWindow.LAST_7D,
+                    )
+                },
+                label = { Text(stringResource(R.string.logs_filter_time_7d)) },
+            )
+        }
         // ── Level filter chips ───────────────────────────────────────────
         Row(
             modifier =
