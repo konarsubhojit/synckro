@@ -5,6 +5,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.synckro.domain.model.ConflictPolicy
 import kotlinx.coroutines.flow.Flow
@@ -145,6 +146,32 @@ class SettingsRepository
         }
 
         // -------------------------------------------------------------------------
+        // Onboarding
+        // -------------------------------------------------------------------------
+
+        /**
+         * Epoch milliseconds when the user explicitly completed or skipped
+         * onboarding. `null` when the user has never finished or skipped
+         * onboarding on this device (i.e. first-run state).
+         *
+         * @see setOnboardingCompletedAt
+         */
+        val onboardingCompletedAtMs: Flow<Long?> =
+            dataStore.data.map { it[KEY_ONBOARDING_COMPLETED_AT_MS] }
+
+        /**
+         * Records [timestampMs] as the moment onboarding was completed or
+         * explicitly skipped, suppressing the onboarding pager on all
+         * subsequent launches.
+         *
+         * @param timestampMs Epoch-milliseconds timestamp; typically
+         *   `System.currentTimeMillis()`.
+         */
+        suspend fun setOnboardingCompletedAt(timestampMs: Long) {
+            dataStore.edit { it[KEY_ONBOARDING_COMPLETED_AT_MS] = timestampMs }
+        }
+
+        // -------------------------------------------------------------------------
         // Storage & logs
         // -------------------------------------------------------------------------
 
@@ -174,6 +201,8 @@ class SettingsRepository
             internal val KEY_NOTIFY_ON_FAILURE = booleanPreferencesKey("notify_on_failure")
 
             internal val KEY_LOG_RETENTION_DAYS = intPreferencesKey("log_retention_days")
+
+            internal val KEY_ONBOARDING_COMPLETED_AT_MS = longPreferencesKey("onboarding_completed_at_ms")
 
             internal const val DEFAULT_GLOBAL_AUTO_SYNC = true
             internal const val DEFAULT_WIFI_ONLY = true

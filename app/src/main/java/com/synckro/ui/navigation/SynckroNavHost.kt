@@ -17,6 +17,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.synckro.domain.model.CloudProviderType
 import com.synckro.ui.screens.OnboardingScreen
+import com.synckro.ui.screens.onboarding.OnboardingViewModel
 import com.synckro.ui.screens.paireditor.PairEditorScreen
 import com.synckro.ui.screens.paireditor.PairEditorViewModel
 import com.synckro.ui.screens.pickfolder.PickLocalFolderScreen
@@ -104,11 +105,40 @@ fun SynckroNavHost(
 
     NavHost(navController = nav, startDestination = Routes.ONBOARDING) {
         composable(Routes.ONBOARDING) {
-            OnboardingScreen(onContinue = {
-                nav.navigate(Routes.MAIN) {
-                    popUpTo(Routes.ONBOARDING) { inclusive = true }
+            val onboardingVm: OnboardingViewModel = hiltViewModel()
+            val shouldShow by onboardingVm.shouldShowOnboarding.collectAsStateWithLifecycle()
+
+            when (shouldShow) {
+                null -> {
+                    // Gateway is still resolving — render nothing to avoid a flash.
                 }
-            })
+                false -> {
+                    // Onboarding already completed (prior run or restore).
+                    // Navigate to main; LaunchedEffect ensures a single execution.
+                    LaunchedEffect(Unit) {
+                        nav.navigate(Routes.MAIN) {
+                            popUpTo(Routes.ONBOARDING) { inclusive = true }
+                        }
+                    }
+                }
+                true -> {
+                    OnboardingScreen(
+                        activity = activity,
+                        onSkip = {
+                            onboardingVm.completeOnboarding()
+                            nav.navigate(Routes.MAIN) {
+                                popUpTo(Routes.ONBOARDING) { inclusive = true }
+                            }
+                        },
+                        onCreateFirstSyncPair = {
+                            onboardingVm.completeOnboarding()
+                            nav.navigate(Routes.pairEditor()) {
+                                popUpTo(Routes.ONBOARDING) { inclusive = true }
+                            }
+                        },
+                    )
+                }
+            }
         }
         composable(Routes.MAIN) {
             MainScaffold(
