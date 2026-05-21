@@ -128,10 +128,6 @@ class LogsViewModel
         val state: StateFlow<UiState> =
             combine(
                 eventsFlow,
-                combine(_levelFilter, _tagFilter, _accountFilter, _providerFilter, _searchQuery) {
-                    level, tag, account, provider, query ->
-                    Filters(level, tag, account, provider, query)
-                if (pairId != 0L) syncEventRepository.observeForPair(pairId) else syncEventRepository.observeAll(),
                 combine(_levelFilter, _tagFilter, _accountFilter, _providerFilter, _timeWindowFilter) {
                     level, tag, account, provider, timeWindow ->
                     PartialFilters(level, tag, account, provider, timeWindow)
@@ -290,6 +286,8 @@ class LogsViewModel
             val normalized = pairId?.takeIf { it > 0L }
             _pairIdFilter.value = normalized
             savedStateHandle[KEY_PAIR_ID] = normalized ?: 0L
+        }
+
         /** Sets (or clears, when [window] is null) the active time-window filter. */
         fun setTimeWindowFilter(window: TimeWindow?) {
             _timeWindowFilter.value = window
