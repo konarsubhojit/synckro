@@ -50,7 +50,7 @@ import javax.inject.Inject
 class LogsViewModel
     @Inject
     constructor(
-        savedStateHandle: SavedStateHandle,
+        private val savedStateHandle: SavedStateHandle,
         private val syncEventRepository: SyncEventRepository,
         private val logExporter: LogExporter,
         accountRepository: AccountRepository,
@@ -248,7 +248,9 @@ class LogsViewModel
 
         /** Sets (or clears, when [pairId] is null/invalid) the active pair filter. */
         fun setPairFilter(pairId: Long?) {
-            _pairIdFilter.value = pairId?.takeIf { it > 0L }
+            val normalized = pairId?.takeIf { it > 0L }
+            _pairIdFilter.value = normalized
+            savedStateHandle[KEY_PAIR_ID] = normalized ?: 0L
         }
 
         /** Updates the free-text search query (case-insensitive over message + tag). */
@@ -258,7 +260,7 @@ class LogsViewModel
 
         /** Clears every active filter and resets the search query. */
         fun clearFilters() {
-            _pairIdFilter.value = null
+            setPairFilter(null)
             _levelFilter.value = null
             _tagFilter.value = null
             _accountFilter.value = null
