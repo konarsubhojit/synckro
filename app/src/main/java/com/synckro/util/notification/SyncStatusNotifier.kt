@@ -81,7 +81,11 @@ class SyncStatusNotifier
                     context.getString(R.string.sync_failure_not_configured_summary)
                 normalized.startsWith("Re-authentication required", ignoreCase = true) ->
                     context.getString(R.string.sync_failure_reauth_summary)
-                else -> normalized.lineSequence().first().take(MAX_SUMMARY_LENGTH)
+                else ->
+                    normalized.lineSequence().firstOrNull()
+                        ?.take(MAX_SUMMARY_LENGTH)
+                        ?.ifBlank { context.getString(R.string.sync_failure_unknown_summary) }
+                        ?: context.getString(R.string.sync_failure_unknown_summary)
             }
         }
 

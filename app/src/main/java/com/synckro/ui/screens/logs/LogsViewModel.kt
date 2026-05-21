@@ -56,7 +56,7 @@ class LogsViewModel
         accountRepository: AccountRepository,
         syncPairDao: SyncPairDao,
     ) : ViewModel() {
-        private val initialPairId: Long = savedStateHandle[KEY_PAIR_ID] ?: 0L
+        private val savedStatePairId: Long = savedStateHandle[KEY_PAIR_ID] ?: 0L
 
         data class UiState(
             val events: List<SyncEvent> = emptyList(),
@@ -79,7 +79,7 @@ class LogsViewModel
             val hasActiveFilters: Boolean = false,
         )
 
-        private val _pairIdFilter = MutableStateFlow(initialPairId.takeIf { it != 0L })
+        private val _pairIdFilter = MutableStateFlow(savedStatePairId.takeIf { it != 0L })
         private val _levelFilter = MutableStateFlow<SyncEventLevel?>(null)
         private val _tagFilter = MutableStateFlow<String?>(null)
         private val _accountFilter = MutableStateFlow<String?>(null)
