@@ -46,15 +46,25 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.adaptive.ExperimentalMaterial3AdaptiveApi
+import androidx.compose.material3.adaptive.layout.AnimatedPane
+import androidx.compose.material3.adaptive.layout.ListDetailPaneScaffoldRole
+import androidx.compose.material3.adaptive.navigation.NavigableListDetailPaneScaffold
+import androidx.compose.material3.adaptive.navigation.rememberListDetailPaneScaffoldNavigator
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.semantics
@@ -76,6 +86,7 @@ import com.synckro.ui.components.EmptyState
 import com.synckro.ui.components.LoadingState
 import java.text.DateFormat
 import java.util.Date
+import kotlinx.coroutines.launch
 
 /**
  * Displays the list of unresolved sync conflicts. Each conflict card explains
@@ -95,17 +106,28 @@ import java.util.Date
  *
  * @param onBack Called when the user presses the back / up button.
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3AdaptiveApi::class)
 @Composable
 fun ConflictInboxScreen(
     onBack: (() -> Unit)? = null,
     viewModel: ConflictInboxViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val isLargeListDetail = LocalConfiguration.current.screenWidthDp >= TABLET_LIST_DETAIL_MIN_WIDTH_DP
+    val scaffoldNavigator = rememberListDetailPaneScaffoldNavigator<Any>()
+    val coroutineScope = rememberCoroutineScope()
+    var selectedConflictId by rememberSaveable { mutableStateOf<Long?>(null) }
 
     // Intercept system back while in selection mode to exit without popping the screen.
     BackHandler(enabled = state.isSelectionMode) {
         viewModel.exitSelectionMode()
+    }
+
+    LaunchedEffect(isLargeListDetail, selectedConflictId) {
+        val currentId = selectedConflictId ?: return@LaunchedEffect
+        if (isLargeListDetail && !scaffoldNavigator.canNavigateBack()) {
+            scaffoldNavigator.navigateTo(ListDetailPaneScaffoldRole.Detail, currentId as Any)
+        }
     }
 
     Scaffold(
@@ -197,49 +219,120 @@ fun ConflictInboxScreen(
                 )
             }
             else -> {
-                LazyColumn(
-                    modifier =
-                        Modifier
-                            .fillMaxSize()
-                            .padding(padding)
-                            .padding(horizontal = 16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    if (!state.isSelectionMode) {
-                        item {
-                            Spacer(Modifier.height(4.dp))
-                            // Explain what a conflict is and how to resolve it
-                            Surface(
-                                color = MaterialTheme.colorScheme.secondaryContainer,
-                                shape = MaterialTheme.shapes.medium,
-                                modifier = Modifier.fillMaxWidth(),
-                            ) {
-                                Text(
-                                    text = stringResource(R.string.conflict_inbox_explainer),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSecondaryContainer,
-                                    modifier = Modifier.padding(12.dp),
+                if (!isLargeListDetail) {
+                    ConflictListPane(
+                        state = state,
+                        padding = padding,
+                        onKeepLocal = viewModel::keepLocal,
+                        onKeepRemote = viewModel::keepRemote,
+                        onKeepBoth = viewModel::keepBoth,
+                        onLongPress = viewModel::enterSelectionMode,
+                        onToggleSelection = viewModel::toggleSelection,
+                    )
+                } else {
+                    NavigableListDetailPaneScaffold(
+                        navigator = scaffoldNavigator,
+                        listPane = {
+                            AnimatedPane {
+                                ConflictListPane(
+                                    state = state,
+                                    padding = padding,
+                                    onKeepLocal = viewModel::keepLocal,
+                                    onKeepRemote = viewModel::keepRemote,
+                                    onKeepBoth = viewModel::keepBoth,
+                                    onLongPress = viewModel::enterSelectionMode,
+                                    onToggleSelection = viewModel::toggleSelection,
+                                    onOpenConflict = { conflictId ->
+                                        selectedConflictId = conflictId
+                                        coroutineScope.launch {
+                                            scaffoldNavigator.navigateTo(ListDetailPaneScaffoldRole.Detail, conflictId as Any)
+                                        }
+                                    },
                                 )
                             }
-                        }
-                    }
-                    items(state.conflicts, key = { it.id }) { conflict ->
-                        val isSelected = conflict.id in state.selectedIds
-                        ConflictCard(
-                            conflict = conflict,
-                            isSelectionMode = state.isSelectionMode,
-                            isSelected = isSelected,
-                            onKeepLocal = { viewModel.keepLocal(conflict.id) },
-                            onKeepRemote = { viewModel.keepRemote(conflict.id) },
-                            onKeepBoth = { viewModel.keepBoth(conflict.id) },
-                            onLongPress = { viewModel.enterSelectionMode(conflict.id) },
-                            onToggleSelection = { viewModel.toggleSelection(conflict.id) },
-                        )
-                    }
-                    item { Spacer(Modifier.height(8.dp)) }
+                        },
+                        detailPane = {
+                            AnimatedPane {
+                                val selectedConflict = state.conflicts.firstOrNull { it.id == selectedConflictId }
+                                if (selectedConflict == null) {
+                                    EmptyState(
+                                        title = stringResource(R.string.conflict_inbox_title),
+                                        body = stringResource(R.string.conflict_inbox_explainer),
+                                        icon = Icons.Filled.Inbox,
+                                        modifier = Modifier.fillMaxSize(),
+                                    )
+                                } else {
+                                    ConflictResolutionPane(
+                                        conflict = selectedConflict,
+                                        onKeepLocal = { viewModel.keepLocal(selectedConflict.id) },
+                                        onKeepRemote = { viewModel.keepRemote(selectedConflict.id) },
+                                        onKeepBoth = { viewModel.keepBoth(selectedConflict.id) },
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .padding(padding)
+                                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                                    )
+                                }
+                            }
+                        },
+                    )
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun ConflictListPane(
+    state: ConflictInboxViewModel.UiState,
+    padding: androidx.compose.foundation.layout.PaddingValues,
+    onKeepLocal: (Long) -> Unit,
+    onKeepRemote: (Long) -> Unit,
+    onKeepBoth: (Long) -> Unit,
+    onLongPress: (Long) -> Unit,
+    onToggleSelection: (Long) -> Unit,
+    onOpenConflict: ((Long) -> Unit)? = null,
+) {
+    LazyColumn(
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .padding(horizontal = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        if (!state.isSelectionMode) {
+            item {
+                Spacer(Modifier.height(4.dp))
+                Surface(
+                    color = MaterialTheme.colorScheme.secondaryContainer,
+                    shape = MaterialTheme.shapes.medium,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(
+                        text = stringResource(R.string.conflict_inbox_explainer),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        modifier = Modifier.padding(12.dp),
+                    )
+                }
+            }
+        }
+        items(state.conflicts, key = { it.id }) { conflict ->
+            val isSelected = conflict.id in state.selectedIds
+            ConflictCard(
+                conflict = conflict,
+                isSelectionMode = state.isSelectionMode,
+                isSelected = isSelected,
+                onKeepLocal = { onKeepLocal(conflict.id) },
+                onKeepRemote = { onKeepRemote(conflict.id) },
+                onKeepBoth = { onKeepBoth(conflict.id) },
+                onLongPress = { onLongPress(conflict.id) },
+                onToggleSelection = { onToggleSelection(conflict.id) },
+                onOpenConflict = onOpenConflict?.let { open -> { open(conflict.id) } },
+            )
+        }
+        item { Spacer(Modifier.height(8.dp)) }
     }
 }
 
@@ -254,6 +347,7 @@ private fun ConflictCard(
     onKeepBoth: () -> Unit,
     onLongPress: () -> Unit,
     onToggleSelection: () -> Unit,
+    onOpenConflict: (() -> Unit)? = null,
     imageLoader: ImageLoader = ImageLoader(LocalContext.current),
 ) {
     val ctx = LocalContext.current
@@ -293,7 +387,11 @@ private fun ConflictCard(
                 }
                 .combinedClickable(
                     onClick = {
-                        if (isSelectionMode) onToggleSelection()
+                        if (isSelectionMode) {
+                            onToggleSelection()
+                        } else {
+                            onOpenConflict?.invoke()
+                        }
                     },
                     onLongClick = {
                         if (!isSelectionMode) onLongPress()
@@ -510,7 +608,7 @@ private fun ConflictCard(
 }
 
 @Composable
-private fun ConflictActionButton(
+internal fun ConflictActionButton(
     icon: ImageVector,
     label: String,
     description: String,
@@ -549,7 +647,7 @@ private fun ConflictActionButton(
 }
 
 @Composable
-private fun resolutionLabel(resolution: String): String =
+internal fun resolutionLabel(resolution: String): String =
     when (resolution) {
         ConflictRecord.RESOLUTION_KEEP_LOCAL -> stringResource(R.string.conflict_inbox_keep_local)
         ConflictRecord.RESOLUTION_KEEP_REMOTE -> stringResource(R.string.conflict_inbox_keep_remote)
@@ -557,7 +655,7 @@ private fun resolutionLabel(resolution: String): String =
         else -> resolution
     }
 
-private fun fileTypeLabelRes(fileTypeIcon: ConflictInboxViewModel.FileTypeIcon): Int =
+internal fun fileTypeLabelRes(fileTypeIcon: ConflictInboxViewModel.FileTypeIcon): Int =
     when (fileTypeIcon) {
         ConflictInboxViewModel.FileTypeIcon.FOLDER -> R.string.conflict_inbox_file_type_folder
         ConflictInboxViewModel.FileTypeIcon.IMAGE -> R.string.conflict_inbox_file_type_image
@@ -565,7 +663,7 @@ private fun fileTypeLabelRes(fileTypeIcon: ConflictInboxViewModel.FileTypeIcon):
         ConflictInboxViewModel.FileTypeIcon.GENERIC -> R.string.conflict_inbox_file_type_generic
     }
 
-private fun fileTypeIcon(fileTypeIcon: ConflictInboxViewModel.FileTypeIcon): ImageVector =
+internal fun fileTypeIcon(fileTypeIcon: ConflictInboxViewModel.FileTypeIcon): ImageVector =
     when (fileTypeIcon) {
         ConflictInboxViewModel.FileTypeIcon.FOLDER -> Icons.Default.Folder
         ConflictInboxViewModel.FileTypeIcon.IMAGE -> Icons.Default.Image
@@ -587,7 +685,7 @@ private fun fileTypeIcon(fileTypeIcon: ConflictInboxViewModel.FileTypeIcon): Ima
  * @param contentDescription Accessibility description for the image; null if decorative.
  */
 @Composable
-private fun ConflictThumbnail(
+internal fun ConflictThumbnail(
     thumbnailUri: String,
     fallbackIcon: ImageVector,
     imageLoader: ImageLoader,
@@ -697,3 +795,5 @@ private fun ConflictCardImagePreview() {
         )
     }
 }
+
+private const val TABLET_LIST_DETAIL_MIN_WIDTH_DP = 720
