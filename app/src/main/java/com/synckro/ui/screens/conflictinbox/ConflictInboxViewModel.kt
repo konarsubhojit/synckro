@@ -8,10 +8,13 @@ import com.synckro.data.repository.ConflictRepository
 import com.synckro.data.repository.SyncPairRepository
 import com.synckro.domain.model.ConflictRecord
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import javax.inject.Inject
@@ -73,17 +76,32 @@ class ConflictInboxViewModel
         data class UiState(
             val conflicts: List<ConflictRow> = emptyList(),
             val isLoading: Boolean = true,
-        )
+            val isSelectionMode: Boolean = false,
+            val selectedIds: Set<Long> = emptySet(),
+        ) {
+            val selectedCount: Int get() = selectedIds.size
+        }
+
+        private val _selectionState = MutableStateFlow(Pair(false, emptySet<Long>()))
 
         val state: StateFlow<UiState> =
-            conflictRepository
-                .observeUnresolved()
-                .map { UiState(conflicts = projectRows(it), isLoading = false) }
-                .stateIn(
-                    scope = viewModelScope,
-                    started = SharingStarted.WhileSubscribed(5_000),
-                    initialValue = UiState(),
+            combine(
+                conflictRepository
+                    .observeUnresolved()
+                    .map { projectRows(it) },
+                _selectionState,
+            ) { rows, (isSelectionMode, selectedIds) ->
+                UiState(
+                    conflicts = rows,
+                    isLoading = false,
+                    isSelectionMode = isSelectionMode,
+                    selectedIds = selectedIds,
                 )
+            }.stateIn(
+                scope = viewModelScope,
+                started = SharingStarted.WhileSubscribed(5_000),
+                initialValue = UiState(),
+            )
 
         /** Records the user's choice to keep the local version for the conflict with [id]. */
         fun keepLocal(id: Long) = resolve(id, ConflictRecord.RESOLUTION_KEEP_LOCAL)
@@ -102,6 +120,60 @@ class ConflictInboxViewModel
                     .onFailure { Timber.w(it, "ConflictInboxViewModel: failed to dismiss conflict %d", id) }
             }
         }
+
+        /**
+         * Enters selection mode with the given [id] as the first selected conflict.
+         * Called on long-press of a conflict row.
+         */
+        fun enterSelectionMode(id: Long) {
+            Timber.i("ConflictInboxViewModel.enterSelectionMode(id=$id)")
+            _selectionState.value = Pair(true, setOf(id))
+        }
+
+        /**
+         * Toggles the selection state of the conflict with [id] while in selection mode.
+         * If [id] is already selected it will be deselected; otherwise it will be selected.
+         */
+        fun toggleSelection(id: Long) {
+            _selectionState.update { (isSelectionMode, selectedIds) ->
+                if (!isSelectionMode) return@update Pair(isSelectionMode, selectedIds)
+                val updated = if (id in selectedIds) selectedIds - id else selectedIds + id
+                Pair(true, updated)
+            }
+        }
+
+        /**
+         * Exits selection mode and clears the current selection without applying any resolution.
+         */
+        fun exitSelectionMode() {
+            Timber.i("ConflictInboxViewModel.exitSelectionMode()")
+            _selectionState.value = Pair(false, emptySet())
+        }
+
+        /**
+         * Applies [resolution] to every currently selected conflict in insertion order,
+         * then exits selection mode.
+         */
+        fun applyBulkResolution(resolution: String) {
+            val ids = _selectionState.value.second.toList()
+            Timber.i("ConflictInboxViewModel.applyBulkResolution(resolution=$resolution, ids=$ids)")
+            exitSelectionMode()
+            viewModelScope.launch {
+                for (id in ids) {
+                    runCatching { conflictRepository.resolve(id, resolution) }
+                        .onFailure { Timber.w(it, "ConflictInboxViewModel: failed to bulk-resolve conflict %d", id) }
+                }
+            }
+        }
+
+        /** Bulk-resolves all selected conflicts with Keep local. */
+        fun bulkKeepLocal() = applyBulkResolution(ConflictRecord.RESOLUTION_KEEP_LOCAL)
+
+        /** Bulk-resolves all selected conflicts with Keep remote. */
+        fun bulkKeepRemote() = applyBulkResolution(ConflictRecord.RESOLUTION_KEEP_REMOTE)
+
+        /** Bulk-resolves all selected conflicts with Keep both. */
+        fun bulkKeepBoth() = applyBulkResolution(ConflictRecord.RESOLUTION_KEEP_BOTH)
 
         private fun resolve(
             id: Long,
