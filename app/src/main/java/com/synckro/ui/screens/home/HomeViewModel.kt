@@ -87,6 +87,12 @@ class HomeViewModel
              * `sync_event` table). Pairs that have never completed a run are absent.
              */
             val lastSummaryByPairId: Map<Long, PairSummary> = emptyMap(),
+            /** `true` when at least one terminal sync run exists in history. */
+            val hasCompletedSyncRun: Boolean = false,
+            /** Non-null when onboarding has been completed/skipped on this install. */
+            val onboardingCompletedAtMs: Long? = null,
+            /** One-shot coach-tooltip ids already shown to the user. */
+            val seenTooltips: Set<String> = emptySet(),
         )
 
         /** Pair IDs that have an active "sync now" run; updated optimistically. */
@@ -136,7 +142,15 @@ class HomeViewModel
                     nextRunByPairId = computeNextRunMap(uiState.pairs, globalEnabled),
                 )
             }.combine(recentEvents) { uiState, events ->
-                uiState.copy(lastSummaryByPairId = aggregatePairSummaries(events))
+                val summaries = aggregatePairSummaries(events)
+                uiState.copy(
+                    lastSummaryByPairId = summaries,
+                    hasCompletedSyncRun = summaries.isNotEmpty(),
+                )
+            }.combine(settingsRepository.onboardingCompletedAtMs) { uiState, completedAt ->
+                uiState.copy(onboardingCompletedAtMs = completedAt)
+            }.combine(settingsRepository.seenTooltips) { uiState, seenTooltips ->
+                uiState.copy(seenTooltips = seenTooltips)
             }.stateIn(
                 scope = viewModelScope,
                 started = SharingStarted.WhileSubscribed(5_000),
@@ -232,6 +246,10 @@ class HomeViewModel
             pendingDeleteJob = null
             pendingDeleteState.value = null
             commitDeleteInternal(pending.pair.id)
+        }
+
+        fun markTooltipSeen(tooltipId: String) {
+            viewModelScope.launch { settingsRepository.markTooltipSeen(tooltipId) }
         }
 
         private fun commitDeleteInternal(id: Long) {

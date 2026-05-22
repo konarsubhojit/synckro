@@ -197,4 +197,13 @@ class SettingsViewModelTest {
             vm.setLogRetentionDays(90)
             assertEquals(90, repo.logRetentionDays.first())
         }
+
+    @Test
+    fun `resetHints clears seen tooltips`() =
+        testScope.runTest {
+            val vm = newVm()
+            repo.markTooltipSeen("pairs_fab")
+            vm.resetHints()
+            assertTrue(repo.seenTooltips.first().isEmpty())
+        }
 }

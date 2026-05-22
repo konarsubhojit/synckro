@@ -21,6 +21,7 @@
     <string name="home_empty_hint">Tap the + button to add your first sync pair.</string>
     <string name="home_empty_needs_account">Connect a cloud account first — tap Accounts, then the + button to add a sync pair.</string>
     <string name="add_sync_pair">Add sync pair</string>
+    <string name="coach_tooltip_pairs_fab">Tap to create your first sync pair</string>
     <string name="sync_now">Sync now</string>
     <!-- Phase 5b: bulk-sync action + pull-to-refresh feedback. -->
     <string name="home_sync_all_now">Sync all now</string>
@@ -214,6 +215,7 @@
     <!-- Content description suffix used for the conflicts nav destination badge.
          e.g. "Conflicts (3 pending)" -->
     <string name="nav_dest_conflicts_badge_format">%1$d pending</string>
+    <string name="coach_tooltip_conflicts_tab">You have conflicts to review</string>
 
     <!-- Conflict inbox -->
     <string name="conflict_inbox_title">Conflict inbox</string>
@@ -274,6 +276,7 @@
     <string name="logs_copy">Copy to clipboard</string>
     <string name="logs_copied">Log copied to clipboard</string>
     <string name="logs_share_export">Share / Export</string>
+    <string name="coach_tooltip_logs_export">Share or export logs for support</string>
     <string name="logs_share">Share log</string>
     <string name="logs_share_text">Share text</string>
     <string name="logs_share_subject">Synckro sync log</string>
@@ -447,6 +450,8 @@
     <string name="settings_version_format">%1$s (%2$d)</string>
     <string name="settings_privacy_policy_title">Privacy policy</string>
     <string name="settings_privacy_policy_body">Read how Synckro handles your data.</string>
+    <string name="settings_reset_hints_title">Reset hints</string>
+    <string name="settings_reset_hints_body">Show first-touch coach marks again.</string>
     <string name="settings_oss_licenses_title">Open-source licenses</string>
     <string name="settings_oss_licenses_body">Libraries used by this build.</string>
     <string name="settings_oss_licenses_unavailable">License list isn\u0027t available in this build.</string>

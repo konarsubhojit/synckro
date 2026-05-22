@@ -82,6 +82,8 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.synckro.R
 import com.synckro.domain.model.SyncPair
+import com.synckro.ui.components.CoachTooltip
+import com.synckro.ui.components.CoachTooltipIds
 import com.synckro.ui.components.EmptyState
 import com.synckro.ui.components.SectionCard
 import com.synckro.ui.screens.home.HomeViewModel
@@ -175,6 +177,7 @@ fun PairsScreen(
         PairsListScaffold(
             state = state,
             onAddSyncPair = onAddSyncPair,
+            onMarkFabTooltipSeen = { viewModel.markTooltipSeen(CoachTooltipIds.PairsFab) },
             onEditSyncPair = onEditSyncPair,
             onOpenPairDetail = openPairDetail,
             onOpenReauth = onOpenReauth,
@@ -203,6 +206,7 @@ fun PairsScreen(
                 PairsListScaffold(
                     state = state,
                     onAddSyncPair = onAddSyncPair,
+                    onMarkFabTooltipSeen = { viewModel.markTooltipSeen(CoachTooltipIds.PairsFab) },
                     onEditSyncPair = onEditSyncPair,
                     onOpenPairDetail = openPairDetail,
                     onOpenReauth = onOpenReauth,
@@ -255,6 +259,7 @@ fun PairsScreen(
 private fun PairsListScaffold(
     state: HomeViewModel.UiState,
     onAddSyncPair: () -> Unit,
+    onMarkFabTooltipSeen: () -> Unit,
     onEditSyncPair: (Long) -> Unit,
     onOpenPairDetail: (Long) -> Unit,
     onOpenReauth: (String?) -> Unit,
@@ -265,6 +270,9 @@ private fun PairsListScaffold(
     snackbarHostState: SnackbarHostState,
     modifier: Modifier = Modifier,
 ) {
+    val showFabTooltip =
+        state.onboardingCompletedAtMs == null &&
+            CoachTooltipIds.PairsFab !in state.seenTooltips
     Scaffold(
         modifier = modifier,
         topBar = {
@@ -286,8 +294,14 @@ private fun PairsListScaffold(
             )
         },
         floatingActionButton = {
-            FloatingActionButton(onClick = onAddSyncPair) {
-                Icon(Icons.Default.Add, contentDescription = stringResource(R.string.add_sync_pair))
+            CoachTooltip(
+                visible = showFabTooltip,
+                tooltipText = stringResource(R.string.coach_tooltip_pairs_fab),
+                onShown = onMarkFabTooltipSeen,
+            ) {
+                FloatingActionButton(onClick = onAddSyncPair) {
+                    Icon(Icons.Default.Add, contentDescription = stringResource(R.string.add_sync_pair))
+                }
             }
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
