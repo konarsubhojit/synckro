@@ -84,6 +84,7 @@ import com.synckro.R
 import com.synckro.domain.model.ConflictRecord
 import com.synckro.ui.components.EmptyState
 import com.synckro.ui.components.LoadingState
+import com.synckro.util.rememberHapticHelper
 import java.text.DateFormat
 import java.util.Date
 import kotlinx.coroutines.launch
@@ -113,6 +114,7 @@ fun ConflictInboxScreen(
     viewModel: ConflictInboxViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val haptic = rememberHapticHelper(state.enableHaptics)
     val isLargeListDetail = LocalConfiguration.current.screenWidthDp >= TABLET_LIST_DETAIL_MIN_WIDTH_DP
     val scaffoldNavigator = rememberListDetailPaneScaffoldNavigator<Any>()
     val coroutineScope = rememberCoroutineScope()
@@ -152,7 +154,10 @@ fun ConflictInboxScreen(
                     },
                     actions = {
                         IconButton(
-                            onClick = { viewModel.bulkKeepLocal() },
+                            onClick = {
+                                viewModel.bulkKeepLocal()
+                                haptic?.success()
+                            },
                             enabled = state.selectedCount > 0,
                         ) {
                             Icon(
@@ -161,7 +166,10 @@ fun ConflictInboxScreen(
                             )
                         }
                         IconButton(
-                            onClick = { viewModel.bulkKeepRemote() },
+                            onClick = {
+                                viewModel.bulkKeepRemote()
+                                haptic?.success()
+                            },
                             enabled = state.selectedCount > 0,
                         ) {
                             Icon(
@@ -170,7 +178,10 @@ fun ConflictInboxScreen(
                             )
                         }
                         IconButton(
-                            onClick = { viewModel.bulkKeepBoth() },
+                            onClick = {
+                                viewModel.bulkKeepBoth()
+                                haptic?.success()
+                            },
                             enabled = state.selectedCount > 0,
                         ) {
                             Icon(
@@ -226,8 +237,12 @@ fun ConflictInboxScreen(
                         onKeepLocal = viewModel::keepLocal,
                         onKeepRemote = viewModel::keepRemote,
                         onKeepBoth = viewModel::keepBoth,
-                        onLongPress = viewModel::enterSelectionMode,
+                        onLongPress = {
+                            haptic?.light()
+                            viewModel.enterSelectionMode(it)
+                        },
                         onToggleSelection = viewModel::toggleSelection,
+                        onResolved = { haptic?.success() },
                     )
                 } else {
                     NavigableListDetailPaneScaffold(
@@ -240,8 +255,12 @@ fun ConflictInboxScreen(
                                     onKeepLocal = viewModel::keepLocal,
                                     onKeepRemote = viewModel::keepRemote,
                                     onKeepBoth = viewModel::keepBoth,
-                                    onLongPress = viewModel::enterSelectionMode,
+                                    onLongPress = {
+                                        haptic?.light()
+                                        viewModel.enterSelectionMode(it)
+                                    },
                                     onToggleSelection = viewModel::toggleSelection,
+                                    onResolved = { haptic?.success() },
                                     onOpenConflict = { conflictId ->
                                         selectedConflictId = conflictId
                                         coroutineScope.launch {
@@ -264,9 +283,18 @@ fun ConflictInboxScreen(
                                 } else {
                                     ConflictResolutionPane(
                                         conflict = selectedConflict,
-                                        onKeepLocal = { viewModel.keepLocal(selectedConflict.id) },
-                                        onKeepRemote = { viewModel.keepRemote(selectedConflict.id) },
-                                        onKeepBoth = { viewModel.keepBoth(selectedConflict.id) },
+                                        onKeepLocal = {
+                                            viewModel.keepLocal(selectedConflict.id)
+                                            haptic?.success()
+                                        },
+                                        onKeepRemote = {
+                                            viewModel.keepRemote(selectedConflict.id)
+                                            haptic?.success()
+                                        },
+                                        onKeepBoth = {
+                                            viewModel.keepBoth(selectedConflict.id)
+                                            haptic?.success()
+                                        },
                                         modifier = Modifier
                                             .fillMaxSize()
                                             .padding(padding)
@@ -291,6 +319,7 @@ private fun ConflictListPane(
     onKeepBoth: (Long) -> Unit,
     onLongPress: (Long) -> Unit,
     onToggleSelection: (Long) -> Unit,
+    onResolved: () -> Unit = {},
     onOpenConflict: ((Long) -> Unit)? = null,
 ) {
     LazyColumn(
@@ -329,6 +358,7 @@ private fun ConflictListPane(
                 onKeepBoth = { onKeepBoth(conflict.id) },
                 onLongPress = { onLongPress(conflict.id) },
                 onToggleSelection = { onToggleSelection(conflict.id) },
+                onResolved = onResolved,
                 onOpenConflict = onOpenConflict?.let { { it(conflict.id) } },
             )
         }
@@ -347,6 +377,7 @@ private fun ConflictCard(
     onKeepBoth: () -> Unit,
     onLongPress: () -> Unit,
     onToggleSelection: () -> Unit,
+    onResolved: () -> Unit = {},
     onOpenConflict: (() -> Unit)? = null,
     imageLoader: ImageLoader = ImageLoader(LocalContext.current),
 ) {
@@ -584,21 +615,30 @@ private fun ConflictCard(
                         icon = Icons.Default.CloudUpload,
                         label = stringResource(R.string.conflict_inbox_keep_local),
                         description = stringResource(R.string.conflict_inbox_keep_local_hint),
-                        onClick = onKeepLocal,
+                        onClick = {
+                            onKeepLocal()
+                            onResolved()
+                        },
                         isPrimary = false,
                     )
                     ConflictActionButton(
                         icon = Icons.Default.CloudDownload,
                         label = stringResource(R.string.conflict_inbox_keep_remote),
                         description = stringResource(R.string.conflict_inbox_keep_remote_hint),
-                        onClick = onKeepRemote,
+                        onClick = {
+                            onKeepRemote()
+                            onResolved()
+                        },
                         isPrimary = false,
                     )
                     ConflictActionButton(
                         icon = Icons.Default.ContentCopy,
                         label = stringResource(R.string.conflict_inbox_keep_both),
                         description = stringResource(R.string.conflict_inbox_keep_both_hint),
-                        onClick = onKeepBoth,
+                        onClick = {
+                            onKeepBoth()
+                            onResolved()
+                        },
                         isPrimary = true,
                     )
                 }

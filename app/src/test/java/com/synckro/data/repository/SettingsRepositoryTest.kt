@@ -80,4 +80,25 @@ class SettingsRepositoryTest {
                 repo.globalAutoSyncEnabled.first(),
             )
         }
+
+    @Test
+    fun `enableHaptics defaults to true`() =
+        testScope.runTest {
+            val repo = buildRepository()
+            assertTrue(
+                "Expected enableHaptics to default to true",
+                repo.enableHaptics.first(),
+            )
+        }
+
+    @Test
+    fun `setEnableHaptics false persists false`() =
+        testScope.runTest {
+            val repo = buildRepository()
+            repo.setEnableHaptics(false)
+            assertFalse(
+                "Expected enableHaptics to be false after setEnableHaptics(false)",
+                repo.enableHaptics.first(),
+            )
+        }
 }

@@ -103,6 +103,7 @@ class SettingsViewModelTest {
                 assertTrue(it.respectFontScale)
                 assertFalse(it.notifyOnSuccess)
                 assertTrue(it.notifyOnFailure)
+                assertTrue(it.enableHaptics)
                 assertEquals(30, it.logRetentionDays)
             }
             // Reference s so the linter doesn't complain.
@@ -179,6 +180,14 @@ class SettingsViewModelTest {
             val vm = newVm()
             vm.setNotifyOnFailure(false)
             assertFalse(repo.notifyOnFailure.first())
+        }
+
+    @Test
+    fun `setEnableHaptics persists value`() =
+        testScope.runTest {
+            val vm = newVm()
+            vm.setEnableHaptics(false)
+            assertFalse(repo.enableHaptics.first())
         }
 
     @Test
