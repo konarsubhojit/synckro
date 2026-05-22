@@ -16,12 +16,12 @@ class HapticHelperTest {
     }
 
     @Test
-    fun `success emits long-press haptic`() {
+    fun `success emits text-handle move haptic`() {
         val fake = FakeHapticFeedback()
 
         HapticHelper(fake).success()
 
-        assertEquals(listOf(HapticFeedbackType.LongPress), fake.events)
+        assertEquals(listOf(HapticFeedbackType.TextHandleMove), fake.events)
     }
 
     @Test

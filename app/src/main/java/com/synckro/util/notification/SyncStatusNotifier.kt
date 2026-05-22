@@ -10,13 +10,14 @@ import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
 import androidx.core.app.NotificationCompat
+import dagger.hilt.android.qualifiers.ApplicationContext
 import com.synckro.MainActivity
 import com.synckro.R
 import com.synckro.data.repository.SettingsRepository
 import com.synckro.data.worker.SyncWorker
 import com.synckro.domain.model.SyncPair
 import kotlinx.coroutines.flow.first
-import dagger.hilt.android.qualifiers.ApplicationContext
+import timber.log.Timber
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -110,8 +111,7 @@ class SyncStatusNotifier
         private fun isAppInForeground(): Boolean {
             val processInfo = ActivityManager.RunningAppProcessInfo()
             ActivityManager.getMyMemoryState(processInfo)
-            return processInfo.importance == ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND ||
-                processInfo.importance == ActivityManager.RunningAppProcessInfo.IMPORTANCE_VISIBLE
+            return processInfo.importance == ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND
         }
 
         private fun performInAppErrorHaptic() {
@@ -130,6 +130,7 @@ class SyncStatusNotifier
                     VibrationEffect.createOneShot(40L, VibrationEffect.DEFAULT_AMPLITUDE)
                 }
             runCatching { vibrator.vibrate(effect) }
+                .onFailure { Timber.w(it, "SyncStatusNotifier: unable to vibrate error haptic") }
         }
 
         private fun buildOpenLogsPendingIntent(pairId: Long): PendingIntent {

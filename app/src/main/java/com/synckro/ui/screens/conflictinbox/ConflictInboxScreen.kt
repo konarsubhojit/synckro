@@ -238,8 +238,8 @@ fun ConflictInboxScreen(
                         onKeepRemote = viewModel::keepRemote,
                         onKeepBoth = viewModel::keepBoth,
                         onLongPress = {
-                            viewModel.enterSelectionMode(it)
                             haptic?.light()
+                            viewModel.enterSelectionMode(it)
                         },
                         onToggleSelection = viewModel::toggleSelection,
                         onResolved = { haptic?.success() },
@@ -256,8 +256,8 @@ fun ConflictInboxScreen(
                                     onKeepRemote = viewModel::keepRemote,
                                     onKeepBoth = viewModel::keepBoth,
                                     onLongPress = {
-                                        viewModel.enterSelectionMode(it)
                                         haptic?.light()
+                                        viewModel.enterSelectionMode(it)
                                     },
                                     onToggleSelection = viewModel::toggleSelection,
                                     onResolved = { haptic?.success() },

@@ -15,7 +15,7 @@ class HapticHelper(
     }
 
     fun success() {
-        hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
+        hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
     }
 
     fun error() {
