@@ -1,5 +1,6 @@
 package com.synckro.ui.screens.pairs
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -26,6 +27,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.FolderOff
+import androidx.compose.material.icons.filled.Inbox
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
@@ -44,17 +46,26 @@ import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.adaptive.ExperimentalMaterial3AdaptiveApi
+import androidx.compose.material3.adaptive.layout.AnimatedPane
+import androidx.compose.material3.adaptive.layout.ListDetailPaneScaffoldRole
+import androidx.compose.material3.adaptive.navigation.NavigableListDetailPaneScaffold
+import androidx.compose.material3.adaptive.navigation.rememberListDetailPaneScaffoldNavigator
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
@@ -64,12 +75,19 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.navigation.NavType
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import com.synckro.R
 import com.synckro.domain.model.SyncPair
 import com.synckro.ui.components.EmptyState
 import com.synckro.ui.components.SectionCard
 import com.synckro.ui.screens.home.HomeViewModel
 import com.synckro.ui.screens.home.PairSummary
+import com.synckro.ui.screens.pairdetail.PairDetailScreen
+import kotlinx.coroutines.launch
 
 /**
  * Sync-pairs destination — the user's list of configured sync pairs plus a FAB
@@ -83,18 +101,24 @@ import com.synckro.ui.screens.home.PairSummary
  * shared instance scoped to the `main` route entry so the conflicts badge and
  * the pair list stay in lock-step).
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3AdaptiveApi::class)
 @Composable
 fun PairsScreen(
     onAddSyncPair: () -> Unit,
     onEditSyncPair: (Long) -> Unit,
     modifier: Modifier = Modifier,
     onOpenPairDetail: (Long) -> Unit = {},
+    onOpenConflicts: () -> Unit = {},
+    onOpenLogs: (Long) -> Unit = {},
     onOpenReauth: (accountId: String?) -> Unit = {},
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
+    val isLargeListDetail = LocalConfiguration.current.screenWidthDp >= TABLET_LIST_DETAIL_MIN_WIDTH_DP
+    val scaffoldNavigator = rememberListDetailPaneScaffoldNavigator<Any>()
+    val coroutineScope = rememberCoroutineScope()
+    var selectedPairId by rememberSaveable { mutableStateOf<Long?>(null) }
 
     val pendingDelete = state.pendingDelete
     val undoLabel = stringResource(R.string.home_delete_undo_action)
@@ -129,6 +153,118 @@ fun PairsScreen(
         }
     }
 
+    LaunchedEffect(isLargeListDetail, selectedPairId) {
+        val currentId = selectedPairId ?: return@LaunchedEffect
+        if (isLargeListDetail && !scaffoldNavigator.canNavigateBack()) {
+            scaffoldNavigator.navigateTo(ListDetailPaneScaffoldRole.Detail, currentId as Any)
+        }
+    }
+
+    val openPairDetail: (Long) -> Unit = { pairId ->
+        if (!isLargeListDetail) {
+            onOpenPairDetail(pairId)
+        } else {
+            selectedPairId = pairId
+            coroutineScope.launch {
+                scaffoldNavigator.navigateTo(ListDetailPaneScaffoldRole.Detail, pairId as Any)
+            }
+        }
+    }
+
+    if (!isLargeListDetail) {
+        PairsListScaffold(
+            state = state,
+            onAddSyncPair = onAddSyncPair,
+            onEditSyncPair = onEditSyncPair,
+            onOpenPairDetail = openPairDetail,
+            onOpenReauth = onOpenReauth,
+            onRequestDelete = viewModel::requestDelete,
+            onSyncNow = viewModel::syncNow,
+            onSyncAllNow = viewModel::syncAllNow,
+            globalAutoSyncEnabled = state.globalAutoSyncEnabled,
+            snackbarHostState = snackbarHostState,
+            modifier = modifier,
+        )
+        return
+    }
+
+    BackHandler(enabled = scaffoldNavigator.canNavigateBack()) {
+        coroutineScope.launch {
+            scaffoldNavigator.navigateBack()
+            selectedPairId = null
+        }
+    }
+
+    NavigableListDetailPaneScaffold(
+        modifier = modifier,
+        navigator = scaffoldNavigator,
+        listPane = {
+            AnimatedPane {
+                PairsListScaffold(
+                    state = state,
+                    onAddSyncPair = onAddSyncPair,
+                    onEditSyncPair = onEditSyncPair,
+                    onOpenPairDetail = openPairDetail,
+                    onOpenReauth = onOpenReauth,
+                    onRequestDelete = viewModel::requestDelete,
+                    onSyncNow = viewModel::syncNow,
+                    onSyncAllNow = viewModel::syncAllNow,
+                    globalAutoSyncEnabled = state.globalAutoSyncEnabled,
+                    snackbarHostState = snackbarHostState,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+        },
+        detailPane = {
+            AnimatedPane {
+                val pairId = selectedPairId
+                if (pairId == null) {
+                    EmptyState(
+                        title = stringResource(R.string.pair_detail_title),
+                        body = stringResource(R.string.pair_detail_missing),
+                        icon = Icons.Filled.Inbox,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                } else {
+                    PairDetailPane(
+                        pairId = pairId,
+                        onEditSyncPair = onEditSyncPair,
+                        onSyncPairNow = { id ->
+                            state.pairs.firstOrNull { it.id == id }?.let(viewModel::syncNow)
+                        },
+                        onDeletePair = { id ->
+                            state.pairs.firstOrNull { it.id == id }?.let(viewModel::requestDelete)
+                            selectedPairId = null
+                            coroutineScope.launch { scaffoldNavigator.navigateBack() }
+                        },
+                        onOpenConflicts = onOpenConflicts,
+                        onOpenLogs = onOpenLogs,
+                        onBack = {
+                            selectedPairId = null
+                            coroutineScope.launch { scaffoldNavigator.navigateBack() }
+                        },
+                    )
+                }
+            }
+        },
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun PairsListScaffold(
+    state: HomeViewModel.UiState,
+    onAddSyncPair: () -> Unit,
+    onEditSyncPair: (Long) -> Unit,
+    onOpenPairDetail: (Long) -> Unit,
+    onOpenReauth: (String?) -> Unit,
+    onRequestDelete: (SyncPair) -> Unit,
+    onSyncNow: (SyncPair) -> Unit,
+    onSyncAllNow: () -> Unit,
+    globalAutoSyncEnabled: Boolean,
+    snackbarHostState: SnackbarHostState,
+    modifier: Modifier = Modifier,
+) {
     Scaffold(
         modifier = modifier,
         topBar = {
@@ -137,27 +273,21 @@ fun PairsScreen(
                 actions = {
                     val syncAllLabel = stringResource(R.string.home_sync_all_now)
                     IconButton(
-                        onClick = { viewModel.syncAllNow() },
+                        onClick = { onSyncAllNow() },
                         enabled = state.pairs.any { p ->
                             !p.needsReLink &&
                                 p.lastSyncResult != "NEEDS_REAUTH" &&
                                 p.id !in state.syncingPairIds
                         },
                     ) {
-                        Icon(
-                            Icons.Default.Sync,
-                            contentDescription = syncAllLabel,
-                        )
+                        Icon(Icons.Default.Sync, contentDescription = syncAllLabel)
                     }
                 },
             )
         },
         floatingActionButton = {
             FloatingActionButton(onClick = onAddSyncPair) {
-                Icon(
-                    Icons.Default.Add,
-                    contentDescription = stringResource(R.string.add_sync_pair),
-                )
+                Icon(Icons.Default.Add, contentDescription = stringResource(R.string.add_sync_pair))
             }
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -165,15 +295,51 @@ fun PairsScreen(
         PairsList(
             state = state,
             onEditSyncPair = onEditSyncPair,
-            onRequestDelete = viewModel::requestDelete,
-            onSyncNow = viewModel::syncNow,
-            onSyncAllNow = viewModel::syncAllNow,
+            onRequestDelete = onRequestDelete,
+            onSyncNow = onSyncNow,
+            onSyncAllNow = onSyncAllNow,
             onAddSyncPair = onAddSyncPair,
             onOpenPairDetail = onOpenPairDetail,
             onOpenReauth = onOpenReauth,
-            globalAutoSyncEnabled = state.globalAutoSyncEnabled,
+            globalAutoSyncEnabled = globalAutoSyncEnabled,
             modifier = Modifier.fillMaxSize().padding(padding),
         )
+    }
+}
+
+@Composable
+private fun PairDetailPane(
+    pairId: Long,
+    onEditSyncPair: (Long) -> Unit,
+    onSyncPairNow: (Long) -> Unit,
+    onDeletePair: (Long) -> Unit,
+    onOpenConflicts: () -> Unit,
+    onOpenLogs: (Long) -> Unit,
+    onBack: () -> Unit,
+) {
+    key(pairId) {
+        val navController = rememberNavController()
+        NavHost(
+            navController = navController,
+            startDestination = "pair_detail/$pairId",
+        ) {
+            composable(
+                route = "pair_detail/{pairId}",
+                arguments =
+                    listOf(
+                        navArgument("pairId") { type = NavType.LongType },
+                    ),
+            ) {
+                PairDetailScreen(
+                    onBack = onBack,
+                    onEdit = onEditSyncPair,
+                    onSyncNow = onSyncPairNow,
+                    onDelete = onDeletePair,
+                    onOpenConflicts = onOpenConflicts,
+                    onOpenLogs = onOpenLogs,
+                )
+            }
+        }
     }
 }
 
@@ -584,3 +750,5 @@ private fun StatusBanner(
         )
     }
 }
+
+private const val TABLET_LIST_DETAIL_MIN_WIDTH_DP = 720
