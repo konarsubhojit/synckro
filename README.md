@@ -127,16 +127,19 @@ The release artifact is for internal/dev testing only. It reuses the same
 
 ## Roadmap
 
-Near-term work:
+Current UX work is tracked in **[#183 — Synckro UX improvement initiative](https://github.com/konarsubhojit/synckro/issues/183)**.
 
-1. Wire up SAF folder picker and persist tree URIs.
-2. Implement real local-folder enumeration against a `DocumentFile` tree and
-   populate Room index.
-3. Implement OneDrive provider (MSAL auth + Graph `/me/drive/root:/.../:/delta`
-   + resumable upload sessions).
-4. Implement Google Drive provider (OAuth + Drive v3 `changes.list` + resumable
-   upload).
-5. Per-pair settings screen.
+That epic is the source of truth for the active phase breakdown, dependency
+graph, and implementation order across navigation, shared components, settings,
+pairs, conflict inbox, onboarding, notifications, logs, accessibility, tablet
+layouts, haptics, coach marks, and feedback.
+
+Every UX phase is expected to:
+
+1. Validate with `./gradlew testDebugUnitTest assembleDebug lintDebug`.
+2. Keep `app/src/main/java/com/synckro/domain/sync/` core logic untouched.
+3. Use the Storage Access Framework rather than `MANAGE_EXTERNAL_STORAGE`.
+4. Add all user-visible strings through `app/src/main/res/values/strings.xml`.
 
 ## License
 
