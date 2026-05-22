@@ -145,6 +145,14 @@ class SettingsRepository
             dataStore.edit { it[KEY_NOTIFY_ON_FAILURE] = enabled }
         }
 
+        /** Whether in-app haptic feedback should be used for supported interactions. */
+        val enableHaptics: Flow<Boolean> =
+            dataStore.data.map { it[KEY_ENABLE_HAPTICS] ?: DEFAULT_ENABLE_HAPTICS }
+
+        suspend fun setEnableHaptics(enabled: Boolean) {
+            dataStore.edit { it[KEY_ENABLE_HAPTICS] = enabled }
+        }
+
         // -------------------------------------------------------------------------
         // Onboarding
         // -------------------------------------------------------------------------
@@ -199,6 +207,7 @@ class SettingsRepository
 
             internal val KEY_NOTIFY_ON_SUCCESS = booleanPreferencesKey("notify_on_success")
             internal val KEY_NOTIFY_ON_FAILURE = booleanPreferencesKey("notify_on_failure")
+            internal val KEY_ENABLE_HAPTICS = booleanPreferencesKey("enable_haptics")
 
             internal val KEY_LOG_RETENTION_DAYS = intPreferencesKey("log_retention_days")
 
@@ -215,6 +224,7 @@ class SettingsRepository
 
             internal const val DEFAULT_NOTIFY_ON_SUCCESS = false
             internal const val DEFAULT_NOTIFY_ON_FAILURE = true
+            internal const val DEFAULT_ENABLE_HAPTICS = true
 
             internal const val DEFAULT_LOG_RETENTION_DAYS = 30
         }

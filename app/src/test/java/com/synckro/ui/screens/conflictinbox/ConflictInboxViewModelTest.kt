@@ -4,6 +4,7 @@ import com.synckro.data.local.dao.FileIndexDao
 import com.synckro.data.local.entity.FileIndexEntity
 import com.synckro.data.repository.AccountRepository
 import com.synckro.data.repository.ConflictRepository
+import com.synckro.data.repository.SettingsRepository
 import com.synckro.data.repository.SyncPairRepository
 import com.synckro.domain.auth.Account
 import com.synckro.domain.model.CloudProviderType
@@ -16,6 +17,7 @@ import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -36,6 +38,7 @@ class ConflictInboxViewModelTest {
     private lateinit var fileIndexDao: FileIndexDao
     private lateinit var syncPairRepository: SyncPairRepository
     private lateinit var accountRepository: AccountRepository
+    private lateinit var settingsRepository: SettingsRepository
 
     @Before
     fun setUp() {
@@ -44,6 +47,10 @@ class ConflictInboxViewModelTest {
         fileIndexDao = mockk(relaxed = true)
         syncPairRepository = mockk(relaxed = true)
         accountRepository = mockk(relaxed = true)
+        settingsRepository =
+            mockk(relaxed = true) {
+                every { enableHaptics } returns flowOf(true)
+            }
     }
 
     @After
@@ -504,5 +511,6 @@ class ConflictInboxViewModelTest {
             fileIndexDao = fileIndexDao,
             syncPairRepository = syncPairRepository,
             accountRepository = accountRepository,
+            settingsRepository = settingsRepository,
         )
 }

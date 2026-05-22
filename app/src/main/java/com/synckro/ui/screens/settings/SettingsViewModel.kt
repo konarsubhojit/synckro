@@ -56,6 +56,7 @@ class SettingsViewModel
             // Notifications
             val notifyOnSuccess: Boolean = false,
             val notifyOnFailure: Boolean = true,
+            val enableHaptics: Boolean = true,
             // Logs
             val logRetentionDays: Int = 30,
         )
@@ -92,8 +93,9 @@ class SettingsViewModel
                 combine(
                     settingsRepository.notifyOnSuccess,
                     settingsRepository.notifyOnFailure,
+                    settingsRepository.enableHaptics,
                     settingsRepository.logRetentionDays,
-                ) { success, failure, retention -> arrayOf(success, failure, retention) },
+                ) { success, failure, haptics, retention -> arrayOf(success, failure, haptics, retention) },
             ) { syncBundle, appearanceBundle, miscBundle ->
                 @Suppress("UNCHECKED_CAST")
                 UiState(
@@ -106,7 +108,8 @@ class SettingsViewModel
                     respectFontScale = appearanceBundle[2] as Boolean,
                     notifyOnSuccess = miscBundle[0] as Boolean,
                     notifyOnFailure = miscBundle[1] as Boolean,
-                    logRetentionDays = miscBundle[2] as Int,
+                    enableHaptics = miscBundle[2] as Boolean,
+                    logRetentionDays = miscBundle[3] as Int,
                 )
             }.stateIn(
                 scope = viewModelScope,
@@ -169,6 +172,10 @@ class SettingsViewModel
 
         fun setNotifyOnFailure(enabled: Boolean) {
             viewModelScope.launch { settingsRepository.setNotifyOnFailure(enabled) }
+        }
+
+        fun setEnableHaptics(enabled: Boolean) {
+            viewModelScope.launch { settingsRepository.setEnableHaptics(enabled) }
         }
 
         // ---------------------------------------------------------------------

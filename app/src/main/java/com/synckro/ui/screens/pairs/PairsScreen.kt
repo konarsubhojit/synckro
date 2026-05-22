@@ -478,6 +478,7 @@ private fun SyncPairRow(
     }
     val stripeDescription = stringResource(R.string.home_card_status_stripe)
     val reauthDeepLinkDescription = stringResource(R.string.home_needs_reauth_action_description)
+    // TODO(#28): Trigger HapticHelper.light() when pair-card swipe gestures are introduced.
 
     SectionCard(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onOpenDetail),

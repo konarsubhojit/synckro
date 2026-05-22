@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.synckro.data.local.dao.FileIndexDao
 import com.synckro.data.repository.AccountRepository
 import com.synckro.data.repository.ConflictRepository
+import com.synckro.data.repository.SettingsRepository
 import com.synckro.data.repository.SyncPairRepository
 import com.synckro.domain.model.ConflictRecord
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -31,6 +32,7 @@ class ConflictInboxViewModel
         private val fileIndexDao: FileIndexDao,
         private val syncPairRepository: SyncPairRepository,
         private val accountRepository: AccountRepository,
+        private val settingsRepository: SettingsRepository,
     ) : ViewModel() {
         data class ConflictRow(
             val id: Long,
@@ -78,6 +80,7 @@ class ConflictInboxViewModel
             val isLoading: Boolean = true,
             val isSelectionMode: Boolean = false,
             val selectedIds: Set<Long> = emptySet(),
+            val enableHaptics: Boolean = true,
         ) {
             val selectedCount: Int get() = selectedIds.size
         }
@@ -89,13 +92,15 @@ class ConflictInboxViewModel
                 conflictRepository
                     .observeUnresolved()
                     .map { projectRows(it) },
+                settingsRepository.enableHaptics,
                 _selectionState,
-            ) { rows, (isSelectionMode, selectedIds) ->
+            ) { rows, enableHaptics, (isSelectionMode, selectedIds) ->
                 UiState(
                     conflicts = rows,
                     isLoading = false,
                     isSelectionMode = isSelectionMode,
                     selectedIds = selectedIds,
+                    enableHaptics = enableHaptics,
                 )
             }.stateIn(
                 scope = viewModelScope,

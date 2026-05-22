@@ -422,6 +422,8 @@
     <string name="settings_notify_success_body">Posts a grouped notification after successful background syncs that moved files.</string>
     <string name="settings_notify_failure_title">Notify on sync failure</string>
     <string name="settings_notify_failure_body">Posts a notification when a sync run fails after retries.</string>
+    <string name="settings_enable_haptics_title">Enable haptics</string>
+    <string name="settings_enable_haptics_body">Use subtle vibration feedback for supported in-app interactions.</string>
     <string name="settings_notification_channels_title">Notification channels</string>
     <string name="settings_notification_channels_body">Customize sounds, importance, and previews per channel in system settings.</string>
     <string name="settings_notification_channels_action">Open channel settings</string>

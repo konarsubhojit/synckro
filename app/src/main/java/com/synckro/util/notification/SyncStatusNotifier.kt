@@ -1,10 +1,14 @@
 package com.synckro.util.notification
 
+import android.app.ActivityManager
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import androidx.core.app.NotificationCompat
 import com.synckro.MainActivity
 import com.synckro.R
@@ -30,6 +34,7 @@ class SyncStatusNotifier
         ) {
             if (!settingsRepository.notifyOnFailure.first()) return
             if (!SyncWorker.canPostNotifications(context)) return
+            val hapticsEnabled = settingsRepository.enableHaptics.first()
 
             val summary = summarizeFailure(reason)
             val notification =
@@ -50,6 +55,10 @@ class SyncStatusNotifier
 
             context.getSystemService(NotificationManager::class.java)
                 .notify(pair.id.toInt(), notification)
+
+            if (hapticsEnabled && isAppInForeground()) {
+                performInAppErrorHaptic()
+            }
         }
 
         suspend fun notifySuccessSummary(
@@ -96,6 +105,31 @@ class SyncStatusNotifier
                         ?.ifBlank { context.getString(R.string.sync_failure_unknown_summary) }
                         ?: context.getString(R.string.sync_failure_unknown_summary)
             }
+        }
+
+        private fun isAppInForeground(): Boolean {
+            val processInfo = ActivityManager.RunningAppProcessInfo()
+            ActivityManager.getMyMemoryState(processInfo)
+            return processInfo.importance == ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND ||
+                processInfo.importance == ActivityManager.RunningAppProcessInfo.IMPORTANCE_VISIBLE
+        }
+
+        private fun performInAppErrorHaptic() {
+            val vibrator =
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    context.getSystemService(VibratorManager::class.java)?.defaultVibrator
+                } else {
+                    @Suppress("DEPRECATION")
+                    context.getSystemService(Vibrator::class.java)
+                }
+            if (vibrator?.hasVibrator() != true) return
+            val effect =
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    VibrationEffect.createPredefined(VibrationEffect.EFFECT_DOUBLE_CLICK)
+                } else {
+                    VibrationEffect.createOneShot(40L, VibrationEffect.DEFAULT_AMPLITUDE)
+                }
+            runCatching { vibrator.vibrate(effect) }
         }
 
         private fun buildOpenLogsPendingIntent(pairId: Long): PendingIntent {

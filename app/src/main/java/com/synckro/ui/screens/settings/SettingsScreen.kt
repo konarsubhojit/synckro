@@ -218,6 +218,14 @@ fun SettingsScreen(
                 )
             }
             item {
+                SwitchRow(
+                    title = stringResource(R.string.settings_enable_haptics_title),
+                    body = stringResource(R.string.settings_enable_haptics_body),
+                    checked = state.enableHaptics,
+                    onCheckedChange = viewModel::setEnableHaptics,
+                )
+            }
+            item {
                 ActionRow(
                     title = stringResource(R.string.settings_notification_channels_title),
                     body = stringResource(R.string.settings_notification_channels_body),
