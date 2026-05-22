@@ -103,7 +103,7 @@ class LogsViewModel
         private val _providerFilter = MutableStateFlow<CloudProviderType?>(null)
         private val _timeWindowFilter = MutableStateFlow<TimeWindow?>(null)
         private val _searchQuery = MutableStateFlow("")
-        private val _exportConfig = MutableStateFlow(LogVisibilityConfig.currentExportConfig())
+        private val _exportConfig = MutableStateFlow(LogExportConfig())
 
         val exportConfig: StateFlow<LogExportConfig> = _exportConfig
 

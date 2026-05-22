@@ -288,7 +288,7 @@ class SettingsViewModel
 
             internal fun resolveFeedbackEmail(rawEmail: String): FeedbackEmailConfig {
                 val normalized = rawEmail.trim()
-                if (normalized.isNotEmpty()) {
+                if (normalized.matches(FEEDBACK_EMAIL_REGEX)) {
                     return FeedbackEmailConfig(address = normalized, isConfigured = true)
                 }
                 return FeedbackEmailConfig(
@@ -296,6 +296,12 @@ class SettingsViewModel
                     isConfigured = false,
                 )
             }
+
+            private val FEEDBACK_EMAIL_REGEX =
+                Regex(
+                    "^[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}$",
+                    RegexOption.IGNORE_CASE,
+                )
         }
 
         data class FeedbackEmailConfig(

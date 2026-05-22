@@ -73,6 +73,7 @@ android {
     val googleWebClientId = secretOrEmpty("GOOGLE_WEB_CLIENT_ID")
     val msClientId = secretOrEmpty("MS_CLIENT_ID")
     val msalRedirect = secretOrEmpty("MSAL_REDIRECT_URI")
+
     fun configuredMsalForBuildType(
         buildTypeName: String,
         expectedHost: String,

@@ -611,12 +611,12 @@ private fun startSendFeedback(
             ctx.getString(
                 R.string.settings_send_feedback_template,
                 versionName,
-                Build.VERSION.RELEASE ?: "Unknown",
+                Build.VERSION.RELEASE,
                 Build.MANUFACTURER,
                 Build.MODEL,
                 currentLocale(ctx).toLanguageTag(),
             )
-        val clipData = ClipData.newRawUri("synckro-feedback-logs", uri)
+        val clipData = ClipData.newRawUri("synckro_feedback_logs", uri)
         val sendToIntent =
             Intent(Intent.ACTION_SENDTO, Uri.fromParts("mailto", feedbackEmail, null)).apply {
                 putExtra(Intent.EXTRA_SUBJECT, subject)

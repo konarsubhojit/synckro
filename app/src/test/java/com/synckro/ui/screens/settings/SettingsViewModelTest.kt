@@ -217,12 +217,19 @@ class SettingsViewModelTest {
     }
 
     @Test
+    fun `resolveFeedbackEmail falls back to placeholder when invalid`() {
+        val resolved = SettingsViewModel.resolveFeedbackEmail("not-an-email")
+        assertEquals("feedback@example.com", resolved.address)
+        assertFalse(resolved.isConfigured)
+    }
+
+    @Test
     fun `sendFeedback exports using active redaction config`() =
         testScope.runTest {
             val vm = newVm()
             val exportUri = mockk<android.net.Uri>(relaxed = true)
             val redaction = LogExportConfig(redactPaths = true, redactAccountIds = true)
-            val originalRedaction = LogVisibilityConfig.currentExportConfig()
+            val originalExportConfig = LogVisibilityConfig.currentExportConfig()
             try {
                 LogVisibilityConfig.setExportConfig(redaction)
                 coEvery { logExporter.export(redaction) } returns exportUri
@@ -234,7 +241,7 @@ class SettingsViewModelTest {
                 assertEquals(SettingsViewModel.UiEvent.ComposeFeedback(exportUri), event)
                 coVerify(exactly = 1) { logExporter.export(redaction) }
             } finally {
-                LogVisibilityConfig.setExportConfig(originalRedaction)
+                LogVisibilityConfig.setExportConfig(originalExportConfig)
             }
         }
 }
