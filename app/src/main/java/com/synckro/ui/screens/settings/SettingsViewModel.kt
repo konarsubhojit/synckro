@@ -11,6 +11,7 @@ import com.synckro.data.repository.SyncPairRepository
 import com.synckro.data.worker.SyncScheduler
 import com.synckro.domain.model.ConflictPolicy
 import com.synckro.util.logging.LogExporter
+import com.synckro.util.logging.LogVisibilityConfig
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -68,6 +69,8 @@ class SettingsViewModel
          */
         sealed interface UiEvent {
             data class ShareLogs(val uri: android.net.Uri) : UiEvent
+
+            data class ComposeFeedback(val uri: android.net.Uri) : UiEvent
 
             data class ExportFailed(val message: String) : UiEvent
 
@@ -202,6 +205,17 @@ class SettingsViewModel
             }
         }
 
+        fun sendFeedback() {
+            viewModelScope.launch {
+                runCatching { logExporter.export(LogVisibilityConfig.currentExportConfig()) }
+                    .onSuccess { uri -> _events.emit(UiEvent.ComposeFeedback(uri)) }
+                    .onFailure { t ->
+                        Timber.e(t, "SettingsViewModel.sendFeedback failed")
+                        _events.emit(UiEvent.ExportFailed(t.message ?: "Unknown error"))
+                    }
+            }
+        }
+
         /**
          * Clears the app's cache directory (excluding the directory itself).
          * Emits [UiEvent.CacheCleared] on completion with the number of bytes
@@ -231,6 +245,8 @@ class SettingsViewModel
 
         /** App version code (e.g. `1`) sourced from BuildConfig. */
         val versionCode: Int get() = BuildConfig.VERSION_CODE
+
+        val feedbackEmailConfig: FeedbackEmailConfig = resolveFeedbackEmail(BuildConfig.FEEDBACK_EMAIL)
 
         /**
          * Public URL of the Synckro privacy policy. Hard-coded for now; if this
@@ -268,5 +284,22 @@ class SettingsViewModel
         companion object {
             /** Filename produced by the `generateOssLicenses` Gradle task. */
             const val OSS_LICENSES_ASSET = "oss_licenses.txt"
+            private const val FEEDBACK_EMAIL_PLACEHOLDER = "feedback@example.com"
+
+            internal fun resolveFeedbackEmail(rawEmail: String): FeedbackEmailConfig {
+                val normalized = rawEmail.trim()
+                if (normalized.isNotEmpty()) {
+                    return FeedbackEmailConfig(address = normalized, isConfigured = true)
+                }
+                return FeedbackEmailConfig(
+                    address = FEEDBACK_EMAIL_PLACEHOLDER,
+                    isConfigured = false,
+                )
+            }
         }
+
+        data class FeedbackEmailConfig(
+            val address: String,
+            val isConfigured: Boolean,
+        )
     }

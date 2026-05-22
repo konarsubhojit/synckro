@@ -201,6 +201,7 @@ Add each secret listed in the table below.
 | `DEBUG_KEYSTORE_PASSWORD` | The keystore store password (e.g. `android`).                        |
 | `DEBUG_KEY_ALIAS`         | The key alias (e.g. `androiddebugkey`).                              |
 | `DEBUG_KEY_PASSWORD`      | The key password (e.g. `android`; may be the same as the store password). |
+| `FEEDBACK_EMAIL` *(optional)* | Support inbox used by Settings → About → Send feedback. Leave unset to use an obvious placeholder address in the draft (`feedback@example.com`). |
 
 > All seven secrets are independent — you can add them in any order.  The
 > effects of missing or empty secrets:
@@ -223,6 +224,9 @@ Add each secret listed in the table below.
 > - Missing `GOOGLE_WEB_CLIENT_ID` → `BuildConfig.GOOGLE_WEB_CLIENT_ID` is an
 >   empty string; `GoogleDriveAuthManager.signIn()` returns `NotConfigured`
 >   without touching the credential flow.
+> - Missing `FEEDBACK_EMAIL` → feedback drafts still open, but use
+>   `feedback@example.com` and show a visible in-app note that this build has no
+>   configured support inbox.
 
 ---
 
@@ -255,6 +259,7 @@ test authentication on a locally built APK:
    GOOGLE_WEB_CLIENT_ID=<your web client id>
    MS_CLIENT_ID=<your azure app client id>
    MSAL_REDIRECT_URI=msauth://com.synckro.debug/<base64-hash>
+   FEEDBACK_EMAIL=support@example.com
    DEBUG_KEYSTORE_PASSWORD=android
    DEBUG_KEY_ALIAS=androiddebugkey
    DEBUG_KEY_PASSWORD=android

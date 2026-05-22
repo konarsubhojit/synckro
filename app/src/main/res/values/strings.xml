@@ -451,5 +451,11 @@
     <string name="settings_oss_licenses_body">Libraries used by this build.</string>
     <string name="settings_oss_licenses_unavailable">License list isn\u0027t available in this build.</string>
     <string name="settings_oss_licenses_close">Close</string>
+    <string name="settings_send_feedback_title">Send feedback</string>
+    <string name="settings_send_feedback_body">Compose an email with logs and device details pre-attached.</string>
+    <string name="settings_send_feedback_body_unset">Feedback email isn\u0027t configured in this build; draft uses %1$s.</string>
+    <string name="settings_send_feedback_subject">Synckro feedback - %1$s</string>
+    <string name="settings_send_feedback_template">App version: %1$s\nAndroid version: %2$s\nDevice: %3$s %4$s\nLocale: %5$s\n\nDescribe what happened:\n</string>
+    <string name="settings_send_feedback_no_app">Couldn\u0027t open an email app to send feedback.</string>
 
 </resources>

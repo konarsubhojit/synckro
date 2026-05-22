@@ -103,7 +103,7 @@ class LogsViewModel
         private val _providerFilter = MutableStateFlow<CloudProviderType?>(null)
         private val _timeWindowFilter = MutableStateFlow<TimeWindow?>(null)
         private val _searchQuery = MutableStateFlow("")
-        private val _exportConfig = MutableStateFlow(LogExportConfig())
+        private val _exportConfig = MutableStateFlow(LogVisibilityConfig.currentExportConfig())
 
         val exportConfig: StateFlow<LogExportConfig> = _exportConfig
 
@@ -302,11 +302,15 @@ class LogsViewModel
         }
 
         fun setExportRedactPaths(enabled: Boolean) {
-            _exportConfig.value = _exportConfig.value.copy(redactPaths = enabled)
+            val updated = _exportConfig.value.copy(redactPaths = enabled)
+            _exportConfig.value = updated
+            LogVisibilityConfig.setExportConfig(updated)
         }
 
         fun setExportRedactAccountIds(enabled: Boolean) {
-            _exportConfig.value = _exportConfig.value.copy(redactAccountIds = enabled)
+            val updated = _exportConfig.value.copy(redactAccountIds = enabled)
+            _exportConfig.value = updated
+            LogVisibilityConfig.setExportConfig(updated)
         }
 
         /** Clears every active filter and resets the search query. */
