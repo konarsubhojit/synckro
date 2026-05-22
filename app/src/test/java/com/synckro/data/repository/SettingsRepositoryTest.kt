@@ -101,4 +101,30 @@ class SettingsRepositoryTest {
                 repo.enableHaptics.first(),
             )
         }
+
+    @Test
+    fun `seenTooltips defaults to empty set`() =
+        testScope.runTest {
+            val repo = buildRepository()
+            assertTrue("Expected seenTooltips to be empty by default", repo.seenTooltips.first().isEmpty())
+        }
+
+    @Test
+    fun `markTooltipSeen persists unique ids`() =
+        testScope.runTest {
+            val repo = buildRepository()
+            repo.markTooltipSeen("pairs_fab")
+            repo.markTooltipSeen("pairs_fab")
+            repo.markTooltipSeen("conflicts_tab")
+            assertTrue(repo.seenTooltips.first().containsAll(setOf("pairs_fab", "conflicts_tab")))
+        }
+
+    @Test
+    fun `resetSeenTooltips clears persisted ids`() =
+        testScope.runTest {
+            val repo = buildRepository()
+            repo.markTooltipSeen("logs_export")
+            repo.resetSeenTooltips()
+            assertTrue("Expected seenTooltips to be empty after reset", repo.seenTooltips.first().isEmpty())
+        }
 }

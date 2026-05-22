@@ -70,6 +70,7 @@ import com.synckro.domain.model.SyncEvent
 import com.synckro.domain.model.SyncEventLevel
 import com.synckro.domain.model.SyncEventTag
 import com.synckro.ui.components.EmptyState
+import com.synckro.ui.components.CoachTooltip
 import com.synckro.ui.theme.SynckroTheme
 import com.synckro.util.logging.LogExportConfig
 import com.synckro.util.logging.LogExportSink
@@ -88,6 +89,8 @@ fun LogsScreen(
     onTriggerSync: () -> Unit = { onBack?.invoke() },
     requestedPairId: Long? = null,
     onRequestedPairIdHandled: () -> Unit = {},
+    showExportCoachTooltip: Boolean = false,
+    onExportCoachTooltipShown: () -> Unit = {},
     viewModel: LogsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -162,6 +165,8 @@ fun LogsScreen(
                         onRedactPathsChanged = viewModel::setExportRedactPaths,
                         onRedactAccountIdsChanged = viewModel::setExportRedactAccountIds,
                         onExport = { viewModel.exportLogs() },
+                        showExportCoachTooltip = showExportCoachTooltip,
+                        onExportCoachTooltipShown = onExportCoachTooltipShown,
                     )
                 },
                 colors = TopAppBarDefaults.topAppBarColors(),
@@ -215,6 +220,8 @@ internal fun LogsActions(
     onRedactPathsChanged: (Boolean) -> Unit,
     onRedactAccountIdsChanged: (Boolean) -> Unit,
     onExport: () -> Unit,
+    showExportCoachTooltip: Boolean = false,
+    onExportCoachTooltipShown: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -247,13 +254,19 @@ internal fun LogsActions(
         )
     }
 
-    TextButton(onClick = { showSheet = true }) {
-        Icon(
-            Icons.Default.Share,
-            contentDescription = stringResource(R.string.logs_share_export),
-        )
-        Spacer(Modifier.width(8.dp))
-        Text(stringResource(R.string.logs_share_export))
+    CoachTooltip(
+        visible = showExportCoachTooltip,
+        tooltipText = stringResource(R.string.coach_tooltip_logs_export),
+        onShown = onExportCoachTooltipShown,
+    ) {
+        TextButton(onClick = { showSheet = true }) {
+            Icon(
+                Icons.Default.Share,
+                contentDescription = stringResource(R.string.logs_share_export),
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(stringResource(R.string.logs_share_export))
+        }
     }
 
     if (showSheet) {

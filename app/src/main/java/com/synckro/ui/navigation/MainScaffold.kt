@@ -41,6 +41,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.synckro.R
+import com.synckro.ui.components.CoachTooltip
+import com.synckro.ui.components.CoachTooltipIds
 import com.synckro.ui.screens.accounts.AccountsScreen
 import com.synckro.ui.screens.conflictinbox.ConflictInboxScreen
 import com.synckro.ui.screens.home.HomeViewModel
@@ -134,6 +136,13 @@ fun MainScaffold(
 
     val state by homeViewModel.state.collectAsStateWithLifecycle()
     val pendingConflictCount = state.pendingConflictCount
+    val showConflictsTooltip =
+        pendingConflictCount > 0 &&
+            CoachTooltipIds.ConflictsTab !in state.seenTooltips
+    val showLogsExportTooltip =
+        selected == MainDestination.Logs &&
+            state.hasCompletedSyncRun &&
+            CoachTooltipIds.LogsExport !in state.seenTooltips
 
     // Material guidance: switch from bottom NavigationBar to a side NavigationRail
     // once the available width crosses sw600dp.
@@ -176,6 +185,10 @@ fun MainScaffold(
                         onTriggerSync = { selected = MainDestination.Pairs },
                         requestedPairId = currentLogsPairId,
                         onRequestedPairIdHandled = { currentLogsPairId = null },
+                        showExportCoachTooltip = showLogsExportTooltip,
+                        onExportCoachTooltipShown = {
+                            homeViewModel.markTooltipSeen(CoachTooltipIds.LogsExport)
+                        },
                     )
                     MainDestination.Accounts -> AccountsScreen(
                         activity = activity,
@@ -198,6 +211,10 @@ fun MainScaffold(
                 selected = selected,
                 onSelect = { selected = it },
                 pendingConflictCount = pendingConflictCount,
+                showConflictsCoachTooltip = showConflictsTooltip,
+                onConflictsCoachTooltipShown = {
+                    homeViewModel.markTooltipSeen(CoachTooltipIds.ConflictsTab)
+                },
             )
             body(Modifier.fillMaxSize())
         }
@@ -209,6 +226,10 @@ fun MainScaffold(
                     selected = selected,
                     onSelect = { selected = it },
                     pendingConflictCount = pendingConflictCount,
+                    showConflictsCoachTooltip = showConflictsTooltip,
+                    onConflictsCoachTooltipShown = {
+                        homeViewModel.markTooltipSeen(CoachTooltipIds.ConflictsTab)
+                    },
                 )
             },
         ) { padding ->
@@ -222,6 +243,8 @@ private fun MainNavigationBar(
     selected: MainDestination,
     onSelect: (MainDestination) -> Unit,
     pendingConflictCount: Int,
+    showConflictsCoachTooltip: Boolean,
+    onConflictsCoachTooltipShown: () -> Unit,
 ) {
     NavigationBar {
         MainDestination.entries.forEach { destination ->
@@ -233,6 +256,8 @@ private fun MainNavigationBar(
                     DestinationIcon(
                         destination = destination,
                         pendingConflictCount = pendingConflictCount,
+                        showConflictsCoachTooltip = showConflictsCoachTooltip,
+                        onConflictsCoachTooltipShown = onConflictsCoachTooltipShown,
                         label = label,
                     )
                 },
@@ -247,6 +272,8 @@ private fun MainNavigationRail(
     selected: MainDestination,
     onSelect: (MainDestination) -> Unit,
     pendingConflictCount: Int,
+    showConflictsCoachTooltip: Boolean,
+    onConflictsCoachTooltipShown: () -> Unit,
 ) {
     NavigationRail {
         MainDestination.entries.forEach { destination ->
@@ -258,6 +285,8 @@ private fun MainNavigationRail(
                     DestinationIcon(
                         destination = destination,
                         pendingConflictCount = pendingConflictCount,
+                        showConflictsCoachTooltip = showConflictsCoachTooltip,
+                        onConflictsCoachTooltipShown = onConflictsCoachTooltipShown,
                         label = label,
                     )
                 },
@@ -271,6 +300,8 @@ private fun MainNavigationRail(
 private fun DestinationIcon(
     destination: MainDestination,
     pendingConflictCount: Int,
+    showConflictsCoachTooltip: Boolean,
+    onConflictsCoachTooltipShown: () -> Unit,
     label: String,
 ) {
     if (destination == MainDestination.Conflicts && pendingConflictCount > 0) {
@@ -278,15 +309,21 @@ private fun DestinationIcon(
             R.string.nav_dest_conflicts_badge_format,
             pendingConflictCount,
         )
-        BadgedBox(
-            modifier = Modifier.semantics {
-                contentDescription = "$label, $badgeDescription"
-            },
-            badge = {
-                Badge { Text(pendingConflictCount.toString()) }
-            },
+        CoachTooltip(
+            visible = showConflictsCoachTooltip,
+            tooltipText = stringResource(R.string.coach_tooltip_conflicts_tab),
+            onShown = onConflictsCoachTooltipShown,
         ) {
-            Icon(destination.icon, contentDescription = null)
+            BadgedBox(
+                modifier = Modifier.semantics {
+                    contentDescription = "$label, $badgeDescription"
+                },
+                badge = {
+                    Badge { Text(pendingConflictCount.toString()) }
+                },
+            ) {
+                Icon(destination.icon, contentDescription = null)
+            }
         }
     } else {
         Icon(destination.icon, contentDescription = null)

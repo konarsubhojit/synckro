@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 import com.synckro.domain.model.ConflictPolicy
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -179,6 +180,23 @@ class SettingsRepository
             dataStore.edit { it[KEY_ONBOARDING_COMPLETED_AT_MS] = timestampMs }
         }
 
+        /**
+         * Set of one-shot coach-tooltip ids that should no longer be shown.
+         */
+        val seenTooltips: Flow<Set<String>> =
+            dataStore.data.map { it[KEY_SEEN_TOOLTIPS] ?: emptySet() }
+
+        suspend fun markTooltipSeen(tooltipId: String) {
+            dataStore.edit { prefs ->
+                val current = prefs[KEY_SEEN_TOOLTIPS] ?: emptySet()
+                prefs[KEY_SEEN_TOOLTIPS] = current + tooltipId
+            }
+        }
+
+        suspend fun resetSeenTooltips() {
+            dataStore.edit { it.remove(KEY_SEEN_TOOLTIPS) }
+        }
+
         // -------------------------------------------------------------------------
         // Storage & logs
         // -------------------------------------------------------------------------
@@ -212,6 +230,7 @@ class SettingsRepository
             internal val KEY_LOG_RETENTION_DAYS = intPreferencesKey("log_retention_days")
 
             internal val KEY_ONBOARDING_COMPLETED_AT_MS = longPreferencesKey("onboarding_completed_at_ms")
+            internal val KEY_SEEN_TOOLTIPS = stringSetPreferencesKey("seen_tooltips")
 
             internal const val DEFAULT_GLOBAL_AUTO_SYNC = true
             internal const val DEFAULT_WIFI_ONLY = true
