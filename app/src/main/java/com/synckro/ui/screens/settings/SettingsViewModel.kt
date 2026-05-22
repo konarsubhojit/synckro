@@ -254,6 +254,10 @@ class SettingsViewModel
          */
         val privacyPolicyUrl: String = "https://github.com/konarsubhojit/synckro/blob/main/PRIVACY.md"
 
+        fun resetHints() {
+            viewModelScope.launch { settingsRepository.resetSeenTooltips() }
+        }
+
         /**
          * Reads the bundled OSS licenses file produced by the Gradle
          * `generateOssLicenses` task. Returns `null` when the asset is missing

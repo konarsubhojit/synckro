@@ -290,6 +290,13 @@ fun SettingsScreen(
             }
             item {
                 ActionRow(
+                    title = stringResource(R.string.settings_reset_hints_title),
+                    body = stringResource(R.string.settings_reset_hints_body),
+                    onClick = viewModel::resetHints,
+                )
+            }
+            item {
+                ActionRow(
                     title = stringResource(R.string.settings_privacy_policy_title),
                     body = stringResource(R.string.settings_privacy_policy_body),
                     onClick = {

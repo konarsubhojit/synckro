@@ -77,6 +77,8 @@ class HomeViewModelTest {
         mockSettingsRepository =
             mockk {
                 every { globalAutoSyncEnabled } returns flowOf(true)
+                every { onboardingCompletedAtMs } returns flowOf(null)
+                every { seenTooltips } returns flowOf(emptySet())
             }
         mockSyncEventRepository =
             mockk {

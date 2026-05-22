@@ -244,4 +244,13 @@ class SettingsViewModelTest {
                 LogVisibilityConfig.setExportConfig(originalExportConfig)
             }
         }
+
+    @Test
+    fun `resetHints clears seen tooltips`() =
+        testScope.runTest {
+            val vm = newVm()
+            repo.markTooltipSeen("pairs_fab")
+            vm.resetHints()
+            assertTrue(repo.seenTooltips.first().isEmpty())
+        }
 }
