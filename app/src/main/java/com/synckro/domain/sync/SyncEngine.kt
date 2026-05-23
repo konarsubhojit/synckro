@@ -258,6 +258,15 @@ class SyncEngine(
         fileAccessFactory: (Uri) -> LocalFileAccess,
         onProgress: suspend (TransferProgress) -> Unit,
     ): Result {
+        suspend fun logStep(stepNumber: Int, message: String) {
+            evtRepo.log(
+                pair.id,
+                SyncEventLevel.INFO,
+                TAG,
+                "Step $stepNumber/8: $message",
+            )
+        }
+
         // -----------------------------------------------------------------
         // Step 0 – Snapshot the index BEFORE local enumeration.
         //
@@ -276,6 +285,7 @@ class SyncEngine(
         //   • Unchanged files: in pre-scan index with remote metadata →
         //     SyncDiffer sees them in syntheticRemote and no-ops ✓
         // -----------------------------------------------------------------
+        logStep(0, "snapshotting local index")
         val preScanIndex = indexDao.getForPair(pair.id)
         val preScanIndexByPath = preScanIndex.associateBy { it.relativePath }
         // Reverse map: stable remote ID → index entry. Used to look up canonical
@@ -292,6 +302,7 @@ class SyncEngine(
         // -----------------------------------------------------------------
         // Step 1 – Enumerate local files (full scan, updates local_index).
         // -----------------------------------------------------------------
+        logStep(1, "enumerating local files")
         val treeUri = Uri.parse(pair.localTreeUri)
         val fileAccess = fileAccessFactory(treeUri)
         // Create a single SyncOpApplier for the entire sync run so that both
@@ -323,6 +334,7 @@ class SyncEngine(
         // are returned as MODIFY changes and can be downloaded.  For existing
         // pairs the persisted delta token is used for incremental polling.
         // -----------------------------------------------------------------
+        logStep(2, "enumerating remote changes")
         val rawRemoteSnapshot =
             if (pair.deltaToken == null) {
                 enumerateRemoteFull(remoteEnumerator, pair)
@@ -371,6 +383,7 @@ class SyncEngine(
         // deletion and emit a DeleteRemote — causing data loss from what is
         // effectively a configuration change.
         // -----------------------------------------------------------------
+        logStep(3, "building diff inputs")
         val scopeFilters = scopeFiltersFor(pair)
 
         fun isInScope(path: String): Boolean {
@@ -506,6 +519,7 @@ class SyncEngine(
         // -----------------------------------------------------------------
         // Step 4 – Compute ops.
         // -----------------------------------------------------------------
+        logStep(4, "computing sync operations")
         val ops =
             SyncDiffer.diff(
                 local = localSnapshots,
@@ -520,6 +534,7 @@ class SyncEngine(
         // Step 5 – Apply previously-resolved ConflictRecords (same pattern
         //          as runFake).
         // -----------------------------------------------------------------
+        logStep(5, "applying resolved conflicts")
         var appliedResolutions = 0
         val resolutionErrors = mutableListOf<String>()
         val resolved =
@@ -576,6 +591,7 @@ class SyncEngine(
                 }
                 .toMap()
 
+        logStep(6, "applying sync operations")
         val applyResult =
             applier.apply(
                 ops = ops,
@@ -590,12 +606,14 @@ class SyncEngine(
         //          This only runs if we reach here without cancellation,
         //          so partial state is never written on CancellationException.
         // -----------------------------------------------------------------
+        logStep(7, "persisting sync state")
         pairDao.updateDeltaToken(pair.id, remoteSnapshot.newDeltaToken)
         pairDao.updateLastFullScanAtMs(pair.id, System.currentTimeMillis())
 
         // -----------------------------------------------------------------
         // Step 8 – Map to Result.
         // -----------------------------------------------------------------
+        logStep(8, "finalizing sync result")
         val totalApplied = appliedResolutions + applyResult.applied
         val allErrors = resolutionErrors + applyResult.errors
         return if (allErrors.isEmpty()) {
