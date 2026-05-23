@@ -137,7 +137,11 @@ class SyncEngine(
      *                   Defaults to a no-op so existing callers are unaffected.
      * @return A [Result] describing the sync outcome.
      */
-    suspend fun runOnce(pair: SyncPair, onProgress: suspend (TransferProgress) -> Unit = {}): Result {
+    suspend fun runOnce(
+        pair: SyncPair,
+        onProgress: suspend (TransferProgress) -> Unit = {},
+        maxConcurrent: Int = 1,
+    ): Result {
         val providerFactory =
             providers[pair.provider]
                 ?: return Result.Terminal("Unsupported provider: ${pair.provider}")
@@ -156,7 +160,7 @@ class SyncEngine(
         if (pair.provider == CloudProviderType.FAKE) {
             return runFake(pair, provider as FakeCloudProvider)
         }
-        return runReal(pair, provider, onProgress)
+        return runReal(pair, provider, onProgress, maxConcurrent)
     }
 
     // -------------------------------------------------------------------------
@@ -179,7 +183,12 @@ class SyncEngine(
      * Auth exceptions are converted to [Result.Terminal]; network/rate-limit
      * errors to [Result.Retriable]; [CancellationException] always propagates.
      */
-    private suspend fun runReal(pair: SyncPair, provider: CloudProvider, onProgress: suspend (TransferProgress) -> Unit): Result {
+    private suspend fun runReal(
+        pair: SyncPair,
+        provider: CloudProvider,
+        onProgress: suspend (TransferProgress) -> Unit,
+        maxConcurrent: Int,
+    ): Result {
         val fsEnumerator =
             localFsEnumerator
                 ?: return Result.Terminal("SyncEngine: LocalFsEnumerator not configured for ${pair.provider}")
@@ -200,7 +209,7 @@ class SyncEngine(
                 ?: return Result.Terminal("SyncEngine: LocalFileAccess not configured")
 
         return try {
-            runRealImpl(pair, provider, fsEnumerator, remoteEnumerator, pairDao, indexDao, evtRepo, fileAccessFactory, onProgress)
+            runRealImpl(pair, provider, fsEnumerator, remoteEnumerator, pairDao, indexDao, evtRepo, fileAccessFactory, onProgress, maxConcurrent)
         } catch (c: CancellationException) {
             // Cooperative cancellation: do NOT write partial state; just rethrow.
             throw c
@@ -257,6 +266,7 @@ class SyncEngine(
         evtRepo: SyncEventRepository,
         fileAccessFactory: (Uri) -> LocalFileAccess,
         onProgress: suspend (TransferProgress) -> Unit,
+        maxConcurrent: Int,
     ): Result {
         suspend fun logStep(stepNumber: Int, message: String) {
             evtRepo.log(
@@ -598,6 +608,7 @@ class SyncEngine(
                 pair = pair,
                 remoteFilesByPath = remoteFilesByPath,
                 localIndexByPath = preScanIndexByPath + coldStartReconciliation.linkedEntriesByPath,
+                maxConcurrent = maxConcurrent,
                 onProgress = onProgress,
             )
 

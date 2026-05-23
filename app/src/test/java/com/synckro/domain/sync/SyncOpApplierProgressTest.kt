@@ -8,17 +8,25 @@ import com.synckro.domain.model.CloudProviderType
 import com.synckro.domain.model.ConflictPolicy
 import com.synckro.domain.model.SyncDirection
 import com.synckro.domain.model.SyncPair
+import com.synckro.domain.provider.CloudProvider
+import com.synckro.domain.provider.CloudProviderException
 import com.synckro.domain.provider.RemoteFile
 import com.synckro.providers.fake.FakeCloudProvider
 import io.mockk.mockk
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Before
 import org.junit.Test
 import java.io.ByteArrayInputStream
 import java.io.InputStream
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Tests for the [TransferProgress] callback in [SyncOpApplier.apply].
@@ -45,6 +53,179 @@ class SyncOpApplierProgressTest {
 
         fun put(path: String, bytes: ByteArray) {
             files[path] = bytes
+        }
+
+        class SyncOpApplierConcurrentTest {
+            private class InMemoryLocalFileAccess(
+                private val nowMs: Long = 5_000L,
+            ) : LocalFileAccess {
+                private val files = mutableMapOf<String, ByteArray>()
+
+                fun put(path: String, bytes: ByteArray) {
+                    files[path] = bytes
+                }
+
+                override fun openRead(relativePath: String): InputStream? = files[relativePath]?.let { ByteArrayInputStream(it) }
+
+                override fun write(relativePath: String, content: InputStream, mimeType: String?): LocalFileStat {
+                    val bytes = content.use { it.readBytes() }
+                    files[relativePath] = bytes
+                    return LocalFileStat(sizeBytes = bytes.size.toLong(), mtimeMs = nowMs, mimeType = mimeType)
+                }
+
+                override fun delete(relativePath: String): Boolean = files.remove(relativePath) != null
+
+                override fun stat(relativePath: String): LocalFileStat? =
+                    files[relativePath]?.let { LocalFileStat(sizeBytes = it.size.toLong(), mtimeMs = nowMs) }
+            }
+
+            private class DelegatingCloudProvider(
+                private val delegate: CloudProvider,
+                private val onUploadNew: suspend (name: String) -> Unit = {},
+            ) : CloudProvider by delegate {
+                override suspend fun uploadNew(
+                    parentId: String,
+                    name: String,
+                    content: InputStream,
+                    size: Long,
+                    mimeType: String?,
+                ): RemoteFile {
+                    onUploadNew(name)
+                    return delegate.uploadNew(parentId, name, content, size, mimeType)
+                }
+            }
+
+            private lateinit var fakeProvider: FakeCloudProvider
+            private lateinit var localFs: InMemoryLocalFileAccess
+            private lateinit var localIndexDao: LocalIndexDao
+            private lateinit var conflictRepo: ConflictRepository
+            private lateinit var eventRepo: SyncEventRepository
+
+            private fun buildApplier(provider: CloudProvider = fakeProvider) =
+                SyncOpApplier(
+                    provider = provider,
+                    localIndexDao = localIndexDao,
+                    conflictRepository = conflictRepo,
+                    eventRepository = eventRepo,
+                    localFileAccess = localFs,
+                    ioDispatcher = Dispatchers.Unconfined,
+                )
+
+            private fun pair() =
+                SyncPair(
+                    id = 1L,
+                    displayName = "Concurrent pair",
+                    localTreeUri = "content://test",
+                    provider = CloudProviderType.FAKE,
+                    remoteFolderId = "root",
+                    direction = SyncDirection.BIDIRECTIONAL,
+                    conflictPolicy = ConflictPolicy.NEWEST_WINS,
+                )
+
+            @Before
+            fun setUp() {
+                fakeProvider = FakeCloudProvider()
+                localFs = InMemoryLocalFileAccess()
+                localIndexDao = mockk(relaxed = true)
+                conflictRepo = mockk(relaxed = true)
+                eventRepo = mockk(relaxed = true)
+            }
+
+            @Test
+            fun `all ops are applied when maxConcurrent = 2`() =
+                runTest {
+                    localFs.put("a.txt", "a".toByteArray())
+                    localFs.put("b.txt", "b".toByteArray())
+
+                    val activeUploads = AtomicInteger(0)
+                    val maxActiveUploads = AtomicInteger(0)
+                    val twoStarted = CompletableDeferred<Unit>()
+                    val provider =
+                        DelegatingCloudProvider(fakeProvider) {
+                            val active = activeUploads.incrementAndGet()
+                            maxActiveUploads.getAndUpdate { maxOf(it, active) }
+                            if (active >= 2) {
+                                twoStarted.complete(Unit)
+                            }
+                            twoStarted.await()
+                            delay(25)
+                            activeUploads.decrementAndGet()
+                        }
+
+                    val result =
+                        withTimeout(2_000L) {
+                            buildApplier(provider).apply(
+                                ops = listOf(SyncOp.UploadNew("a.txt"), SyncOp.UploadNew("b.txt")),
+                                pair = pair(),
+                                remoteFilesByPath = emptyMap(),
+                                localIndexByPath = emptyMap(),
+                                maxConcurrent = 2,
+                            )
+                        }
+
+                    assertEquals(2, result.applied)
+                    assertEquals(0, result.conflicts)
+                    assertTrue(result.errors.isEmpty())
+                    assertEquals(2, maxActiveUploads.get())
+                }
+
+            @Test
+            fun `filesCompleted eventually reaches totalFiles in concurrent mode`() =
+                runTest {
+                    localFs.put("x.txt", "x".toByteArray())
+                    localFs.put("y.txt", "y".toByteArray())
+                    localFs.put("z.txt", "z".toByteArray())
+                    val events = mutableListOf<TransferProgress>()
+
+                    buildApplier().apply(
+                        ops = listOf(SyncOp.UploadNew("x.txt"), SyncOp.UploadNew("y.txt"), SyncOp.UploadNew("z.txt")),
+                        pair = pair(),
+                        remoteFilesByPath = emptyMap(),
+                        localIndexByPath = emptyMap(),
+                        maxConcurrent = 2,
+                        onProgress = { events += it },
+                    )
+
+                    assertTrue(events.isNotEmpty())
+                    assertEquals(3, events.maxOf { it.filesCompleted })
+                    assertEquals(3, events.last().filesCompleted)
+                    assertEquals(3, events.last().totalFiles)
+                }
+
+            @Test
+            fun `auth exception propagates after concurrent ops complete`() =
+                runTest {
+                    localFs.put("good.txt", "good".toByteArray())
+                    localFs.put("bad.txt", "bad".toByteArray())
+                    val goodFinished = AtomicBoolean(false)
+
+                    val provider =
+                        DelegatingCloudProvider(fakeProvider) { name ->
+                            if (name == "good.txt") {
+                                delay(100)
+                                goodFinished.set(true)
+                            } else if (name == "bad.txt") {
+                                throw CloudProviderException.AuthenticationRequired("auth needed")
+                            }
+                        }
+
+                    var authThrown = false
+                    try {
+                        buildApplier(provider).apply(
+                            ops = listOf(SyncOp.UploadNew("good.txt"), SyncOp.UploadNew("bad.txt")),
+                            pair = pair(),
+                            remoteFilesByPath = emptyMap(),
+                            localIndexByPath = emptyMap(),
+                            maxConcurrent = 2,
+                        )
+                        fail("Expected AuthenticationRequired")
+                    } catch (_: CloudProviderException.AuthenticationRequired) {
+                        authThrown = true
+                    }
+
+                    assertTrue(authThrown)
+                    assertTrue(goodFinished.get())
+                }
         }
 
         override fun openRead(path: String): InputStream? = files[path]?.let { ByteArrayInputStream(it) }
