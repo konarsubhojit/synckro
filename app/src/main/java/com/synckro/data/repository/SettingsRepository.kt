@@ -84,6 +84,20 @@ class SettingsRepository
             dataStore.edit { it[KEY_DEFAULT_CONFLICT_POLICY] = policy.name }
         }
 
+        /** Number of file operations that may run concurrently during a single sync
+         *  pass. Clamped to [1, MAX_CONCURRENT_TRANSFERS] on read and write. */
+        val maxConcurrentTransfers: Flow<Int> =
+            dataStore.data.map {
+                (it[KEY_MAX_CONCURRENT_TRANSFERS] ?: DEFAULT_MAX_CONCURRENT_TRANSFERS)
+                    .coerceIn(1, MAX_CONCURRENT_TRANSFERS)
+            }
+
+        suspend fun setMaxConcurrentTransfers(n: Int) {
+            dataStore.edit {
+                it[KEY_MAX_CONCURRENT_TRANSFERS] = n.coerceIn(1, MAX_CONCURRENT_TRANSFERS)
+            }
+        }
+
         // -------------------------------------------------------------------------
         // Appearance
         // -------------------------------------------------------------------------
@@ -218,6 +232,8 @@ class SettingsRepository
             internal val KEY_DEFAULT_WIFI_ONLY = booleanPreferencesKey("default_wifi_only")
             internal val KEY_DEFAULT_CHARGING_ONLY = booleanPreferencesKey("default_charging_only")
             internal val KEY_DEFAULT_CONFLICT_POLICY = stringPreferencesKey("default_conflict_policy")
+            internal val KEY_MAX_CONCURRENT_TRANSFERS =
+                intPreferencesKey("max_concurrent_transfers")
 
             internal val KEY_DARK_MODE = stringPreferencesKey("dark_mode")
             internal val KEY_DYNAMIC_COLOR = booleanPreferencesKey("dynamic_color")
@@ -236,6 +252,9 @@ class SettingsRepository
             internal const val DEFAULT_WIFI_ONLY = true
             internal const val DEFAULT_CHARGING_ONLY = false
             internal val DEFAULT_CONFLICT_POLICY = ConflictPolicy.NEWEST_WINS
+            internal const val DEFAULT_MAX_CONCURRENT_TRANSFERS = 1
+            /** Upper bound exposed as a public constant so the UI slider can reference it. */
+            const val MAX_CONCURRENT_TRANSFERS = 4
 
             internal val DEFAULT_DARK_MODE = DarkModePreference.SYSTEM
             internal const val DEFAULT_DYNAMIC_COLOR = false

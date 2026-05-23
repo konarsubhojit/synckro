@@ -33,6 +33,7 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -58,6 +59,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.synckro.R
 import com.synckro.data.repository.DarkModePreference
 import com.synckro.data.repository.LogRetentionPreference
+import com.synckro.data.repository.SettingsRepository
 import com.synckro.domain.model.ConflictPolicy
 import kotlinx.coroutines.launch
 import java.util.Locale
@@ -212,6 +214,13 @@ fun SettingsScreen(
                     title = stringResource(R.string.settings_default_conflict_policy_title),
                     body = conflictPolicyLabel(state.defaultConflictPolicy),
                     onClick = { conflictPolicyDialog = true },
+                )
+            }
+            item {
+                ConcurrentTransfersRow(
+                    value = state.maxConcurrentTransfers,
+                    max = SettingsRepository.MAX_CONCURRENT_TRANSFERS,
+                    onValueChange = viewModel::setMaxConcurrentTransfers,
                 )
             }
 
@@ -467,6 +476,37 @@ private fun DarkModeRow(
         }
     }
 }
+
+@Composable
+private fun ConcurrentTransfersRow(value: Int, max: Int, onValueChange: (Int) -> Unit) {
+    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text(
+                stringResource(R.string.settings_concurrent_transfers_title),
+                style = MaterialTheme.typography.bodyLarge,
+            )
+            Text(
+                stringResource(R.string.settings_concurrent_transfers_value_format, value),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.primary,
+            )
+        }
+        Text(
+            stringResource(R.string.settings_concurrent_transfers_body),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Slider(
+            value = value.toFloat(),
+            onValueChange = { onValueChange(it.toInt()) },
+            valueRange = 1f..max.toFloat(),
+            steps = max - 2,
+        )
+        }
+    }
 
 @Composable
 private fun LogRetentionRow(

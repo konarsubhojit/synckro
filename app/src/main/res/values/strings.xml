@@ -422,6 +422,9 @@
     <string name="settings_default_charging_only_body">New sync pairs will only sync while the device is plugged in.</string>
     <string name="settings_default_conflict_policy_title">Default conflict policy</string>
     <string name="settings_default_conflict_policy_body">Applied to newly created sync pairs. Existing pairs keep their per-pair setting.</string>
+    <string name="settings_concurrent_transfers_title">Simultaneous file transfers</string>
+    <string name="settings_concurrent_transfers_body">How many files are uploaded or downloaded at the same time (1–4). A higher value speeds up large syncs but uses more battery and data.</string>
+    <string name="settings_concurrent_transfers_value_format">%1$d at a time</string>
 
     <!-- Settings: notifications -->
     <string name="settings_notify_success_title">Notify when sync completes</string>
