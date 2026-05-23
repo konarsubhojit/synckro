@@ -657,7 +657,7 @@ class SyncWorker
                     .mapNotNull { row ->
                         val parts = row.split('|')
                         if (parts.size != 4) return@mapNotNull null
-                        val path = URLDecoder.decode(parts[0], Charsets.UTF_8)
+                        val path = URLDecoder.decode(parts[0], Charsets.UTF_8.name())
                         val direction =
                             runCatching { TransferDirection.valueOf(parts[1]) }.getOrNull()
                                 ?: return@mapNotNull null
@@ -675,7 +675,7 @@ class SyncWorker
 
             private fun serializeActiveTransfers(activeTransfers: List<ActiveTransfer>): String =
                 activeTransfers.joinToString(separator = "\n") { transfer ->
-                    val encodedPath = URLEncoder.encode(transfer.relativePath, Charsets.UTF_8)
+                    val encodedPath = URLEncoder.encode(transfer.relativePath, Charsets.UTF_8.name())
                     listOf(
                         encodedPath,
                         transfer.direction.name,
