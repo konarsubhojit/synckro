@@ -1,5 +1,6 @@
 package com.synckro.ui.screens.settings
 
+import android.content.ClipData
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -59,6 +60,7 @@ import com.synckro.data.repository.DarkModePreference
 import com.synckro.data.repository.LogRetentionPreference
 import com.synckro.domain.model.ConflictPolicy
 import kotlinx.coroutines.launch
+import java.util.Locale
 
 /**
  * Top-level Settings screen. Renders all user-configurable preferences in a
@@ -85,6 +87,20 @@ fun SettingsScreen(
         viewModel.events.collect { event ->
             when (event) {
                 is SettingsViewModel.UiEvent.ShareLogs -> startShareLogs(ctx, event.uri)
+                is SettingsViewModel.UiEvent.ComposeFeedback -> {
+                    val launched =
+                        startSendFeedback(
+                            ctx = ctx,
+                            uri = event.uri,
+                            feedbackEmail = viewModel.feedbackEmailConfig.address,
+                            versionName = viewModel.versionName,
+                        )
+                    if (!launched) {
+                        snackbarHostState.showSnackbar(
+                            ctx.getString(R.string.settings_send_feedback_no_app),
+                        )
+                    }
+                }
                 is SettingsViewModel.UiEvent.ExportFailed ->
                     snackbarHostState.showSnackbar(
                         ctx.getString(R.string.settings_export_logs_failed, event.message),
@@ -298,6 +314,22 @@ fun SettingsScreen(
                     title = stringResource(R.string.settings_oss_licenses_title),
                     body = stringResource(R.string.settings_oss_licenses_body),
                     onClick = { ossDialog = true },
+                )
+            }
+            item {
+                val feedbackBody =
+                    if (viewModel.feedbackEmailConfig.isConfigured) {
+                        stringResource(R.string.settings_send_feedback_body)
+                    } else {
+                        stringResource(
+                            R.string.settings_send_feedback_body_unset,
+                            viewModel.feedbackEmailConfig.address,
+                        )
+                    }
+                ActionRow(
+                    title = stringResource(R.string.settings_send_feedback_title),
+                    body = feedbackBody,
+                    onClick = viewModel::sendFeedback,
                 )
             }
         }
@@ -573,3 +605,59 @@ private fun startShareLogs(ctx: Context, uri: Uri) {
         )
     }
 }
+
+private fun startSendFeedback(
+    ctx: Context,
+    uri: Uri,
+    feedbackEmail: String,
+    versionName: String,
+): Boolean =
+    runCatching {
+        val subject = ctx.getString(R.string.settings_send_feedback_subject, versionName)
+        val body =
+            ctx.getString(
+                R.string.settings_send_feedback_template,
+                versionName,
+                Build.VERSION.RELEASE,
+                Build.MANUFACTURER,
+                Build.MODEL,
+                currentLocale(ctx).toLanguageTag(),
+            )
+        val clipData = ClipData.newRawUri("synckro_feedback_logs", uri)
+        val sendToIntent =
+            Intent(Intent.ACTION_SENDTO, Uri.fromParts("mailto", feedbackEmail, null)).apply {
+                putExtra(Intent.EXTRA_SUBJECT, subject)
+                putExtra(Intent.EXTRA_TEXT, body)
+                putExtra(Intent.EXTRA_STREAM, uri)
+                this.clipData = clipData
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+        if (sendToIntent.resolveActivity(ctx.packageManager) != null) {
+            ctx.startActivity(sendToIntent)
+            return@runCatching true
+        }
+        val sendIntent =
+            Intent(Intent.ACTION_SEND).apply {
+                type = "application/zip"
+                putExtra(Intent.EXTRA_EMAIL, arrayOf(feedbackEmail))
+                putExtra(Intent.EXTRA_SUBJECT, subject)
+                putExtra(Intent.EXTRA_TEXT, body)
+                putExtra(Intent.EXTRA_STREAM, uri)
+                this.clipData = clipData
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+        ctx.startActivity(
+            Intent.createChooser(sendIntent, ctx.getString(R.string.settings_send_feedback_title))
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
+        true
+    }.getOrDefault(false)
+
+private fun currentLocale(ctx: Context): Locale =
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+        ctx.resources.configuration.locales.get(0) ?: Locale.getDefault()
+    } else {
+        @Suppress("DEPRECATION")
+        ctx.resources.configuration.locale ?: Locale.getDefault()
+    }

@@ -16,6 +16,7 @@ data class MsalBuildConfig(
 )
 
 val msalConfigByBuildType = mutableMapOf<String, MsalBuildConfig>()
+val feedbackEmail = secretOrEmpty("FEEDBACK_EMAIL")
 
 plugins {
     alias(libs.plugins.android.application)
@@ -43,6 +44,7 @@ android {
         buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"\"")
         buildConfigField("String", "MS_CLIENT_ID", "\"\"")
         buildConfigField("String", "MSAL_REDIRECT_URI", "\"\"")
+        buildConfigField("String", "FEEDBACK_EMAIL", "\"$feedbackEmail\"")
         manifestPlaceholders["msalHost"] = ""
         manifestPlaceholders["msalPath"] = "/"
     }

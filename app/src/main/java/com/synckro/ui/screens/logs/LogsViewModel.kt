@@ -302,11 +302,15 @@ class LogsViewModel
         }
 
         fun setExportRedactPaths(enabled: Boolean) {
-            _exportConfig.value = _exportConfig.value.copy(redactPaths = enabled)
+            val updated = _exportConfig.value.copy(redactPaths = enabled)
+            _exportConfig.value = updated
+            LogVisibilityConfig.setExportConfig(updated)
         }
 
         fun setExportRedactAccountIds(enabled: Boolean) {
-            _exportConfig.value = _exportConfig.value.copy(redactAccountIds = enabled)
+            val updated = _exportConfig.value.copy(redactAccountIds = enabled)
+            _exportConfig.value = updated
+            LogVisibilityConfig.setExportConfig(updated)
         }
 
         /** Clears every active filter and resets the search query. */

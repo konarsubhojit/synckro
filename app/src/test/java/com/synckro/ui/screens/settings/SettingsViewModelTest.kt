@@ -7,11 +7,15 @@ import com.synckro.data.repository.SettingsRepository
 import com.synckro.data.repository.SyncPairRepository
 import com.synckro.data.worker.SyncScheduler
 import com.synckro.domain.model.ConflictPolicy
+import com.synckro.util.logging.LogExportConfig
 import com.synckro.util.logging.LogExporter
+import com.synckro.util.logging.LogVisibilityConfig
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.TestScope
@@ -196,6 +200,49 @@ class SettingsViewModelTest {
             val vm = newVm()
             vm.setLogRetentionDays(90)
             assertEquals(90, repo.logRetentionDays.first())
+        }
+
+    @Test
+    fun `resolveFeedbackEmail returns configured address when non-blank`() {
+        val resolved = SettingsViewModel.resolveFeedbackEmail(" support@synckro.dev ")
+        assertEquals("support@synckro.dev", resolved.address)
+        assertTrue(resolved.isConfigured)
+    }
+
+    @Test
+    fun `resolveFeedbackEmail falls back to placeholder when blank`() {
+        val resolved = SettingsViewModel.resolveFeedbackEmail("   ")
+        assertEquals("feedback@example.com", resolved.address)
+        assertFalse(resolved.isConfigured)
+    }
+
+    @Test
+    fun `resolveFeedbackEmail falls back to placeholder when invalid`() {
+        val resolved = SettingsViewModel.resolveFeedbackEmail("not-an-email")
+        assertEquals("feedback@example.com", resolved.address)
+        assertFalse(resolved.isConfigured)
+    }
+
+    @Test
+    fun `sendFeedback exports using active redaction config`() =
+        testScope.runTest {
+            val vm = newVm()
+            val exportUri = mockk<android.net.Uri>(relaxed = true)
+            val redaction = LogExportConfig(redactPaths = true, redactAccountIds = true)
+            val originalExportConfig = LogVisibilityConfig.currentExportConfig()
+            try {
+                LogVisibilityConfig.setExportConfig(redaction)
+                coEvery { logExporter.export(redaction) } returns exportUri
+
+                val eventAwait = async { vm.events.first() }
+                vm.sendFeedback()
+
+                val event = eventAwait.await()
+                assertEquals(SettingsViewModel.UiEvent.ComposeFeedback(exportUri), event)
+                coVerify(exactly = 1) { logExporter.export(redaction) }
+            } finally {
+                LogVisibilityConfig.setExportConfig(originalExportConfig)
+            }
         }
 
     @Test

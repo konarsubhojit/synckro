@@ -32,6 +32,9 @@ object LogVisibilityConfig {
     @Volatile
     var minVisibleLevel: SyncEventLevel = defaultMinVisibleLevel
 
+    @Volatile
+    private var exportConfig: LogExportConfig = LogExportConfig()
+
     /** True when [level] passes the visibility gate. */
     fun isVisible(level: SyncEventLevel): Boolean = level.ordinal >= minVisibleLevel.ordinal
 
@@ -42,10 +45,17 @@ object LogVisibilityConfig {
     fun visibleLevels(): List<SyncEventLevel> =
         SyncEventLevel.entries.filter { it.ordinal >= minVisibleLevel.ordinal }
 
+    fun currentExportConfig(): LogExportConfig = exportConfig
+
+    fun setExportConfig(config: LogExportConfig) {
+        exportConfig = config
+    }
+
     /** Resets [minVisibleLevel] to its build-variant default. Intended for tests. */
     @VisibleForTesting
     fun resetForTests() {
         minVisibleLevel = defaultMinVisibleLevel
+        exportConfig = LogExportConfig()
     }
 
     /** Applies optional export redactions to [text]. */
