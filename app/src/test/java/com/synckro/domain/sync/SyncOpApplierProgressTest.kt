@@ -24,11 +24,12 @@ import java.io.InputStream
  * Tests for the [TransferProgress] callback in [SyncOpApplier.apply].
  *
  * Verifies:
- * - [TransferProgress] is emitted once per op.
- * - [TransferProgress.filesCompleted] increments monotonically from 1 to totalFiles.
+ * - [TransferProgress] is emitted twice per op (before and after the op runs).
+ * - Post-op [TransferProgress.filesCompleted] increments monotonically from 1 to totalFiles.
  * - [TransferProgress.totalFiles] equals ops.size.
  * - [TransferProgress.totalBytes] is the sum of known remote/local sizes.
- * - [TransferProgress.bytesTransferred] accumulates correctly op-by-op.
+ * - Post-op [TransferProgress.bytesTransferred] accumulates correctly op-by-op.
+ * - Pre-op events name the active file and post-op events clear it.
  * - Falls back to file-count mode (totalBytes == 0) when no sizes are available.
  */
 class SyncOpApplierProgressTest {
@@ -127,7 +128,7 @@ class SyncOpApplierProgressTest {
     // =========================================================================
 
     @Test
-    fun `onProgress is called once per op`() =
+    fun `onProgress is called twice per op`() =
         runTest {
             val content = "hello".toByteArray()
             localFs.put("a.txt", content)
@@ -142,11 +143,11 @@ class SyncOpApplierProgressTest {
                 onProgress = { events += it },
             )
 
-            assertEquals("exactly one event per op", 2, events.size)
+            assertEquals("exactly two events per op", 4, events.size)
         }
 
     @Test
-    fun `filesCompleted increments monotonically and equals totalFiles on last event`() =
+    fun `post-op filesCompleted increments monotonically and equals totalFiles on last event`() =
         runTest {
             val content = "data".toByteArray()
             localFs.put("x.txt", content)
@@ -166,8 +167,33 @@ class SyncOpApplierProgressTest {
                 onProgress = { events += it },
             )
 
-            assertEquals(listOf(1, 2, 3), events.map { it.filesCompleted })
+            val postEvents = events.filterIndexed { i, _ -> i % 2 == 1 }
+            assertEquals(listOf(1, 2, 3), postEvents.map { it.filesCompleted })
             assertEquals(3, events.last().totalFiles)
+        }
+
+    @Test
+    fun `pre-op events expose current file name and post-op events clear it`() =
+        runTest {
+            val content = "data".toByteArray()
+            localFs.put("x.txt", content)
+            localFs.put("y.txt", content)
+
+            val ops = listOf(SyncOp.UploadNew("x.txt"), SyncOp.UploadNew("y.txt"))
+            val events = mutableListOf<TransferProgress>()
+            buildApplier().apply(
+                ops = ops,
+                pair = pair(),
+                remoteFilesByPath = emptyMap(),
+                localIndexByPath = emptyMap(),
+                onProgress = { events += it },
+            )
+
+            val preEvents = events.filterIndexed { i, _ -> i % 2 == 0 }
+            val postEvents = events.filterIndexed { i, _ -> i % 2 == 1 }
+
+            assertEquals(ops.map { it.relativePath }, preEvents.map { it.currentFileName })
+            assertTrue(postEvents.all { it.currentFileName == null })
         }
 
     @Test
@@ -230,8 +256,8 @@ class SyncOpApplierProgressTest {
                 onProgress = { events += it },
             )
 
-            assertEquals(100L, events[0].bytesTransferred)
-            assertEquals(300L, events[1].bytesTransferred)
+            assertEquals(100L, events[1].bytesTransferred)
+            assertEquals(300L, events[3].bytesTransferred)
         }
 
     // =========================================================================
@@ -324,8 +350,8 @@ class SyncOpApplierProgressTest {
                 onProgress = { events += it },
             )
 
-            assertEquals("progress event fired despite error", 1, events.size)
-            assertEquals(1, events[0].filesCompleted)
+            assertEquals("progress event fired before and after the error", 2, events.size)
+            assertEquals(1, events[1].filesCompleted)
         }
 
     @Test
@@ -344,8 +370,8 @@ class SyncOpApplierProgressTest {
                 onProgress = { events += it },
             )
 
-            assertEquals(123L, events.single().totalBytes)
-            assertEquals(0L, events.single().bytesTransferred)
+            assertEquals(123L, events.last().totalBytes)
+            assertEquals(0L, events.last().bytesTransferred)
         }
 
     // =========================================================================
@@ -367,8 +393,8 @@ class SyncOpApplierProgressTest {
                 onProgress = { events += it },
             )
 
-            assertEquals(300L, events.single().totalBytes)
-            assertEquals(300L, events.single().bytesTransferred)
+            assertEquals(300L, events.last().totalBytes)
+            assertEquals(300L, events.last().bytesTransferred)
         }
 
     @Test
@@ -392,8 +418,8 @@ class SyncOpApplierProgressTest {
                 onProgress = { events += it },
             )
 
-            assertEquals(200L, events.single().totalBytes)
-            assertEquals(200L, events.single().bytesTransferred)
+            assertEquals(200L, events.last().totalBytes)
+            assertEquals(200L, events.last().bytesTransferred)
         }
 
     // =========================================================================
@@ -440,10 +466,10 @@ class SyncOpApplierProgressTest {
                 onProgress = { events += it },
             )
 
-            // All three ops fire a progress event, regardless of success/failure.
-            assertEquals(3, events.size)
-            // filesCompleted is strictly monotonically increasing.
-            assertEquals(listOf(1, 2, 3), events.map { it.filesCompleted })
+            // All three ops fire pre/post progress events, regardless of success/failure.
+            assertEquals(6, events.size)
+            // Post-op filesCompleted is strictly monotonically increasing.
+            assertEquals(listOf(1, 2, 3), events.filterIndexed { i, _ -> i % 2 == 1 }.map { it.filesCompleted })
             // totalBytes is only the two known-size ops (bad.bin size unknown → 0).
             assertEquals(goodRemote.size!! * 2, events.last().totalBytes)
         }

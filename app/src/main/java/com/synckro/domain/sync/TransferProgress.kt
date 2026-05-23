@@ -20,4 +20,7 @@ data class TransferProgress(
     val totalFiles: Int,
     val bytesTransferred: Long,
     val totalBytes: Long,
+    /** Relative path of the file currently being transferred, or `null` when
+     *  between ops or when multiple ops are running concurrently. */
+    val currentFileName: String? = null,
 )
