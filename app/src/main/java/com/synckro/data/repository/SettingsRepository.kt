@@ -252,9 +252,9 @@ class SettingsRepository
             internal const val DEFAULT_WIFI_ONLY = true
             internal const val DEFAULT_CHARGING_ONLY = false
             internal val DEFAULT_CONFLICT_POLICY = ConflictPolicy.NEWEST_WINS
-            internal const val DEFAULT_MAX_CONCURRENT_TRANSFERS = 1
-            /** Upper bound exposed as a public constant so the UI slider can reference it. */
-            const val MAX_CONCURRENT_TRANSFERS = 4
+            internal const val DEFAULT_MAX_CONCURRENT_TRANSFERS = 3
+            /** Public max cap used by both clamping logic and the settings slider upper bound. */
+            const val MAX_CONCURRENT_TRANSFERS = 3
 
             internal val DEFAULT_DARK_MODE = DarkModePreference.SYSTEM
             internal const val DEFAULT_DYNAMIC_COLOR = false

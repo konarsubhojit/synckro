@@ -23,4 +23,15 @@ data class TransferProgress(
     /** Relative path of the file currently being transferred, or `null` when
      *  between ops or when multiple ops are running concurrently. */
     val currentFileName: String? = null,
+    /** Active upload/download transfers currently running. */
+    val activeTransfers: List<ActiveTransfer> = emptyList(),
+)
+
+enum class TransferDirection { UPLOAD, DOWNLOAD }
+
+data class ActiveTransfer(
+    val relativePath: String,
+    val direction: TransferDirection,
+    val bytesTransferred: Long,
+    val totalBytes: Long,
 )

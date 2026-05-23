@@ -14,16 +14,22 @@ import com.synckro.domain.provider.RemoteFile
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import java.io.InputStream
+import java.io.FilterInputStream
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
+import kotlin.coroutines.coroutineContext
 
 /**
  * Abstraction over local file I/O for [SyncOpApplier].
@@ -151,10 +157,10 @@ class SyncOpApplier(
      * For each op (success or failure) [onProgress] is invoked twice with a
      * [TransferProgress] snapshot:
      * 1. immediately before the op starts, with the current counters unchanged and
-     *    [TransferProgress.currentFileName] set to the active relative path;
+     *    [TransferProgress.activeTransfers] populated with the active transfer row(s);
      * 2. immediately after the op finishes, with [TransferProgress.filesCompleted]
      *    incremented, [TransferProgress.bytesTransferred] updated only for successful
-     *    transfers, and [TransferProgress.currentFileName] cleared back to `null`.
+     *    transfers, and the completed op removed from [TransferProgress.activeTransfers].
      *
      * [TransferProgress.totalBytes] is the sum of file sizes that could be resolved from
      * [remoteFilesByPath] and [localIndexByPath] before the batch started; it is 0 when
@@ -193,23 +199,52 @@ class SyncOpApplier(
             val totalBytes = opBytes.sum()
             var filesProcessed = 0
             var bytesTransferred = 0L
+            val activeTransfers = ConcurrentHashMap<String, ActiveTransfer>()
+            val progressScope = CoroutineScope(coroutineContext)
+
+            suspend fun emitProgress(filesCompleted: Int, completedBytes: Long) {
+                val activeSnapshot =
+                    activeTransfers.values
+                        .sortedBy { it.relativePath }
+                val inFlightBytes = activeSnapshot.sumOf { it.bytesTransferred }
+                val effectiveBytes =
+                    if (totalBytes > 0L) {
+                        (completedBytes + inFlightBytes).coerceIn(0L, totalBytes)
+                    } else {
+                        completedBytes
+                    }
+                onProgress(
+                    TransferProgress(
+                        filesCompleted = filesCompleted,
+                        totalFiles = totalFiles,
+                        bytesTransferred = effectiveBytes,
+                        totalBytes = totalBytes,
+                        currentFileName = activeSnapshot.singleOrNull()?.relativePath,
+                        activeTransfers = activeSnapshot,
+                    ),
+                )
+            }
 
             if (maxConcurrent <= 1) {
                 for ((index, op) in ops.withIndex()) {
-                    onProgress(
-                        TransferProgress(
-                            filesCompleted = filesProcessed,
-                            totalFiles = totalFiles,
-                            bytesTransferred = bytesTransferred,
-                            totalBytes = totalBytes,
-                            currentFileName = op.relativePath,
-                        ),
-                    )
+                    val direction = opTransferDirection(op)
+                    val perOpTotalBytes = opBytes[index].coerceAtLeast(0L)
+                    if (direction != null) {
+                        activeTransfers[op.relativePath] =
+                            ActiveTransfer(
+                                relativePath = op.relativePath,
+                                direction = direction,
+                                bytesTransferred = 0L,
+                                totalBytes = perOpTotalBytes,
+                            )
+                    }
+                    emitProgress(filesProcessed, bytesTransferred)
+                    val onTransferBytes: (Long) -> Unit = {}
                     var opSucceeded = false
                     try {
                         when (op) {
                             is SyncOp.UploadNew -> {
-                                applyUploadNew(op, pair)
+                                applyUploadNew(op, pair, onTransferBytes)
                                 applied++
                                 eventRepository.log(
                                     pair.id,
@@ -223,7 +258,7 @@ class SyncOpApplier(
                                 val remote =
                                     remoteFilesByPath[op.relativePath]
                                         ?: error("Remote file not in snapshot for DownloadNew: ${op.relativePath}")
-                                applyDownloadNew(op, pair, remote)
+                                applyDownloadNew(op, pair, remote, onTransferBytes)
                                 applied++
                                 eventRepository.log(
                                     pair.id,
@@ -237,7 +272,7 @@ class SyncOpApplier(
                                 val index =
                                     localIndexByPath[op.relativePath]
                                         ?: error("No index entry for UpdateRemote: ${op.relativePath}")
-                                applyUpdateRemote(op, pair, index)
+                                applyUpdateRemote(op, pair, index, onTransferBytes)
                                 applied++
                                 eventRepository.log(
                                     pair.id,
@@ -251,7 +286,7 @@ class SyncOpApplier(
                                 val remote =
                                     remoteFilesByPath[op.relativePath]
                                         ?: error("Remote file not in snapshot for UpdateLocal: ${op.relativePath}")
-                                applyUpdateLocal(op, pair, remote)
+                                applyUpdateLocal(op, pair, remote, onTransferBytes)
                                 applied++
                                 eventRepository.log(
                                     pair.id,
@@ -363,15 +398,10 @@ class SyncOpApplier(
                     if (opSucceeded) {
                         bytesTransferred += opBytes[index]
                     }
-                    onProgress(
-                        TransferProgress(
-                            filesCompleted = filesProcessed,
-                            totalFiles = totalFiles,
-                            bytesTransferred = bytesTransferred,
-                            totalBytes = totalBytes,
-                            currentFileName = null,
-                        ),
-                    )
+                    if (direction != null) {
+                        activeTransfers.remove(op.relativePath)
+                    }
+                    emitProgress(filesProcessed, bytesTransferred)
                 }
             } else {
                 // Thread-safety note: LocalFileAccess uses SAF/ContentProvider I/O.
@@ -393,21 +423,46 @@ class SyncOpApplier(
                             semaphore.withPermit {
                                 val preBytes = atomicBytes.get()
                                 val preFiles = atomicFiles.get()
-                                onProgress(
-                                    TransferProgress(
-                                        filesCompleted = preFiles,
-                                        totalFiles = totalFiles,
-                                        bytesTransferred = preBytes,
-                                        totalBytes = totalBytes,
-                                        currentFileName = null,
-                                    ),
-                                )
+                                val direction = opTransferDirection(op)
+                                val perOpTotalBytes = opBytes[index].coerceAtLeast(0L)
+                                if (direction != null) {
+                                    activeTransfers[op.relativePath] =
+                                        ActiveTransfer(
+                                            relativePath = op.relativePath,
+                                            direction = direction,
+                                            bytesTransferred = 0L,
+                                            totalBytes = perOpTotalBytes,
+                                        )
+                                }
+                                emitProgress(preFiles, preBytes)
+                                val onTransferBytes: (Long) -> Unit =
+                                    if (direction != null) {
+                                        { bytes ->
+                                            activeTransfers[op.relativePath] =
+                                                ActiveTransfer(
+                                                    relativePath = op.relativePath,
+                                                    direction = direction,
+                                                    bytesTransferred = bytes.coerceIn(0L, perOpTotalBytes),
+                                                    totalBytes = perOpTotalBytes,
+                                                )
+                                            progressScope.launch {
+                                                runCatching {
+                                                    emitProgress(
+                                                        atomicFiles.get(),
+                                                        atomicBytes.get(),
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    } else {
+                                        {}
+                                    }
 
                                 var opSucceeded = false
                                 try {
                                     when (op) {
                                         is SyncOp.UploadNew -> {
-                                            applyUploadNew(op, pair)
+                                            applyUploadNew(op, pair, onTransferBytes)
                                             atomicApplied.incrementAndGet()
                                             eventRepository.log(
                                                 pair.id,
@@ -421,7 +476,7 @@ class SyncOpApplier(
                                             val remote =
                                                 remoteFilesByPath[op.relativePath]
                                                     ?: error("Remote file not in snapshot for DownloadNew: ${op.relativePath}")
-                                            applyDownloadNew(op, pair, remote)
+                                            applyDownloadNew(op, pair, remote, onTransferBytes)
                                             atomicApplied.incrementAndGet()
                                             eventRepository.log(
                                                 pair.id,
@@ -435,7 +490,7 @@ class SyncOpApplier(
                                             val index =
                                                 localIndexByPath[op.relativePath]
                                                     ?: error("No index entry for UpdateRemote: ${op.relativePath}")
-                                            applyUpdateRemote(op, pair, index)
+                                            applyUpdateRemote(op, pair, index, onTransferBytes)
                                             atomicApplied.incrementAndGet()
                                             eventRepository.log(
                                                 pair.id,
@@ -449,7 +504,7 @@ class SyncOpApplier(
                                             val remote =
                                                 remoteFilesByPath[op.relativePath]
                                                     ?: error("Remote file not in snapshot for UpdateLocal: ${op.relativePath}")
-                                            applyUpdateLocal(op, pair, remote)
+                                            applyUpdateLocal(op, pair, remote, onTransferBytes)
                                             atomicApplied.incrementAndGet()
                                             eventRepository.log(
                                                 pair.id,
@@ -555,16 +610,13 @@ class SyncOpApplier(
                                 }
 
                                 val fp = atomicFiles.incrementAndGet()
-                                val bt = if (opSucceeded) atomicBytes.addAndGet(opBytes[index]) else atomicBytes.get()
-                                onProgress(
-                                    TransferProgress(
-                                        filesCompleted = fp,
-                                        totalFiles = totalFiles,
-                                        bytesTransferred = bt,
-                                        totalBytes = totalBytes,
-                                        currentFileName = null,
-                                    ),
-                                )
+                                if (opSucceeded) {
+                                    atomicBytes.addAndGet(opBytes[index])
+                                }
+                                if (direction != null) {
+                                    activeTransfers.remove(op.relativePath)
+                                }
+                                emitProgress(fp, atomicBytes.get())
                             }
                         }
                     }.awaitAll()
@@ -589,6 +641,7 @@ class SyncOpApplier(
     private suspend fun applyUploadNew(
         op: SyncOp.UploadNew,
         pair: SyncPair,
+        onBytesTransferred: (Long) -> Unit = {},
     ) {
         val stat =
             localFileAccess.stat(op.relativePath)
@@ -612,7 +665,7 @@ class SyncOpApplier(
                 provider.uploadNew(
                     parentId = parentId,
                     name = fileName,
-                    content = stream,
+                    content = ProgressInputStream(stream, onBytesTransferred),
                     size = stat.sizeBytes,
                     mimeType = stat.mimeType,
                 )
@@ -639,12 +692,17 @@ class SyncOpApplier(
         op: SyncOp.DownloadNew,
         pair: SyncPair,
         remote: RemoteFile,
+        onBytesTransferred: (Long) -> Unit = {},
     ) {
         var retried = false
         val stat =
             withRetry(onRetry = { _, _ -> retried = true }) {
                 val stream = provider.download(remote.id)
-                localFileAccess.write(op.relativePath, stream, remote.mimeType)
+                localFileAccess.write(
+                    op.relativePath,
+                    ProgressInputStream(stream, onBytesTransferred),
+                    remote.mimeType,
+                )
             }
         if (retried) {
             eventRepository.log(pair.id, SyncEventLevel.WARN, TAG, "Retried download: ${op.relativePath}")
@@ -668,6 +726,7 @@ class SyncOpApplier(
         op: SyncOp.UpdateRemote,
         pair: SyncPair,
         index: LocalIndexEntity,
+        onBytesTransferred: (Long) -> Unit = {},
     ) {
         val stat =
             localFileAccess.stat(op.relativePath)
@@ -683,7 +742,7 @@ class SyncOpApplier(
                         ?: error("Cannot read local file for UpdateRemote: ${op.relativePath}")
                 provider.updateContent(
                     id = remoteId,
-                    content = stream,
+                    content = ProgressInputStream(stream, onBytesTransferred),
                     size = stat.sizeBytes,
                     mimeType = stat.mimeType,
                 )
@@ -708,12 +767,17 @@ class SyncOpApplier(
         op: SyncOp.UpdateLocal,
         pair: SyncPair,
         remote: RemoteFile,
+        onBytesTransferred: (Long) -> Unit = {},
     ) {
         var retried = false
         val stat =
             withRetry(onRetry = { _, _ -> retried = true }) {
                 val stream = provider.download(remote.id)
-                localFileAccess.write(op.relativePath, stream, remote.mimeType)
+                localFileAccess.write(
+                    op.relativePath,
+                    ProgressInputStream(stream, onBytesTransferred),
+                    remote.mimeType,
+                )
             }
         if (retried) {
             eventRepository.log(pair.id, SyncEventLevel.WARN, TAG, "Retried update-local: ${op.relativePath}")
@@ -979,6 +1043,15 @@ class SyncOpApplier(
             is SyncOp.Conflict -> "Conflict(${op.relativePath})"
         }
 
+    private fun opTransferDirection(op: SyncOp): TransferDirection? =
+        when (op) {
+            is SyncOp.UploadNew, is SyncOp.UpdateRemote -> TransferDirection.UPLOAD
+            is SyncOp.DownloadNew, is SyncOp.UpdateLocal -> TransferDirection.DOWNLOAD
+            is SyncOp.DeleteRemote, is SyncOp.DeleteLocal -> null
+            is SyncOp.DeleteLocalRetention, is SyncOp.DeleteRemoteRetention -> null
+            is SyncOp.Conflict -> null
+        }
+
     /**
      * Returns the number of bytes expected to be transferred for a single [op].
      *
@@ -1022,7 +1095,49 @@ class SyncOpApplier(
                 }
         }
 
+    private class ProgressInputStream(
+        stream: InputStream,
+        private val onBytesTransferred: (Long) -> Unit,
+    ) : FilterInputStream(stream) {
+        private var bytesRead = 0L
+        private var lastReported = 0L
+
+        override fun read(): Int {
+            val value = super.read()
+            if (value >= 0) {
+                bytesRead++
+                maybeReport()
+            }
+            return value
+        }
+
+        override fun read(b: ByteArray, off: Int, len: Int): Int {
+            val count = super.read(b, off, len)
+            if (count > 0) {
+                bytesRead += count
+                maybeReport()
+            }
+            return count
+        }
+
+        override fun close() {
+            if (bytesRead > lastReported) {
+                lastReported = bytesRead
+                onBytesTransferred(bytesRead)
+            }
+            super.close()
+        }
+
+        private fun maybeReport() {
+            if (bytesRead - lastReported < REPORT_INTERVAL_BYTES) return
+            lastReported = bytesRead
+            onBytesTransferred(bytesRead)
+        }
+    }
+
     private companion object {
         const val TAG = "SyncOpApplier"
+        /** Emit in-flight byte updates at most once per 64 KiB read to cap callback churn. */
+        const val REPORT_INTERVAL_BYTES = 64L * 1024L
     }
 }
