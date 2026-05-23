@@ -588,6 +588,7 @@ private fun SyncPairRow(
                 }
 
                 if (isSyncing) {
+                    val syncingLabel = stringResource(R.string.sync_now_in_progress)
                     val fraction: Float? = when {
                         progress != null && progress.totalBytes > 0L ->
                             (progress.bytesTransferred.toFloat() / progress.totalBytes).coerceIn(0f, 1f)
@@ -607,7 +608,10 @@ private fun SyncPairRow(
                             ) {
                                 LinearProgressIndicator(
                                     progress = { fraction },
-                                    modifier = Modifier.weight(1f),
+                                    modifier = Modifier.weight(1f).semantics {
+                                        contentDescription = "$syncingLabel ${(fraction * 100f).toInt()}%"
+                                        liveRegion = LiveRegionMode.Polite
+                                    },
                                 )
                                 Text(
                                     text = stringResource(
@@ -620,7 +624,12 @@ private fun SyncPairRow(
                                 )
                             }
                         } else {
-                            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                            LinearProgressIndicator(
+                                modifier = Modifier.fillMaxWidth().semantics {
+                                    contentDescription = syncingLabel
+                                    liveRegion = LiveRegionMode.Polite
+                                },
+                            )
                         }
                         progress?.currentFileName?.let { fileName ->
                             Text(
@@ -629,7 +638,10 @@ private fun SyncPairRow(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                                modifier = Modifier.semantics {
+                                    contentDescription = "$syncingLabel: $fileName"
+                                    liveRegion = LiveRegionMode.Polite
+                                },
                             )
                         }
                     }
