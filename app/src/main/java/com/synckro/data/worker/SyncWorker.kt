@@ -21,6 +21,7 @@ import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import com.synckro.R
 import com.synckro.data.local.dao.SyncPairDao
+import com.synckro.data.repository.SettingsRepository
 import com.synckro.data.local.entity.toDomain
 import com.synckro.data.repository.SyncEventRepository
 import com.synckro.domain.model.CloudProviderType
@@ -38,6 +39,7 @@ import dagger.assisted.AssistedInject
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import java.util.concurrent.TimeUnit
@@ -68,6 +70,7 @@ class SyncWorker
         private val engine: SyncEngine,
         private val syncEventRepository: SyncEventRepository,
         private val syncStatusNotifier: SyncStatusNotifier,
+        private val settingsRepository: SettingsRepository,
     ) : CoroutineWorker(appContext, params) {
         /**
          * Returns the [ForegroundInfo] used when WorkManager promotes this worker to a foreground
@@ -162,6 +165,7 @@ class SyncWorker
             val notificationId = NOTIFICATION_ID_BASE + (pairId and 0xFFFFL).toInt()
             val notificationManager =
                 applicationContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            val maxConcurrent = settingsRepository.maxConcurrentTransfers.first()
 
             return coroutineScope {
                 val promotedToForeground = AtomicBoolean(false)
@@ -258,7 +262,7 @@ class SyncWorker
 
                 val workerResult =
                     try {
-                        when (val r = engine.runOnce(pair, onSyncProgress)) {
+                        when (val r = engine.runOnce(pair, onSyncProgress, maxConcurrent)) {
                             is SyncEngine.Result.Success -> {
                                 syncPairDao.updateLastSyncResult(pairId, System.currentTimeMillis(), RESULT_SUCCESS)
                                 syncEventRepository.log(

@@ -11,10 +11,19 @@ import com.synckro.domain.model.SyncPair
 import com.synckro.domain.provider.CloudProvider
 import com.synckro.domain.provider.CloudProviderException
 import com.synckro.domain.provider.RemoteFile
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import java.io.InputStream
+import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.AtomicReference
 
 /**
  * Abstraction over local file I/O for [SyncOpApplier].
@@ -156,6 +165,7 @@ class SyncOpApplier(
      * @param pair             The sync pair owning the ops.
      * @param remoteFilesByPath Map from relative path to [RemoteFile] for all remote files.
      * @param localIndexByPath  Map from relative path to [LocalIndexEntity] for all indexed files.
+     * @param maxConcurrent    Maximum number of ops that may run concurrently.
      * @param onProgress       Called twice per op (before and after it runs) with the current
      *                         [TransferProgress]. Defaults to a no-op so existing callers are
      *                         unaffected.
@@ -166,6 +176,7 @@ class SyncOpApplier(
         pair: SyncPair,
         remoteFilesByPath: Map<String, RemoteFile>,
         localIndexByPath: Map<String, LocalIndexEntity>,
+        maxConcurrent: Int = 1,
         onProgress: suspend (TransferProgress) -> Unit = {},
     ): ApplyResult =
         withContext(ioDispatcher) {
@@ -183,182 +194,388 @@ class SyncOpApplier(
             var filesProcessed = 0
             var bytesTransferred = 0L
 
-            for ((index, op) in ops.withIndex()) {
-                onProgress(
-                    TransferProgress(
-                        filesCompleted = filesProcessed,
-                        totalFiles = totalFiles,
-                        bytesTransferred = bytesTransferred,
-                        totalBytes = totalBytes,
-                        currentFileName = op.relativePath,
-                    ),
-                )
-                var opSucceeded = false
-                try {
-                    when (op) {
-                        is SyncOp.UploadNew -> {
-                            applyUploadNew(op, pair)
-                            applied++
-                            eventRepository.log(
-                                pair.id,
-                                SyncEventLevel.INFO,
-                                TAG,
-                                "Uploaded new file: ${op.relativePath}",
-                            )
-                        }
-
-                        is SyncOp.DownloadNew -> {
-                            val remote =
-                                remoteFilesByPath[op.relativePath]
-                                    ?: error("Remote file not in snapshot for DownloadNew: ${op.relativePath}")
-                            applyDownloadNew(op, pair, remote)
-                            applied++
-                            eventRepository.log(
-                                pair.id,
-                                SyncEventLevel.INFO,
-                                TAG,
-                                "Downloaded new file: ${op.relativePath}",
-                            )
-                        }
-
-                        is SyncOp.UpdateRemote -> {
-                            val index =
-                                localIndexByPath[op.relativePath]
-                                    ?: error("No index entry for UpdateRemote: ${op.relativePath}")
-                            applyUpdateRemote(op, pair, index)
-                            applied++
-                            eventRepository.log(
-                                pair.id,
-                                SyncEventLevel.INFO,
-                                TAG,
-                                "Updated remote file: ${op.relativePath}",
-                            )
-                        }
-
-                        is SyncOp.UpdateLocal -> {
-                            val remote =
-                                remoteFilesByPath[op.relativePath]
-                                    ?: error("Remote file not in snapshot for UpdateLocal: ${op.relativePath}")
-                            applyUpdateLocal(op, pair, remote)
-                            applied++
-                            eventRepository.log(
-                                pair.id,
-                                SyncEventLevel.INFO,
-                                TAG,
-                                "Updated local file: ${op.relativePath}",
-                            )
-                        }
-
-                        is SyncOp.DeleteRemote -> {
-                            val index =
-                                localIndexByPath[op.relativePath]
-                                    ?: error("No index entry for DeleteRemote: ${op.relativePath}")
-                            applyDeleteRemote(op, pair, index)
-                            applied++
-                            eventRepository.log(
-                                pair.id,
-                                SyncEventLevel.INFO,
-                                TAG,
-                                "Deleted remote file: ${op.relativePath}",
-                            )
-                        }
-
-                        is SyncOp.DeleteLocal -> {
-                            applyDeleteLocal(op, pair)
-                            applied++
-                            eventRepository.log(
-                                pair.id,
-                                SyncEventLevel.INFO,
-                                TAG,
-                                "Deleted local file: ${op.relativePath}",
-                            )
-                        }
-
-                        is SyncOp.DeleteLocalRetention -> {
-                            val index = localIndexByPath[op.relativePath]
-                            if (index?.remoteId == null) {
-                                // Fail safe: no confirmed remote copy — skip local deletion.
-                                eventRepository.log(
-                                    pair.id,
-                                    SyncEventLevel.WARN,
-                                    TAG,
-                                    "Skipped retention-delete local [${pair.displayName}]: ${op.relativePath} — remote copy not confirmed in index",
-                                )
-                            } else {
-                                applyDeleteLocal(SyncOp.DeleteLocal(op.relativePath), pair)
+            if (maxConcurrent <= 1) {
+                for ((index, op) in ops.withIndex()) {
+                    onProgress(
+                        TransferProgress(
+                            filesCompleted = filesProcessed,
+                            totalFiles = totalFiles,
+                            bytesTransferred = bytesTransferred,
+                            totalBytes = totalBytes,
+                            currentFileName = op.relativePath,
+                        ),
+                    )
+                    var opSucceeded = false
+                    try {
+                        when (op) {
+                            is SyncOp.UploadNew -> {
+                                applyUploadNew(op, pair)
                                 applied++
                                 eventRepository.log(
                                     pair.id,
                                     SyncEventLevel.INFO,
                                     TAG,
-                                    "Retention delete (local, ${pair.retentionDays}d) [${pair.displayName}]: ${op.relativePath}",
+                                    "Uploaded new file: ${op.relativePath}",
                                 )
                             }
-                        }
 
-                        is SyncOp.DeleteRemoteRetention -> {
-                            val index = localIndexByPath[op.relativePath]
-                            if (index?.remoteId == null) {
-                                // Fail safe: no index entry or remoteId absent — skip remote deletion.
+                            is SyncOp.DownloadNew -> {
+                                val remote =
+                                    remoteFilesByPath[op.relativePath]
+                                        ?: error("Remote file not in snapshot for DownloadNew: ${op.relativePath}")
+                                applyDownloadNew(op, pair, remote)
+                                applied++
                                 eventRepository.log(
                                     pair.id,
-                                    SyncEventLevel.WARN,
+                                    SyncEventLevel.INFO,
                                     TAG,
-                                    "Skipped retention-delete remote [${pair.displayName}]: ${op.relativePath} — remote copy not confirmed in index",
+                                    "Downloaded new file: ${op.relativePath}",
                                 )
-                            } else {
-                                val localStat = localFileAccess.stat(op.relativePath)
-                                if (localStat == null) {
-                                    // Fail safe: local copy not found — skip remote deletion.
+                            }
+
+                            is SyncOp.UpdateRemote -> {
+                                val index =
+                                    localIndexByPath[op.relativePath]
+                                        ?: error("No index entry for UpdateRemote: ${op.relativePath}")
+                                applyUpdateRemote(op, pair, index)
+                                applied++
+                                eventRepository.log(
+                                    pair.id,
+                                    SyncEventLevel.INFO,
+                                    TAG,
+                                    "Updated remote file: ${op.relativePath}",
+                                )
+                            }
+
+                            is SyncOp.UpdateLocal -> {
+                                val remote =
+                                    remoteFilesByPath[op.relativePath]
+                                        ?: error("Remote file not in snapshot for UpdateLocal: ${op.relativePath}")
+                                applyUpdateLocal(op, pair, remote)
+                                applied++
+                                eventRepository.log(
+                                    pair.id,
+                                    SyncEventLevel.INFO,
+                                    TAG,
+                                    "Updated local file: ${op.relativePath}",
+                                )
+                            }
+
+                            is SyncOp.DeleteRemote -> {
+                                val index =
+                                    localIndexByPath[op.relativePath]
+                                        ?: error("No index entry for DeleteRemote: ${op.relativePath}")
+                                applyDeleteRemote(op, pair, index)
+                                applied++
+                                eventRepository.log(
+                                    pair.id,
+                                    SyncEventLevel.INFO,
+                                    TAG,
+                                    "Deleted remote file: ${op.relativePath}",
+                                )
+                            }
+
+                            is SyncOp.DeleteLocal -> {
+                                applyDeleteLocal(op, pair)
+                                applied++
+                                eventRepository.log(
+                                    pair.id,
+                                    SyncEventLevel.INFO,
+                                    TAG,
+                                    "Deleted local file: ${op.relativePath}",
+                                )
+                            }
+
+                            is SyncOp.DeleteLocalRetention -> {
+                                val index = localIndexByPath[op.relativePath]
+                                if (index?.remoteId == null) {
+                                    // Fail safe: no confirmed remote copy — skip local deletion.
                                     eventRepository.log(
                                         pair.id,
                                         SyncEventLevel.WARN,
                                         TAG,
-                                        "Skipped retention-delete remote [${pair.displayName}]: ${op.relativePath} — local copy not found",
+                                        "Skipped retention-delete local [${pair.displayName}]: ${op.relativePath} — remote copy not confirmed in index",
                                     )
                                 } else {
-                                    applyDeleteRemote(SyncOp.DeleteRemote(op.relativePath), pair, index)
+                                    applyDeleteLocal(SyncOp.DeleteLocal(op.relativePath), pair)
                                     applied++
                                     eventRepository.log(
                                         pair.id,
                                         SyncEventLevel.INFO,
                                         TAG,
-                                        "Retention delete (remote, ${pair.retentionDays}d) [${pair.displayName}]: ${op.relativePath}",
+                                        "Retention delete (local, ${pair.retentionDays}d) [${pair.displayName}]: ${op.relativePath}",
                                     )
                                 }
                             }
-                        }
 
-                        is SyncOp.Conflict -> {
-                            applyConflict(op, pair, remoteFilesByPath, localIndexByPath)
-                            conflicts++
+                            is SyncOp.DeleteRemoteRetention -> {
+                                val index = localIndexByPath[op.relativePath]
+                                if (index?.remoteId == null) {
+                                    // Fail safe: no index entry or remoteId absent — skip remote deletion.
+                                    eventRepository.log(
+                                        pair.id,
+                                        SyncEventLevel.WARN,
+                                        TAG,
+                                        "Skipped retention-delete remote [${pair.displayName}]: ${op.relativePath} — remote copy not confirmed in index",
+                                    )
+                                } else {
+                                    val localStat = localFileAccess.stat(op.relativePath)
+                                    if (localStat == null) {
+                                        // Fail safe: local copy not found — skip remote deletion.
+                                        eventRepository.log(
+                                            pair.id,
+                                            SyncEventLevel.WARN,
+                                            TAG,
+                                            "Skipped retention-delete remote [${pair.displayName}]: ${op.relativePath} — local copy not found",
+                                        )
+                                    } else {
+                                        applyDeleteRemote(SyncOp.DeleteRemote(op.relativePath), pair, index)
+                                        applied++
+                                        eventRepository.log(
+                                            pair.id,
+                                            SyncEventLevel.INFO,
+                                            TAG,
+                                            "Retention delete (remote, ${pair.retentionDays}d) [${pair.displayName}]: ${op.relativePath}",
+                                        )
+                                    }
+                                }
+                            }
+
+                            is SyncOp.Conflict -> {
+                                applyConflict(op, pair, remoteFilesByPath, localIndexByPath)
+                                conflicts++
+                            }
                         }
+                        opSucceeded = true
+                    } catch (e: CloudProviderException.AuthenticationRequired) {
+                        throw e
+                    } catch (e: CloudProviderException.AuthenticationFailed) {
+                        throw e
+                    } catch (e: CloudProviderException.NotConfigured) {
+                        throw e
+                    } catch (e: Throwable) {
+                        val msg = "Failed ${opLabel(op)}: ${e.message}"
+                        errors += msg
+                        eventRepository.log(pair.id, SyncEventLevel.ERROR, TAG, msg)
                     }
-                    opSucceeded = true
-                } catch (e: CloudProviderException.AuthenticationRequired) {
-                    throw e
-                } catch (e: CloudProviderException.AuthenticationFailed) {
-                    throw e
-                } catch (e: CloudProviderException.NotConfigured) {
-                    throw e
-                } catch (e: Throwable) {
-                    val msg = "Failed ${opLabel(op)}: ${e.message}"
-                    errors += msg
-                    eventRepository.log(pair.id, SyncEventLevel.ERROR, TAG, msg)
+
+                    filesProcessed++
+                    if (opSucceeded) {
+                        bytesTransferred += opBytes[index]
+                    }
+                    onProgress(
+                        TransferProgress(
+                            filesCompleted = filesProcessed,
+                            totalFiles = totalFiles,
+                            bytesTransferred = bytesTransferred,
+                            totalBytes = totalBytes,
+                            currentFileName = null,
+                        ),
+                    )
+                }
+            } else {
+                // Thread-safety note: LocalFileAccess uses SAF/ContentProvider I/O.
+                // Concurrent writes to distinct paths are expected to work in practice,
+                // but SAF does not formally guarantee this. If contention appears in
+                // production, wrap localFileAccess calls with a Mutex. LocalIndexDao
+                // writes are serialized by Room and safe for concurrent use.
+                val semaphore = Semaphore(maxConcurrent)
+                val atomicFiles = AtomicInteger(0)
+                val atomicBytes = AtomicLong(0L)
+                val atomicApplied = AtomicInteger(0)
+                val atomicConflicts = AtomicInteger(0)
+                val concurrentErrors = CopyOnWriteArrayList<String>()
+                val authFailure = AtomicReference<Throwable?>(null)
+
+                coroutineScope {
+                    ops.mapIndexed { index, op ->
+                        async {
+                            semaphore.withPermit {
+                                val preBytes = atomicBytes.get()
+                                val preFiles = atomicFiles.get()
+                                onProgress(
+                                    TransferProgress(
+                                        filesCompleted = preFiles,
+                                        totalFiles = totalFiles,
+                                        bytesTransferred = preBytes,
+                                        totalBytes = totalBytes,
+                                        currentFileName = null,
+                                    ),
+                                )
+
+                                var opSucceeded = false
+                                try {
+                                    when (op) {
+                                        is SyncOp.UploadNew -> {
+                                            applyUploadNew(op, pair)
+                                            atomicApplied.incrementAndGet()
+                                            eventRepository.log(
+                                                pair.id,
+                                                SyncEventLevel.INFO,
+                                                TAG,
+                                                "Uploaded new file: ${op.relativePath}",
+                                            )
+                                        }
+
+                                        is SyncOp.DownloadNew -> {
+                                            val remote =
+                                                remoteFilesByPath[op.relativePath]
+                                                    ?: error("Remote file not in snapshot for DownloadNew: ${op.relativePath}")
+                                            applyDownloadNew(op, pair, remote)
+                                            atomicApplied.incrementAndGet()
+                                            eventRepository.log(
+                                                pair.id,
+                                                SyncEventLevel.INFO,
+                                                TAG,
+                                                "Downloaded new file: ${op.relativePath}",
+                                            )
+                                        }
+
+                                        is SyncOp.UpdateRemote -> {
+                                            val index =
+                                                localIndexByPath[op.relativePath]
+                                                    ?: error("No index entry for UpdateRemote: ${op.relativePath}")
+                                            applyUpdateRemote(op, pair, index)
+                                            atomicApplied.incrementAndGet()
+                                            eventRepository.log(
+                                                pair.id,
+                                                SyncEventLevel.INFO,
+                                                TAG,
+                                                "Updated remote file: ${op.relativePath}",
+                                            )
+                                        }
+
+                                        is SyncOp.UpdateLocal -> {
+                                            val remote =
+                                                remoteFilesByPath[op.relativePath]
+                                                    ?: error("Remote file not in snapshot for UpdateLocal: ${op.relativePath}")
+                                            applyUpdateLocal(op, pair, remote)
+                                            atomicApplied.incrementAndGet()
+                                            eventRepository.log(
+                                                pair.id,
+                                                SyncEventLevel.INFO,
+                                                TAG,
+                                                "Updated local file: ${op.relativePath}",
+                                            )
+                                        }
+
+                                        is SyncOp.DeleteRemote -> {
+                                            val index =
+                                                localIndexByPath[op.relativePath]
+                                                    ?: error("No index entry for DeleteRemote: ${op.relativePath}")
+                                            applyDeleteRemote(op, pair, index)
+                                            atomicApplied.incrementAndGet()
+                                            eventRepository.log(
+                                                pair.id,
+                                                SyncEventLevel.INFO,
+                                                TAG,
+                                                "Deleted remote file: ${op.relativePath}",
+                                            )
+                                        }
+
+                                        is SyncOp.DeleteLocal -> {
+                                            applyDeleteLocal(op, pair)
+                                            atomicApplied.incrementAndGet()
+                                            eventRepository.log(
+                                                pair.id,
+                                                SyncEventLevel.INFO,
+                                                TAG,
+                                                "Deleted local file: ${op.relativePath}",
+                                            )
+                                        }
+
+                                        is SyncOp.DeleteLocalRetention -> {
+                                            val index = localIndexByPath[op.relativePath]
+                                            if (index?.remoteId == null) {
+                                                eventRepository.log(
+                                                    pair.id,
+                                                    SyncEventLevel.WARN,
+                                                    TAG,
+                                                    "Skipped retention-delete local [${pair.displayName}]: ${op.relativePath} — remote copy not confirmed in index",
+                                                )
+                                            } else {
+                                                applyDeleteLocal(SyncOp.DeleteLocal(op.relativePath), pair)
+                                                atomicApplied.incrementAndGet()
+                                                eventRepository.log(
+                                                    pair.id,
+                                                    SyncEventLevel.INFO,
+                                                    TAG,
+                                                    "Retention delete (local, ${pair.retentionDays}d) [${pair.displayName}]: ${op.relativePath}",
+                                                )
+                                            }
+                                        }
+
+                                        is SyncOp.DeleteRemoteRetention -> {
+                                            val index = localIndexByPath[op.relativePath]
+                                            if (index?.remoteId == null) {
+                                                eventRepository.log(
+                                                    pair.id,
+                                                    SyncEventLevel.WARN,
+                                                    TAG,
+                                                    "Skipped retention-delete remote [${pair.displayName}]: ${op.relativePath} — remote copy not confirmed in index",
+                                                )
+                                            } else {
+                                                val localStat = localFileAccess.stat(op.relativePath)
+                                                if (localStat == null) {
+                                                    eventRepository.log(
+                                                        pair.id,
+                                                        SyncEventLevel.WARN,
+                                                        TAG,
+                                                        "Skipped retention-delete remote [${pair.displayName}]: ${op.relativePath} — local copy not found",
+                                                    )
+                                                } else {
+                                                    applyDeleteRemote(SyncOp.DeleteRemote(op.relativePath), pair, index)
+                                                    atomicApplied.incrementAndGet()
+                                                    eventRepository.log(
+                                                        pair.id,
+                                                        SyncEventLevel.INFO,
+                                                        TAG,
+                                                        "Retention delete (remote, ${pair.retentionDays}d) [${pair.displayName}]: ${op.relativePath}",
+                                                    )
+                                                }
+                                            }
+                                        }
+
+                                        is SyncOp.Conflict -> {
+                                            applyConflict(op, pair, remoteFilesByPath, localIndexByPath)
+                                            atomicConflicts.incrementAndGet()
+                                        }
+                                    }
+                                    opSucceeded = true
+                                } catch (e: CloudProviderException.AuthenticationRequired) {
+                                    authFailure.compareAndSet(null, e)
+                                } catch (e: CloudProviderException.AuthenticationFailed) {
+                                    authFailure.compareAndSet(null, e)
+                                } catch (e: CloudProviderException.NotConfigured) {
+                                    authFailure.compareAndSet(null, e)
+                                } catch (e: Throwable) {
+                                    val msg = "Failed ${opLabel(op)}: ${e.message}"
+                                    concurrentErrors += msg
+                                    eventRepository.log(pair.id, SyncEventLevel.ERROR, TAG, msg)
+                                }
+
+                                val fp = atomicFiles.incrementAndGet()
+                                val bt = if (opSucceeded) atomicBytes.addAndGet(opBytes[index]) else atomicBytes.get()
+                                onProgress(
+                                    TransferProgress(
+                                        filesCompleted = fp,
+                                        totalFiles = totalFiles,
+                                        bytesTransferred = bt,
+                                        totalBytes = totalBytes,
+                                        currentFileName = null,
+                                    ),
+                                )
+                            }
+                        }
+                    }.awaitAll()
                 }
 
-                filesProcessed++
-                if (opSucceeded) {
-                    bytesTransferred += opBytes[index]
-                }
-                onProgress(
-                    TransferProgress(
-                        filesCompleted = filesProcessed,
-                        totalFiles = totalFiles,
-                        bytesTransferred = bytesTransferred,
-                        totalBytes = totalBytes,
-                        currentFileName = null,
-                    ),
+                authFailure.get()?.let { throw it }
+
+                return@withContext ApplyResult(
+                    applied = atomicApplied.get(),
+                    conflicts = atomicConflicts.get(),
+                    errors = concurrentErrors,
                 )
             }
 

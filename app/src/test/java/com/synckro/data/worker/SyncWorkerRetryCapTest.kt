@@ -5,6 +5,7 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.work.Configuration
 import androidx.work.WorkManager
 import com.synckro.data.local.dao.SyncPairDao
+import com.synckro.data.repository.SettingsRepository
 import com.synckro.data.repository.SyncEventRepository
 import com.synckro.domain.model.CloudProviderType
 import com.synckro.domain.model.ConflictPolicy
@@ -151,6 +152,7 @@ class SyncWorkerRetryCapTest {
                     engine = mockk<SyncEngine>(relaxed = true),
                     syncEventRepository = syncEventRepository,
                     syncStatusNotifier = syncStatusNotifier,
+                    settingsRepository = mockk<SettingsRepository>(relaxed = true),
                 )
 
             coEvery { syncStatusNotifier.notifyFailure(pair, "boom") } returns Unit
