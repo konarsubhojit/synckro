@@ -48,6 +48,9 @@
     <string name="home_last_result_needs_reauth">Last run: re-authentication required</string>
     <string name="home_last_result_needs_relink">Last run: folder access lost</string>
     <string name="home_card_status_stripe">Status indicator</string>
+    <!-- Live sync progress shown on pair cards -->
+    <string name="home_sync_progress_files_format">%1$d / %2$d</string>
+    <string name="home_sync_current_file_format">%1$s</string>
 
     <!-- Pair detail screen (Phase 5c) -->
     <string name="pair_detail_title">Sync pair</string>
