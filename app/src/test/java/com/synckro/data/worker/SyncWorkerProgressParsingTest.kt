@@ -97,4 +97,21 @@ class SyncWorkerProgressParsingTest {
         assertEquals("notes/todo.txt", parsed?.activeTransfers?.get(1)?.relativePath)
         assertEquals(TransferDirection.DOWNLOAD, parsed?.activeTransfers?.get(1)?.direction)
     }
+
+    @Test
+    fun `parseProgress decodes active transfer paths with spaces`() {
+        val parsed =
+            SyncWorker.parseProgress(
+                workDataOf(
+                    SyncWorker.PROGRESS_FILES_COMPLETED to 1,
+                    SyncWorker.PROGRESS_TOTAL_FILES to 1,
+                    SyncWorker.PROGRESS_BYTES_XFERRED to 64L,
+                    SyncWorker.PROGRESS_TOTAL_BYTES to 128L,
+                    SyncWorker.PROGRESS_ACTIVE_TRANSFERS to "my+folder%2Fmy+file.txt|UPLOAD|64|128",
+                ),
+            )
+
+        assertEquals("my folder/my file.txt", parsed?.activeTransfers?.singleOrNull()?.relativePath)
+        assertEquals(TransferDirection.UPLOAD, parsed?.activeTransfers?.singleOrNull()?.direction)
+    }
 }
