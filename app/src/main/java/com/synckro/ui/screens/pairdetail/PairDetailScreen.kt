@@ -26,6 +26,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
@@ -39,13 +40,19 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.synckro.R
 import com.synckro.domain.model.SyncEvent
 import com.synckro.domain.model.SyncEventLevel
+import com.synckro.domain.sync.TransferProgress
 import com.synckro.ui.components.LoadingState
 import com.synckro.ui.components.SectionCard
 
@@ -145,6 +152,7 @@ fun PairDetailScreen(
             ) {
                 Button(
                     onClick = { onSyncNow(pair.id) },
+                    enabled = !state.isSyncing,
                     modifier = Modifier.weight(1f),
                 ) {
                     Icon(Icons.Default.Sync, contentDescription = null, modifier = Modifier.size(18.dp))
@@ -202,11 +210,15 @@ private fun StatusCard(
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                 )
-                Text(
-                    text = nextRunDescription(state),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                if (state.isSyncing) {
+                    SyncProgressBlock(progress = state.progress)
+                } else {
+                    Text(
+                        text = nextRunDescription(state),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
         }
 
@@ -229,6 +241,71 @@ private fun StatusCard(
                     },
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun SyncProgressBlock(progress: TransferProgress?) {
+    val syncingLabel = stringResource(R.string.sync_now_in_progress)
+    val fraction: Float? = when {
+        progress != null && progress.totalBytes > 0L ->
+            (progress.bytesTransferred.toFloat() / progress.totalBytes).coerceIn(0f, 1f)
+        progress != null && progress.totalFiles > 0 ->
+            (progress.filesCompleted.toFloat() / progress.totalFiles).coerceIn(0f, 1f)
+        else -> null
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        if (fraction != null && progress != null) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                LinearProgressIndicator(
+                    progress = { fraction },
+                    modifier = Modifier.weight(1f).semantics {
+                        contentDescription = "$syncingLabel ${(fraction * 100f).toInt()}%"
+                        liveRegion = LiveRegionMode.Polite
+                    },
+                )
+                Text(
+                    text = stringResource(
+                        R.string.home_sync_progress_files_format,
+                        progress.filesCompleted,
+                        progress.totalFiles,
+                    ),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        } else {
+            LinearProgressIndicator(
+                modifier = Modifier.fillMaxWidth().semantics {
+                    contentDescription = syncingLabel
+                    liveRegion = LiveRegionMode.Polite
+                },
+            )
+        }
+
+        progress?.currentFileName?.let { fileName ->
+            Text(
+                text = stringResource(R.string.home_sync_current_file_format, fileName),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.semantics {
+                    contentDescription = "$syncingLabel: $fileName"
+                    liveRegion = LiveRegionMode.Polite
+                },
+            )
         }
     }
 }
