@@ -1,5 +1,6 @@
 package com.synckro.ui.screens.pairs
 
+import android.text.format.Formatter
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -66,6 +67,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
@@ -83,6 +85,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.synckro.R
 import com.synckro.domain.model.SyncPair
+import com.synckro.domain.sync.TransferDirection
 import com.synckro.domain.sync.TransferProgress
 import com.synckro.ui.components.CoachTooltip
 import com.synckro.ui.components.CoachTooltipIds
@@ -588,6 +591,7 @@ private fun SyncPairRow(
                 }
 
                 if (isSyncing) {
+                    val ctx = LocalContext.current
                     val syncingLabel = stringResource(R.string.sync_now_in_progress)
                     val fraction: Float? = when {
                         progress != null && progress.totalBytes > 0L ->
@@ -631,18 +635,80 @@ private fun SyncPairRow(
                                 },
                             )
                         }
-                        progress?.currentFileName?.let { fileName ->
-                            Text(
-                                text = stringResource(R.string.home_sync_current_file_format, fileName),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.semantics {
-                                    contentDescription = "$syncingLabel: $fileName"
-                                    liveRegion = LiveRegionMode.Polite
-                                },
-                            )
+                        val activeTransfers = progress?.activeTransfers.orEmpty()
+                        if (activeTransfers.isNotEmpty()) {
+                            activeTransfers.forEach { transfer ->
+                                val directionLabel =
+                                    when (transfer.direction) {
+                                        TransferDirection.UPLOAD ->
+                                            stringResource(R.string.home_sync_transfer_upload)
+                                        TransferDirection.DOWNLOAD ->
+                                            stringResource(R.string.home_sync_transfer_download)
+                                    }
+                                val transferFraction =
+                                    if (transfer.totalBytes > 0L) {
+                                        (transfer.bytesTransferred.toFloat() / transfer.totalBytes.toFloat()).coerceIn(0f, 1f)
+                                    } else {
+                                        null
+                                    }
+                                val sizeDone =
+                                    Formatter.formatShortFileSize(
+                                        ctx,
+                                        transfer.bytesTransferred.coerceAtLeast(0L),
+                                    )
+                                val sizeTotal =
+                                    Formatter.formatShortFileSize(
+                                        ctx,
+                                        transfer.totalBytes.coerceAtLeast(0L),
+                                    )
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = "$directionLabel · ${transfer.relativePath}",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                        Text(
+                                            text = stringResource(R.string.home_sync_transfer_size_format, sizeDone, sizeTotal),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                    Text(
+                                        text =
+                                            stringResource(
+                                                R.string.home_sync_transfer_progress_percent,
+                                                ((transferFraction ?: 0f) * 100f).toInt(),
+                                            ),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.semantics {
+                                            contentDescription = "$directionLabel ${transfer.relativePath}"
+                                            liveRegion = LiveRegionMode.Polite
+                                        },
+                                    )
+                                }
+                            }
+                        } else {
+                            progress?.currentFileName?.let { fileName ->
+                                Text(
+                                    text = stringResource(R.string.home_sync_current_file_format, fileName),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.semantics {
+                                        contentDescription = "$syncingLabel: $fileName"
+                                        liveRegion = LiveRegionMode.Polite
+                                    },
+                                )
+                            }
                         }
                     }
                 }

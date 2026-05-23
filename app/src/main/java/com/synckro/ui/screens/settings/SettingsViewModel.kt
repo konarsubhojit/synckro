@@ -50,7 +50,7 @@ class SettingsViewModel
             val defaultWifiOnly: Boolean = true,
             val defaultChargingOnly: Boolean = false,
             val defaultConflictPolicy: ConflictPolicy = ConflictPolicy.NEWEST_WINS,
-            val maxConcurrentTransfers: Int = 1,
+            val maxConcurrentTransfers: Int = SettingsRepository.MAX_CONCURRENT_TRANSFERS,
             // Appearance
             val darkMode: DarkModePreference = DarkModePreference.SYSTEM,
             val dynamicColor: Boolean = false,

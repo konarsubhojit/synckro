@@ -31,7 +31,9 @@ import com.synckro.domain.provider.CloudProviderFactory
 import com.synckro.domain.provider.CloudProviderException
 import com.synckro.domain.sync.CloudExceptionMapper
 import com.synckro.domain.sync.SyncEngine
+import com.synckro.domain.sync.ActiveTransfer
 import com.synckro.domain.sync.TransferProgress
+import com.synckro.domain.sync.TransferDirection
 import com.synckro.util.notification.ReauthNotificationHelper
 import com.synckro.util.notification.SyncStatusNotifier
 import dagger.assisted.Assisted
@@ -42,6 +44,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import timber.log.Timber
+import java.net.URLDecoder
+import java.net.URLEncoder
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.jvm.JvmSuppressWildcards
@@ -227,6 +231,7 @@ class SyncWorker
                             PROGRESS_BYTES_XFERRED to progress.bytesTransferred,
                             PROGRESS_TOTAL_BYTES to progress.totalBytes,
                             PROGRESS_CURRENT_FILE to progress.currentFileName,
+                            PROGRESS_ACTIVE_TRANSFERS to serializeActiveTransfers(progress.activeTransfers),
                         ),
                     )
                     if (!promotedToForeground.get() && progress.totalBytes >= LARGE_TRANSFER_THRESHOLD_BYTES) {
@@ -533,6 +538,7 @@ class SyncWorker
             const val PROGRESS_BYTES_XFERRED = "p_bytes_done"
             const val PROGRESS_TOTAL_BYTES = "p_bytes_total"
             const val PROGRESS_CURRENT_FILE = "p_current_file"
+            const val PROGRESS_ACTIVE_TRANSFERS = "p_active_transfers"
 
             /** Notification channel ID for sync progress. Created by SynckroApp.createNotificationChannels(). */
             const val SYNC_CHANNEL_ID = "synckro_sync"
@@ -640,8 +646,43 @@ class SyncWorker
                     bytesTransferred = data.getLong(PROGRESS_BYTES_XFERRED, 0L),
                     totalBytes = data.getLong(PROGRESS_TOTAL_BYTES, 0L),
                     currentFileName = data.getString(PROGRESS_CURRENT_FILE),
+                    activeTransfers = parseActiveTransfers(data.getString(PROGRESS_ACTIVE_TRANSFERS)),
                 )
             }
+
+            private fun parseActiveTransfers(raw: String?): List<ActiveTransfer> {
+                if (raw.isNullOrBlank()) return emptyList()
+                return raw.split('\n')
+                    .asSequence()
+                    .mapNotNull { row ->
+                        val parts = row.split('|')
+                        if (parts.size != 4) return@mapNotNull null
+                        val path = URLDecoder.decode(parts[0], Charsets.UTF_8)
+                        val direction =
+                            runCatching { TransferDirection.valueOf(parts[1]) }.getOrNull()
+                                ?: return@mapNotNull null
+                        val bytesTransferred = parts[2].toLongOrNull() ?: return@mapNotNull null
+                        val totalBytes = parts[3].toLongOrNull() ?: return@mapNotNull null
+                        ActiveTransfer(
+                            relativePath = path,
+                            direction = direction,
+                            bytesTransferred = bytesTransferred,
+                            totalBytes = totalBytes,
+                        )
+                    }
+                    .toList()
+            }
+
+            private fun serializeActiveTransfers(activeTransfers: List<ActiveTransfer>): String =
+                activeTransfers.joinToString(separator = "\n") { transfer ->
+                    val encodedPath = URLEncoder.encode(transfer.relativePath, Charsets.UTF_8)
+                    listOf(
+                        encodedPath,
+                        transfer.direction.name,
+                        transfer.bytesTransferred.toString(),
+                        transfer.totalBytes.toString(),
+                    ).joinToString("|")
+                }
 
             /**
              * Returns `true` if the app is allowed to post notifications.

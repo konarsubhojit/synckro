@@ -51,6 +51,10 @@
     <!-- Live sync progress shown on pair cards -->
     <string name="home_sync_progress_files_format">%1$d / %2$d</string>
     <string name="home_sync_current_file_format">%1$s</string>
+    <string name="home_sync_transfer_upload">Uploading</string>
+    <string name="home_sync_transfer_download">Downloading</string>
+    <string name="home_sync_transfer_progress_percent">%1$d%%</string>
+    <string name="home_sync_transfer_size_format">%1$s / %2$s</string>
 
     <!-- Pair detail screen (Phase 5c) -->
     <string name="pair_detail_title">Sync pair</string>
@@ -423,7 +427,7 @@
     <string name="settings_default_conflict_policy_title">Default conflict policy</string>
     <string name="settings_default_conflict_policy_body">Applied to newly created sync pairs. Existing pairs keep their per-pair setting.</string>
     <string name="settings_concurrent_transfers_title">Simultaneous file transfers</string>
-    <string name="settings_concurrent_transfers_body">How many files are uploaded or downloaded at the same time (1–4). A higher value speeds up large syncs but uses more battery and data.</string>
+    <string name="settings_concurrent_transfers_body">How many files are uploaded or downloaded at the same time (1–3). A higher value speeds up large syncs but uses more battery and data.</string>
     <string name="settings_concurrent_transfers_value_format">%1$d at a time</string>
 
     <!-- Settings: notifications -->

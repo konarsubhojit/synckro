@@ -102,7 +102,7 @@ class SettingsViewModelTest {
                 assertTrue(it.defaultWifiOnly)
                 assertFalse(it.defaultChargingOnly)
                 assertEquals(ConflictPolicy.NEWEST_WINS, it.defaultConflictPolicy)
-                assertEquals(1, it.maxConcurrentTransfers)
+                assertEquals(3, it.maxConcurrentTransfers)
                 assertEquals(DarkModePreference.SYSTEM, it.darkMode)
                 assertFalse(it.dynamicColor)
                 assertTrue(it.respectFontScale)

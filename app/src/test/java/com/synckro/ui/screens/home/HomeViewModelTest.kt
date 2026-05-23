@@ -387,6 +387,10 @@ class HomeViewModelTest {
                             .putLong(SyncWorker.PROGRESS_BYTES_XFERRED, 300L)
                             .putLong(SyncWorker.PROGRESS_TOTAL_BYTES, 1200L)
                             .putString(SyncWorker.PROGRESS_CURRENT_FILE, "IMG_20240101.jpg")
+                            .putString(
+                                SyncWorker.PROGRESS_ACTIVE_TRANSFERS,
+                                "IMG_20240101.jpg|DOWNLOAD|300|1200",
+                            )
                             .build()
                 }
             every { mockWorkManager.getWorkInfosForUniqueWorkFlow(any<String>()) } returns
@@ -406,6 +410,7 @@ class HomeViewModelTest {
             assertEquals(3, progress?.filesCompleted)
             assertEquals(12, progress?.totalFiles)
             assertEquals("IMG_20240101.jpg", progress?.currentFileName)
+            assertEquals(1, progress?.activeTransfers?.size)
             assertTrue(9L in vm.state.value.syncingPairIds)
             collectJob.cancel()
         }

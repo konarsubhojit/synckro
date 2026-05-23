@@ -104,12 +104,12 @@ class SettingsRepositoryTest {
         }
 
     @Test
-    fun `maxConcurrentTransfers defaults to one`() =
+    fun `maxConcurrentTransfers defaults to three`() =
         testScope.runTest {
             val repo = buildRepository()
             assertEquals(
-                "Expected maxConcurrentTransfers to default to 1",
-                1,
+                "Expected maxConcurrentTransfers to default to 3",
+                3,
                 repo.maxConcurrentTransfers.first(),
             )
         }
@@ -118,8 +118,8 @@ class SettingsRepositoryTest {
     fun `setMaxConcurrentTransfers round trip clamps to range`() =
         testScope.runTest {
             val repo = buildRepository()
-            repo.setMaxConcurrentTransfers(4)
-            assertEquals(4, repo.maxConcurrentTransfers.first())
+            repo.setMaxConcurrentTransfers(3)
+            assertEquals(3, repo.maxConcurrentTransfers.first())
             repo.setMaxConcurrentTransfers(0)
             assertEquals(1, repo.maxConcurrentTransfers.first())
             repo.setMaxConcurrentTransfers(99)
