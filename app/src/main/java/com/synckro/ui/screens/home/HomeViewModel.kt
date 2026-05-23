@@ -368,7 +368,7 @@ class HomeViewModel
                             .onEach { infos ->
                                 val progress = infos.firstOrNull()?.progress?.let { SyncWorker.parseProgress(it) }
                                 pairProgress.update { map ->
-                                    if (progress != null) map + (pair.id to progress) else map
+                                    if (progress != null) map + (pair.id to progress) else map - pair.id
                                 }
                             }
                             .first { infos ->
