@@ -50,6 +50,7 @@ class SettingsViewModel
             val defaultWifiOnly: Boolean = true,
             val defaultChargingOnly: Boolean = false,
             val defaultConflictPolicy: ConflictPolicy = ConflictPolicy.NEWEST_WINS,
+            val maxConcurrentTransfers: Int = 1,
             // Appearance
             val darkMode: DarkModePreference = DarkModePreference.SYSTEM,
             val dynamicColor: Boolean = false,
@@ -114,6 +115,8 @@ class SettingsViewModel
                     enableHaptics = miscBundle[2] as Boolean,
                     logRetentionDays = miscBundle[3] as Int,
                 )
+            }.combine(settingsRepository.maxConcurrentTransfers) { uiState, maxConcurrent ->
+                uiState.copy(maxConcurrentTransfers = maxConcurrent)
             }.stateIn(
                 scope = viewModelScope,
                 started = SharingStarted.WhileSubscribed(5_000),
@@ -147,6 +150,10 @@ class SettingsViewModel
 
         fun setDefaultConflictPolicy(policy: ConflictPolicy) {
             viewModelScope.launch { settingsRepository.setDefaultConflictPolicy(policy) }
+        }
+
+        fun setMaxConcurrentTransfers(n: Int) {
+            viewModelScope.launch { settingsRepository.setMaxConcurrentTransfers(n) }
         }
 
         // ---------------------------------------------------------------------

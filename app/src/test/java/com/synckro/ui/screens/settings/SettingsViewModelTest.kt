@@ -102,6 +102,7 @@ class SettingsViewModelTest {
                 assertTrue(it.defaultWifiOnly)
                 assertFalse(it.defaultChargingOnly)
                 assertEquals(ConflictPolicy.NEWEST_WINS, it.defaultConflictPolicy)
+                assertEquals(1, it.maxConcurrentTransfers)
                 assertEquals(DarkModePreference.SYSTEM, it.darkMode)
                 assertFalse(it.dynamicColor)
                 assertTrue(it.respectFontScale)
@@ -144,6 +145,14 @@ class SettingsViewModelTest {
             val vm = newVm()
             vm.setDefaultConflictPolicy(ConflictPolicy.KEEP_BOTH)
             assertEquals(ConflictPolicy.KEEP_BOTH, repo.defaultConflictPolicy.first())
+        }
+
+    @Test
+    fun `setMaxConcurrentTransfers persists value`() =
+        testScope.runTest {
+            val vm = newVm()
+            vm.setMaxConcurrentTransfers(3)
+            assertEquals(3, repo.maxConcurrentTransfers.first())
         }
 
     @Test

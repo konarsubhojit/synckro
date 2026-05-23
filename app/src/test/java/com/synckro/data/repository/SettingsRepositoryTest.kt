@@ -6,6 +6,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -100,6 +101,29 @@ class SettingsRepositoryTest {
                 "Expected enableHaptics to be false after setEnableHaptics(false)",
                 repo.enableHaptics.first(),
             )
+        }
+
+    @Test
+    fun `maxConcurrentTransfers defaults to one`() =
+        testScope.runTest {
+            val repo = buildRepository()
+            assertEquals(
+                "Expected maxConcurrentTransfers to default to 1",
+                1,
+                repo.maxConcurrentTransfers.first(),
+            )
+        }
+
+    @Test
+    fun `setMaxConcurrentTransfers round trip clamps to range`() =
+        testScope.runTest {
+            val repo = buildRepository()
+            repo.setMaxConcurrentTransfers(4)
+            assertEquals(4, repo.maxConcurrentTransfers.first())
+            repo.setMaxConcurrentTransfers(0)
+            assertEquals(1, repo.maxConcurrentTransfers.first())
+            repo.setMaxConcurrentTransfers(99)
+            assertEquals(SettingsRepository.MAX_CONCURRENT_TRANSFERS, repo.maxConcurrentTransfers.first())
         }
 
     @Test
