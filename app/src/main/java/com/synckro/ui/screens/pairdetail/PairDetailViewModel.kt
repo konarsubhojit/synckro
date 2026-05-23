@@ -112,19 +112,13 @@ class PairDetailViewModel
 
         val state: StateFlow<UiState> =
             combine(
-                pairFlow.map { it as Any? },
-                syncEventRepository.observeForPair(pairId, RECENT_EVENT_LIMIT).map { it as Any? },
+                pairFlow,
+                syncEventRepository.observeForPair(pairId, RECENT_EVENT_LIMIT),
                 conflictRepository.observeForPair(pairId)
-                    .map { records -> records.count { it.resolution == null } as Any? },
-                settingsRepository.globalAutoSyncEnabled.map { it as Any? },
-                workInfoFlow.map { it as Any? },
-            ) { values ->
-                val pair = values[0] as SyncPair?
-                @Suppress("UNCHECKED_CAST")
-                val events = values[1] as List<SyncEvent>
-                val conflictCount = values[2] as Int
-                val globalEnabled = values[3] as Boolean
-                val workProgress = values[4] as WorkProgressState
+                    .map { records -> records.count { it.resolution == null } },
+                settingsRepository.globalAutoSyncEnabled,
+                workInfoFlow,
+            ) { pair, events, conflictCount, globalEnabled, workProgress ->
                 val summary = events.firstNotNullOfOrNull { parsePairSummary(it) }
                 val now = System.currentTimeMillis()
                 val nextRun = pair?.let {

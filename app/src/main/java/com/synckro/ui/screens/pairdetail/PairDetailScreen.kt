@@ -257,7 +257,9 @@ private fun SyncProgressBlock(progress: TransferProgress?) {
     }
 
     Column(
-        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 4.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         if (fraction != null && progress != null) {
