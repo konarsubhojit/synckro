@@ -3,8 +3,10 @@ package com.synckro.ui.screens.home
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import androidx.work.ExistingWorkPolicy
+import androidx.work.Data
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequest
+import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import com.synckro.data.repository.AccountRepository
 import com.synckro.data.repository.ConflictRepository
@@ -368,6 +370,79 @@ class HomeViewModelTest {
             advanceUntilIdle()
 
             assertFalse(3L in vm.state.value.syncingPairIds)
+            collectJob.cancel()
+        }
+
+    @Test
+    fun `syncNow updates progressByPairId from worker progress while running`() =
+        runTest {
+            val runningInfo =
+                mockk<WorkInfo> {
+                    every { state } returns WorkInfo.State.RUNNING
+                    every { progress } returns
+                        Data
+                            .Builder()
+                            .putInt(SyncWorker.PROGRESS_FILES_COMPLETED, 3)
+                            .putInt(SyncWorker.PROGRESS_TOTAL_FILES, 12)
+                            .putLong(SyncWorker.PROGRESS_BYTES_XFERRED, 300L)
+                            .putLong(SyncWorker.PROGRESS_TOTAL_BYTES, 1200L)
+                            .putString(SyncWorker.PROGRESS_CURRENT_FILE, "IMG_20240101.jpg")
+                            .build()
+                }
+            every { mockWorkManager.getWorkInfosForUniqueWorkFlow(any<String>()) } returns
+                flow {
+                    emit(listOf(runningInfo))
+                    awaitCancellation()
+                }
+
+            val vm = createVm()
+            val collectJob = launch { vm.state.collect {} }
+            advanceUntilIdle()
+
+            vm.syncNow(pair(9L))
+            runCurrent()
+
+            val progress = vm.state.value.progressByPairId[9L]
+            assertEquals(3, progress?.filesCompleted)
+            assertEquals(12, progress?.totalFiles)
+            assertEquals("IMG_20240101.jpg", progress?.currentFileName)
+            assertTrue(9L in vm.state.value.syncingPairIds)
+            collectJob.cancel()
+        }
+
+    @Test
+    fun `syncNow clears progressByPairId when watcher finishes`() =
+        runTest {
+            val runningInfo =
+                mockk<WorkInfo> {
+                    every { state } returns WorkInfo.State.RUNNING
+                    every { progress } returns
+                        Data
+                            .Builder()
+                            .putInt(SyncWorker.PROGRESS_FILES_COMPLETED, 1)
+                            .putInt(SyncWorker.PROGRESS_TOTAL_FILES, 2)
+                            .putLong(SyncWorker.PROGRESS_BYTES_XFERRED, 100L)
+                            .putLong(SyncWorker.PROGRESS_TOTAL_BYTES, 200L)
+                            .putString(SyncWorker.PROGRESS_CURRENT_FILE, "file.txt")
+                            .build()
+                }
+            val finishedInfo =
+                mockk<WorkInfo> {
+                    every { state } returns WorkInfo.State.SUCCEEDED
+                    every { progress } returns Data.EMPTY
+                }
+            every { mockWorkManager.getWorkInfosForUniqueWorkFlow(any<String>()) } returns
+                flowOf(listOf(runningInfo), listOf(finishedInfo))
+
+            val vm = createVm()
+            val collectJob = launch { vm.state.collect {} }
+            advanceUntilIdle()
+
+            vm.syncNow(pair(10L))
+            advanceUntilIdle()
+
+            assertFalse(10L in vm.state.value.progressByPairId)
+            assertFalse(10L in vm.state.value.syncingPairIds)
             collectJob.cancel()
         }
 

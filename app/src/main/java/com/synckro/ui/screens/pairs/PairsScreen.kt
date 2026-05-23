@@ -31,12 +31,12 @@ import androidx.compose.material.icons.filled.Inbox
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarDuration
@@ -72,6 +72,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -82,6 +83,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.synckro.R
 import com.synckro.domain.model.SyncPair
+import com.synckro.domain.sync.TransferProgress
 import com.synckro.ui.components.CoachTooltip
 import com.synckro.ui.components.CoachTooltipIds
 import com.synckro.ui.components.EmptyState
@@ -416,6 +418,7 @@ private fun PairsList(
                         pair = pair,
                         accountEmail = pair.accountId?.let { state.accountEmailById[it] },
                         isSyncing = pair.id in state.syncingPairIds,
+                        progress = state.progressByPairId[pair.id],
                         nextRunAtMs = state.nextRunByPairId[pair.id],
                         lastSummary = state.lastSummaryByPairId[pair.id],
                         onEdit = { onEditSyncPair(pair.id) },
@@ -437,6 +440,7 @@ private fun SyncPairRow(
     pair: SyncPair,
     accountEmail: String?,
     isSyncing: Boolean,
+    progress: TransferProgress?,
     nextRunAtMs: Long?,
     lastSummary: PairSummary?,
     onEdit: () -> Unit,
@@ -542,18 +546,7 @@ private fun SyncPairRow(
                         )
                     }
                     when {
-                        isSyncing -> {
-                            val label = stringResource(R.string.sync_now_in_progress)
-                            CircularProgressIndicator(
-                                modifier = Modifier
-                                    .size(20.dp)
-                                    .semantics {
-                                        contentDescription = label
-                                        liveRegion = LiveRegionMode.Polite
-                                    },
-                                strokeWidth = 2.dp,
-                            )
-                        }
+                        isSyncing -> Unit
                         pair.needsReLink -> Icon(
                             Icons.Default.FolderOff,
                             contentDescription = stringResource(R.string.home_needs_relink),
@@ -592,6 +585,54 @@ private fun SyncPairRow(
                                 contentDescription = reauthDeepLinkDescription
                             },
                     )
+                }
+
+                if (isSyncing) {
+                    val fraction: Float? = when {
+                        progress != null && progress.totalBytes > 0L ->
+                            (progress.bytesTransferred.toFloat() / progress.totalBytes).coerceIn(0f, 1f)
+                        progress != null && progress.totalFiles > 0 ->
+                            (progress.filesCompleted.toFloat() / progress.totalFiles).coerceIn(0f, 1f)
+                        else -> null
+                    }
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        if (fraction != null && progress != null) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                LinearProgressIndicator(
+                                    progress = { fraction },
+                                    modifier = Modifier.weight(1f),
+                                )
+                                Text(
+                                    text = stringResource(
+                                        R.string.home_sync_progress_files_format,
+                                        progress.filesCompleted,
+                                        progress.totalFiles,
+                                    ),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        } else {
+                            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                        }
+                        progress?.currentFileName?.let { fileName ->
+                            Text(
+                                text = stringResource(R.string.home_sync_current_file_format, fileName),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                            )
+                        }
+                    }
                 }
 
                 // Phase 5a: last-result summary (parsed from the latest terminal SyncEvent).

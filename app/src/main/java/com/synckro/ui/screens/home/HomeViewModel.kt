@@ -19,6 +19,7 @@ import com.synckro.data.repository.SyncPairRepository
 import com.synckro.data.worker.SyncScheduler
 import com.synckro.data.worker.SyncWorker
 import com.synckro.domain.model.SyncPair
+import com.synckro.domain.sync.TransferProgress
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Job
@@ -93,10 +94,15 @@ class HomeViewModel
             val onboardingCompletedAtMs: Long? = null,
             /** One-shot coach-tooltip ids already shown to the user. */
             val seenTooltips: Set<String> = emptySet(),
+            /** Live transfer progress for each syncing pair; absent when unavailable or finished. */
+            val progressByPairId: Map<Long, TransferProgress> = emptyMap(),
         )
 
         /** Pair IDs that have an active "sync now" run; updated optimistically. */
         private val syncingIds = MutableStateFlow<Set<Long>>(emptySet())
+
+        /** Live transfer progress emitted by WorkManager for currently syncing pairs. */
+        private val pairProgress = MutableStateFlow<Map<Long, TransferProgress>>(emptyMap())
 
         /** Pair IDs hidden from the visible list because they are pending soft-deletion. */
         private val hiddenIds = MutableStateFlow<Set<Long>>(emptySet())
@@ -151,6 +157,8 @@ class HomeViewModel
                 uiState.copy(onboardingCompletedAtMs = completedAt)
             }.combine(settingsRepository.seenTooltips) { uiState, seenTooltips ->
                 uiState.copy(seenTooltips = seenTooltips)
+            }.combine(pairProgress) { uiState, prog ->
+                uiState.copy(progressByPairId = prog)
             }.stateIn(
                 scope = viewModelScope,
                 started = SharingStarted.WhileSubscribed(5_000),
@@ -357,6 +365,12 @@ class HomeViewModel
                     runCatching {
                         workManager
                             .getWorkInfosForUniqueWorkFlow(SyncWorker.syncNowUniqueName(pair.id))
+                            .onEach { infos ->
+                                val progress = infos.firstOrNull()?.progress?.let { SyncWorker.parseProgress(it) }
+                                pairProgress.update { map ->
+                                    if (progress != null) map + (pair.id to progress) else map
+                                }
+                            }
                             .first { infos ->
                                 // Wait until WorkManager has a record for this work and all
                                 // entries report a finished state (SUCCEEDED/FAILED/CANCELLED).
@@ -371,6 +385,7 @@ class HomeViewModel
                 // If the worker is still running, the foreground notification keeps
                 // the user informed; tapping Sync now again is a safe no-op because
                 // ExistingWorkPolicy.KEEP preserves the in-flight job.
+                pairProgress.update { it - pair.id }
                 syncingIds.update { it - pair.id }
             }
         }
