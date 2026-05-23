@@ -4,19 +4,24 @@ import android.content.Context
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.work.WorkInfo
+import androidx.work.WorkManager
 import com.synckro.data.repository.ConflictRepository
 import com.synckro.data.repository.SettingsRepository
 import com.synckro.data.repository.SyncEventRepository
 import com.synckro.data.repository.SyncPairRepository
 import com.synckro.data.worker.SyncScheduler
+import com.synckro.data.worker.SyncWorker
 import com.synckro.domain.model.SyncEvent
 import com.synckro.domain.model.SyncPair
+import com.synckro.domain.sync.TransferProgress
 import com.synckro.ui.screens.home.PairSummary
 import com.synckro.ui.screens.home.parsePairSummary
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -34,6 +39,7 @@ import javax.inject.Inject
  *  - the last [RECENT_EVENT_LIMIT] events for the pair
  *  - the count of unresolved conflicts for the pair
  *  - the next-run ETA computed via [SyncScheduler.estimateNextRunAtMs]
+ *  - live WorkManager-backed sync progress for periodic and "sync now" runs
  *
  * `pairId` is read from [SavedStateHandle] using the [KEY_PAIR_ID] key so the
  * NavHost can pass it via a path arg without an explicit lambda.
@@ -52,6 +58,7 @@ class PairDetailViewModel
         syncEventRepository: SyncEventRepository,
         conflictRepository: ConflictRepository,
         settingsRepository: SettingsRepository,
+        workManager: WorkManager,
     ) : ViewModel() {
         val pairId: Long = savedStateHandle[KEY_PAIR_ID] ?: 0L
 
@@ -68,6 +75,15 @@ class PairDetailViewModel
             val nextRunAtMs: Long? = null,
             /** Current global auto-sync flag — surfaced so the screen can explain a null ETA. */
             val globalAutoSyncEnabled: Boolean = true,
+            /** True while either the periodic or one-shot sync worker is queued/running. */
+            val isSyncing: Boolean = false,
+            /** Live transfer progress from WorkManager while a sync is actively running. */
+            val progress: TransferProgress? = null,
+        )
+
+        private data class WorkProgressState(
+            val isSyncing: Boolean = false,
+            val progress: TransferProgress? = null,
         )
 
         // Use observeAll() so the screen stays live across sync-now / auto-sync runs
@@ -77,14 +93,38 @@ class PairDetailViewModel
             syncPairRepository.observeAll(context.contentResolver)
                 .map { all -> all.firstOrNull { it.id == pairId } }
 
+        private val workInfoFlow =
+            combine(
+                workManager
+                    .getWorkInfosForUniqueWorkFlow(SyncWorker.uniqueName(pairId))
+                    .catch { emit(emptyList()) },
+                workManager
+                    .getWorkInfosForUniqueWorkFlow(SyncWorker.syncNowUniqueName(pairId))
+                    .catch { emit(emptyList()) },
+            ) { periodicInfos, syncNowInfos ->
+                val infos = periodicInfos + syncNowInfos
+                val runningInfo = infos.firstOrNull { it.state == WorkInfo.State.RUNNING }
+                WorkProgressState(
+                    isSyncing = infos.any { it.state == WorkInfo.State.RUNNING || it.state == WorkInfo.State.ENQUEUED },
+                    progress = runningInfo?.let { SyncWorker.parseProgress(it.progress) },
+                )
+            }
+
         val state: StateFlow<UiState> =
             combine(
-                pairFlow,
-                syncEventRepository.observeForPair(pairId, RECENT_EVENT_LIMIT),
+                pairFlow.map { it as Any? },
+                syncEventRepository.observeForPair(pairId, RECENT_EVENT_LIMIT).map { it as Any? },
                 conflictRepository.observeForPair(pairId)
-                    .map { records -> records.count { it.resolution == null } },
-                settingsRepository.globalAutoSyncEnabled,
-            ) { pair, events, conflictCount, globalEnabled ->
+                    .map { records -> records.count { it.resolution == null } as Any? },
+                settingsRepository.globalAutoSyncEnabled.map { it as Any? },
+                workInfoFlow.map { it as Any? },
+            ) { values ->
+                val pair = values[0] as SyncPair?
+                @Suppress("UNCHECKED_CAST")
+                val events = values[1] as List<SyncEvent>
+                val conflictCount = values[2] as Int
+                val globalEnabled = values[3] as Boolean
+                val workProgress = values[4] as WorkProgressState
                 val summary = events.firstNotNullOfOrNull { parsePairSummary(it) }
                 val now = System.currentTimeMillis()
                 val nextRun = pair?.let {
@@ -102,6 +142,8 @@ class PairDetailViewModel
                     unresolvedConflictCount = conflictCount,
                     nextRunAtMs = nextRun,
                     globalAutoSyncEnabled = globalEnabled,
+                    isSyncing = workProgress.isSyncing,
+                    progress = workProgress.progress,
                 )
             }.stateIn(
                 scope = viewModelScope,
@@ -116,4 +158,3 @@ class PairDetailViewModel
             const val RECENT_EVENT_LIMIT = 5
         }
     }
-
