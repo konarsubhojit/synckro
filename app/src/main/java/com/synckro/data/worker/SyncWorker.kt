@@ -212,9 +212,19 @@ class SyncWorker
 
                 // Progress callback forwarded from SyncEngine → SyncOpApplier.
                 // Handles two concerns:
-                //  1. Early foreground promotion for large transfers (≥ LARGE_TRANSFER_THRESHOLD_BYTES).
-                //  2. Updating the progress notification once the worker is in foreground.
+                //  1. Publishing live progress to WorkManager's WorkInfo.progress Data.
+                //  2. Early foreground promotion for large transfers (≥ LARGE_TRANSFER_THRESHOLD_BYTES).
+                //  3. Updating the progress notification once the worker is in foreground.
                 val onSyncProgress: suspend (TransferProgress) -> Unit = { progress ->
+                    setProgress(
+                        workDataOf(
+                            PROGRESS_FILES_COMPLETED to progress.filesCompleted,
+                            PROGRESS_TOTAL_FILES to progress.totalFiles,
+                            PROGRESS_BYTES_XFERRED to progress.bytesTransferred,
+                            PROGRESS_TOTAL_BYTES to progress.totalBytes,
+                            PROGRESS_CURRENT_FILE to progress.currentFileName,
+                        ),
+                    )
                     if (!promotedToForeground.get() && progress.totalBytes >= LARGE_TRANSFER_THRESHOLD_BYTES) {
                         if (tryPromoteToForeground(
                                 progress = progress,
@@ -514,6 +524,11 @@ class SyncWorker
         companion object {
             const val KEY_PAIR_ID = "pair_id"
             const val KEY_IS_PERIODIC = "is_periodic"
+            const val PROGRESS_FILES_COMPLETED = "p_files_done"
+            const val PROGRESS_TOTAL_FILES = "p_files_total"
+            const val PROGRESS_BYTES_XFERRED = "p_bytes_done"
+            const val PROGRESS_TOTAL_BYTES = "p_bytes_total"
+            const val PROGRESS_CURRENT_FILE = "p_current_file"
 
             /** Notification channel ID for sync progress. Created by SynckroApp.createNotificationChannels(). */
             const val SYNC_CHANNEL_ID = "synckro_sync"
@@ -607,6 +622,22 @@ class SyncWorker
              * @return The unique work name for the one-shot job (format: "syncnow-<pairId>").
              */
             fun syncNowUniqueName(pairId: Long): String = "syncnow-$pairId"
+
+            /**
+             * Returns a [TransferProgress] from a [androidx.work.WorkInfo.progress] Data object,
+             * or `null` if the Data is empty (worker not yet started or no op run).
+             */
+            fun parseProgress(data: androidx.work.Data): TransferProgress? {
+                val total = data.getInt(PROGRESS_TOTAL_FILES, 0)
+                if (total == 0) return null
+                return TransferProgress(
+                    filesCompleted = data.getInt(PROGRESS_FILES_COMPLETED, 0),
+                    totalFiles = total,
+                    bytesTransferred = data.getLong(PROGRESS_BYTES_XFERRED, 0L),
+                    totalBytes = data.getLong(PROGRESS_TOTAL_BYTES, 0L),
+                    currentFileName = data.getString(PROGRESS_CURRENT_FILE),
+                )
+            }
 
             /**
              * Returns `true` if the app is allowed to post notifications.

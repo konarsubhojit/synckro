@@ -257,6 +257,23 @@ class SyncEngineRealIntegrationTest {
         }
 
     @Test
+    fun `runReal emits structured log for each sync pipeline step`() =
+        runTest {
+            val pair = insertPair()
+
+            val result = buildEngine().runOnce(pair)
+
+            assertTrue("Expected Success for empty sync, got: $result", result is SyncEngine.Result.Success)
+            val messages = eventRepository.getAll().map { it.message }
+            for (step in 0..8) {
+                assertTrue(
+                    "Expected structured log for step $step",
+                    messages.any { it.startsWith("Step $step/8:") },
+                )
+            }
+        }
+
+    @Test
     fun `runReal persists delta token after successful run`() =
         runTest {
             val pair = insertPair()
