@@ -139,9 +139,16 @@ class SyncOpApplier(
      * Terminal auth exceptions propagate immediately; all other exceptions are collected
      * in [ApplyResult.errors] so a single bad file does not abort the whole batch.
      *
-     * After each op (success or failure) [onProgress] is invoked with a [TransferProgress]
-     * snapshot. [TransferProgress.totalBytes] is the sum of file sizes that could be resolved
-     * from [remoteFilesByPath] and [localIndexByPath] before the batch started; it is 0 when
+     * For each op (success or failure) [onProgress] is invoked twice with a
+     * [TransferProgress] snapshot:
+     * 1. immediately before the op starts, with the current counters unchanged and
+     *    [TransferProgress.currentFileName] set to the active relative path;
+     * 2. immediately after the op finishes, with [TransferProgress.filesCompleted]
+     *    incremented, [TransferProgress.bytesTransferred] updated only for successful
+     *    transfers, and [TransferProgress.currentFileName] cleared back to `null`.
+     *
+     * [TransferProgress.totalBytes] is the sum of file sizes that could be resolved from
+     * [remoteFilesByPath] and [localIndexByPath] before the batch started; it is 0 when
      * no sizes are available, in which case [TransferProgress.totalFiles] should be used as a
      * fallback denominator.
      *
@@ -149,8 +156,9 @@ class SyncOpApplier(
      * @param pair             The sync pair owning the ops.
      * @param remoteFilesByPath Map from relative path to [RemoteFile] for all remote files.
      * @param localIndexByPath  Map from relative path to [LocalIndexEntity] for all indexed files.
-     * @param onProgress       Called after every op with the current [TransferProgress].
-     *                         Defaults to a no-op so existing callers are unaffected.
+     * @param onProgress       Called twice per op (before and after it runs) with the current
+     *                         [TransferProgress]. Defaults to a no-op so existing callers are
+     *                         unaffected.
      * @return [ApplyResult] summarising what was applied, how many conflicts, and any errors.
      */
     suspend fun apply(
@@ -176,6 +184,15 @@ class SyncOpApplier(
             var bytesTransferred = 0L
 
             for ((index, op) in ops.withIndex()) {
+                onProgress(
+                    TransferProgress(
+                        filesCompleted = filesProcessed,
+                        totalFiles = totalFiles,
+                        bytesTransferred = bytesTransferred,
+                        totalBytes = totalBytes,
+                        currentFileName = op.relativePath,
+                    ),
+                )
                 var opSucceeded = false
                 try {
                     when (op) {
@@ -340,6 +357,7 @@ class SyncOpApplier(
                         totalFiles = totalFiles,
                         bytesTransferred = bytesTransferred,
                         totalBytes = totalBytes,
+                        currentFileName = null,
                     ),
                 )
             }
