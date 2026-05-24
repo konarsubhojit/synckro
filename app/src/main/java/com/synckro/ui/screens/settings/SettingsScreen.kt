@@ -60,6 +60,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -78,6 +79,7 @@ import com.synckro.data.repository.AutoSyncSchedule
 import com.synckro.data.repository.InternetConnectionScope
 import com.synckro.data.repository.SettingsRepository
 import com.synckro.domain.model.ConflictPolicy
+import kotlinx.coroutines.launch
 import java.util.Locale
 
 // ---- Internal navigation constants ----
@@ -244,7 +246,13 @@ fun SettingsScreen(
                     viewModel = viewModel,
                     contentPadding = contentPadding,
                 )
-            SECTION_SECURITY -> SecuritySettingsContent(contentPadding = contentPadding)
+            SECTION_SECURITY ->
+                SecuritySettingsContent(
+                    state = state,
+                    viewModel = viewModel,
+                    contentPadding = contentPadding,
+                    snackbarHostState = snackbarHostState,
+                )
             SECTION_BACKUP ->
                 BackupSettingsContent(
                     state = state,
@@ -879,19 +887,89 @@ private fun BatterySettingsContent(
 }
 
 @Composable
-private fun SecuritySettingsContent(contentPadding: PaddingValues) {
+private fun SecuritySettingsContent(
+    state: SettingsViewModel.UiState,
+    viewModel: SettingsViewModel,
+    contentPadding: PaddingValues,
+    snackbarHostState: SnackbarHostState,
+) {
+    var showPinTimeoutDialog by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val pinSetupComingSoon = stringResource(R.string.settings_security_set_pin_coming_soon)
+    val pinTimeoutMinutesFormat = stringResource(R.string.settings_security_pin_timeout_minutes_format)
+    val pinTimeoutOptions =
+        listOf(
+            SettingsRepository.MIN_PIN_TIMEOUT_MINUTES,
+            2,
+            5,
+            10,
+            SettingsRepository.MAX_PIN_TIMEOUT_MINUTES,
+        ).distinct()
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = contentPadding,
     ) {
         item {
-            Text(
-                text = stringResource(R.string.settings_security_placeholder),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(16.dp),
+            SwitchRow(
+                title = stringResource(R.string.settings_security_pin_enable_title),
+                body = stringResource(R.string.settings_security_pin_enable_body),
+                checked = state.pinProtectionEnabled,
+                onCheckedChange = viewModel::setPinProtectionEnabled,
             )
         }
+        item {
+            ActionRow(
+                title = stringResource(R.string.settings_security_set_pin_title),
+                body = stringResource(R.string.settings_security_set_pin_body),
+                enabled = state.pinProtectionEnabled,
+                onClick = {
+                    scope.launch { snackbarHostState.showSnackbar(pinSetupComingSoon) }
+                },
+            )
+        }
+        item {
+            ActionRow(
+                title = stringResource(R.string.settings_security_pin_timeout_title),
+                body =
+                    stringResource(
+                        R.string.settings_security_pin_timeout_body_format,
+                        state.pinTimeoutMinutes,
+                    ),
+                enabled = state.pinProtectionEnabled,
+                onClick = { showPinTimeoutDialog = true },
+            )
+        }
+        item {
+            CheckboxRow(
+                title = stringResource(R.string.settings_security_biometrics_title),
+                body = stringResource(R.string.settings_security_biometrics_body),
+                checked = state.unlockWithBiometrics,
+                enabled = state.pinProtectionEnabled,
+                onCheckedChange = viewModel::setUnlockWithBiometrics,
+            )
+        }
+        item {
+            CheckboxRow(
+                title = stringResource(R.string.settings_security_protect_settings_only_title),
+                body = stringResource(R.string.settings_security_protect_settings_only_body),
+                checked = state.protectSettingsOnly,
+                enabled = state.pinProtectionEnabled,
+                onCheckedChange = viewModel::setProtectSettingsOnly,
+            )
+        }
+    }
+
+    if (showPinTimeoutDialog) {
+        IntOptionsDialog(
+            title = stringResource(R.string.settings_security_pin_timeout_title),
+            options = pinTimeoutOptions,
+            valueFormatter = { pinTimeoutMinutesFormat.format(it) },
+            onSelect = {
+                viewModel.setPinTimeoutMinutes(it)
+                showPinTimeoutDialog = false
+            },
+            onDismiss = { showPinTimeoutDialog = false },
+        )
     }
 }
 
@@ -1067,7 +1145,20 @@ private fun CheckboxRow(
     body: String,
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
+    enabled: Boolean = true,
 ) {
+    val titleColor =
+        if (enabled) {
+            MaterialTheme.colorScheme.onSurface
+        } else {
+            MaterialTheme.colorScheme.onSurfaceVariant
+        }
+    val bodyColor =
+        if (enabled) {
+            MaterialTheme.colorScheme.onSurfaceVariant
+        } else {
+            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+        }
     Row(
         modifier =
             Modifier
@@ -1077,16 +1168,17 @@ private fun CheckboxRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(modifier = Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.bodyLarge)
+            Text(title, style = MaterialTheme.typography.bodyLarge, color = titleColor)
             Text(
                 body,
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = bodyColor,
             )
         }
         Checkbox(
             checked = checked,
             onCheckedChange = onCheckedChange,
+            enabled = enabled,
         )
     }
 }
@@ -1095,10 +1187,11 @@ private fun CheckboxRow(
 private fun ActionRow(
     title: String,
     body: String,
+    enabled: Boolean = true,
     onClick: (() -> Unit)?,
 ) {
     val rowModifier =
-        if (onClick != null) {
+        if (onClick != null && enabled) {
             Modifier
                 .fillMaxWidth()
                 .selectable(selected = false, onClick = onClick)
@@ -1108,12 +1201,24 @@ private fun ActionRow(
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 14.dp)
         }
+    val titleColor =
+        if (enabled) {
+            MaterialTheme.colorScheme.onSurface
+        } else {
+            MaterialTheme.colorScheme.onSurfaceVariant
+        }
+    val bodyColor =
+        if (enabled) {
+            MaterialTheme.colorScheme.onSurfaceVariant
+        } else {
+            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+        }
     Column(modifier = rowModifier) {
-        Text(title, style = MaterialTheme.typography.bodyLarge)
+        Text(title, style = MaterialTheme.typography.bodyLarge, color = titleColor)
         Text(
             body,
             style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = bodyColor,
             overflow = TextOverflow.Ellipsis,
         )
     }

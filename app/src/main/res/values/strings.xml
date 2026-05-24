@@ -504,8 +504,19 @@
     <string name="settings_menu_support_title">Help &amp; support</string>
     <string name="settings_menu_support_subtitle">Send feedback to the Synckro team</string>
 
-    <!-- Settings: security placeholder -->
-    <string name="settings_security_placeholder">Security settings will be available in a future update.</string>
+    <!-- Settings: security -->
+    <string name="settings_security_pin_enable_title">Enable PIN code</string>
+    <string name="settings_security_pin_enable_body">Require a PIN before protected actions.</string>
+    <string name="settings_security_set_pin_title">Set PIN code</string>
+    <string name="settings_security_set_pin_body">Changing your PIN resets biometric unlock on this device.</string>
+    <string name="settings_security_set_pin_coming_soon">PIN setup flow will be added in an upcoming update.</string>
+    <string name="settings_security_pin_timeout_title">PIN timeout</string>
+    <string name="settings_security_pin_timeout_body_format">Require PIN again after %1$d min of inactivity.</string>
+    <string name="settings_security_pin_timeout_minutes_format">%1$d min</string>
+    <string name="settings_security_biometrics_title">Unlock with biometrics</string>
+    <string name="settings_security_biometrics_body">Allow fingerprint or face unlock instead of entering the PIN each time.</string>
+    <string name="settings_security_protect_settings_only_title">Only protect app settings</string>
+    <string name="settings_security_protect_settings_only_body">Anyone can view sync status and run sync manually, but changing configuration still requires unlock.</string>
 
     <!-- Settings: appearance -->
     <string name="settings_dark_mode_title">Dark mode</string>
