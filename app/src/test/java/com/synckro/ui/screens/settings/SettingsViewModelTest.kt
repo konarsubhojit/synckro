@@ -2,7 +2,9 @@ package com.synckro.ui.screens.settings
 
 import android.content.Context
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
+import com.synckro.data.repository.AutoSyncSchedule
 import com.synckro.data.repository.DarkModePreference
+import com.synckro.data.repository.InternetConnectionScope
 import com.synckro.data.repository.SettingsRepository
 import com.synckro.data.repository.SyncPairRepository
 import com.synckro.data.worker.SyncScheduler
@@ -103,6 +105,23 @@ class SettingsViewModelTest {
                 assertFalse(it.defaultChargingOnly)
                 assertEquals(ConflictPolicy.NEWEST_WINS, it.defaultConflictPolicy)
                 assertEquals(3, it.maxConcurrentTransfers)
+                assertEquals(100, it.mobileUploadLimitMb)
+                assertEquals(100, it.mobileDownloadLimitMb)
+                assertTrue(it.warnOnMobileNetworkSync)
+                assertTrue(it.retryAutomaticallyAfterError)
+                assertEquals(15, it.retryWaitMinutes)
+                assertEquals(3, it.retryMaxAttempts)
+                assertEquals(3, it.parallelUploads)
+                assertEquals(3, it.parallelDownloads)
+                assertEquals(AutoSyncSchedule.EVERY_30_MINUTES, it.autoSyncSchedule)
+                assertFalse(it.autoSyncChargingOnly)
+                assertEquals(20, it.autoSyncBatteryThresholdPercent)
+                assertEquals(InternetConnectionScope.WIFI_AND_MOBILE, it.internetConnectionScope)
+                assertFalse(it.syncOnMeteredWifi)
+                assertTrue(it.allowedWifiNetworks.isEmpty())
+                assertTrue(it.disallowedWifiNetworks.isEmpty())
+                assertFalse(it.syncOnMobileRoaming)
+                assertFalse(it.syncOnSlow2g)
                 assertEquals(DarkModePreference.SYSTEM, it.darkMode)
                 assertFalse(it.dynamicColor)
                 assertTrue(it.respectFontScale)
@@ -162,6 +181,47 @@ class SettingsViewModelTest {
             val vm = newVm()
             vm.setDarkMode(DarkModePreference.DARK)
             assertEquals(DarkModePreference.DARK, repo.darkMode.first())
+        }
+
+    @Test
+    fun `sync redesign settings persist values`() =
+        testScope.runTest {
+            val vm = newVm()
+            vm.setMobileUploadLimitMb(250)
+            vm.setMobileDownloadLimitMb(500)
+            vm.setWarnOnMobileNetworkSync(false)
+            vm.setRetryAutomaticallyAfterError(false)
+            vm.setRetryWaitMinutes(30)
+            vm.setRetryMaxAttempts(5)
+            vm.setParallelUploads(4)
+            vm.setParallelDownloads(2)
+            vm.setAutoSyncSchedule(AutoSyncSchedule.HOURLY)
+            vm.setAutoSyncChargingOnly(true)
+            vm.setAutoSyncBatteryThresholdPercent(35)
+            vm.setInternetConnectionScope(InternetConnectionScope.WIFI_ONLY)
+            vm.setSyncOnMeteredWifi(true)
+            vm.setAllowedWifiNetworks(setOf("Office", "Home"))
+            vm.setDisallowedWifiNetworks(setOf("Airport"))
+            vm.setSyncOnMobileRoaming(true)
+            vm.setSyncOnSlow2g(true)
+
+            assertEquals(250, repo.mobileUploadLimitMb.first())
+            assertEquals(500, repo.mobileDownloadLimitMb.first())
+            assertFalse(repo.warnOnMobileNetworkSync.first())
+            assertFalse(repo.retryAutomaticallyAfterError.first())
+            assertEquals(30, repo.retryWaitMinutes.first())
+            assertEquals(5, repo.retryMaxAttempts.first())
+            assertEquals(4, repo.parallelUploads.first())
+            assertEquals(2, repo.parallelDownloads.first())
+            assertEquals(AutoSyncSchedule.HOURLY, repo.autoSyncSchedule.first())
+            assertTrue(repo.autoSyncChargingOnly.first())
+            assertEquals(35, repo.autoSyncBatteryThresholdPercent.first())
+            assertEquals(InternetConnectionScope.WIFI_ONLY, repo.internetConnectionScope.first())
+            assertTrue(repo.syncOnMeteredWifi.first())
+            assertEquals(setOf("Office", "Home"), repo.allowedWifiNetworks.first())
+            assertEquals(setOf("Airport"), repo.disallowedWifiNetworks.first())
+            assertTrue(repo.syncOnMobileRoaming.first())
+            assertTrue(repo.syncOnSlow2g.first())
         }
 
     @Test
