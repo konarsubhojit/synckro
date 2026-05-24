@@ -438,44 +438,54 @@ class SettingsViewModel
 
         fun backupSettings() {
             viewModelScope.launch {
-                if (!settingsDataStoreFile().exists()) {
-                    _events.emit(UiEvent.SettingsBackupNoSettings)
-                    return@launch
-                }
-                runCatching {
+                when (
                     withContext(Dispatchers.IO) {
                         val source = settingsDataStoreFile()
-                        val backup = settingsBackupFile()
-                        backup.parentFile?.mkdirs()
-                        source.copyTo(backup, overwrite = true)
+                        if (!source.exists()) return@withContext BackupSettingsResult.NO_SETTINGS
+
+                        runCatching {
+                            val backup = settingsBackupFile()
+                            backup.parentFile?.mkdirs()
+                            source.copyTo(backup, overwrite = true)
+                        }.fold(
+                            onSuccess = { BackupSettingsResult.SUCCESS },
+                            onFailure = { t ->
+                                Timber.e(t, "SettingsViewModel.backupSettings failed")
+                                BackupSettingsResult.FAILED
+                            },
+                        )
                     }
-                }.onSuccess {
-                    _events.emit(UiEvent.SettingsBackedUp)
-                }.onFailure { t ->
-                    Timber.e(t, "SettingsViewModel.backupSettings failed")
-                    _events.emit(UiEvent.SettingsBackupFailed)
+                ) {
+                    BackupSettingsResult.SUCCESS -> _events.emit(UiEvent.SettingsBackedUp)
+                    BackupSettingsResult.NO_SETTINGS -> _events.emit(UiEvent.SettingsBackupNoSettings)
+                    BackupSettingsResult.FAILED -> _events.emit(UiEvent.SettingsBackupFailed)
                 }
             }
         }
 
         fun restoreSettings() {
             viewModelScope.launch {
-                if (!settingsBackupFile().exists()) {
-                    _events.emit(UiEvent.SettingsRestoreNoBackup)
-                    return@launch
-                }
-                runCatching {
+                when (
                     withContext(Dispatchers.IO) {
                         val backup = settingsBackupFile()
-                        val target = settingsDataStoreFile()
-                        target.parentFile?.mkdirs()
-                        backup.copyTo(target, overwrite = true)
+                        if (!backup.exists()) return@withContext RestoreSettingsResult.NO_BACKUP
+
+                        runCatching {
+                            val target = settingsDataStoreFile()
+                            target.parentFile?.mkdirs()
+                            backup.copyTo(target, overwrite = true)
+                        }.fold(
+                            onSuccess = { RestoreSettingsResult.SUCCESS },
+                            onFailure = { t ->
+                                Timber.e(t, "SettingsViewModel.restoreSettings failed")
+                                RestoreSettingsResult.FAILED
+                            },
+                        )
                     }
-                }.onSuccess {
-                    _events.emit(UiEvent.SettingsRestored)
-                }.onFailure { t ->
-                    Timber.e(t, "SettingsViewModel.restoreSettings failed")
-                    _events.emit(UiEvent.SettingsRestoreFailed)
+                ) {
+                    RestoreSettingsResult.SUCCESS -> _events.emit(UiEvent.SettingsRestored)
+                    RestoreSettingsResult.NO_BACKUP -> _events.emit(UiEvent.SettingsRestoreNoBackup)
+                    RestoreSettingsResult.FAILED -> _events.emit(UiEvent.SettingsRestoreFailed)
                 }
             }
         }
@@ -530,6 +540,8 @@ class SettingsViewModel
         /**
          * Mirrors `preferencesDataStoreFile("settings")` from AppModule:
          * `<filesDir>/datastore/settings.preferences_pb`.
+         * Keep this in sync with AppModule's DataStore file contract so backup/restore
+         * always targets the same settings file used by SettingsRepository.
          */
         private fun settingsDataStoreFile(): File =
             File(
@@ -549,6 +561,17 @@ class SettingsViewModel
             private const val SETTINGS_DATASTORE_FILENAME = "settings.preferences_pb"
             internal const val SETTINGS_BACKUP_FILENAME = "settings.backup.preferences_pb"
             private const val FEEDBACK_EMAIL_PLACEHOLDER = "feedback@example.com"
+            private enum class BackupSettingsResult {
+                SUCCESS,
+                NO_SETTINGS,
+                FAILED,
+            }
+
+            private enum class RestoreSettingsResult {
+                SUCCESS,
+                NO_BACKUP,
+                FAILED,
+            }
 
             internal fun resolveFeedbackEmail(rawEmail: String): FeedbackEmailConfig {
                 val normalized = rawEmail.trim()
