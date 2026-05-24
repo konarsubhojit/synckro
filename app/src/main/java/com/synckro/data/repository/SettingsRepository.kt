@@ -326,6 +326,44 @@ class SettingsRepository
         }
 
         // -------------------------------------------------------------------------
+        // Security
+        // -------------------------------------------------------------------------
+
+        val pinProtectionEnabled: Flow<Boolean> =
+            dataStore.data.map { it[KEY_PIN_PROTECTION_ENABLED] ?: DEFAULT_PIN_PROTECTION_ENABLED }
+
+        suspend fun setPinProtectionEnabled(enabled: Boolean) {
+            dataStore.edit { it[KEY_PIN_PROTECTION_ENABLED] = enabled }
+        }
+
+        val pinTimeoutMinutes: Flow<Int> =
+            dataStore.data.map {
+                (it[KEY_PIN_TIMEOUT_MINUTES] ?: DEFAULT_PIN_TIMEOUT_MINUTES)
+                    .coerceIn(MIN_PIN_TIMEOUT_MINUTES, MAX_PIN_TIMEOUT_MINUTES)
+            }
+
+        suspend fun setPinTimeoutMinutes(minutes: Int) {
+            dataStore.edit {
+                it[KEY_PIN_TIMEOUT_MINUTES] =
+                    minutes.coerceIn(MIN_PIN_TIMEOUT_MINUTES, MAX_PIN_TIMEOUT_MINUTES)
+            }
+        }
+
+        val unlockWithBiometrics: Flow<Boolean> =
+            dataStore.data.map { it[KEY_UNLOCK_WITH_BIOMETRICS] ?: DEFAULT_UNLOCK_WITH_BIOMETRICS }
+
+        suspend fun setUnlockWithBiometrics(enabled: Boolean) {
+            dataStore.edit { it[KEY_UNLOCK_WITH_BIOMETRICS] = enabled }
+        }
+
+        val protectSettingsOnly: Flow<Boolean> =
+            dataStore.data.map { it[KEY_PROTECT_SETTINGS_ONLY] ?: DEFAULT_PROTECT_SETTINGS_ONLY }
+
+        suspend fun setProtectSettingsOnly(enabled: Boolean) {
+            dataStore.edit { it[KEY_PROTECT_SETTINGS_ONLY] = enabled }
+        }
+
+        // -------------------------------------------------------------------------
         // Onboarding
         // -------------------------------------------------------------------------
 
@@ -421,6 +459,10 @@ class SettingsRepository
             internal val KEY_NOTIFY_ON_SUCCESS = booleanPreferencesKey("notify_on_success")
             internal val KEY_NOTIFY_ON_FAILURE = booleanPreferencesKey("notify_on_failure")
             internal val KEY_ENABLE_HAPTICS = booleanPreferencesKey("enable_haptics")
+            internal val KEY_PIN_PROTECTION_ENABLED = booleanPreferencesKey("pin_protection_enabled")
+            internal val KEY_PIN_TIMEOUT_MINUTES = intPreferencesKey("pin_timeout_minutes")
+            internal val KEY_UNLOCK_WITH_BIOMETRICS = booleanPreferencesKey("unlock_with_biometrics")
+            internal val KEY_PROTECT_SETTINGS_ONLY = booleanPreferencesKey("protect_settings_only")
 
             internal val KEY_LOG_RETENTION_DAYS = intPreferencesKey("log_retention_days")
 
@@ -464,8 +506,14 @@ class SettingsRepository
             internal const val DEFAULT_NOTIFY_ON_SUCCESS = false
             internal const val DEFAULT_NOTIFY_ON_FAILURE = true
             internal const val DEFAULT_ENABLE_HAPTICS = true
+            internal const val DEFAULT_PIN_PROTECTION_ENABLED = false
+            internal const val DEFAULT_PIN_TIMEOUT_MINUTES = 2
+            internal const val DEFAULT_UNLOCK_WITH_BIOMETRICS = false
+            internal const val DEFAULT_PROTECT_SETTINGS_ONLY = false
 
             internal const val DEFAULT_LOG_RETENTION_DAYS = 30
+            internal const val MIN_PIN_TIMEOUT_MINUTES = 1
+            internal const val MAX_PIN_TIMEOUT_MINUTES = 15
         }
     }
 

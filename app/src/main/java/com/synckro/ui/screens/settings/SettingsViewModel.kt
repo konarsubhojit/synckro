@@ -78,6 +78,11 @@ class SettingsViewModel
             val notifyOnSuccess: Boolean = false,
             val notifyOnFailure: Boolean = true,
             val enableHaptics: Boolean = true,
+            // Security
+            val pinProtectionEnabled: Boolean = false,
+            val pinTimeoutMinutes: Int = SettingsRepository.DEFAULT_PIN_TIMEOUT_MINUTES,
+            val unlockWithBiometrics: Boolean = false,
+            val protectSettingsOnly: Boolean = false,
             // Logs
             val logRetentionDays: Int = 30,
         )
@@ -147,8 +152,12 @@ class SettingsViewModel
                     settingsRepository.notifyOnSuccess,
                     settingsRepository.notifyOnFailure,
                     settingsRepository.enableHaptics,
+                    settingsRepository.pinProtectionEnabled,
+                    settingsRepository.pinTimeoutMinutes,
+                    settingsRepository.unlockWithBiometrics,
+                    settingsRepository.protectSettingsOnly,
                     settingsRepository.logRetentionDays,
-                ) { success, failure, haptics, retention -> arrayOf(success, failure, haptics, retention) },
+                ) { miscValues -> miscValues },
             ) { syncBundle, appearanceBundle, miscBundle ->
                 @Suppress("UNCHECKED_CAST")
                 // syncBundle index map:
@@ -185,7 +194,11 @@ class SettingsViewModel
                     notifyOnSuccess = miscBundle[0] as Boolean,
                     notifyOnFailure = miscBundle[1] as Boolean,
                     enableHaptics = miscBundle[2] as Boolean,
-                    logRetentionDays = miscBundle[3] as Int,
+                    pinProtectionEnabled = miscBundle[3] as Boolean,
+                    pinTimeoutMinutes = miscBundle[4] as Int,
+                    unlockWithBiometrics = miscBundle[5] as Boolean,
+                    protectSettingsOnly = miscBundle[6] as Boolean,
+                    logRetentionDays = miscBundle[7] as Int,
                 )
             }.combine(settingsRepository.maxConcurrentTransfers) { uiState, maxConcurrent ->
                 uiState.copy(maxConcurrentTransfers = maxConcurrent)
@@ -326,6 +339,26 @@ class SettingsViewModel
 
         fun setEnableHaptics(enabled: Boolean) {
             viewModelScope.launch { settingsRepository.setEnableHaptics(enabled) }
+        }
+
+        // ---------------------------------------------------------------------
+        // Security
+        // ---------------------------------------------------------------------
+
+        fun setPinProtectionEnabled(enabled: Boolean) {
+            viewModelScope.launch { settingsRepository.setPinProtectionEnabled(enabled) }
+        }
+
+        fun setPinTimeoutMinutes(minutes: Int) {
+            viewModelScope.launch { settingsRepository.setPinTimeoutMinutes(minutes) }
+        }
+
+        fun setUnlockWithBiometrics(enabled: Boolean) {
+            viewModelScope.launch { settingsRepository.setUnlockWithBiometrics(enabled) }
+        }
+
+        fun setProtectSettingsOnly(enabled: Boolean) {
+            viewModelScope.launch { settingsRepository.setProtectSettingsOnly(enabled) }
         }
 
         // ---------------------------------------------------------------------

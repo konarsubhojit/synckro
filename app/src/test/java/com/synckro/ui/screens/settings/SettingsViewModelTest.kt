@@ -128,6 +128,10 @@ class SettingsViewModelTest {
                 assertFalse(it.notifyOnSuccess)
                 assertTrue(it.notifyOnFailure)
                 assertTrue(it.enableHaptics)
+                assertFalse(it.pinProtectionEnabled)
+                assertEquals(2, it.pinTimeoutMinutes)
+                assertFalse(it.unlockWithBiometrics)
+                assertFalse(it.protectSettingsOnly)
                 assertEquals(30, it.logRetentionDays)
             }
             // Reference s so the linter doesn't complain.
@@ -262,6 +266,21 @@ class SettingsViewModelTest {
             val vm = newVm()
             vm.setEnableHaptics(false)
             assertFalse(repo.enableHaptics.first())
+        }
+
+    @Test
+    fun `security settings persist values`() =
+        testScope.runTest {
+            val vm = newVm()
+            vm.setPinProtectionEnabled(true)
+            vm.setPinTimeoutMinutes(5)
+            vm.setUnlockWithBiometrics(true)
+            vm.setProtectSettingsOnly(true)
+
+            assertTrue(repo.pinProtectionEnabled.first())
+            assertEquals(5, repo.pinTimeoutMinutes.first())
+            assertTrue(repo.unlockWithBiometrics.first())
+            assertTrue(repo.protectSettingsOnly.first())
         }
 
     @Test
