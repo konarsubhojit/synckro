@@ -76,9 +76,9 @@ data class StatusOverview(
     }
 
     /**
-     * One row in the "Account info" card. Synthesised from the connected
-     * sync pairs so we don't need a second observer on the Accounts table —
-     * the email is looked up from
+     * One row in the "Account info" card. Synthesised from connected sync
+     * pairs plus persisted accounts, so accounts appear even before the first
+     * pair is configured. The email/display label is looked up from
      * [com.synckro.ui.screens.home.HomeViewModel.UiState.accountEmailById].
      *
      * @param provider The cloud provider this account belongs to.
@@ -122,6 +122,7 @@ fun buildStatusOverview(
     progressByPairId: Map<Long, com.synckro.domain.sync.TransferProgress>,
     lastSummaryByPairId: Map<Long, PairSummary>,
     accountEmailById: Map<String, String>,
+    accountProviderById: Map<String, CloudProviderType>,
     pendingConflictCount: Int,
 ): StatusOverview {
     // --- Sync status ---
@@ -172,6 +173,10 @@ fun buildStatusOverview(
     for (p in pairs) {
         val key = p.provider to p.accountId
         countByKey[key] = (countByKey[key] ?: 0) + 1
+    }
+    for ((accountId, provider) in accountProviderById) {
+        val key = provider to accountId
+        if (key !in countByKey) countByKey[key] = 0
     }
     val accountRows =
         countByKey.map { (key, count) ->

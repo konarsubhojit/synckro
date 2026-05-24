@@ -26,6 +26,7 @@ class StatusOverviewTest {
                 progressByPairId = emptyMap(),
                 lastSummaryByPairId = emptyMap(),
                 accountEmailById = emptyMap(),
+                accountProviderById = emptyMap(),
                 pendingConflictCount = 0,
             )
         assertEquals(0, overview.syncStatus.totalPairs)
@@ -67,6 +68,7 @@ class StatusOverviewTest {
                 progressByPairId = progress,
                 lastSummaryByPairId = emptyMap(),
                 accountEmailById = emptyMap(),
+                accountProviderById = emptyMap(),
                 pendingConflictCount = 0,
             )
         val s = overview.syncStatus
@@ -97,6 +99,7 @@ class StatusOverviewTest {
                     ),
                 lastSummaryByPairId = emptyMap(),
                 accountEmailById = emptyMap(),
+                accountProviderById = emptyMap(),
                 pendingConflictCount = 0,
             )
         assertEquals(0.25f, overview.syncStatus.fraction!!, 1e-3f)
@@ -129,6 +132,7 @@ class StatusOverviewTest {
                             ),
                     ),
                 accountEmailById = emptyMap(),
+                accountProviderById = emptyMap(),
                 pendingConflictCount = 0,
             )
         val r = overview.recentChanges
@@ -161,6 +165,11 @@ class StatusOverviewTest {
                         "acc-1" to "alice@example.com",
                         "acc-2" to "bob@example.com",
                     ),
+                accountProviderById =
+                    mapOf(
+                        "acc-1" to CloudProviderType.GOOGLE_DRIVE,
+                        "acc-2" to CloudProviderType.ONEDRIVE,
+                    ),
                 pendingConflictCount = 0,
             )
         assertEquals(3, overview.accountRows.size)
@@ -189,6 +198,7 @@ class StatusOverviewTest {
                 progressByPairId = emptyMap(),
                 lastSummaryByPairId = emptyMap(),
                 accountEmailById = emptyMap(),
+                accountProviderById = emptyMap(),
                 pendingConflictCount = 4,
             )
         val w = overview.warnings
@@ -207,9 +217,36 @@ class StatusOverviewTest {
                 progressByPairId = emptyMap(),
                 lastSummaryByPairId = emptyMap(),
                 accountEmailById = emptyMap(),
+                accountProviderById = emptyMap(),
                 pendingConflictCount = 0,
             )
         assertFalse(overview.warnings.hasAny)
+    }
+
+    @Test
+    fun `accounts without sync pairs are still surfaced in account rows`() {
+        val overview =
+            buildStatusOverview(
+                pairs = emptyList(),
+                syncingPairIds = emptySet(),
+                progressByPairId = emptyMap(),
+                lastSummaryByPairId = emptyMap(),
+                accountEmailById =
+                    mapOf(
+                        "acc-1" to "alice@example.com",
+                    ),
+                accountProviderById =
+                    mapOf(
+                        "acc-1" to CloudProviderType.GOOGLE_DRIVE,
+                    ),
+                pendingConflictCount = 0,
+            )
+        assertEquals(1, overview.accountRows.size)
+        val row = overview.accountRows.single()
+        assertEquals(CloudProviderType.GOOGLE_DRIVE, row.provider)
+        assertEquals("acc-1", row.accountId)
+        assertEquals("alice@example.com", row.email)
+        assertEquals(0, row.pairCount)
     }
 
     private fun pair(

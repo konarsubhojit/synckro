@@ -63,6 +63,7 @@ fun StatusScreen(
             state.progressByPairId,
             state.lastSummaryByPairId,
             state.accountEmailById,
+            state.accountProviderById,
             state.pendingConflictCount,
         ) {
             buildStatusOverview(
@@ -71,6 +72,7 @@ fun StatusScreen(
                 progressByPairId = state.progressByPairId,
                 lastSummaryByPairId = state.lastSummaryByPairId,
                 accountEmailById = state.accountEmailById,
+                accountProviderById = state.accountProviderById,
                 pendingConflictCount = state.pendingConflictCount,
             )
         }
