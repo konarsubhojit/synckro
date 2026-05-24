@@ -73,10 +73,11 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.synckro.R
-import com.synckro.data.repository.DarkModePreference
-import com.synckro.data.repository.LogRetentionPreference
+import com.synckro.data.repository.AppLanguagePreference
 import com.synckro.data.repository.AutoSyncSchedule
+import com.synckro.data.repository.DarkModePreference
 import com.synckro.data.repository.InternetConnectionScope
+import com.synckro.data.repository.LogRetentionPreference
 import com.synckro.data.repository.SettingsRepository
 import com.synckro.domain.model.ConflictPolicy
 import kotlinx.coroutines.launch
@@ -779,6 +780,12 @@ private fun AppearanceSettingsContent(
         contentPadding = contentPadding,
     ) {
         item {
+            LanguageRow(
+                selected = state.appLanguage,
+                onSelected = viewModel::setAppLanguage,
+            )
+        }
+        item {
             DarkModeRow(
                 selected = state.darkMode,
                 onSelected = viewModel::setDarkMode,
@@ -1221,6 +1228,49 @@ private fun ActionRow(
             color = bodyColor,
             overflow = TextOverflow.Ellipsis,
         )
+    }
+}
+
+@Composable
+private fun LanguageRow(
+    selected: AppLanguagePreference,
+    onSelected: (AppLanguagePreference) -> Unit,
+) {
+    Column(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+    ) {
+        Text(
+            stringResource(R.string.settings_language_title),
+            style = MaterialTheme.typography.bodyLarge,
+        )
+        Text(
+            stringResource(R.string.settings_language_relaunch_hint),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(4.dp))
+        listOf(
+            AppLanguagePreference.SYSTEM to R.string.settings_language_system,
+            AppLanguagePreference.ENGLISH to R.string.settings_language_english,
+        ).forEach { (language, label) ->
+            Row(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .selectable(
+                            selected = selected == language,
+                            onClick = { onSelected(language) },
+                        )
+                        .padding(vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                RadioButton(selected = selected == language, onClick = null)
+                Text(stringResource(label), modifier = Modifier.padding(start = 8.dp))
+            }
+        }
     }
 }
 

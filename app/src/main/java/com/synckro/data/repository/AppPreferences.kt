@@ -16,6 +16,20 @@ enum class DarkModePreference {
 }
 
 /**
+ * User-facing app language preference.
+ *
+ * - [SYSTEM] follows the device language.
+ * - [ENGLISH] forces English strings where translations exist.
+ * - [languageTag] is `null` for [SYSTEM] and an IETF BCP 47 tag for fixed-language options.
+ */
+enum class AppLanguagePreference(
+    val languageTag: String?,
+) {
+    SYSTEM(null),
+    ENGLISH("en"),
+}
+
+/**
  * Allowed log retention windows surfaced in the Settings screen. The stored
  * value is the integer number of days so the schema is forward-compatible with
  * additional presets without an enum migration.

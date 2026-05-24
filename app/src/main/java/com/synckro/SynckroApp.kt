@@ -4,8 +4,12 @@ import android.app.Application
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.os.Build
+import androidx.appcompat.app.AppCompatDelegate
+import androidx.core.os.LocaleListCompat
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
+import com.synckro.data.repository.AppLanguagePreference
+import com.synckro.data.repository.SettingsRepository
 import com.synckro.data.worker.SyncWorker
 import com.synckro.providers.onedrive.OneDriveMultiAccountStartupProbe
 import com.synckro.util.logging.FileLoggingTree
@@ -15,7 +19,9 @@ import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import timber.log.Timber
 import javax.inject.Inject
 
@@ -38,10 +44,13 @@ class SynckroApp :
 
     @Inject lateinit var oneDriveMultiAccountStartupProbe: OneDriveMultiAccountStartupProbe
 
+    @Inject lateinit var settingsRepository: SettingsRepository
+
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override fun onCreate() {
         super.onCreate()
+        applicationScope.launch { applyLanguagePreference() }
         createNotificationChannels()
         applicationScope.launch {
             oneDriveMultiAccountStartupProbe.runIfNeeded()
@@ -149,4 +158,16 @@ class SynckroApp :
                 .setWorkerFactory(workerFactory)
                 .setMinimumLoggingLevel(if (BuildConfig.DEBUG) android.util.Log.DEBUG else android.util.Log.INFO)
                 .build()
+
+    private suspend fun applyLanguagePreference() {
+        val languagePreference = settingsRepository.appLanguage.first()
+        val locales =
+            when (languagePreference) {
+                AppLanguagePreference.SYSTEM -> LocaleListCompat.getEmptyLocaleList()
+                AppLanguagePreference.ENGLISH -> LocaleListCompat.forLanguageTags("en")
+            }
+        withContext(Dispatchers.Main.immediate) {
+            AppCompatDelegate.setApplicationLocales(locales)
+        }
+    }
 }

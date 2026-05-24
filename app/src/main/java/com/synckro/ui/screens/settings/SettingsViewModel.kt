@@ -5,6 +5,7 @@ import android.content.Intent
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.synckro.BuildConfig
+import com.synckro.data.repository.AppLanguagePreference
 import com.synckro.data.repository.AutoSyncSchedule
 import com.synckro.data.repository.DarkModePreference
 import com.synckro.data.repository.InternetConnectionScope
@@ -72,6 +73,7 @@ class SettingsViewModel
             val syncOnSlow2g: Boolean = false,
             // Appearance
             val darkMode: DarkModePreference = DarkModePreference.SYSTEM,
+            val appLanguage: AppLanguagePreference = AppLanguagePreference.SYSTEM,
             val dynamicColor: Boolean = false,
             val respectFontScale: Boolean = true,
             // Notifications
@@ -145,9 +147,10 @@ class SettingsViewModel
                 },
                 combine(
                     settingsRepository.darkMode,
+                    settingsRepository.appLanguage,
                     settingsRepository.dynamicColor,
                     settingsRepository.respectFontScale,
-                ) { dark, dynamic, font -> arrayOf(dark, dynamic, font) },
+                ) { dark, language, dynamic, font -> arrayOf(dark, language, dynamic, font) },
                 combine(
                     settingsRepository.notifyOnSuccess,
                     settingsRepository.notifyOnFailure,
@@ -189,8 +192,9 @@ class SettingsViewModel
                     syncOnMobileRoaming = syncBundle[19] as Boolean,
                     syncOnSlow2g = syncBundle[20] as Boolean,
                     darkMode = appearanceBundle[0] as DarkModePreference,
-                    dynamicColor = appearanceBundle[1] as Boolean,
-                    respectFontScale = appearanceBundle[2] as Boolean,
+                    appLanguage = appearanceBundle[1] as AppLanguagePreference,
+                    dynamicColor = appearanceBundle[2] as Boolean,
+                    respectFontScale = appearanceBundle[3] as Boolean,
                     notifyOnSuccess = miscBundle[0] as Boolean,
                     notifyOnFailure = miscBundle[1] as Boolean,
                     enableHaptics = miscBundle[2] as Boolean,
@@ -315,6 +319,10 @@ class SettingsViewModel
 
         fun setDarkMode(mode: DarkModePreference) {
             viewModelScope.launch { settingsRepository.setDarkMode(mode) }
+        }
+
+        fun setAppLanguage(language: AppLanguagePreference) {
+            viewModelScope.launch { settingsRepository.setAppLanguage(language) }
         }
 
         fun setDynamicColor(enabled: Boolean) {

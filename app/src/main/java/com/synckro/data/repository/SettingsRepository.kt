@@ -271,6 +271,18 @@ class SettingsRepository
             dataStore.edit { it[KEY_DARK_MODE] = mode.name }
         }
 
+        /** App language preference (System / English). */
+        val appLanguage: Flow<AppLanguagePreference> =
+            dataStore.data.map { prefs ->
+                prefs[KEY_APP_LANGUAGE]
+                    ?.let { runCatching { AppLanguagePreference.valueOf(it) }.getOrNull() }
+                    ?: DEFAULT_APP_LANGUAGE
+            }
+
+        suspend fun setAppLanguage(language: AppLanguagePreference) {
+            dataStore.edit { it[KEY_APP_LANGUAGE] = language.name }
+        }
+
         /**
          * Whether to opt in to Material 3 dynamic color (Android 12+).
          *
@@ -453,6 +465,7 @@ class SettingsRepository
             internal val KEY_SYNC_ON_SLOW_2G = booleanPreferencesKey("sync_on_slow_2g")
 
             internal val KEY_DARK_MODE = stringPreferencesKey("dark_mode")
+            internal val KEY_APP_LANGUAGE = stringPreferencesKey("app_language")
             internal val KEY_DYNAMIC_COLOR = booleanPreferencesKey("dynamic_color")
             internal val KEY_RESPECT_FONT_SCALE = booleanPreferencesKey("respect_font_scale")
 
@@ -500,6 +513,7 @@ class SettingsRepository
             const val MAX_PARALLEL_TRANSFERS_PER_DIRECTION = 5
 
             internal val DEFAULT_DARK_MODE = DarkModePreference.SYSTEM
+            internal val DEFAULT_APP_LANGUAGE = AppLanguagePreference.SYSTEM
             internal const val DEFAULT_DYNAMIC_COLOR = false
             internal const val DEFAULT_RESPECT_FONT_SCALE = true
 

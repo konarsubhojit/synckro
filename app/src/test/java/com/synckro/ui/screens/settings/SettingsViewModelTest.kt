@@ -2,6 +2,7 @@ package com.synckro.ui.screens.settings
 
 import android.content.Context
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
+import com.synckro.data.repository.AppLanguagePreference
 import com.synckro.data.repository.AutoSyncSchedule
 import com.synckro.data.repository.DarkModePreference
 import com.synckro.data.repository.InternetConnectionScope
@@ -123,6 +124,7 @@ class SettingsViewModelTest {
                 assertFalse(it.syncOnMobileRoaming)
                 assertFalse(it.syncOnSlow2g)
                 assertEquals(DarkModePreference.SYSTEM, it.darkMode)
+                assertEquals(AppLanguagePreference.SYSTEM, it.appLanguage)
                 assertFalse(it.dynamicColor)
                 assertTrue(it.respectFontScale)
                 assertFalse(it.notifyOnSuccess)
@@ -185,6 +187,14 @@ class SettingsViewModelTest {
             val vm = newVm()
             vm.setDarkMode(DarkModePreference.DARK)
             assertEquals(DarkModePreference.DARK, repo.darkMode.first())
+        }
+
+    @Test
+    fun `setAppLanguage persists enum`() =
+        testScope.runTest {
+            val vm = newVm()
+            vm.setAppLanguage(AppLanguagePreference.ENGLISH)
+            assertEquals(AppLanguagePreference.ENGLISH, repo.appLanguage.first())
         }
 
     @Test
