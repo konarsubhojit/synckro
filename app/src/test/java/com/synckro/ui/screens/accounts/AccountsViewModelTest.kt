@@ -271,6 +271,87 @@ class AccountsViewModelTest {
             assertNull(vm.state.value.highlightedAccountId)
         }
 
+    @Test
+    fun `startRename stages PendingRename for the given account`() =
+        runTest {
+            val account = account("gd-1", CloudProviderType.GOOGLE_DRIVE, "alpha@gmail.com")
+            val registry =
+                AuthManagerRegistry(
+                    mapOf(
+                        CloudProviderType.GOOGLE_DRIVE to manager("Google Drive", CloudProviderType.GOOGLE_DRIVE, listOf(account)),
+                    ),
+                )
+            val vm = createVm(registry)
+            advanceUntilIdle()
+
+            vm.startRename(account)
+
+            val pending = vm.state.value.pendingRename
+            assertNotNull(pending)
+            assertEquals(account, pending?.account)
+        }
+
+    @Test
+    fun `cancelRename clears pendingRename without changes`() =
+        runTest {
+            val account = account("gd-1", CloudProviderType.GOOGLE_DRIVE, "alpha@gmail.com")
+            val registry =
+                AuthManagerRegistry(
+                    mapOf(
+                        CloudProviderType.GOOGLE_DRIVE to manager("Google Drive", CloudProviderType.GOOGLE_DRIVE, listOf(account)),
+                    ),
+                )
+            val vm = createVm(registry)
+            advanceUntilIdle()
+
+            vm.startRename(account)
+            assertNotNull(vm.state.value.pendingRename)
+
+            vm.cancelRename()
+            assertNull(vm.state.value.pendingRename)
+        }
+
+    @Test
+    fun `confirmRename calls repository rename with trimmed name`() =
+        runTest {
+            val account = account("gd-1", CloudProviderType.GOOGLE_DRIVE, "alpha@gmail.com")
+            val registry =
+                AuthManagerRegistry(
+                    mapOf(
+                        CloudProviderType.GOOGLE_DRIVE to manager("Google Drive", CloudProviderType.GOOGLE_DRIVE, listOf(account)),
+                    ),
+                )
+            val vm = createVm(registry)
+            advanceUntilIdle()
+
+            vm.startRename(account)
+            vm.confirmRename("  New Name  ")
+            advanceUntilIdle()
+
+            io.mockk.coVerify { accountRepository.rename(account.id, "New Name") }
+            assertNull(vm.state.value.pendingRename)
+        }
+
+    @Test
+    fun `confirmRename is a no-op when name is blank`() =
+        runTest {
+            val account = account("gd-1", CloudProviderType.GOOGLE_DRIVE, "alpha@gmail.com")
+            val registry =
+                AuthManagerRegistry(
+                    mapOf(
+                        CloudProviderType.GOOGLE_DRIVE to manager("Google Drive", CloudProviderType.GOOGLE_DRIVE, listOf(account)),
+                    ),
+                )
+            val vm = createVm(registry)
+            advanceUntilIdle()
+
+            vm.startRename(account)
+            vm.confirmRename("   ")
+            advanceUntilIdle()
+
+            io.mockk.coVerify(exactly = 0) { accountRepository.rename(any(), any()) }
+        }
+
     private fun account(
         id: String,
         provider: CloudProviderType,

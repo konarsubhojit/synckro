@@ -276,6 +276,23 @@ class GoogleDriveRestClient
         }
 
         /**
+         * Fetches account-level storage quota from `GET /about?fields=storageQuota`.
+         *
+         * @param token Bearer access token.
+         * @return The [DriveAbout] response containing the [DriveStorageQuota] block.
+         */
+        internal suspend fun getAbout(token: String): DriveAbout {
+            val url =
+                "$driveBaseUrl/about"
+                    .toHttpUrl()
+                    .newBuilder()
+                    .addQueryParameter("fields", "storageQuota")
+                    .build()
+            val resp = executeWithRetry(buildGetRequest(url.toString(), token))
+            return parseBody(resp)
+        }
+
+        /**
          * Retrieves incremental changes since [pageToken].
          *
          * - `pageToken == null`: calls `changes/startPageToken` to establish a baseline

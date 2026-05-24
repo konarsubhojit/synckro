@@ -1,5 +1,6 @@
 package com.synckro.ui.screens.accounts
 
+import android.text.format.Formatter
 import androidx.activity.ComponentActivity
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
@@ -20,14 +21,22 @@ import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Cloud
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.DriveEta
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.DriveFileRenameOutline
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -35,8 +44,10 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -50,6 +61,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -59,6 +71,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.synckro.R
 import com.synckro.domain.auth.Account
+import com.synckro.domain.model.CloudProviderType
+import com.synckro.domain.provider.StorageQuota
 import com.synckro.ui.auth.ActivityAuthUiHost
 import com.synckro.ui.components.SectionCard
 
@@ -99,6 +113,14 @@ fun AccountsScreen(
             onCancel = { viewModel.cancelDisconnect() },
             onDelete = { viewModel.confirmDisconnectDelete() },
             onReassign = { toAccountId -> viewModel.confirmDisconnectReassign(toAccountId) },
+        )
+    }
+
+    state.pendingRename?.let { pending ->
+        RenameDialog(
+            account = pending.account,
+            onCancel = { viewModel.cancelRename() },
+            onConfirm = { newName -> viewModel.confirmRename(newName) },
         )
     }
 
@@ -160,25 +182,33 @@ fun AccountsScreen(
             }
 
             state.rows.forEach { row ->
-                AccountProviderCard(
+                AccountProviderSection(
                     row = row,
                     highlightedAccountId = state.highlightedAccountId,
                     onConnect = {
                         viewModel.connect(row.providerKey) { manager -> manager.signIn(host) }
                     },
-                    onDisconnect = { viewModel.disconnect(it) },
+                    onSignOut = { viewModel.disconnect(it) },
+                    onRename = { viewModel.startRename(it) },
+                    onRemove = { viewModel.remove(it) },
                 )
             }
         }
     }
 }
 
+// ---------------------------------------------------------------------------
+// Provider section: one section per provider type
+// ---------------------------------------------------------------------------
+
 @Composable
-private fun AccountProviderCard(
+private fun AccountProviderSection(
     row: AccountsViewModel.AccountRow,
+    highlightedAccountId: String?,
     onConnect: () -> Unit,
-    onDisconnect: (Account) -> Unit,
-    highlightedAccountId: String? = null,
+    onSignOut: (Account) -> Unit,
+    onRename: (Account) -> Unit,
+    onRemove: (Account) -> Unit,
 ) {
     val needsReauth = row.needsReauth
     val cardColor =
@@ -192,18 +222,24 @@ private fun AccountProviderCard(
         containerColor = cardColor,
         contentColor = MaterialTheme.colorScheme.onSurface,
     ) {
-        // Provider header
+        // Provider header row
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(
-                text = row.providerDisplayName,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                ProviderIcon(providerKey = row.providerKey)
+                Text(
+                    text = row.providerDisplayName,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+            }
             if (row.accounts.isNotEmpty() && !needsReauth) {
                 Icon(
                     Icons.Default.CheckCircle,
@@ -248,7 +284,7 @@ private fun AccountProviderCard(
             }
         }
 
-        // Connected accounts
+        // Connected account cards
         if (row.accounts.isEmpty()) {
             Text(
                 text = stringResource(R.string.accounts_empty),
@@ -258,64 +294,79 @@ private fun AccountProviderCard(
         } else {
             HorizontalDivider()
             row.accounts.forEach { item ->
-                AccountItemRow(
+                AccountCard(
                     item = item,
+                    providerDisplayName = row.providerDisplayName,
                     isBusy = row.isBusy,
                     isHighlighted = item.account.id == highlightedAccountId,
-                    onDisconnect = { onDisconnect(item.account) },
+                    onSignOut = { onSignOut(item.account) },
                     onReauth = onConnect,
+                    onRename = { onRename(item.account) },
+                    onRemove = { onRemove(item.account) },
                 )
             }
         }
 
-        // Connect / Add another / Re-authenticate button
-        Button(
-            onClick = onConnect,
-            enabled = !row.isBusy && row.isConfigured,
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            if (row.isBusy) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(18.dp),
-                    strokeWidth = 2.dp,
-                    color = MaterialTheme.colorScheme.onPrimary,
-                )
-            } else {
-                val label =
-                    when {
-                        row.accounts.isNotEmpty() && !needsReauth ->
-                            stringResource(R.string.accounts_add_another_format, row.providerDisplayName)
-                        needsReauth ->
-                            stringResource(R.string.accounts_reauth_button, row.providerDisplayName)
-                        else ->
-                            stringResource(R.string.accounts_connect_format, row.providerDisplayName)
-                    }
-                Text(label, fontWeight = FontWeight.Medium)
-            }
-        }
+        // "Add account" pill button
+        AddAccountButton(
+            row = row,
+            onConnect = onConnect,
+        )
     }
 }
 
+// ---------------------------------------------------------------------------
+// Provider icon
+// ---------------------------------------------------------------------------
+
+@Composable
+private fun ProviderIcon(
+    providerKey: String,
+    modifier: Modifier = Modifier,
+) {
+    val icon =
+        when (providerKey) {
+            CloudProviderType.ONEDRIVE.name -> Icons.Default.Cloud
+            CloudProviderType.GOOGLE_DRIVE.name -> Icons.Default.DriveEta
+            else -> Icons.Default.Cloud
+        }
+    Icon(
+        imageVector = icon,
+        contentDescription = null,
+        tint = MaterialTheme.colorScheme.primary,
+        modifier = modifier.size(22.dp),
+    )
+}
+
+// ---------------------------------------------------------------------------
+// Account card
+// ---------------------------------------------------------------------------
+
 /**
- * A single row showing an account's avatar initials, email / display name,
- * an optional per-account Re-authenticate button, and a Disconnect button.
+ * A card showing one connected account's details (avatar, provider name,
+ * display name, email, storage usage) plus a three-dot overflow menu with
+ * "Rename", "Sign out", and "Remove" actions.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun AccountItemRow(
+private fun AccountCard(
     item: AccountsViewModel.AccountItem,
+    providerDisplayName: String,
     isBusy: Boolean,
-    onDisconnect: () -> Unit,
+    onSignOut: () -> Unit,
     onReauth: () -> Unit,
+    onRename: () -> Unit,
+    onRemove: () -> Unit,
     isHighlighted: Boolean = false,
 ) {
-    val label = item.account.email ?: item.account.displayName
+    val account = item.account
+    val label = account.email ?: account.displayName
     val initial = label.firstOrNull()?.uppercaseChar()?.toString() ?: "?"
 
-    // Phase 5d: animate a brief background tint when this row is the target of a
-    // reauth deep-link, then fade back to the default. The VM clears
-    // highlightedAccountId after ~2 s, which drives [isHighlighted] back to false
-    // and animates the colour out via [animateColorAsState].
+    var menuExpanded by remember { mutableStateOf(false) }
+
+    // Phase 5d: animate a brief background tint when this card is the target
+    // of a reauth deep-link, then fade back to the default.
     val highlightColor =
         animateColorAsState(
             targetValue =
@@ -325,87 +376,305 @@ private fun AccountItemRow(
                     androidx.compose.ui.graphics.Color.Transparent
                 },
             animationSpec = tween(durationMillis = 350),
-            label = "AccountItemRow.highlight",
+            label = "AccountCard.highlight",
         )
 
     val bringIntoViewRequester = remember { BringIntoViewRequester() }
     LaunchedEffect(isHighlighted) {
         if (isHighlighted) {
-            // Auto-scroll the surrounding scroll container so the highlighted row is
-            // visible even when it was off-screen at deep-link time.
             runCatching { bringIntoViewRequester.bringIntoView() }
         }
     }
 
-    Row(
+    val context = LocalContext.current
+
+    Surface(
         modifier =
             Modifier
                 .fillMaxWidth()
                 .bringIntoViewRequester(bringIntoViewRequester)
-                .background(
-                    color = highlightColor.value,
-                    shape = MaterialTheme.shapes.small,
-                )
                 .padding(vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        shape = MaterialTheme.shapes.medium,
+        color =
+            if (item.needsReauth) {
+                MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f)
+            } else {
+                MaterialTheme.colorScheme.surface.copy(alpha = 0.6f)
+            },
+        tonalElevation = 1.dp,
     ) {
-        val avatarDescription = stringResource(R.string.accounts_avatar_description, label)
-        Box(
+        Column(
             modifier =
                 Modifier
-                    .size(36.dp)
-                    .background(
-                        color = MaterialTheme.colorScheme.primaryContainer,
-                        shape = CircleShape,
-                    )
-                    .semantics { contentDescription = avatarDescription },
-            contentAlignment = Alignment.Center,
+                    .background(highlightColor.value)
+                    .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            Text(
-                text = initial,
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onPrimaryContainer,
-                fontWeight = FontWeight.Bold,
-            )
-        }
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = label,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurface,
-                fontWeight = FontWeight.Medium,
-            )
-            if (item.needsReauth) {
-                Text(
-                    text = stringResource(R.string.accounts_reauth_account_hint),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.error,
-                )
-            } else {
-                Text(
-                    text = stringResource(R.string.accounts_signed_in_format, label),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-            }
-        }
-        if (item.needsReauth) {
-            OutlinedButton(
-                onClick = onReauth,
-                enabled = !isBusy,
+            // Top row: avatar + name/email column + overflow button
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Text(stringResource(R.string.accounts_reauth_account))
+                // Avatar with initials
+                val avatarDescription = stringResource(R.string.accounts_avatar_description, label)
+                Box(
+                    modifier =
+                        Modifier
+                            .size(40.dp)
+                            .background(
+                                color = MaterialTheme.colorScheme.primaryContainer,
+                                shape = CircleShape,
+                            )
+                            .semantics { contentDescription = avatarDescription },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = initial,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+
+                // Name / provider / reauth columns
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    // Provider name (small label)
+                    Text(
+                        text = providerDisplayName,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    // Display name
+                    Text(
+                        text = account.displayName,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    // Email (if different from displayName)
+                    if (account.email != null && account.email != account.displayName) {
+                        Text(
+                            text = account.email,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    // Reauth hint
+                    if (item.needsReauth) {
+                        Text(
+                            text = stringResource(R.string.accounts_reauth_account_hint),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                }
+
+                // Overflow menu
+                Box {
+                    val overflowDesc = stringResource(R.string.accounts_overflow_menu_description)
+                    IconButton(
+                        onClick = { menuExpanded = true },
+                        enabled = !isBusy,
+                        modifier = Modifier.semantics { contentDescription = overflowDesc },
+                    ) {
+                        Icon(Icons.Default.MoreVert, contentDescription = null)
+                    }
+                    DropdownMenu(
+                        expanded = menuExpanded,
+                        onDismissRequest = { menuExpanded = false },
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.accounts_rename)) },
+                            leadingIcon = {
+                                Icon(Icons.Default.DriveFileRenameOutline, contentDescription = null)
+                            },
+                            onClick = {
+                                menuExpanded = false
+                                onRename()
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.accounts_sign_out)) },
+                            leadingIcon = {
+                                Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null)
+                            },
+                            onClick = {
+                                menuExpanded = false
+                                if (item.needsReauth) onReauth() else onSignOut()
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    stringResource(R.string.accounts_remove),
+                                    color = MaterialTheme.colorScheme.error,
+                                )
+                            },
+                            leadingIcon = {
+                                Icon(
+                                    Icons.Default.Delete,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.error,
+                                )
+                            },
+                            onClick = {
+                                menuExpanded = false
+                                onRemove()
+                            },
+                        )
+                    }
+                }
             }
-        }
-        OutlinedButton(
-            onClick = onDisconnect,
-            enabled = !isBusy,
-        ) {
-            Text(stringResource(R.string.accounts_disconnect))
+
+            // Storage usage line
+            StorageUsageRow(quota = item.storageQuota, context = context)
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// Storage usage
+// ---------------------------------------------------------------------------
+
+@Composable
+private fun StorageUsageRow(
+    quota: StorageQuota?,
+    context: android.content.Context,
+) {
+    when {
+        quota == null -> {
+            // Quota not yet loaded — show a subtle placeholder
+            Text(
+                text = stringResource(R.string.accounts_storage_fetching),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        quota.totalBytes > 0L -> {
+            val usedFormatted = Formatter.formatShortFileSize(context, quota.usedBytes)
+            val totalFormatted = Formatter.formatShortFileSize(context, quota.totalBytes)
+            val percent = (quota.usedBytes * 100L / quota.totalBytes).toInt().coerceIn(0, 100)
+            val usageText =
+                stringResource(
+                    R.string.accounts_storage_used_format,
+                    usedFormatted,
+                    percent,
+                    totalFormatted,
+                )
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    text = usageText,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                LinearProgressIndicator(
+                    progress = { percent / 100f },
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .height(4.dp),
+                    color =
+                        if (percent >= 90) {
+                            MaterialTheme.colorScheme.error
+                        } else {
+                            MaterialTheme.colorScheme.primary
+                        },
+                    trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// "Add account" pill button
+// ---------------------------------------------------------------------------
+
+@Composable
+private fun AddAccountButton(
+    row: AccountsViewModel.AccountRow,
+    onConnect: () -> Unit,
+) {
+    val needsReauth = row.needsReauth
+    val label =
+        when {
+            row.isBusy -> null
+            needsReauth -> stringResource(R.string.accounts_reauth_button, row.providerDisplayName)
+            row.accounts.isEmpty() -> stringResource(R.string.accounts_connect_format, row.providerDisplayName)
+            else -> stringResource(R.string.accounts_add_account)
+        }
+
+    Button(
+        onClick = onConnect,
+        enabled = !row.isBusy && row.isConfigured,
+        shape = RoundedCornerShape(50),
+        modifier = Modifier.fillMaxWidth(),
+        colors =
+            ButtonDefaults.buttonColors(
+                containerColor =
+                    if (needsReauth) {
+                        MaterialTheme.colorScheme.error
+                    } else {
+                        MaterialTheme.colorScheme.primary
+                    },
+            ),
+    ) {
+        if (row.isBusy) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(18.dp),
+                strokeWidth = 2.dp,
+                color = MaterialTheme.colorScheme.onPrimary,
+            )
+        } else {
+            Text(label ?: "", fontWeight = FontWeight.Medium)
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Rename dialog
+// ---------------------------------------------------------------------------
+
+@Composable
+private fun RenameDialog(
+    account: Account,
+    onCancel: () -> Unit,
+    onConfirm: (String) -> Unit,
+) {
+    var text by remember(account.id) { mutableStateOf(account.displayName) }
+
+    AlertDialog(
+        onDismissRequest = onCancel,
+        title = { Text(stringResource(R.string.accounts_rename_dialog_title)) },
+        text = {
+            OutlinedTextField(
+                value = text,
+                onValueChange = { text = it },
+                label = { Text(stringResource(R.string.accounts_rename_dialog_label)) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onConfirm(text) },
+                enabled = text.trim().isNotEmpty(),
+            ) {
+                Text(stringResource(R.string.accounts_rename_dialog_confirm))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onCancel) {
+                Text(stringResource(R.string.accounts_rename_dialog_cancel))
+            }
+        },
+    )
+}
+
+// ---------------------------------------------------------------------------
+// Disconnect confirmation dialog (unchanged)
+// ---------------------------------------------------------------------------
 
 /**
  * Confirmation dialog shown when the user requests disconnect of an account

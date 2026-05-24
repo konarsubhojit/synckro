@@ -88,6 +88,24 @@ class AccountRepository
         }
 
         /**
+         * Renames the account identified by [id] by updating its local [displayName].
+         *
+         * This only changes the Room row — it does not make any API call to the
+         * cloud provider. The rename is purely cosmetic and survives a token refresh
+         * only if the next reconcile does not overwrite the display name from the
+         * provider cache.
+         *
+         * @param id The account's unique identifier.
+         * @param newDisplayName The new local display name to store.
+         */
+        suspend fun rename(
+            id: String,
+            newDisplayName: String,
+        ) {
+            Timber.i("AccountRepository.rename(id=$id, newDisplayName=$newDisplayName)")
+            accountDao.updateDisplayName(id, newDisplayName)
+        }
+        /**
          * Observes all accounts for a given [providerType], emitting the
          * current snapshot and any subsequent updates whenever the underlying
          * `account` table changes. Emits an empty list when the provider has

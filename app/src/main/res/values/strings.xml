@@ -94,7 +94,12 @@
     <string name="accounts_body">Connect the cloud services you want to sync with. You can add more than one.</string>
     <string name="accounts_connect_format">Connect %1$s</string>
     <string name="accounts_add_another_format">+ Add another %1$s account</string>
+    <string name="accounts_add_account">Add account</string>
     <string name="accounts_disconnect">Disconnect</string>
+    <string name="accounts_sign_out">Sign out</string>
+    <string name="accounts_rename">Rename</string>
+    <string name="accounts_remove">Remove</string>
+    <string name="accounts_overflow_menu_description">Account options</string>
     <string name="accounts_reauth_account">Re-authenticate</string>
     <string name="accounts_empty">No accounts connected yet.</string>
     <string name="accounts_not_configured_format">%1$s is not configured in this build.</string>
@@ -102,6 +107,17 @@
     <string name="accounts_reauth_required">Sign-in expired or access was revoked. Sync stopped — tap to re-authenticate.</string>
     <string name="accounts_reauth_button">Re-authenticate %1$s</string>
     <string name="accounts_avatar_description">Account avatar for %1$s</string>
+    <!-- Storage quota line: "X GB (Y%) of Z TB used" -->
+    <string name="accounts_storage_used_format">%1$s (%2$d%%) of %3$s used</string>
+    <string name="accounts_storage_fetching">Fetching storage usage…</string>
+    <!-- Rename dialog -->
+    <string name="accounts_rename_dialog_title">Rename account</string>
+    <string name="accounts_rename_dialog_label">Display name</string>
+    <string name="accounts_rename_dialog_confirm">Save</string>
+    <string name="accounts_rename_dialog_cancel">Cancel</string>
+    <string name="accounts_rename_failed_format">Couldn\'t rename %1$s.</string>
+    <!-- Remove account (force-local remove without sign-out) -->
+    <string name="accounts_remove_failed_format">Couldn\'t remove %1$s.</string>
     <!-- Disconnect confirmation dialog (orphaned pairs) -->
     <string name="accounts_disconnect_confirm_title">Disconnect %1$s?</string>
     <string name="accounts_disconnect_confirm_body">Disconnecting %1$s will affect %2$d sync pair(s). Choose what to do with them:</string>

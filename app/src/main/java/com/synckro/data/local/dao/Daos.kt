@@ -110,6 +110,21 @@ interface AccountDao {
     suspend fun delete(id: String)
 
     /**
+     * Updates the [displayName] of the account with the given [id].
+     *
+     * Used by the user-facing "rename" action on the Accounts screen to apply
+     * a local nickname without touching the provider's own identity system.
+     *
+     * @param id The primary key of the account to rename.
+     * @param displayName The new local display name.
+     */
+    @Query("UPDATE account SET displayName = :displayName WHERE id = :id")
+    suspend fun updateDisplayName(
+        id: String,
+        displayName: String,
+    )
+
+    /**
      * Atomically reconciles persisted accounts for [providerType] with [cached] (the provider's
      * current token-cache snapshot):
      * - upserts any cached account that is missing or whose metadata (displayName/email) has drifted,

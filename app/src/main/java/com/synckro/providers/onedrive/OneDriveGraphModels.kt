@@ -89,5 +89,18 @@ internal data class GraphUploadStatus(
     val expirationDateTime: String? = null,
 )
 
+/** Drive resource returned by GET /me/drive, carrying quota information. */
+@Serializable
+internal data class GraphDrive(
+    val quota: GraphQuota? = null,
+)
+
+/** Quota block embedded in a [GraphDrive] response. All fields are in bytes. */
+@Serializable
+internal data class GraphQuota(
+    val used: Long? = null,
+    val total: Long? = null,
+)
+
 /** Parses an ISO-8601 UTC timestamp (e.g. "2024-03-15T10:30:00Z") to epoch millis, or null. */
 internal fun parseIso8601(dateTime: String): Long? = runCatching { Instant.parse(dateTime).toEpochMilli() }.getOrNull()

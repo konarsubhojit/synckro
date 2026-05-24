@@ -212,6 +212,17 @@ class OneDriveGraphClient
         }
 
         /**
+         * Fetches drive-level metadata (including quota) from GET `/me/drive`.
+         *
+         * @param token Bearer access token.
+         * @return The [GraphDrive] resource, including the [GraphQuota] block when available.
+         */
+        internal suspend fun getDriveInfo(token: String): GraphDrive {
+            val resp = executeWithRetry(buildGetRequest(graphBaseUrl, token))
+            return parseBody(resp)
+        }
+
+        /**
          * Retrieves incremental changes since [deltaToken].
          *
          * - `deltaToken == null`: calls `root/delta?$deltaToken=latest` to establish a baseline
