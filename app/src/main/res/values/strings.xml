@@ -474,7 +474,7 @@
     <string name="settings_section_preferences">Preferences</string>
     <string name="settings_section_privacy">Privacy &amp; data</string>
     <string name="settings_section_app">App</string>
-    <string name="settings_section_appearance">Appearance</string>
+    <string name="settings_section_appearance">Language &amp; appearance</string>
     <string name="settings_section_sync_defaults">Sync</string>
     <string name="settings_section_notifications">Notifications</string>
     <string name="settings_section_battery">Battery &amp; charging</string>
@@ -519,7 +519,11 @@
     <string name="settings_security_protect_settings_only_body">Anyone can view sync status and run sync manually, but changing configuration still requires unlock.</string>
 
     <!-- Settings: appearance -->
-    <string name="settings_dark_mode_title">Dark mode</string>
+    <string name="settings_language_title">Language</string>
+    <string name="settings_language_relaunch_hint">Change requires app relaunch</string>
+    <string name="settings_language_system">System language</string>
+    <string name="settings_language_english">English</string>
+    <string name="settings_dark_mode_title">Color theme</string>
     <string name="settings_dark_mode_system">System default</string>
     <string name="settings_dark_mode_light">Light</string>
     <string name="settings_dark_mode_dark">Dark</string>

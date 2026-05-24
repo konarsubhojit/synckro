@@ -127,6 +127,21 @@ class SettingsRepositoryTest {
         }
 
     @Test
+    fun `appLanguage defaults to system`() =
+        testScope.runTest {
+            val repo = buildRepository()
+            assertEquals(AppLanguagePreference.SYSTEM, repo.appLanguage.first())
+        }
+
+    @Test
+    fun `setAppLanguage persists enum`() =
+        testScope.runTest {
+            val repo = buildRepository()
+            repo.setAppLanguage(AppLanguagePreference.ENGLISH)
+            assertEquals(AppLanguagePreference.ENGLISH, repo.appLanguage.first())
+        }
+
+    @Test
     fun `seenTooltips defaults to empty set`() =
         testScope.runTest {
             val repo = buildRepository()
