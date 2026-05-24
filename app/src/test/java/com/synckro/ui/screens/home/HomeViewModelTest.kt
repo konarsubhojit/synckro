@@ -754,4 +754,56 @@ class HomeViewModelTest {
             resultsJob.cancel()
             collectJob.cancel()
         }
+
+    // -------------------------------------------------------------------------
+    // Phase 3 — Synced Folders redesign: master + per-pair auto-sync toggles
+    // -------------------------------------------------------------------------
+
+    @Test
+    fun `setGlobalAutoSync persists the flag and reschedules every pair`() =
+        runTest {
+            val pairs = listOf(pair(1L), pair(2L))
+            pairsFlow.value = pairs
+            io.mockk.coEvery { mockSettingsRepository.setGlobalAutoSync(any()) } returns Unit
+            val vm = createVm()
+            val collectJob = launch { vm.state.collect {} }
+            advanceUntilIdle()
+
+            vm.setGlobalAutoSync(false)
+            advanceUntilIdle()
+
+            coVerify { mockSettingsRepository.setGlobalAutoSync(false) }
+            verify { mockScheduler.scheduleOrCancelAll(pairs, false) }
+            collectJob.cancel()
+        }
+
+    @Test
+    fun `setPairAutoSync persists the new flag and reschedules the pair`() =
+        runTest {
+            val original = pair(7L).copy(autoSyncEnabled = true)
+            every { mockSettingsRepository.globalAutoSyncEnabled } returns flowOf(true)
+            val vm = createVm()
+
+            vm.setPairAutoSync(original, false)
+            advanceUntilIdle()
+
+            val saved = slot<SyncPair>()
+            coVerify { mockRepo.upsert(capture(saved)) }
+            assertEquals(7L, saved.captured.id)
+            assertFalse(saved.captured.autoSyncEnabled)
+            verify { mockScheduler.scheduleOrCancel(saved.captured, true) }
+        }
+
+    @Test
+    fun `setPairAutoSync is a no-op when the flag is unchanged`() =
+        runTest {
+            val original = pair(7L).copy(autoSyncEnabled = true)
+            val vm = createVm()
+
+            vm.setPairAutoSync(original, true)
+            advanceUntilIdle()
+
+            coVerify(exactly = 0) { mockRepo.upsert(any()) }
+            verify(exactly = 0) { mockScheduler.scheduleOrCancel(any(), any()) }
+        }
 }
