@@ -228,6 +228,46 @@
     <string name="status_summary_pairs">Configured sync pairs: %1$d</string>
     <string name="status_summary_conflicts">Pending conflicts: %1$d</string>
     <string name="status_summary_empty">No sync pairs configured yet.</string>
+
+    <!-- Status tab redesigned cards (Phase 2). -->
+    <string name="status_card_sync_status_title">Sync status</string>
+    <string name="status_card_sync_status_idle">All pairs are idle.</string>
+    <string name="status_card_sync_status_empty">No sync pairs configured yet.</string>
+    <!-- %1$d = pairs currently syncing, %2$d = total pairs. -->
+    <string name="status_card_sync_status_running">Syncing %1$d of %2$d pair(s)</string>
+    <!-- %1$d = files completed, %2$d = total files in the active batch. -->
+    <string name="status_card_sync_status_files">%1$d of %2$d files</string>
+
+    <string name="status_card_battery_title">Battery optimization</string>
+    <string name="status_card_battery_body">Synckro is being throttled by Android battery optimizations. Background syncs may be delayed or skipped.</string>
+    <string name="status_card_battery_action">Allow background activity</string>
+
+    <string name="status_card_recent_changes_title">Recent changes</string>
+    <string name="status_card_recent_changes_empty">No sync runs yet.</string>
+    <!-- %1$d = files applied, %2$d = pairs that completed a run. -->
+    <string name="status_card_recent_changes_summary">%1$d file(s) applied across %2$d pair(s)</string>
+    <!-- %1$d = conflicts detected in the most recent runs. -->
+    <string name="status_card_recent_changes_conflicts">%1$d conflict(s) detected</string>
+    <!-- %1$d = partial-failure errors in the most recent runs. -->
+    <string name="status_card_recent_changes_errors">%1$d error(s)</string>
+    <!-- %1$s = relative time, e.g. "5 minutes ago". -->
+    <string name="status_card_recent_changes_last_run">Last run: %1$s</string>
+
+    <string name="status_card_accounts_title">Accounts</string>
+    <string name="status_card_accounts_empty">No accounts connected yet.</string>
+    <string name="status_card_accounts_unlinked">Needs re-link</string>
+    <!-- %1$d = number of sync pairs bound to the account. -->
+    <string name="status_card_accounts_pair_count">%1$d pair(s)</string>
+
+    <!-- Bottom dismissible warning banner (Phase 2). -->
+    <string name="status_warning_banner_title">Attention needed</string>
+    <!-- %1$d = pending unresolved conflicts. -->
+    <string name="status_warning_banner_conflicts">%1$d unresolved conflict(s)</string>
+    <!-- %1$d = pairs whose token needs re-auth. -->
+    <string name="status_warning_banner_reauth">%1$d account(s) need to sign in again</string>
+    <!-- %1$d = pairs whose SAF folder permission was lost. -->
+    <string name="status_warning_banner_relink">%1$d pair(s) need folder re-link</string>
+    <string name="status_warning_banner_dismiss">Dismiss warning</string>
     <!-- Content description suffix used for the conflicts nav destination badge.
          e.g. "Conflicts (3 pending)" -->
     <string name="nav_dest_conflicts_badge_format">%1$d pending</string>
