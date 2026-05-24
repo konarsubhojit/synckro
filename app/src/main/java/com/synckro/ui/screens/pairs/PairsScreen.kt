@@ -299,16 +299,14 @@ private fun PairsListScaffold(
                 title = { Text(stringResource(R.string.home_title)) },
                 actions = {
                     val syncAllLabel = stringResource(R.string.home_sync_all_now)
-                    IconButton(
+                    TextButton(
                         onClick = { onSyncAllNow() },
                         enabled =
                             state.pairs.any { p ->
-                                !p.needsReLink &&
-                                    p.lastSyncResult != "NEEDS_REAUTH" &&
-                                    p.id !in state.syncingPairIds
+                                HomeViewModel.isPairEligibleForManualSync(p, state.syncingPairIds)
                             },
                     ) {
-                        Icon(Icons.Default.Sync, contentDescription = syncAllLabel)
+                        Text(syncAllLabel)
                     }
                 },
             )

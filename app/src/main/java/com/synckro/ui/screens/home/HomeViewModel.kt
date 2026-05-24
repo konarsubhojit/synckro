@@ -361,6 +361,7 @@ class HomeViewModel
          * Pairs are skipped when they require user intervention:
          * - [SyncPair.needsReLink] is `true` (SAF folder access lost), or
          * - [SyncPair.lastSyncResult] is `"NEEDS_REAUTH"` (token revoked).
+         * - [SyncPair.autoSyncEnabled] is `false` (pair manually paused by user).
          * Pairs already in [UiState.syncingPairIds] are also skipped so a rapid
          * pull-to-refresh does not stack duplicate one-shot jobs on top of a
          * worker that WorkManager is about to coalesce away anyway.
@@ -395,6 +396,11 @@ class HomeViewModel
          * (Wi-Fi only, requires charging) are respected even for manual syncs.
          */
         fun syncNow(pair: SyncPair) {
+            val currentSyncing = state.value.syncingPairIds
+            if (!isPairEligibleForManualSync(pair, currentSyncing)) {
+                Timber.i("HomeViewModel.syncNow(id=${pair.id}) skipped: pair not eligible for manual sync")
+                return
+            }
             Timber.i("HomeViewModel.syncNow(id=${pair.id})")
             val constraints =
                 Constraints
@@ -504,7 +510,7 @@ class HomeViewModel
              * Pure-Kotlin filter used by [syncAllNow] (Phase 5b). Returns the
              * pairs that should be enqueued as the first component, and the number
              * that were skipped because they require user intervention or are
-             * already syncing as the second.
+             * disabled/already syncing as the second.
              *
              * Exposed in the companion object so unit tests can exercise the
              * filtering rules without touching WorkManager.
@@ -517,15 +523,22 @@ class HomeViewModel
                 val eligible = ArrayList<SyncPair>(pairs.size)
                 var skipped = 0
                 for (p in pairs) {
-                    val unhealthy = p.needsReLink || p.lastSyncResult == "NEEDS_REAUTH"
-                    val inFlight = p.id in syncingPairIds
-                    if (unhealthy || inFlight) {
+                    if (!isPairEligibleForManualSync(p, syncingPairIds)) {
                         skipped++
                     } else {
                         eligible.add(p)
                     }
                 }
                 return eligible to skipped
+            }
+
+            fun isPairEligibleForManualSync(
+                pair: SyncPair,
+                syncingPairIds: Set<Long>,
+            ): Boolean {
+                val unhealthy = pair.needsReLink || pair.lastSyncResult == "NEEDS_REAUTH"
+                val inFlight = pair.id in syncingPairIds
+                return pair.autoSyncEnabled && !unhealthy && !inFlight
             }
         }
     }

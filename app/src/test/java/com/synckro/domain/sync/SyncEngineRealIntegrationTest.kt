@@ -208,12 +208,12 @@ class SyncEngineRealIntegrationTest {
     }
 
     /** Builds a [SyncEngine] wired with all the in-memory fakes. */
-    private fun buildEngine(): SyncEngine =
+    private fun buildEngine(remoteEnumerator: RemoteEnumerator = fakeRemoteEnumerator): SyncEngine =
         SyncEngine(
             conflictRepository = conflictRepository,
             providers = mapOf(CloudProviderType.ONEDRIVE to singleProviderFactory(fakeProvider)),
             localFsEnumerator = localFsEnumerator,
-            remoteEnumerators = mapOf(CloudProviderType.ONEDRIVE to fakeRemoteEnumerator),
+            remoteEnumerators = mapOf(CloudProviderType.ONEDRIVE to remoteEnumerator),
             syncPairDao = syncPairDao,
             localIndexDao = localIndexDao,
             eventRepository = eventRepository,
@@ -672,6 +672,54 @@ class SyncEngineRealIntegrationTest {
                 remoteFile.id,
                 indexEntry.remoteId,
             )
+        }
+
+    @Test
+    fun `runReal on cold-start relink does not upload duplicate when remote metadata is missing`() =
+        runTest {
+            val fileContent = "same content".toByteArray()
+            fakeProvider.uploadNew(
+                parentId = "remote-root",
+                name = "same.txt",
+                content = fileContent.inputStream(),
+                size = fileContent.size.toLong(),
+                mimeType = "text/plain",
+            )
+
+            localFileAccess.put("same.txt", fileContent)
+            inMemoryChildren.set(
+                "root",
+                listOf(
+                    RawDocChild(
+                        docId = "doc-same",
+                        name = "same.txt",
+                        mimeType = "text/plain",
+                        size = fileContent.size.toLong(),
+                        lastModifiedMs = 5_000L,
+                    ),
+                ),
+            )
+
+            val metadataOmittingEnumerator =
+                object : RemoteEnumerator by fakeRemoteEnumerator {
+                    override suspend fun enumerateFull(rootFolderId: String): RemoteSnapshot {
+                        val full = fakeRemoteEnumerator.enumerateFull(rootFolderId)
+                        return full.copy(
+                            changes =
+                                full.changes.map { change ->
+                                    change.copy(sizeBytes = null, mtimeMs = null)
+                                },
+                        )
+                    }
+                }
+
+            val pair = insertPair()
+            val result = buildEngine(metadataOmittingEnumerator).runOnce(pair)
+
+            assertTrue("Cold-start relink should still succeed", result is SyncEngine.Result.Success)
+
+            val remoteFiles = fakeProvider.list("remote-root").filter { !it.isFolder && it.name == "same.txt" }
+            assertEquals("Remote file must not be duplicated", 1, remoteFiles.size)
         }
 
     @Test

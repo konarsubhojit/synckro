@@ -26,7 +26,7 @@
     <!-- Phase 5b: bulk-sync action + pull-to-refresh feedback. -->
     <string name="home_sync_all_now">Sync all now</string>
     <string name="home_sync_all_result_synced_format">Started sync for %1$d pair(s)</string>
-    <string name="home_sync_all_result_skipped_format">%1$d skipped (needs action)</string>
+    <string name="home_sync_all_result_skipped_format">%1$d skipped (paused/needs action)</string>
     <string name="home_sync_all_result_none">No pairs to sync</string>
     <string name="accounts_action">Accounts</string>
     <string name="home_edit_pair">Edit pair</string>

@@ -230,6 +230,21 @@ class HomeViewModelTest {
     }
 
     @Test
+    fun `syncNow ignores pair when auto-sync is disabled`() {
+        val vm = createVm()
+
+        vm.syncNow(pair(8L).copy(autoSyncEnabled = false))
+
+        verify(exactly = 0) {
+            mockWorkManager.enqueueUniqueWork(
+                SyncWorker.syncNowUniqueName(8L),
+                any(),
+                any<OneTimeWorkRequest>(),
+            )
+        }
+    }
+
+    @Test
     fun `syncNow for different pairs enqueues with different work names`() {
         val vm = createVm()
         vm.syncNow(pair(1L))
@@ -672,16 +687,17 @@ class HomeViewModelTest {
     @Test
     fun `partitionForSyncAll skips unhealthy pairs and pairs already in flight`() {
         val healthy = pair(1L)
+        val disabled = pair(5L).copy(autoSyncEnabled = false)
         val needsReLink = pair(2L).copy(needsReLink = true)
         val needsReauth = pair(3L).copy(lastSyncResult = "NEEDS_REAUTH")
         val inFlight = pair(4L)
         val (eligible, skipped) =
             HomeViewModel.partitionForSyncAll(
-                pairs = listOf(healthy, needsReLink, needsReauth, inFlight),
+                pairs = listOf(healthy, disabled, needsReLink, needsReauth, inFlight),
                 syncingPairIds = setOf(inFlight.id),
             )
         assertEquals(listOf(1L), eligible.map { it.id })
-        assertEquals(3, skipped)
+        assertEquals(4, skipped)
     }
 
     @Test
@@ -696,8 +712,9 @@ class HomeViewModelTest {
         runTest {
             val healthy1 = pair(1L)
             val healthy2 = pair(2L)
+            val disabled = pair(4L).copy(autoSyncEnabled = false)
             val needsReauth = pair(3L).copy(lastSyncResult = "NEEDS_REAUTH")
-            pairsFlow.value = listOf(healthy1, healthy2, needsReauth)
+            pairsFlow.value = listOf(healthy1, healthy2, needsReauth, disabled)
             val vm = createVm()
             val collectJob = launch { vm.state.collect {} }
             advanceUntilIdle()
@@ -732,9 +749,16 @@ class HomeViewModelTest {
                     any<OneTimeWorkRequest>(),
                 )
             }
+            io.mockk.verify(exactly = 0) {
+                mockWorkManager.enqueueUniqueWork(
+                    SyncWorker.syncNowUniqueName(4L),
+                    any(),
+                    any<OneTimeWorkRequest>(),
+                )
+            }
             assertEquals(1, results.size)
             assertEquals(2, results[0].synced)
-            assertEquals(1, results[0].skipped)
+            assertEquals(2, results[0].skipped)
             resultsJob.cancel()
             collectJob.cancel()
         }
