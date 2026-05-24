@@ -338,7 +338,14 @@
     <string name="accounts_export_debug_log_saved">Debug log saved to Downloads/%1$s</string>
 
     <!-- Sync logs screen -->
-    <string name="logs_title">Sync logs</string>
+    <string name="logs_title">Sync history</string>
+    <string name="logs_history_expand">Show event details</string>
+    <string name="logs_history_collapse">Hide event details</string>
+    <string name="logs_history_level_label">Level</string>
+    <string name="logs_history_tag_label">Tag</string>
+    <string name="logs_history_pair_label">Pair</string>
+    <string name="logs_history_full_time_label">When</string>
+    <string name="logs_history_pair_global">All pairs</string>
     <string name="logs_action">View logs</string>
     <string name="logs_empty">No log entries yet. Run a sync to see events here.</string>
     <string name="logs_copy">Copy to clipboard</string>

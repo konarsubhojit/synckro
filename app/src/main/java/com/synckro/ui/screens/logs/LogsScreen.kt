@@ -4,10 +4,12 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.text.format.DateUtils
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -20,19 +22,22 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.ErrorOutline
-import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.outlined.BugReport
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -57,15 +62,22 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.synckro.R
-import com.synckro.domain.model.CloudProviderType
 import com.synckro.domain.model.SyncEvent
 import com.synckro.domain.model.SyncEventLevel
 import com.synckro.domain.model.SyncEventTag
@@ -75,8 +87,6 @@ import com.synckro.ui.theme.SynckroTheme
 import com.synckro.util.logging.LogExportConfig
 import com.synckro.util.logging.LogExportSink
 import com.synckro.util.logging.LogVisibilityConfig
-import androidx.compose.material.icons.filled.History
-import androidx.compose.ui.tooling.preview.Preview
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -177,11 +187,6 @@ fun LogsScreen(
         LogsTabContent(
             state = state,
             onSearchQueryChange = viewModel::setSearchQuery,
-            onLevelFilterChange = viewModel::setLevelFilter,
-            onTagFilterChange = viewModel::setTagFilter,
-            onProviderFilterChange = viewModel::setProviderFilter,
-            onAccountFilterChange = viewModel::setAccountFilter,
-            onTimeWindowFilterChange = viewModel::setTimeWindowFilter,
             onClearFilters = viewModel::clearFilters,
             onTriggerSync = onTriggerSync,
             dateFormat = dateFormat,
@@ -345,35 +350,29 @@ private fun ExportToggleRow(
 }
 
 /**
- * Stateless logs content (search, filter chips, events list) used by both the
- * standalone [LogsScreen] and the Logs tab on the Home screen.
+ * Stateless Sync History content: a search field over a vertical list of one-row-per-event
+ * cards. Each row is a compact summary (status icon · message · right-aligned relative
+ * timestamp) that can be tapped to reveal additional details (tag, level, full timestamp,
+ * pair id). Long-press copies the row to the clipboard.
  *
- * Renders no [Scaffold] or top app bar of its own; callers wrap or embed it as
- * appropriate. The DEBUG filter chip is omitted when
- * [LogVisibilityConfig.minVisibleLevel] is above DEBUG (i.e. release builds) so
- * users can't pick a level that will never match.
+ * The detailed structured log entries remain available behind the scenes through the
+ * `Share / Export` action in the top app bar (see [LogsActions]), which bundles the
+ * complete event history (all levels, including DEBUG when visible) and is reused as
+ * the attachment for the "Send feedback" flow in Settings.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LogsTabContent(
     state: LogsViewModel.UiState,
     onSearchQueryChange: (String) -> Unit,
-    onLevelFilterChange: (SyncEventLevel?) -> Unit,
-    onTagFilterChange: (String?) -> Unit,
-    onProviderFilterChange: (CloudProviderType?) -> Unit,
-    onAccountFilterChange: (String?) -> Unit,
-    onTimeWindowFilterChange: (TimeWindow?) -> Unit,
     onClearFilters: () -> Unit,
     onTriggerSync: () -> Unit,
     dateFormat: SimpleDateFormat,
     onRowLongPress: (SyncEvent) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val visibleLevels = LogVisibilityConfig.visibleLevels()
     Column(
-        modifier =
-            modifier
-                .fillMaxSize(),
+        modifier = modifier.fillMaxSize(),
     ) {
         // ── Search field ─────────────────────────────────────────────────
         OutlinedTextField(
@@ -382,7 +381,7 @@ fun LogsTabContent(
             modifier =
                 Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
             singleLine = true,
             placeholder = { Text(stringResource(R.string.logs_search_placeholder)) },
             trailingIcon = {
@@ -396,181 +395,6 @@ fun LogsTabContent(
                 }
             },
         )
-        // ── Time-window filter chips ─────────────────────────────────────
-        Row(
-            modifier =
-                Modifier
-                    .horizontalScroll(rememberScrollState())
-                    .padding(horizontal = 8.dp, vertical = 2.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            Text(
-                text = stringResource(R.string.logs_filter_time_label),
-                style = MaterialTheme.typography.labelSmall,
-                modifier = Modifier.align(Alignment.CenterVertically),
-            )
-            FilterChip(
-                selected = state.timeWindowFilter == null,
-                onClick = { onTimeWindowFilterChange(null) },
-                label = { Text(stringResource(R.string.logs_filter_all)) },
-            )
-            FilterChip(
-                selected = state.timeWindowFilter == TimeWindow.LAST_HOUR,
-                onClick = {
-                    onTimeWindowFilterChange(
-                        if (state.timeWindowFilter == TimeWindow.LAST_HOUR) null else TimeWindow.LAST_HOUR,
-                    )
-                },
-                label = { Text(stringResource(R.string.logs_filter_time_1h)) },
-            )
-            FilterChip(
-                selected = state.timeWindowFilter == TimeWindow.LAST_24H,
-                onClick = {
-                    onTimeWindowFilterChange(
-                        if (state.timeWindowFilter == TimeWindow.LAST_24H) null else TimeWindow.LAST_24H,
-                    )
-                },
-                label = { Text(stringResource(R.string.logs_filter_time_24h)) },
-            )
-            FilterChip(
-                selected = state.timeWindowFilter == TimeWindow.LAST_7D,
-                onClick = {
-                    onTimeWindowFilterChange(
-                        if (state.timeWindowFilter == TimeWindow.LAST_7D) null else TimeWindow.LAST_7D,
-                    )
-                },
-                label = { Text(stringResource(R.string.logs_filter_time_7d)) },
-            )
-        }
-        // ── Level filter chips ───────────────────────────────────────────
-        Row(
-            modifier =
-                Modifier
-                    .horizontalScroll(rememberScrollState())
-                    .padding(horizontal = 8.dp, vertical = 2.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            Text(
-                text = stringResource(R.string.logs_filter_level_label),
-                style = MaterialTheme.typography.labelSmall,
-                modifier = Modifier.align(Alignment.CenterVertically),
-            )
-            FilterChip(
-                selected = state.levelFilter == null,
-                onClick = { onLevelFilterChange(null) },
-                label = { Text(stringResource(R.string.logs_filter_all)) },
-            )
-            visibleLevels.forEach { level ->
-                FilterChip(
-                    selected = state.levelFilter == level,
-                    onClick = {
-                        onLevelFilterChange(if (state.levelFilter == level) null else level)
-                    },
-                    label = { Text(level.name) },
-                )
-            }
-        }
-        // ── Tag filter chips ─────────────────────────────────────────────
-        Row(
-            modifier =
-                Modifier
-                    .horizontalScroll(rememberScrollState())
-                    .padding(horizontal = 8.dp, vertical = 2.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            Text(
-                text = stringResource(R.string.logs_filter_tag_label),
-                style = MaterialTheme.typography.labelSmall,
-                modifier = Modifier.align(Alignment.CenterVertically),
-            )
-            FilterChip(
-                selected = state.tagFilter == null,
-                onClick = { onTagFilterChange(null) },
-                label = { Text(stringResource(R.string.logs_filter_all)) },
-            )
-            listOf(
-                SyncEventTag.Auth,
-                SyncEventTag.Account,
-                SyncEventTag.PairEditor,
-                SyncEventTag.Scheduler,
-                SyncEventTag.SyncWorker,
-                SyncEventTag.RemoteEnum,
-                SyncEventTag.OpApplier,
-                SyncEventTag.UI,
-                SyncEventTag.Export,
-            ).forEach { tag ->
-                FilterChip(
-                    selected = state.tagFilter == tag,
-                    onClick = {
-                        onTagFilterChange(if (state.tagFilter == tag) null else tag)
-                    },
-                    label = { Text(tag) },
-                )
-            }
-        }
-        // ── Provider filter chips ────────────────────────────────────────
-        Row(
-            modifier =
-                Modifier
-                    .horizontalScroll(rememberScrollState())
-                    .padding(horizontal = 8.dp, vertical = 2.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            Text(
-                text = stringResource(R.string.logs_filter_provider_label),
-                style = MaterialTheme.typography.labelSmall,
-                modifier = Modifier.align(Alignment.CenterVertically),
-            )
-            FilterChip(
-                selected = state.providerFilter == null,
-                onClick = { onProviderFilterChange(null) },
-                label = { Text(stringResource(R.string.logs_filter_all)) },
-            )
-            CloudProviderType.entries.forEach { provider ->
-                FilterChip(
-                    selected = state.providerFilter == provider,
-                    onClick = {
-                        onProviderFilterChange(
-                            if (state.providerFilter == provider) null else provider,
-                        )
-                    },
-                    label = { Text(provider.name) },
-                )
-            }
-        }
-        // ── Account filter chips ─────────────────────────────────────────
-        if (state.knownAccounts.isNotEmpty()) {
-            Row(
-                modifier =
-                    Modifier
-                        .horizontalScroll(rememberScrollState())
-                        .padding(horizontal = 8.dp, vertical = 2.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                Text(
-                    text = stringResource(R.string.logs_filter_account_label),
-                    style = MaterialTheme.typography.labelSmall,
-                    modifier = Modifier.align(Alignment.CenterVertically),
-                )
-                FilterChip(
-                    selected = state.accountFilter == null,
-                    onClick = { onAccountFilterChange(null) },
-                    label = { Text(stringResource(R.string.logs_filter_all)) },
-                )
-                state.knownAccounts.forEach { account ->
-                    val label = account.email ?: account.displayName
-                    FilterChip(
-                        selected = state.accountFilter == account.id,
-                        onClick = {
-                            onAccountFilterChange(
-                                if (state.accountFilter == account.id) null else account.id,
-                            )
-                        },
-                        label = { Text(label) },
-                    )
-                }
-            }
-        }
         // ── Events list / empty state ────────────────────────────────────
         if (!state.isLoading && state.events.isEmpty()) {
             if (state.hasActiveFilters) {
@@ -595,11 +419,11 @@ fun LogsTabContent(
         } else {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                verticalArrangement = Arrangement.spacedBy(2.dp),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 items(state.events, key = { it.id }) { event ->
-                    LogEntryRow(
+                    SyncHistoryRow(
                         event = event,
                         dateFormat = dateFormat,
                         onLongPress = { onRowLongPress(event) },
@@ -610,75 +434,221 @@ fun LogsTabContent(
     }
 }
 
+/**
+ * Single sync-history card: status dot · message + tag subtitle · right-aligned
+ * relative timestamp. Tapping the card expands an inline details block with the
+ * full timestamp, level, tag, and originating pair id (or "All pairs" for
+ * global events). Designed so the expanded region can grow in future without
+ * reworking the list architecture.
+ */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun LogEntryRow(
+private fun SyncHistoryRow(
     event: SyncEvent,
     dateFormat: SimpleDateFormat,
     onLongPress: () -> Unit = {},
 ) {
-    val levelColor =
-        when (event.level) {
-            SyncEventLevel.DEBUG -> MaterialTheme.colorScheme.onSurfaceVariant
-            SyncEventLevel.INFO -> MaterialTheme.colorScheme.onSurface
-            SyncEventLevel.WARN -> Color(0xFFF59E0B) // Amber-500
-            SyncEventLevel.ERROR -> MaterialTheme.colorScheme.error
-        }
-    val levelIcon: ImageVector =
-        when (event.level) {
-            SyncEventLevel.DEBUG -> Icons.Outlined.BugReport
-            SyncEventLevel.INFO -> Icons.Default.Info
-            SyncEventLevel.WARN -> Icons.Default.Warning
-            SyncEventLevel.ERROR -> Icons.Default.ErrorOutline
-        }
-    Surface(
+    var expanded by rememberSaveable(event.id) { mutableStateOf(false) }
+
+    val levelColor = levelColor(event.level)
+    val levelIcon = levelIcon(event.level)
+
+    val expandLabel = stringResource(R.string.logs_history_expand)
+    val collapseLabel = stringResource(R.string.logs_history_collapse)
+
+    Card(
         modifier =
             Modifier
                 .fillMaxWidth()
+                .animateContentSize()
                 .combinedClickable(
-                    onClick = {},
+                    onClick = { expanded = !expanded },
                     onLongClick = onLongPress,
-                ),
-        color = MaterialTheme.colorScheme.surface,
-        tonalElevation = 0.dp,
+                )
+                .semantics {
+                    contentDescription = if (expanded) collapseLabel else expandLabel
+                },
+        colors =
+            CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+            ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
-        Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            // Status dot (colored circle with the level icon inside).
+            Box(
+                modifier =
+                    Modifier
+                        .size(32.dp)
+                        .clip(CircleShape)
+                        .padding(0.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Surface(
+                    shape = CircleShape,
+                    color = levelColor.copy(alpha = 0.16f),
+                    modifier = Modifier.size(32.dp),
+                ) {}
                 Icon(
                     imageVector = levelIcon,
                     contentDescription = null,
                     tint = levelColor,
-                    modifier = Modifier.size(14.dp),
+                    modifier = Modifier.size(18.dp),
                 )
-                Spacer(Modifier.width(4.dp))
+            }
+
+            Spacer(Modifier.width(12.dp))
+
+            // Message + tag subtitle.
+            Column(
+                modifier = Modifier.weight(1f),
+            ) {
                 Text(
-                    text = dateFormat.format(Date(event.timestampMs)),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontFamily = FontFamily.Monospace,
+                    text = event.message,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = if (expanded) Int.MAX_VALUE else 2,
+                    overflow = TextOverflow.Ellipsis,
                 )
-                Spacer(Modifier.width(6.dp))
-                Text(
-                    text = event.level.name,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = levelColor,
-                    fontFamily = FontFamily.Monospace,
-                )
-                Spacer(Modifier.width(6.dp))
+                Spacer(Modifier.height(2.dp))
                 Text(
                     text = event.tag,
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontFamily = FontFamily.Monospace,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
-            Text(
-                text = event.message,
-                style = MaterialTheme.typography.bodySmall,
-                color = levelColor,
-                fontFamily = FontFamily.Monospace,
+
+            Spacer(Modifier.width(8.dp))
+
+            // Right-aligned relative timestamp + expand affordance.
+            Column(
+                horizontalAlignment = Alignment.End,
+            ) {
+                Text(
+                    text = relativeTimestamp(event.timestampMs),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.End,
+                    maxLines = 1,
+                )
+                Icon(
+                    imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+        }
+
+        if (expanded) {
+            SyncHistoryRowDetails(
+                event = event,
+                dateFormat = dateFormat,
+                levelColor = levelColor,
             )
         }
+    }
+}
+
+@Composable
+private fun SyncHistoryRowDetails(
+    event: SyncEvent,
+    dateFormat: SimpleDateFormat,
+    levelColor: Color,
+) {
+    Column(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(start = 56.dp, end = 12.dp, bottom = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        DetailLine(
+            label = stringResource(R.string.logs_history_full_time_label),
+            value = dateFormat.format(Date(event.timestampMs)),
+            valueFontFamily = FontFamily.Monospace,
+        )
+        DetailLine(
+            label = stringResource(R.string.logs_history_level_label),
+            value = event.level.name,
+            valueColor = levelColor,
+        )
+        DetailLine(
+            label = stringResource(R.string.logs_history_tag_label),
+            value = event.tag,
+        )
+        DetailLine(
+            label = stringResource(R.string.logs_history_pair_label),
+            value =
+                event.pairId?.toString()
+                    ?: stringResource(R.string.logs_history_pair_global),
+        )
+    }
+}
+
+@Composable
+private fun DetailLine(
+    label: String,
+    value: String,
+    valueColor: Color = MaterialTheme.colorScheme.onSurface,
+    valueFontFamily: FontFamily? = null,
+) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.width(56.dp),
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodySmall,
+            color = valueColor,
+            fontFamily = valueFontFamily,
+        )
+    }
+}
+
+private fun levelColor(level: SyncEventLevel): Color =
+    when (level) {
+        SyncEventLevel.DEBUG -> Color(0xFF6B7280) // Slate-500
+        SyncEventLevel.INFO -> Color(0xFF22C55E) // Green-500 (sync success-style)
+        SyncEventLevel.WARN -> Color(0xFFF59E0B) // Amber-500
+        SyncEventLevel.ERROR -> Color(0xFFEF4444) // Red-500
+    }
+
+private fun levelIcon(level: SyncEventLevel): ImageVector =
+    when (level) {
+        SyncEventLevel.DEBUG -> Icons.Outlined.BugReport
+        SyncEventLevel.INFO -> Icons.Default.CheckCircle
+        SyncEventLevel.WARN -> Icons.Default.Warning
+        SyncEventLevel.ERROR -> Icons.Default.ErrorOutline
+    }
+
+/**
+ * Short, human-friendly relative timestamp ("2 min ago", "yesterday", "Mar 5", …)
+ * used for the right-aligned time column in the sync-history list. Falls back
+ * to a numeric date when the event is older than ~a week.
+ */
+internal fun relativeTimestamp(timestampMs: Long, now: Long = System.currentTimeMillis()): String {
+    val delta = now - timestampMs
+    return when {
+        delta < DateUtils.MINUTE_IN_MILLIS -> "just now"
+        else ->
+            DateUtils
+                .getRelativeTimeSpanString(
+                    timestampMs,
+                    now,
+                    DateUtils.MINUTE_IN_MILLIS,
+                    DateUtils.FORMAT_ABBREV_RELATIVE,
+                )
+                .toString()
     }
 }
 
@@ -687,44 +657,47 @@ internal fun SyncEvent.toLogLine(dateFormat: SimpleDateFormat): String {
     return "$ts ${level.name.padEnd(5)} [$tag] $message"
 }
 
-@Preview(name = "LogEntryRow — all levels (light)", showBackground = true, widthDp = 360)
+@Preview(name = "SyncHistoryRow — all levels (light)", showBackground = true, widthDp = 360)
 @Preview(
-    name = "LogEntryRow — all levels (dark)",
+    name = "SyncHistoryRow — all levels (dark)",
     showBackground = true,
     widthDp = 360,
     uiMode = android.content.res.Configuration.UI_MODE_NIGHT_YES,
 )
 @Composable
-private fun LogEntryRowPreview() {
-    val fmt = remember { SimpleDateFormat("HH:mm:ss.SSS", Locale.US) }
-    val baseMs = 1_700_000_000_000L
+private fun SyncHistoryRowPreview() {
+    val fmt = remember { SimpleDateFormat("MM-dd HH:mm:ss.SSS", Locale.US) }
+    val baseMs = System.currentTimeMillis()
     val events = listOf(
         SyncEvent(
-            id = 1, pairId = null, timestampMs = baseMs,
+            id = 1, pairId = 42L, timestampMs = baseMs - 30_000,
+            level = SyncEventLevel.INFO, tag = SyncEventTag.SyncWorker,
+            message = "Sync completed — 12 files uploaded, 3 downloaded.",
+        ),
+        SyncEvent(
+            id = 2, pairId = 42L, timestampMs = baseMs - 5 * 60_000,
+            level = SyncEventLevel.WARN, tag = SyncEventTag.Auth,
+            message = "Token nearing expiry, refreshing in background.",
+        ),
+        SyncEvent(
+            id = 3, pairId = null, timestampMs = baseMs - 2 * 60 * 60_000,
+            level = SyncEventLevel.ERROR, tag = SyncEventTag.SyncWorker,
+            message = "Upload failed: cloud quota exceeded.",
+        ),
+        SyncEvent(
+            id = 4, pairId = 42L, timestampMs = baseMs - 25 * 60 * 60_000,
             level = SyncEventLevel.DEBUG, tag = SyncEventTag.SyncWorker,
             message = "Enumerating remote files…",
-        ),
-        SyncEvent(
-            id = 2, pairId = null, timestampMs = baseMs + 1_000,
-            level = SyncEventLevel.INFO, tag = SyncEventTag.OpApplier,
-            message = "Uploaded 3 files successfully.",
-        ),
-        SyncEvent(
-            id = 3, pairId = null, timestampMs = baseMs + 2_000,
-            level = SyncEventLevel.WARN, tag = SyncEventTag.Auth,
-            message = "Token nearing expiry, refreshing.",
-        ),
-        SyncEvent(
-            id = 4, pairId = null, timestampMs = baseMs + 3_000,
-            level = SyncEventLevel.ERROR, tag = SyncEventTag.SyncWorker,
-            message = "Upload failed: quota exceeded.",
         ),
     )
     SynckroTheme {
         Surface {
-            Column {
+            Column(
+                modifier = Modifier.padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
                 events.forEach { event ->
-                    LogEntryRow(event = event, dateFormat = fmt)
+                    SyncHistoryRow(event = event, dateFormat = fmt)
                 }
             }
         }
