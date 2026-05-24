@@ -21,19 +21,19 @@ import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import com.synckro.R
 import com.synckro.data.local.dao.SyncPairDao
-import com.synckro.data.local.entity.toDomain
 import com.synckro.data.repository.SettingsRepository
+import com.synckro.data.local.entity.toDomain
 import com.synckro.data.repository.SyncEventRepository
 import com.synckro.domain.model.CloudProviderType
 import com.synckro.domain.model.SyncEventLevel
 import com.synckro.domain.model.SyncPair
-import com.synckro.domain.provider.CloudProviderException
 import com.synckro.domain.provider.CloudProviderFactory
-import com.synckro.domain.sync.ActiveTransfer
+import com.synckro.domain.provider.CloudProviderException
 import com.synckro.domain.sync.CloudExceptionMapper
 import com.synckro.domain.sync.SyncEngine
-import com.synckro.domain.sync.TransferDirection
+import com.synckro.domain.sync.ActiveTransfer
 import com.synckro.domain.sync.TransferProgress
+import com.synckro.domain.sync.TransferDirection
 import com.synckro.util.notification.ReauthNotificationHelper
 import com.synckro.util.notification.SyncStatusNotifier
 import dagger.assisted.Assisted
@@ -307,15 +307,10 @@ class SyncWorker
                                 } else {
                                     Timber.i(
                                         "Retrying sync for pair %d (attempt %d/%d): %s",
-                                        pairId,
-                                        runAttemptCount + 1,
-                                        MAX_RETRY_ATTEMPTS,
-                                        r.reason,
+                                        pairId, runAttemptCount + 1, MAX_RETRY_ATTEMPTS, r.reason,
                                     )
                                     syncEventRepository.log(
-                                        pairId,
-                                        SyncEventLevel.WARN,
-                                        LOG_TAG,
+                                        pairId, SyncEventLevel.WARN, LOG_TAG,
                                         "Sync retriable, will retry (attempt ${runAttemptCount + 1}/$MAX_RETRY_ATTEMPTS): ${r.reason}",
                                     )
                                     Result.retry()
@@ -397,44 +392,34 @@ class SyncWorker
                                     Timber.i(
                                         e,
                                         "Retriable CloudProviderException for pair %d (attempt %d/%d): %s",
-                                        pairId,
-                                        runAttemptCount + 1,
-                                        MAX_RETRY_ATTEMPTS,
-                                        mapped.reason,
+                                        pairId, runAttemptCount + 1, MAX_RETRY_ATTEMPTS, mapped.reason,
                                     )
                                     syncEventRepository.log(
-                                        pairId,
-                                        SyncEventLevel.WARN,
-                                        tag,
+                                        pairId, SyncEventLevel.WARN, tag,
                                         "Sync retriable, will retry (attempt ${runAttemptCount + 1}/$MAX_RETRY_ATTEMPTS): ${mapped.reason}",
                                     )
                                     Result.retry()
                                 }
                             }
                             // Mapper never returns Success / PartialFailure for an exception input.
-                            else ->
-                                if (runAttemptCount + 1 >= MAX_RETRY_ATTEMPTS) {
-                                    syncPairDao.updateLastSyncResult(pairId, System.currentTimeMillis(), RESULT_FAILURE)
-                                    syncEventRepository.log(
-                                        pairId,
-                                        SyncEventLevel.ERROR,
-                                        LOG_TAG,
-                                        "Sync failed after $MAX_RETRY_ATTEMPTS attempt(s), giving up: ${e.message}",
-                                    )
-                                    WorkManager.getInstance(applicationContext).cancelUniqueWork(uniqueName(pairId))
-                                    Result.failure()
-                                } else {
-                                    Result.retry()
-                                }
+                            else -> if (runAttemptCount + 1 >= MAX_RETRY_ATTEMPTS) {
+                                syncPairDao.updateLastSyncResult(pairId, System.currentTimeMillis(), RESULT_FAILURE)
+                                syncEventRepository.log(
+                                    pairId, SyncEventLevel.ERROR, LOG_TAG,
+                                    "Sync failed after $MAX_RETRY_ATTEMPTS attempt(s), giving up: ${e.message}",
+                                )
+                                WorkManager.getInstance(applicationContext).cancelUniqueWork(uniqueName(pairId))
+                                Result.failure()
+                            } else {
+                                Result.retry()
+                            }
                         }
                     } catch (t: Throwable) {
                         if (runAttemptCount + 1 >= MAX_RETRY_ATTEMPTS) {
                             Timber.w(t, "Sync for pair %d exhausted %d attempt(s)", pairId, MAX_RETRY_ATTEMPTS)
                             syncPairDao.updateLastSyncResult(pairId, System.currentTimeMillis(), RESULT_FAILURE)
                             syncEventRepository.log(
-                                pairId,
-                                SyncEventLevel.ERROR,
-                                LOG_TAG,
+                                pairId, SyncEventLevel.ERROR, LOG_TAG,
                                 "Sync failed after $MAX_RETRY_ATTEMPTS attempt(s), giving up: ${t.message}",
                             )
                             WorkManager.getInstance(applicationContext).cancelUniqueWork(uniqueName(pairId))
@@ -442,9 +427,7 @@ class SyncWorker
                         } else {
                             Timber.w(t, "Sync failed for pair %d", pairId)
                             syncEventRepository.log(
-                                pairId,
-                                SyncEventLevel.ERROR,
-                                LOG_TAG,
+                                pairId, SyncEventLevel.ERROR, LOG_TAG,
                                 "Sync threw an exception, will retry (attempt ${runAttemptCount + 1}/$MAX_RETRY_ATTEMPTS): ${t.message}",
                             )
                             Result.retry()
@@ -765,15 +748,15 @@ class SyncScheduler(
                 .setRequiresStorageNotLow(true)
                 .build()
 
-        val req =
-            PeriodicWorkRequestBuilder<SyncWorker>(interval, TimeUnit.MINUTES)
-                .setConstraints(constraints)
-                .setInputData(
-                    workDataOf(
-                        SyncWorker.KEY_PAIR_ID to pair.id,
-                        SyncWorker.KEY_IS_PERIODIC to true,
-                    ),
-                )
+            val req =
+                PeriodicWorkRequestBuilder<SyncWorker>(interval, TimeUnit.MINUTES)
+                    .setConstraints(constraints)
+                    .setInputData(
+                        workDataOf(
+                            SyncWorker.KEY_PAIR_ID to pair.id,
+                            SyncWorker.KEY_IS_PERIODIC to true,
+                        ),
+                    )
                 // Exponential backoff (sub-issue #142): transient retriable failures
                 // (network blips, Retriable CloudProviderException) re-enter the queue
                 // with WorkManager's exponential schedule starting at 30s, capped at

@@ -80,10 +80,9 @@ fun SectionCard(
         tonalElevation = tonalElevation,
     ) {
         Column(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .padding(contentPadding),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(contentPadding),
             verticalArrangement = verticalArrangement,
             content = content,
         )

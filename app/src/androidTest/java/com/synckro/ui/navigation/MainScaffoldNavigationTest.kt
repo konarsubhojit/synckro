@@ -3,6 +3,7 @@ package com.synckro.ui.navigation
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -34,6 +35,12 @@ class MainScaffoldNavigationTest {
         val pairsTab = activity.getString(R.string.nav_dest_pairs)
         composeRule.onNodeWithText(pairsTab).performClick()
         composeRule.waitForIdle()
+        // PairsScreen exposes an "Add sync pair" FAB content description; use
+        // it as a stable, visible signal that the screen rendered.
+        val addSyncPair = activity.getString(R.string.add_sync_pair)
+        assertTrue(
+            composeRule.onAllNodesWithContentDescription(addSyncPair).fetchSemanticsNodes().isNotEmpty(),
+        )
     }
 
     @Test

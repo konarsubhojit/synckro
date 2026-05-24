@@ -253,7 +253,6 @@ class SettingsRepository
             internal const val DEFAULT_CHARGING_ONLY = false
             internal val DEFAULT_CONFLICT_POLICY = ConflictPolicy.NEWEST_WINS
             internal const val DEFAULT_MAX_CONCURRENT_TRANSFERS = 3
-
             /** Public max cap used by both clamping logic and the settings slider upper bound. */
             const val MAX_CONCURRENT_TRANSFERS = 3
 

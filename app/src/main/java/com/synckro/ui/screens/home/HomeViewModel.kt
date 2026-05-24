@@ -10,6 +10,7 @@ import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.workDataOf
+import java.util.concurrent.TimeUnit
 import com.synckro.data.repository.AccountRepository
 import com.synckro.data.repository.ConflictRepository
 import com.synckro.data.repository.SettingsRepository
@@ -37,7 +38,6 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import timber.log.Timber
-import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 
 /**
@@ -62,9 +62,7 @@ class HomeViewModel
          * [UiState.pendingDelete] so the home screen can render an "undo" snackbar
          * (Material 3 snackbar pattern).
          */
-        data class PendingDelete(
-            val pair: SyncPair,
-        )
+        data class PendingDelete(val pair: SyncPair)
 
         data class UiState(
             val pairs: List<SyncPair> = emptyList(),
@@ -276,10 +274,7 @@ class HomeViewModel
          * @param skipped Number of pairs skipped because they require user action
          *   (needs re-link or re-auth) or are already syncing.
          */
-        data class SyncAllResult(
-            val synced: Int,
-            val skipped: Int,
-        )
+        data class SyncAllResult(val synced: Int, val skipped: Int)
 
         private val _syncAllResults = MutableSharedFlow<SyncAllResult>(extraBufferCapacity = 1)
 
@@ -310,8 +305,7 @@ class HomeViewModel
             val (eligible, skipped) = partitionForSyncAll(current.pairs, current.syncingPairIds)
             Timber.i(
                 "HomeViewModel.syncAllNow: enqueuing %d pair(s), skipping %d unhealthy/in-flight",
-                eligible.size,
-                skipped,
+                eligible.size, skipped,
             )
             eligible.forEach { syncNow(it) }
             _syncAllResults.tryEmit(SyncAllResult(synced = eligible.size, skipped = skipped))
@@ -407,12 +401,11 @@ class HomeViewModel
             val now = System.currentTimeMillis()
             val out = LinkedHashMap<Long, Long>(pairs.size)
             for (p in pairs) {
-                val next =
-                    SyncScheduler.estimateNextRunAtMs(
-                        pair = p,
-                        nowMs = now,
-                        globalAutoSyncEnabled = globalAutoSyncEnabled,
-                    )
+                val next = SyncScheduler.estimateNextRunAtMs(
+                    pair = p,
+                    nowMs = now,
+                    globalAutoSyncEnabled = globalAutoSyncEnabled,
+                )
                 if (next != null) out[p.id] = next
             }
             return out

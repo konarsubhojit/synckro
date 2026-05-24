@@ -12,15 +12,15 @@ import com.synckro.domain.model.CloudProviderType
 import com.synckro.domain.model.SyncEvent
 import com.synckro.domain.model.SyncEventLevel
 import com.synckro.domain.model.SyncEventTag
-import com.synckro.util.logging.LogExportConfig
 import com.synckro.util.logging.LogExporter
+import com.synckro.util.logging.LogExportConfig
 import com.synckro.util.logging.LogVisibilityConfig
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
@@ -30,9 +30,7 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /** Quick time-window presets for the Logs filter row. */
-enum class TimeWindow(
-    val durationMs: Long,
-) {
+enum class TimeWindow(val durationMs: Long) {
     LAST_HOUR(60 * 60 * 1_000L),
     LAST_24H(24 * 60 * 60 * 1_000L),
     LAST_7D(7 * 24 * 60 * 60 * 1_000L),
@@ -68,7 +66,6 @@ class LogsViewModel
     ) : ViewModel() {
         /** 0 means "show all pairs". */
         private val savedStatePairId: Long = savedStateHandle[KEY_PAIR_ID] ?: 0L
-
         /**
          * Time source (millis since epoch). Defaults to [System.currentTimeMillis].
          * Exposed as `internal var` so unit tests can inject a fixed clock without
@@ -134,7 +131,8 @@ class LogsViewModel
         val state: StateFlow<UiState> =
             combine(
                 eventsFlow,
-                combine(_levelFilter, _tagFilter, _accountFilter, _providerFilter, _timeWindowFilter) { level, tag, account, provider, timeWindow ->
+                combine(_levelFilter, _tagFilter, _accountFilter, _providerFilter, _timeWindowFilter) {
+                    level, tag, account, provider, timeWindow ->
                     PartialFilters(level, tag, account, provider, timeWindow)
                 }.combine(_searchQuery) { pf, query ->
                     Filters(pf.level, pf.tag, pf.account, pf.provider, query, pf.timeWindow)
@@ -158,7 +156,7 @@ class LogsViewModel
                     pairIdFilter = pairIdFilter,
                     hasActiveFilters =
                         pairIdFilter != null ||
-                            filters.level != null ||
+                        filters.level != null ||
                             filters.tag != null ||
                             filters.account != null ||
                             filters.provider != null ||

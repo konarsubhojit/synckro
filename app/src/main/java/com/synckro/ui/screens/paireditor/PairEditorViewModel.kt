@@ -19,7 +19,6 @@ import com.synckro.domain.model.SyncPair
 import com.synckro.domain.model.isDestructive
 import com.synckro.util.StringProvider
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -31,6 +30,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import javax.inject.Inject
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 
 /**
  * Friendly schedule preset options shown in the pair editor.
@@ -490,11 +490,8 @@ class PairEditorViewModel
          */
         fun goToNextStep() {
             _state.update { s ->
-                if (!s.canGoToNextStep || s.currentStep >= TOTAL_STEPS) {
-                    s
-                } else {
-                    s.copy(currentStep = s.currentStep + 1)
-                }
+                if (!s.canGoToNextStep || s.currentStep >= TOTAL_STEPS) s
+                else s.copy(currentStep = s.currentStep + 1)
             }
         }
 

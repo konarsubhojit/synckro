@@ -11,20 +11,21 @@ import com.synckro.domain.model.SyncPair
 import com.synckro.domain.provider.CloudProvider
 import com.synckro.domain.provider.CloudProviderException
 import com.synckro.domain.provider.RemoteFile
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
-import java.io.FilterInputStream
 import java.io.InputStream
-import java.util.concurrent.ConcurrentHashMap
+import java.io.FilterInputStream
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
@@ -192,10 +193,9 @@ class SyncOpApplier(
             val totalFiles = ops.size
             // Pre-compute per-op transfer bytes once so we don't repeat map lookups
             // inside the hot apply loop.
-            val opBytes =
-                LongArray(totalFiles) { i ->
-                    opTransferBytes(ops[i], pair, remoteFilesByPath, localIndexByPath)
-                }
+            val opBytes = LongArray(totalFiles) { i ->
+                opTransferBytes(ops[i], pair, remoteFilesByPath, localIndexByPath)
+            }
             val totalBytes = opBytes.sum()
             var filesProcessed = 0
             var bytesTransferred = 0L
@@ -1137,7 +1137,6 @@ class SyncOpApplier(
 
     private companion object {
         const val TAG = "SyncOpApplier"
-
         /** Emit in-flight byte updates at most once per 64 KiB read to cap callback churn. */
         const val REPORT_INTERVAL_BYTES = 64L * 1024L
     }

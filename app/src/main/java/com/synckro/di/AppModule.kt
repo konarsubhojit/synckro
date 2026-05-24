@@ -3,9 +3,9 @@ package com.synckro.di
 import android.content.ContentResolver
 import android.content.Context
 import androidx.datastore.core.DataStore
-import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.preferencesDataStoreFile
+import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.room.Room
 import androidx.work.WorkManager
 import com.synckro.data.local.dao.AccountDao
@@ -29,8 +29,8 @@ import com.synckro.domain.sync.RemoteEnumerator
 import com.synckro.domain.sync.SyncEngine
 import com.synckro.providers.fake.FakeCloudProvider
 import com.synckro.providers.gdrive.GoogleDriveAuthManager
-import com.synckro.providers.onedrive.OneDriveAuthManager
 import com.synckro.providers.onedrive.OneDriveCacheCompatibilityChecker
+import com.synckro.providers.onedrive.OneDriveAuthManager
 import com.synckro.util.ContextStringProvider
 import com.synckro.util.StringProvider
 import dagger.Module

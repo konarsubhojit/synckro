@@ -28,6 +28,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
+import androidx.compose.material3.TabRowDefaults
+import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -243,9 +245,19 @@ fun MainScaffold(
         ) {
             val primaryIndex = primaryDestinations.indexOf(selected).takeIf { it >= 0 }
             // When an overflow destination is active there is no primary tab
-            // selection; fall back to 0 for the TabRow indicator but leave every
-            // tab visually unselected.
-            TabRow(selectedTabIndex = primaryIndex ?: 0) {
+            // selection; we still need a non-negative index for the TabRow API
+            // but we suppress the indicator entirely so the user is not misled
+            // into thinking the first tab is selected.
+            TabRow(
+                selectedTabIndex = primaryIndex ?: 0,
+                indicator = { tabPositions ->
+                    if (primaryIndex != null) {
+                        TabRowDefaults.SecondaryIndicator(
+                            modifier = Modifier.tabIndicatorOffset(tabPositions[primaryIndex]),
+                        )
+                    }
+                },
+            ) {
                 primaryDestinations.forEachIndexed { index, destination ->
                     val label = stringResource(destination.labelRes)
                     Tab(

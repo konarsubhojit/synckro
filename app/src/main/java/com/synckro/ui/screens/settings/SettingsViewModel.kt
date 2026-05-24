@@ -69,21 +69,13 @@ class SettingsViewModel
          * delivered even if the collector momentarily lags.
          */
         sealed interface UiEvent {
-            data class ShareLogs(
-                val uri: android.net.Uri,
-            ) : UiEvent
+            data class ShareLogs(val uri: android.net.Uri) : UiEvent
 
-            data class ComposeFeedback(
-                val uri: android.net.Uri,
-            ) : UiEvent
+            data class ComposeFeedback(val uri: android.net.Uri) : UiEvent
 
-            data class ExportFailed(
-                val message: String,
-            ) : UiEvent
+            data class ExportFailed(val message: String) : UiEvent
 
-            data class CacheCleared(
-                val freedBytes: Long,
-            ) : UiEvent
+            data class CacheCleared(val freedBytes: Long) : UiEvent
         }
 
         private val _events = MutableSharedFlow<UiEvent>(extraBufferCapacity = 1)

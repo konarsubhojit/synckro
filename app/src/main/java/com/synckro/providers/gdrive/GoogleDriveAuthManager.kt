@@ -1,5 +1,6 @@
 package com.synckro.providers.gdrive
 
+import android.accounts.Account as AndroidAccount
 import android.app.Activity
 import android.app.PendingIntent
 import android.content.Context
@@ -42,11 +43,10 @@ import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import timber.log.Timber
-import java.util.Base64
 import javax.inject.Inject
 import javax.inject.Singleton
+import java.util.Base64
 import kotlin.coroutines.resume
-import android.accounts.Account as AndroidAccount
 
 /**
  * Google Drive [AuthManager] backed by Credential Manager (Google Identity Services)
@@ -313,7 +313,9 @@ class GoogleDriveAuthManager private constructor(
         return AuthResult.Success(Unit)
     }
 
-    override suspend fun currentAccounts(): List<Account> = readStoredAccounts()
+    override suspend fun currentAccounts(): List<Account> {
+        return readStoredAccounts()
+    }
 
     /**
      * Attempts a silent token acquisition via [Identity.getAuthorizationClient].

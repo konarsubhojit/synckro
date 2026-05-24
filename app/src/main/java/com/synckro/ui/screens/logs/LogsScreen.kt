@@ -12,9 +12,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -25,11 +25,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.ErrorOutline
-import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.outlined.BugReport
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -58,11 +58,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -71,12 +69,14 @@ import com.synckro.domain.model.CloudProviderType
 import com.synckro.domain.model.SyncEvent
 import com.synckro.domain.model.SyncEventLevel
 import com.synckro.domain.model.SyncEventTag
-import com.synckro.ui.components.CoachTooltip
 import com.synckro.ui.components.EmptyState
+import com.synckro.ui.components.CoachTooltip
 import com.synckro.ui.theme.SynckroTheme
 import com.synckro.util.logging.LogExportConfig
 import com.synckro.util.logging.LogExportSink
 import com.synckro.util.logging.LogVisibilityConfig
+import androidx.compose.material.icons.filled.History
+import androidx.compose.ui.tooling.preview.Preview
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -698,41 +698,28 @@ internal fun SyncEvent.toLogLine(dateFormat: SimpleDateFormat): String {
 private fun LogEntryRowPreview() {
     val fmt = remember { SimpleDateFormat("HH:mm:ss.SSS", Locale.US) }
     val baseMs = 1_700_000_000_000L
-    val events =
-        listOf(
-            SyncEvent(
-                id = 1,
-                pairId = null,
-                timestampMs = baseMs,
-                level = SyncEventLevel.DEBUG,
-                tag = SyncEventTag.SyncWorker,
-                message = "Enumerating remote files…",
-            ),
-            SyncEvent(
-                id = 2,
-                pairId = null,
-                timestampMs = baseMs + 1_000,
-                level = SyncEventLevel.INFO,
-                tag = SyncEventTag.OpApplier,
-                message = "Uploaded 3 files successfully.",
-            ),
-            SyncEvent(
-                id = 3,
-                pairId = null,
-                timestampMs = baseMs + 2_000,
-                level = SyncEventLevel.WARN,
-                tag = SyncEventTag.Auth,
-                message = "Token nearing expiry, refreshing.",
-            ),
-            SyncEvent(
-                id = 4,
-                pairId = null,
-                timestampMs = baseMs + 3_000,
-                level = SyncEventLevel.ERROR,
-                tag = SyncEventTag.SyncWorker,
-                message = "Upload failed: quota exceeded.",
-            ),
-        )
+    val events = listOf(
+        SyncEvent(
+            id = 1, pairId = null, timestampMs = baseMs,
+            level = SyncEventLevel.DEBUG, tag = SyncEventTag.SyncWorker,
+            message = "Enumerating remote files…",
+        ),
+        SyncEvent(
+            id = 2, pairId = null, timestampMs = baseMs + 1_000,
+            level = SyncEventLevel.INFO, tag = SyncEventTag.OpApplier,
+            message = "Uploaded 3 files successfully.",
+        ),
+        SyncEvent(
+            id = 3, pairId = null, timestampMs = baseMs + 2_000,
+            level = SyncEventLevel.WARN, tag = SyncEventTag.Auth,
+            message = "Token nearing expiry, refreshing.",
+        ),
+        SyncEvent(
+            id = 4, pairId = null, timestampMs = baseMs + 3_000,
+            level = SyncEventLevel.ERROR, tag = SyncEventTag.SyncWorker,
+            message = "Upload failed: quota exceeded.",
+        ),
+    )
     SynckroTheme {
         Surface {
             Column {
@@ -773,10 +760,9 @@ internal fun buildLogExportText(
     }
     val omitted = total - MAX_COPY_SHARE_ENTRIES
     val recent = events.subList(total - MAX_COPY_SHARE_ENTRIES, total)
-    val text =
-        buildString {
-            append("… $omitted earlier entries omitted (showing most recent $MAX_COPY_SHARE_ENTRIES)\n")
-            recent.joinTo(this, separator = "\n") { it.toLogLine(dateFormat) }
-        }
+    val text = buildString {
+        append("… $omitted earlier entries omitted (showing most recent $MAX_COPY_SHARE_ENTRIES)\n")
+        recent.joinTo(this, separator = "\n") { it.toLogLine(dateFormat) }
+    }
     return LogVisibilityConfig.redactForExport(text, config)
 }
