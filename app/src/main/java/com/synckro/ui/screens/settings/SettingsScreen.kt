@@ -163,6 +163,10 @@ fun SettingsScreen(
                     snackbarHostState.showSnackbar(
                         ctx.getString(R.string.settings_backup_settings_failed),
                     )
+                SettingsViewModel.UiEvent.SettingsBackupNoSettings ->
+                    snackbarHostState.showSnackbar(
+                        ctx.getString(R.string.settings_backup_settings_no_settings),
+                    )
                 SettingsViewModel.UiEvent.SettingsRestored ->
                     snackbarHostState.showSnackbar(
                         ctx.getString(R.string.settings_restore_settings_done_relaunch),
@@ -170,6 +174,10 @@ fun SettingsScreen(
                 SettingsViewModel.UiEvent.SettingsRestoreFailed ->
                     snackbarHostState.showSnackbar(
                         ctx.getString(R.string.settings_restore_settings_failed),
+                    )
+                SettingsViewModel.UiEvent.SettingsRestoreNoBackup ->
+                    snackbarHostState.showSnackbar(
+                        ctx.getString(R.string.settings_restore_settings_no_backup),
                     )
             }
         }

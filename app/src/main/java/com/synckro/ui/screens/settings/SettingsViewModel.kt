@@ -115,9 +115,13 @@ class SettingsViewModel
 
             data object SettingsBackupFailed : UiEvent
 
+            data object SettingsBackupNoSettings : UiEvent
+
             data object SettingsRestored : UiEvent
 
             data object SettingsRestoreFailed : UiEvent
+
+            data object SettingsRestoreNoBackup : UiEvent
         }
 
         private val _events = MutableSharedFlow<UiEvent>(extraBufferCapacity = 1)
@@ -434,12 +438,13 @@ class SettingsViewModel
 
         fun backupSettings() {
             viewModelScope.launch {
+                if (!settingsDataStoreFile().exists()) {
+                    _events.emit(UiEvent.SettingsBackupNoSettings)
+                    return@launch
+                }
                 runCatching {
                     withContext(Dispatchers.IO) {
                         val source = settingsDataStoreFile()
-                        check(source.exists()) {
-                            "No settings file found yet. Save any setting first, then try backing up again."
-                        }
                         val backup = settingsBackupFile()
                         backup.parentFile?.mkdirs()
                         source.copyTo(backup, overwrite = true)
@@ -455,12 +460,13 @@ class SettingsViewModel
 
         fun restoreSettings() {
             viewModelScope.launch {
+                if (!settingsBackupFile().exists()) {
+                    _events.emit(UiEvent.SettingsRestoreNoBackup)
+                    return@launch
+                }
                 runCatching {
                     withContext(Dispatchers.IO) {
                         val backup = settingsBackupFile()
-                        check(backup.exists()) {
-                            "No settings backup found. Create a backup before restoring."
-                        }
                         val target = settingsDataStoreFile()
                         target.parentFile?.mkdirs()
                         backup.copyTo(target, overwrite = true)

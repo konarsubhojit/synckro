@@ -367,6 +367,17 @@ class SettingsViewModelTest {
         }
 
     @Test
+    fun `backupSettings emits no-settings event when datastore file does not exist`() =
+        testScope.runTest {
+            val vm = newVm()
+
+            val eventAwait = async { vm.events.first() }
+            vm.backupSettings()
+
+            assertEquals(SettingsViewModel.UiEvent.SettingsBackupNoSettings, eventAwait.await())
+        }
+
+    @Test
     fun `restoreSettings restores last backup and emits success event`() =
         testScope.runTest {
             val vm = newVm()
@@ -385,14 +396,14 @@ class SettingsViewModelTest {
         }
 
     @Test
-    fun `restoreSettings emits failure event when backup does not exist`() =
+    fun `restoreSettings emits no-backup event when backup does not exist`() =
         testScope.runTest {
             val vm = newVm()
 
             val eventAwait = async { vm.events.first() }
             vm.restoreSettings()
 
-            assertEquals(SettingsViewModel.UiEvent.SettingsRestoreFailed, eventAwait.await())
+            assertEquals(SettingsViewModel.UiEvent.SettingsRestoreNoBackup, eventAwait.await())
         }
 
     @Test
