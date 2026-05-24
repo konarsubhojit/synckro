@@ -260,6 +260,39 @@ class HomeViewModel
             viewModelScope.launch { settingsRepository.markTooltipSeen(tooltipId) }
         }
 
+        /**
+         * Phase 3 (Synced Folders redesign): toggles the global auto-sync master
+         * switch from the Pairs screen. Mirrors [com.synckro.ui.screens.settings
+         * .SettingsViewModel.setGlobalAutoSync] — it persists the new preference
+         * and immediately reschedules (or cancels) periodic sync work for every
+         * pair so the change takes effect without bouncing back to Settings.
+         */
+        fun setGlobalAutoSync(enabled: Boolean) {
+            Timber.i("HomeViewModel.setGlobalAutoSync(enabled=$enabled)")
+            viewModelScope.launch {
+                settingsRepository.setGlobalAutoSync(enabled)
+                val pairs = syncPairRepository.observeAll(context.contentResolver).first()
+                syncScheduler.scheduleOrCancelAll(pairs, enabled)
+            }
+        }
+
+        /**
+         * Phase 3 (Synced Folders redesign): toggles the per-pair auto-sync flag
+         * from the Pairs screen. Persists [SyncPair.autoSyncEnabled] on the pair
+         * and then reschedules or cancels the WorkManager periodic job for it,
+         * matching the pattern used by the pair editor's save path.
+         */
+        fun setPairAutoSync(pair: SyncPair, enabled: Boolean) {
+            if (pair.autoSyncEnabled == enabled) return
+            Timber.i("HomeViewModel.setPairAutoSync(id=${pair.id}, enabled=$enabled)")
+            viewModelScope.launch {
+                val updated = pair.copy(autoSyncEnabled = enabled)
+                syncPairRepository.upsert(updated)
+                val globalEnabled = settingsRepository.globalAutoSyncEnabled.first()
+                syncScheduler.scheduleOrCancel(updated, globalEnabled)
+            }
+        }
+
         private fun commitDeleteInternal(id: Long) {
             syncScheduler.cancel(id)
             viewModelScope.launch { syncPairRepository.delete(id) }

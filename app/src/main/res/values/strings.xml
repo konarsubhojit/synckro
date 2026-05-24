@@ -56,6 +56,18 @@
     <string name="home_sync_transfer_progress_percent">%1$d%%</string>
     <string name="home_sync_transfer_size_format">%1$s / %2$s</string>
 
+    <!-- Phase 3 (Synced Folders redesign): master auto-sync card + per-pair switch / overflow. -->
+    <string name="pairs_master_autosync_title">Auto-sync</string>
+    <string name="pairs_master_autosync_body">Keep all sync pairs up to date automatically in the background.</string>
+    <string name="pairs_master_autosync_body_off">Paused — pairs will not sync automatically until you turn this on.</string>
+    <string name="pairs_pair_autosync_switch_description">Toggle automatic sync for this pair</string>
+    <string name="pairs_overflow_menu_description">More options</string>
+    <string name="pairs_card_local_folder_label">Local: %1$s</string>
+    <string name="pairs_card_remote_folder_label">Cloud: %1$s</string>
+    <string name="pairs_card_direction_label">Mode: %1$s</string>
+    <string name="pairs_card_local_folder_unknown">(folder)</string>
+    <string name="pairs_card_remote_root">root</string>
+
     <!-- Pair detail screen (Phase 5c) -->
     <string name="pair_detail_title">Sync pair</string>
     <string name="pair_detail_loading">Loading sync pair…</string>

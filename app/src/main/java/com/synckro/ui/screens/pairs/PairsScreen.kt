@@ -23,15 +23,21 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.CloudOff
+import androidx.compose.material.icons.filled.CompareArrows
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Error
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.FolderOff
 import androidx.compose.material.icons.filled.Inbox
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
@@ -44,6 +50,7 @@ import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -76,6 +83,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.documentfile.provider.DocumentFile
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavType
@@ -84,6 +92,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.synckro.R
+import com.synckro.domain.model.SyncDirection
 import com.synckro.domain.model.SyncPair
 import com.synckro.domain.sync.TransferDirection
 import com.synckro.domain.sync.TransferProgress
@@ -189,6 +198,8 @@ fun PairsScreen(
             onRequestDelete = viewModel::requestDelete,
             onSyncNow = viewModel::syncNow,
             onSyncAllNow = viewModel::syncAllNow,
+            onSetGlobalAutoSync = viewModel::setGlobalAutoSync,
+            onSetPairAutoSync = viewModel::setPairAutoSync,
             globalAutoSyncEnabled = state.globalAutoSyncEnabled,
             snackbarHostState = snackbarHostState,
             modifier = modifier,
@@ -218,6 +229,8 @@ fun PairsScreen(
                     onRequestDelete = viewModel::requestDelete,
                     onSyncNow = viewModel::syncNow,
                     onSyncAllNow = viewModel::syncAllNow,
+                    onSetGlobalAutoSync = viewModel::setGlobalAutoSync,
+                    onSetPairAutoSync = viewModel::setPairAutoSync,
                     globalAutoSyncEnabled = state.globalAutoSyncEnabled,
                     snackbarHostState = snackbarHostState,
                     modifier = Modifier.fillMaxSize(),
@@ -271,6 +284,8 @@ private fun PairsListScaffold(
     onRequestDelete: (SyncPair) -> Unit,
     onSyncNow: (SyncPair) -> Unit,
     onSyncAllNow: () -> Unit,
+    onSetGlobalAutoSync: (Boolean) -> Unit,
+    onSetPairAutoSync: (SyncPair, Boolean) -> Unit,
     globalAutoSyncEnabled: Boolean,
     snackbarHostState: SnackbarHostState,
     modifier: Modifier = Modifier,
@@ -320,6 +335,8 @@ private fun PairsListScaffold(
             onAddSyncPair = onAddSyncPair,
             onOpenPairDetail = onOpenPairDetail,
             onOpenReauth = onOpenReauth,
+            onSetGlobalAutoSync = onSetGlobalAutoSync,
+            onSetPairAutoSync = onSetPairAutoSync,
             globalAutoSyncEnabled = globalAutoSyncEnabled,
             modifier = Modifier.fillMaxSize().padding(padding),
         )
@@ -373,6 +390,8 @@ private fun PairsList(
     onAddSyncPair: () -> Unit,
     onOpenPairDetail: (Long) -> Unit,
     onOpenReauth: (accountId: String?) -> Unit,
+    onSetGlobalAutoSync: (Boolean) -> Unit,
+    onSetPairAutoSync: (SyncPair, Boolean) -> Unit,
     globalAutoSyncEnabled: Boolean,
     modifier: Modifier = Modifier,
 ) {
@@ -416,6 +435,15 @@ private fun PairsList(
                     .padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
+                // Phase 3 (Synced Folders redesign): master "Enable auto-sync"
+                // card pinned to the top of the list. Toggling it reschedules
+                // every pair via HomeViewModel.setGlobalAutoSync.
+                item(key = "master_autosync") {
+                    GlobalAutoSyncCard(
+                        enabled = globalAutoSyncEnabled,
+                        onCheckedChange = onSetGlobalAutoSync,
+                    )
+                }
                 items(state.pairs, key = { it.id }) { pair ->
                     SyncPairRow(
                         pair = pair,
@@ -429,11 +457,66 @@ private fun PairsList(
                         onSyncNow = { onSyncNow(pair) },
                         onOpenDetail = { onOpenPairDetail(pair.id) },
                         onOpenReauth = { onOpenReauth(pair.accountId) },
+                        onSetPairAutoSync = { enabled -> onSetPairAutoSync(pair, enabled) },
                         globalAutoSyncEnabled = globalAutoSyncEnabled,
                     )
                 }
                 item { Spacer(Modifier.height(80.dp)) } // leave room for FAB
             }
+        }
+    }
+}
+
+/**
+ * Phase 3 (Synced Folders redesign): top "Enable auto-sync" master card.
+ *
+ * Mirrors the Settings → Sync defaults switch so users can pause/resume
+ * background sync without leaving the Pairs tab. The body text changes to
+ * reflect the paused state and reuses existing strings to communicate the
+ * effect on individual pairs.
+ */
+@Composable
+private fun GlobalAutoSyncCard(
+    enabled: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    SectionCard(
+        modifier = Modifier.fillMaxWidth(),
+        containerColor = MaterialTheme.colorScheme.primaryContainer,
+        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+        verticalArrangement = Arrangement.spacedBy(0.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Icon(
+                imageVector = Icons.Default.Sync,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(R.string.pairs_master_autosync_title),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    text = stringResource(
+                        if (enabled) {
+                            R.string.pairs_master_autosync_body
+                        } else {
+                            R.string.pairs_master_autosync_body_off
+                        },
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            Switch(
+                checked = enabled,
+                onCheckedChange = onCheckedChange,
+            )
         }
     }
 }
@@ -451,6 +534,7 @@ private fun SyncPairRow(
     onSyncNow: () -> Unit,
     onOpenDetail: () -> Unit,
     onOpenReauth: () -> Unit,
+    onSetPairAutoSync: (Boolean) -> Unit,
     globalAutoSyncEnabled: Boolean,
 ) {
     var showDeleteDialog by remember { mutableStateOf(false) }
@@ -569,6 +653,29 @@ private fun SyncPairRow(
                         else -> Unit
                     }
                 }
+
+                // Phase 3 (Synced Folders redesign): explicit cloud + local
+                // folder + mode rows so users can identify a pair at a glance
+                // without opening Pair Detail.
+                PairInfoRow(
+                    icon = Icons.Default.Cloud,
+                    text = stringResource(
+                        R.string.pairs_card_remote_folder_label,
+                        pair.remoteFolderId.ifBlank { stringResource(R.string.pairs_card_remote_root) },
+                    ),
+                )
+                val localFolderName = rememberLocalFolderName(pair.localTreeUri)
+                PairInfoRow(
+                    icon = Icons.Default.Folder,
+                    text = stringResource(R.string.pairs_card_local_folder_label, localFolderName),
+                )
+                PairInfoRow(
+                    icon = Icons.Default.CompareArrows,
+                    text = stringResource(
+                        R.string.pairs_card_direction_label,
+                        directionShortLabel(pair.direction),
+                    ),
+                )
 
                 when {
                     pair.needsReLink -> StatusBanner(
@@ -768,25 +875,36 @@ private fun SyncPairRow(
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    IconButton(onClick = onSyncNow, enabled = !isSyncing) {
-                        Icon(
-                            Icons.Default.Sync,
-                            contentDescription = stringResource(R.string.sync_now),
-                        )
-                    }
-                    IconButton(onClick = onEdit) {
-                        Icon(
-                            Icons.Default.Edit,
-                            contentDescription = stringResource(R.string.home_edit_pair),
-                        )
-                    }
-                    IconButton(onClick = { showDeleteDialog = true }) {
-                        Icon(
-                            Icons.Default.Delete,
-                            contentDescription = stringResource(R.string.home_delete_pair),
-                            tint = MaterialTheme.colorScheme.error,
+                    // Phase 3 (Synced Folders redesign): per-folder auto-sync
+                    // switch. Mirrors the master card switch but scoped to a
+                    // single pair (SyncPair.autoSyncEnabled).
+                    val pairAutoSyncDescription = stringResource(R.string.pairs_pair_autosync_switch_description)
+                    Switch(
+                        checked = pair.autoSyncEnabled,
+                        onCheckedChange = onSetPairAutoSync,
+                        modifier = Modifier.semantics {
+                            contentDescription = pairAutoSyncDescription
+                        },
+                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        IconButton(onClick = onSyncNow, enabled = !isSyncing) {
+                            Icon(
+                                Icons.Default.Sync,
+                                contentDescription = stringResource(R.string.sync_now),
+                            )
+                        }
+                        // Phase 3 (Synced Folders redesign): collapse the
+                        // standalone Edit/Delete icon buttons into a single
+                        // overflow menu so the action row matches the
+                        // reference screenshot.
+                        PairOverflowMenu(
+                            onEdit = onEdit,
+                            onDelete = { showDeleteDialog = true },
                         )
                     }
                 }
@@ -794,6 +912,126 @@ private fun SyncPairRow(
         }
     }
 }
+
+/**
+ * Compact row used to surface a labelled property (cloud/local folder, mode)
+ * on a pair card. Phase 3 (Synced Folders redesign).
+ */
+@Composable
+private fun PairInfoRow(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    text: String,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(14.dp),
+        )
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+/**
+ * Overflow menu shown on each pair card (Phase 3 — Synced Folders redesign).
+ *
+ * Houses the secondary "Edit" and "Delete" actions that previously lived as
+ * standalone icon buttons. The primary "Sync now" remains a top-level icon
+ * so the most common action stays one tap away.
+ */
+@Composable
+private fun PairOverflowMenu(
+    onEdit: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        IconButton(onClick = { expanded = true }) {
+            Icon(
+                Icons.Default.MoreVert,
+                contentDescription = stringResource(R.string.pairs_overflow_menu_description),
+            )
+        }
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+        ) {
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.home_edit_pair)) },
+                leadingIcon = {
+                    Icon(Icons.Default.Edit, contentDescription = null)
+                },
+                onClick = {
+                    expanded = false
+                    onEdit()
+                },
+            )
+            DropdownMenuItem(
+                text = {
+                    Text(
+                        stringResource(R.string.home_delete_pair),
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                },
+                leadingIcon = {
+                    Icon(
+                        Icons.Default.Delete,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.error,
+                    )
+                },
+                onClick = {
+                    expanded = false
+                    onDelete()
+                },
+            )
+        }
+    }
+}
+
+/**
+ * Resolves a SAF tree URI to its display name (the user-visible folder name)
+ * using [DocumentFile.fromTreeUri]. Falls back to a stable placeholder so the
+ * card never renders an empty path label.
+ */
+@Composable
+private fun rememberLocalFolderName(localTreeUri: String): String {
+    val context = LocalContext.current
+    val fallback = stringResource(R.string.pairs_card_local_folder_unknown)
+    return remember(localTreeUri) {
+        if (localTreeUri.isBlank()) {
+            fallback
+        } else {
+            runCatching {
+                val uri = android.net.Uri.parse(localTreeUri)
+                DocumentFile.fromTreeUri(context, uri)?.name
+            }.getOrNull()?.takeIf { it.isNotBlank() } ?: fallback
+        }
+    }
+}
+
+/** Compact direction label used on pair cards (Phase 3 — Synced Folders redesign). */
+@Composable
+private fun directionShortLabel(direction: SyncDirection): String = stringResource(
+    when (direction) {
+        SyncDirection.LOCAL_TO_REMOTE -> R.string.direction_local_to_remote
+        SyncDirection.REMOTE_TO_LOCAL -> R.string.direction_remote_to_local
+        SyncDirection.BIDIRECTIONAL -> R.string.direction_bidirectional
+        SyncDirection.UPLOAD_AND_DELETE_LOCAL_AFTER_N_DAYS -> R.string.direction_upload_delete_local
+        SyncDirection.DOWNLOAD_AND_DELETE_REMOTE_AFTER_N_DAYS -> R.string.direction_download_delete_remote
+    },
+)
 
 /**
  * Coarse status used to colour the left-edge stripe on a pair card. Derived
