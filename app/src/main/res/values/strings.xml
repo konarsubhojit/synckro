@@ -214,11 +214,20 @@
 
     <!-- Navigation -->
     <string name="nav_back">Back</string>
-    <string name="nav_dest_pairs">Pairs</string>
+    <string name="nav_dest_pairs">Synced folders</string>
     <string name="nav_dest_conflicts">Conflicts</string>
-    <string name="nav_dest_logs">Logs</string>
+    <string name="nav_dest_logs">Sync history</string>
     <string name="nav_dest_accounts">Accounts</string>
     <string name="nav_dest_settings">Settings</string>
+    <string name="nav_dest_status">Status</string>
+    <!-- Header actions for the main scaffold app bar. -->
+    <string name="action_close">Close</string>
+    <string name="action_more">More options</string>
+    <!-- Status tab placeholder content (Phase 1). -->
+    <string name="status_title">Status</string>
+    <string name="status_summary_pairs">Configured sync pairs: %1$d</string>
+    <string name="status_summary_conflicts">Pending conflicts: %1$d</string>
+    <string name="status_summary_empty">No sync pairs configured yet.</string>
     <!-- Content description suffix used for the conflicts nav destination badge.
          e.g. "Conflicts (3 pending)" -->
     <string name="nav_dest_conflicts_badge_format">%1$d pending</string>

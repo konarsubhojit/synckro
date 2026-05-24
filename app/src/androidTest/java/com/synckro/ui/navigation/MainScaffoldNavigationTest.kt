@@ -1,7 +1,10 @@
 package com.synckro.ui.navigation
 
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onFirst
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -18,24 +21,68 @@ class MainScaffoldNavigationTest {
     val composeRule = createAndroidComposeRule<MainActivity>()
 
     @Test
-    fun bottomTabsShowTheirScreenTitles() {
+    fun primaryTabsShowTheirScreens() {
         val activity = composeRule.activity
         dismissOnboardingIfPresent()
 
-        val settingsTab = activity.getString(R.string.nav_dest_settings)
-        val settingsSection = activity.getString(R.string.settings_section_appearance)
-        composeRule.onNodeWithText(settingsTab).performClick()
-        assertTrue(composeRule.onAllNodesWithText(settingsSection).fetchSemanticsNodes().isNotEmpty())
-
-        val accountsTab = activity.getString(R.string.nav_dest_accounts)
-        val accountsBody = activity.getString(R.string.accounts_body)
-        composeRule.onNodeWithText(accountsTab).performClick()
-        assertTrue(composeRule.onAllNodesWithText(accountsBody).fetchSemanticsNodes().isNotEmpty())
-
+        // Sync history (Logs) is a primary top tab.
         val logsTab = activity.getString(R.string.nav_dest_logs)
         val logsShareExport = activity.getString(R.string.logs_share_export)
         composeRule.onNodeWithText(logsTab).performClick()
         assertTrue(composeRule.onAllNodesWithText(logsShareExport).fetchSemanticsNodes().isNotEmpty())
+
+        // Synced folders (Pairs) is a primary top tab.
+        val pairsTab = activity.getString(R.string.nav_dest_pairs)
+        composeRule.onNodeWithText(pairsTab).performClick()
+        composeRule.waitForIdle()
+        // PairsScreen exposes an "Add sync pair" FAB content description; use
+        // it as a stable, visible signal that the screen rendered.
+        val addSyncPair = activity.getString(R.string.add_sync_pair)
+        assertTrue(
+            composeRule.onAllNodesWithContentDescription(addSyncPair).fetchSemanticsNodes().isNotEmpty(),
+        )
+    }
+
+    @Test
+    fun overflowMenuExposesSecondaryDestinations() {
+        val activity = composeRule.activity
+        dismissOnboardingIfPresent()
+
+        // Open the top-right overflow ("more options") menu.
+        val more = activity.getString(R.string.action_more)
+        // The content description on the overflow icon may include the badge
+        // suffix; match by prefix using onAllNodesWithContentDescription.
+        val overflowNodes = composeRule.onAllNodesWithContentDescription(more, substring = true)
+        assertTrue(overflowNodes.fetchSemanticsNodes().isNotEmpty())
+        overflowNodes.onFirst().performClick()
+        composeRule.waitForIdle()
+
+        // Tapping Settings in the overflow shows the settings screen body.
+        val settingsItem = activity.getString(R.string.nav_dest_settings)
+        val settingsSection = activity.getString(R.string.settings_section_appearance)
+        composeRule.onNodeWithText(settingsItem).performClick()
+        assertTrue(composeRule.onAllNodesWithText(settingsSection).fetchSemanticsNodes().isNotEmpty())
+
+        // Open overflow again and pick Accounts.
+        composeRule.onAllNodesWithContentDescription(more, substring = true)
+            .onFirst().performClick()
+        composeRule.waitForIdle()
+        val accountsItem = activity.getString(R.string.nav_dest_accounts)
+        val accountsBody = activity.getString(R.string.accounts_body)
+        composeRule.onNodeWithText(accountsItem).performClick()
+        assertTrue(composeRule.onAllNodesWithText(accountsBody).fetchSemanticsNodes().isNotEmpty())
+    }
+
+    @Test
+    fun headerShowsAppBrandingAndCloseAction() {
+        val activity = composeRule.activity
+        dismissOnboardingIfPresent()
+
+        val appName = activity.getString(R.string.app_name)
+        assertTrue(composeRule.onAllNodesWithText(appName).fetchSemanticsNodes().isNotEmpty())
+
+        val close = activity.getString(R.string.action_close)
+        composeRule.onNodeWithContentDescription(close).assertExists()
     }
 
     private fun dismissOnboardingIfPresent() {
