@@ -269,6 +269,7 @@
     <string name="status_card_battery_title">Battery optimization</string>
     <string name="status_card_battery_body">Synckro is being throttled by Android battery optimizations. Background syncs may be delayed or skipped.</string>
     <string name="status_card_battery_action">Allow background activity</string>
+    <string name="status_card_battery_dismiss">Dismiss battery optimisation warning</string>
 
     <string name="status_card_recent_changes_title">Recent changes</string>
     <string name="status_card_recent_changes_empty">No sync runs yet.</string>

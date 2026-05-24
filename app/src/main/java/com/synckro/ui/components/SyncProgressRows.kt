@@ -32,6 +32,7 @@ fun SyncProgressRows(
     progress: TransferProgress?,
     syncingLabel: String,
     modifier: Modifier = Modifier,
+    showActiveTransfers: Boolean = true,
 ) {
     val fraction = primaryProgressFraction(progress)
     Column(
@@ -78,10 +79,15 @@ fun SyncProgressRows(
             )
         }
         val activeTransfers = progress?.activeTransfers.orEmpty()
-        if (activeTransfers.isNotEmpty()) {
+        if (showActiveTransfers && activeTransfers.isNotEmpty()) {
             activeTransfers.forEach { transfer ->
                 ActiveTransferRow(transfer = transfer)
             }
+        } else if (!showActiveTransfers && activeTransfers.isNotEmpty()) {
+            // Per-file rows now live on the Status screen so the pair card
+            // shows only the aggregate progress bar and counters. Intentionally
+            // omit the rows here to avoid duplicating the live "currently
+            // uploading/downloading" UX.
         } else {
             progress?.currentFileName?.let { fileName ->
                 Text(
@@ -102,7 +108,7 @@ fun SyncProgressRows(
 }
 
 @Composable
-private fun ActiveTransferRow(
+fun ActiveTransferRow(
     transfer: ActiveTransfer,
 ) {
     val context = LocalContext.current

@@ -101,6 +101,12 @@ class HomeViewModel
             val seenTooltips: Set<String> = emptySet(),
             /** Live transfer progress for each syncing pair; absent when unavailable or finished. */
             val progressByPairId: Map<Long, TransferProgress> = emptyMap(),
+            /**
+             * When `true` the user has explicitly dismissed the battery
+             * optimisation warning card on the Status screen and it should
+             * stay hidden until reset from Settings.
+             */
+            val batteryWarningDismissed: Boolean = false,
         )
 
         /** Pair IDs that have an active "sync now" run; updated optimistically. */
@@ -169,6 +175,8 @@ class HomeViewModel
                 uiState.copy(seenTooltips = seenTooltips)
             }.combine(pairProgress) { uiState, prog ->
                 uiState.copy(progressByPairId = prog)
+            }.combine(settingsRepository.batteryWarningDismissed) { uiState, dismissed ->
+                uiState.copy(batteryWarningDismissed = dismissed)
             }.stateIn(
                 scope = viewModelScope,
                 started = SharingStarted.WhileSubscribed(5_000),
@@ -273,6 +281,17 @@ class HomeViewModel
 
         fun markTooltipSeen(tooltipId: String) {
             viewModelScope.launch { settingsRepository.markTooltipSeen(tooltipId) }
+        }
+
+        /**
+         * Persists the user's "don't show again" choice for the battery
+         * optimisation warning card on the Status screen. Some Android OEMs
+         * grant background permission through a path that does not flip
+         * [android.os.PowerManager.isIgnoringBatteryOptimizations], leaving the
+         * card stuck visible — this lets the user dismiss it for good.
+         */
+        fun dismissBatteryWarning() {
+            viewModelScope.launch { settingsRepository.setBatteryWarningDismissed(true) }
         }
 
         /**

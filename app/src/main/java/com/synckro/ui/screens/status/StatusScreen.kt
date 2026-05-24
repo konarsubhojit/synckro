@@ -83,6 +83,7 @@ fun StatusScreen(
     val showBanner by remember(overview.warnings, warningDismissed) {
         derivedStateOf { overview.warnings.hasAny && !warningDismissed }
     }
+    val showBatteryCard = !ignoringBatteryOptimizations && !state.batteryWarningDismissed
 
     Box(modifier = modifier.fillMaxSize()) {
         LazyColumn(
@@ -108,8 +109,13 @@ fun StatusScreen(
                 )
             }
             item { SyncStatusCard(overview.syncStatus) }
-            if (!ignoringBatteryOptimizations) {
-                item { BatteryOptimizationCard(onAction = { openBatterySettings(context) }) }
+            if (showBatteryCard) {
+                item {
+                    BatteryOptimizationCard(
+                        onAction = { openBatterySettings(context) },
+                        onDismiss = { viewModel.dismissBatteryWarning() },
+                    )
+                }
             }
             item { RecentChangesCard(overview.recentChanges) }
             item { AccountsCard(overview.accountRows) }

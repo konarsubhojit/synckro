@@ -45,37 +45,26 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.synckro.R
 import com.synckro.ui.components.CoachTooltipIds
 import com.synckro.ui.components.MainDestinationTabRow
-import com.synckro.ui.screens.accounts.AccountsScreen
-import com.synckro.ui.screens.conflictinbox.ConflictInboxScreen
 import com.synckro.ui.screens.home.HomeViewModel
 import com.synckro.ui.screens.logs.LogsScreen
 import com.synckro.ui.screens.pairs.PairsScreen
-import com.synckro.ui.screens.settings.SettingsScreen
 import com.synckro.ui.screens.status.StatusScreen
 
 /**
- * Top-level destinations rendered by [MainScaffold].
+ * Top-level destinations rendered inline by [MainScaffold] as primary tabs.
  *
- * Each destination belongs to a [Category]:
- *  * [Category.PRIMARY] — exposed as a top tab in the header [TabRow].
- *  * [Category.OVERFLOW] — accessed via the top-right "more options" menu.
- *
- * The enum order here is the order shown in the tab row / overflow menu.
+ * Secondary destinations (Conflicts / Accounts / Settings) are no longer
+ * embedded tabs — they have been promoted to dedicated full-screen routes
+ * pushed on top of [MainScaffold] via [SynckroNavHost]. The overflow menu
+ * navigates to those routes instead of selecting an inner tab.
  */
 enum class MainDestination(
     val icon: ImageVector,
     val labelRes: Int,
-    val category: Category,
 ) {
-    Status(Icons.Filled.Dashboard, R.string.nav_dest_status, Category.PRIMARY),
-    Logs(Icons.Filled.History, R.string.nav_dest_logs, Category.PRIMARY),
-    Pairs(Icons.Filled.Folder, R.string.nav_dest_pairs, Category.PRIMARY),
-    Conflicts(Icons.Filled.Inbox, R.string.nav_dest_conflicts, Category.OVERFLOW),
-    Accounts(Icons.Filled.AccountCircle, R.string.nav_dest_accounts, Category.OVERFLOW),
-    Settings(Icons.Filled.Settings, R.string.nav_dest_settings, Category.OVERFLOW),
-    ;
-
-    enum class Category { PRIMARY, OVERFLOW }
+    Status(Icons.Filled.Dashboard, R.string.nav_dest_status),
+    Logs(Icons.Filled.History, R.string.nav_dest_logs),
+    Pairs(Icons.Filled.Folder, R.string.nav_dest_pairs),
 }
 
 /**
@@ -113,10 +102,11 @@ fun MainScaffold(
     onEditSyncPair: (Long) -> Unit,
     onClose: () -> Unit = {},
     onOpenPairDetail: (Long) -> Unit = {},
+    onOpenConflicts: () -> Unit = {},
+    onOpenAccounts: (String?) -> Unit = {},
+    onOpenSettings: () -> Unit = {},
     pendingDestination: MainDestination? = null,
     onPendingDestinationHandled: () -> Unit = {},
-    pendingAccountHighlight: String? = null,
-    onPendingAccountHighlightHandled: () -> Unit = {},
     pendingLogsPairId: Long? = null,
     onPendingLogsPairHandled: () -> Unit = {},
     // The conflicts badge reads from the shared HomeViewModel (which already
@@ -127,25 +117,14 @@ fun MainScaffold(
 ) {
     var selected by rememberSaveable { mutableStateOf(MainDestination.Status) }
 
-    // The account id (if any) that AccountsScreen should briefly highlight on
-    // its next composition. Set either by an external deep-link
-    // ([pendingAccountHighlight]) or by an internal request from PairsScreen's
-    // reauth banner — both paths land on the same AccountsScreen consumer.
-    var currentAccountHighlight by remember { mutableStateOf<String?>(null) }
     var currentLogsPairId by remember { mutableStateOf<Long?>(null) }
     var overflowExpanded by remember { mutableStateOf(false) }
 
-    // Honour external deep-links (e.g. re-auth notification → Accounts).
+    // Honour external deep-links (e.g. re-auth notification → Logs).
     LaunchedEffect(pendingDestination) {
         if (pendingDestination != null) {
             selected = pendingDestination
             onPendingDestinationHandled()
-        }
-    }
-    LaunchedEffect(pendingAccountHighlight) {
-        if (pendingAccountHighlight != null) {
-            currentAccountHighlight = pendingAccountHighlight
-            onPendingAccountHighlightHandled()
         }
     }
     LaunchedEffect(pendingLogsPairId) {
@@ -162,14 +141,7 @@ fun MainScaffold(
             state.hasCompletedSyncRun &&
             CoachTooltipIds.LOGS_EXPORT !in state.seenTooltips
 
-    val primaryDestinations =
-        remember {
-            MainDestination.entries.filter { it.category == MainDestination.Category.PRIMARY }
-        }
-    val overflowDestinations =
-        remember {
-            MainDestination.entries.filter { it.category == MainDestination.Category.OVERFLOW }
-        }
+    val primaryDestinations = remember { MainDestination.entries.toList() }
 
     Scaffold(
         topBar = {
@@ -209,25 +181,42 @@ fun MainScaffold(
                             expanded = overflowExpanded,
                             onDismissRequest = { overflowExpanded = false },
                         ) {
-                            overflowDestinations.forEach { destination ->
-                                val label = stringResource(destination.labelRes)
-                                DropdownMenuItem(
-                                    text = {
-                                        OverflowMenuLabel(
-                                            destination = destination,
-                                            label = label,
-                                            pendingConflictCount = pendingConflictCount,
-                                        )
-                                    },
-                                    leadingIcon = {
-                                        Icon(destination.icon, contentDescription = null)
-                                    },
-                                    onClick = {
-                                        overflowExpanded = false
-                                        selected = destination
-                                    },
-                                )
-                            }
+                            DropdownMenuItem(
+                                text = {
+                                    OverflowMenuLabel(
+                                        labelRes = R.string.nav_dest_conflicts,
+                                        showBadge = pendingConflictCount > 0,
+                                        pendingConflictCount = pendingConflictCount,
+                                    )
+                                },
+                                leadingIcon = {
+                                    Icon(Icons.Filled.Inbox, contentDescription = null)
+                                },
+                                onClick = {
+                                    overflowExpanded = false
+                                    onOpenConflicts()
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.nav_dest_accounts)) },
+                                leadingIcon = {
+                                    Icon(Icons.Filled.AccountCircle, contentDescription = null)
+                                },
+                                onClick = {
+                                    overflowExpanded = false
+                                    onOpenAccounts(null)
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.nav_dest_settings)) },
+                                leadingIcon = {
+                                    Icon(Icons.Filled.Settings, contentDescription = null)
+                                },
+                                onClick = {
+                                    overflowExpanded = false
+                                    onOpenSettings()
+                                },
+                            )
                         }
                     }
                 },
@@ -265,23 +254,18 @@ fun MainScaffold(
                                 onAddSyncPair = onAddSyncPair,
                                 onEditSyncPair = onEditSyncPair,
                                 onOpenPairDetail = onOpenPairDetail,
-                                onOpenConflicts = { selected = MainDestination.Conflicts },
+                                onOpenConflicts = onOpenConflicts,
                                 onOpenLogs = { pairId ->
                                     currentLogsPairId = pairId
                                     selected = MainDestination.Logs
                                 },
                                 onOpenReauth = { accountId ->
-                                    // Switch to the Accounts overflow destination and
-                                    // ask it to highlight the affected account.
-                                    currentAccountHighlight = accountId
-                                    selected = MainDestination.Accounts
+                                    // Phase 6: Accounts is now its own full-screen
+                                    // route, so navigate (with optional highlight)
+                                    // instead of switching an inner tab.
+                                    onOpenAccounts(accountId)
                                 },
                                 viewModel = homeViewModel,
-                            )
-                        MainDestination.Conflicts ->
-                            ConflictInboxScreen(
-                                // No back arrow — hosted as a destination.
-                                onBack = null,
                             )
                         MainDestination.Logs ->
                             LogsScreen(
@@ -293,18 +277,6 @@ fun MainScaffold(
                                 onExportCoachTooltipShown = {
                                     homeViewModel.markTooltipSeen(CoachTooltipIds.LOGS_EXPORT)
                                 },
-                            )
-                        MainDestination.Accounts ->
-                            AccountsScreen(
-                                activity = activity,
-                                onBack = null,
-                                highlightAccountId = currentAccountHighlight,
-                                onHighlightConsumed = { currentAccountHighlight = null },
-                            )
-                        MainDestination.Settings ->
-                            SettingsScreen(
-                                onBack = null,
-                                onNavigateToAccounts = { selected = MainDestination.Accounts },
                             )
                     }
                 }
@@ -342,11 +314,12 @@ private fun OverflowIcon(
 
 @Composable
 private fun OverflowMenuLabel(
-    destination: MainDestination,
-    label: String,
+    labelRes: Int,
+    showBadge: Boolean,
     pendingConflictCount: Int,
 ) {
-    if (destination == MainDestination.Conflicts && pendingConflictCount > 0) {
+    val label = stringResource(labelRes)
+    if (showBadge && pendingConflictCount > 0) {
         val badgeDescription =
             stringResource(
                 R.string.nav_dest_conflicts_badge_format,

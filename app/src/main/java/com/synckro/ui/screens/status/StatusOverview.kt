@@ -37,6 +37,13 @@ data class StatusOverview(
         val totalFiles: Int,
         val bytesTransferred: Long,
         val totalBytes: Long,
+        /**
+         * Per-file transfers currently in flight, aggregated across every
+         * syncing pair. Used by the Status screen's Sync status card to
+         * surface "which file is being uploaded / downloaded right now"
+         * instead of forcing the user to drill into a sync pair card.
+         */
+        val activeTransfers: List<com.synckro.domain.sync.ActiveTransfer> = emptyList(),
     ) {
         /** True when at least one pair is actively transferring. */
         val isSyncing: Boolean get() = syncingPairs > 0
@@ -130,12 +137,14 @@ fun buildStatusOverview(
     var totalFiles = 0
     var bytesTransferred = 0L
     var totalBytes = 0L
+    val activeTransfers = mutableListOf<com.synckro.domain.sync.ActiveTransfer>()
     for (id in syncingPairIds) {
         val p = progressByPairId[id] ?: continue
         filesCompleted += p.filesCompleted
         totalFiles += p.totalFiles
         bytesTransferred += p.bytesTransferred
         totalBytes += p.totalBytes
+        activeTransfers += p.activeTransfers
     }
     val syncStatus =
         StatusOverview.SyncStatus(
@@ -145,6 +154,7 @@ fun buildStatusOverview(
             totalFiles = totalFiles,
             bytesTransferred = bytesTransferred,
             totalBytes = totalBytes,
+            activeTransfers = activeTransfers,
         )
 
     // --- Recent changes ---

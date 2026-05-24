@@ -434,6 +434,31 @@ class SettingsRepository
             dataStore.edit { it[KEY_LOG_RETENTION_DAYS] = days }
         }
 
+        // -------------------------------------------------------------------------
+        // Status surface dismissals
+        // -------------------------------------------------------------------------
+
+        /**
+         * Emits `true` when the user has explicitly dismissed the battery
+         * optimisation warning card on the Status screen. We honour the
+         * dismissal independently from [PowerManager.isIgnoringBatteryOptimizations]
+         * because some Android OEMs grant "Unrestricted background" via a
+         * different system surface (App info → Battery) that does not flip the
+         * PowerManager whitelist flag — leaving the warning stuck on-screen
+         * even after the user has effectively allowed background sync.
+         */
+        val batteryWarningDismissed: Flow<Boolean> =
+            dataStore.data.map { it[KEY_BATTERY_WARNING_DISMISSED] ?: false }
+
+        /**
+         * Persists the user's "don't show again" choice for the battery
+         * optimisation warning card. The Settings → About / Reset path resets
+         * the flag if the user needs the prompt back.
+         */
+        suspend fun setBatteryWarningDismissed(dismissed: Boolean) {
+            dataStore.edit { it[KEY_BATTERY_WARNING_DISMISSED] = dismissed }
+        }
+
         companion object {
             internal val KEY_GLOBAL_AUTO_SYNC = booleanPreferencesKey("global_auto_sync_enabled")
             internal val KEY_DEFAULT_WIFI_ONLY = booleanPreferencesKey("default_wifi_only")
@@ -481,6 +506,7 @@ class SettingsRepository
 
             internal val KEY_ONBOARDING_COMPLETED_AT_MS = longPreferencesKey("onboarding_completed_at_ms")
             internal val KEY_SEEN_TOOLTIPS = stringSetPreferencesKey("seen_tooltips")
+            internal val KEY_BATTERY_WARNING_DISMISSED = booleanPreferencesKey("battery_warning_dismissed")
 
             internal const val DEFAULT_GLOBAL_AUTO_SYNC = true
             internal const val DEFAULT_WIFI_ONLY = true

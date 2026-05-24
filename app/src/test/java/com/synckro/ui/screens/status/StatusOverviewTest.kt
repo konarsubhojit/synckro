@@ -79,6 +79,10 @@ class StatusOverviewTest {
         assertEquals(400L, s.bytesTransferred)
         assertEquals(800L, s.totalBytes)
         assertEquals(0.5f, s.fraction!!, 1e-3f)
+        // Per-file rows aggregated from every syncing pair are surfaced on the
+        // Status card so users no longer need to drill into the pair card.
+        assertEquals(1, s.activeTransfers.size)
+        assertEquals("a.txt", s.activeTransfers[0].relativePath)
     }
 
     @Test

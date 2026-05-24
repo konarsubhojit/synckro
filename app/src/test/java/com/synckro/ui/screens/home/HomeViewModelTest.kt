@@ -81,6 +81,7 @@ class HomeViewModelTest {
                 every { globalAutoSyncEnabled } returns flowOf(true)
                 every { onboardingCompletedAtMs } returns flowOf(null)
                 every { seenTooltips } returns flowOf(emptySet())
+                every { batteryWarningDismissed } returns flowOf(false)
             }
         mockSyncEventRepository =
             mockk {

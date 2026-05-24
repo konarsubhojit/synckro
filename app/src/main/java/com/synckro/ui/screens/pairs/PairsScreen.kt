@@ -722,6 +722,9 @@ private fun SyncPairRow(
                     SyncProgressRows(
                         progress = progress,
                         syncingLabel = syncingLabel,
+                        // Per-file active transfer rows now live in the Status
+                        // screen's Sync status card; keep this card compact.
+                        showActiveTransfers = false,
                     )
                 }
 
