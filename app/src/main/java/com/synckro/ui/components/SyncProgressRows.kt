@@ -32,6 +32,7 @@ fun SyncProgressRows(
     progress: TransferProgress?,
     syncingLabel: String,
     modifier: Modifier = Modifier,
+    showActiveTransfers: Boolean = true,
 ) {
     val fraction = primaryProgressFraction(progress)
     Column(
@@ -78,11 +79,15 @@ fun SyncProgressRows(
             )
         }
         val activeTransfers = progress?.activeTransfers.orEmpty()
-        if (activeTransfers.isNotEmpty()) {
+        if (showActiveTransfers && activeTransfers.isNotEmpty()) {
             activeTransfers.forEach { transfer ->
                 ActiveTransferRow(transfer = transfer)
             }
-        } else {
+        } else if (activeTransfers.isEmpty()) {
+            // Fall back to the legacy single "currently syncing <file>" text when
+            // the live per-file rows are unavailable. When [showActiveTransfers]
+            // is false we intentionally render nothing here because the per-file
+            // rows now live on the Status screen's Sync status card.
             progress?.currentFileName?.let { fileName ->
                 Text(
                     text = stringResource(R.string.home_sync_current_file_format, fileName),
@@ -101,8 +106,17 @@ fun SyncProgressRows(
     }
 }
 
+/**
+ * Renders a single in-flight file transfer row: direction label + relative
+ * path, bytes transferred / total, and a percentage on the right. Visible
+ * inside both the Status screen's Sync status card (aggregated across every
+ * syncing pair) and the per-pair [SyncProgressRows] composable.
+ *
+ * @param transfer The in-flight transfer to render. `totalBytes == 0L` is
+ *   treated as "unknown size" and renders a 0% indicator.
+ */
 @Composable
-private fun ActiveTransferRow(
+fun ActiveTransferRow(
     transfer: ActiveTransfer,
 ) {
     val context = LocalContext.current

@@ -24,6 +24,35 @@ object LogVisibilityConfig {
         if (BuildConfig.DEBUG) SyncEventLevel.DEBUG else SyncEventLevel.INFO
 
     /**
+     * Tags considered "user-facing sync activity" — what users expect to see
+     * in the Sync history tab. Other tags (Account / PairEditor / Scheduler
+     * / UI / Export / internal infra) are still persisted to the `sync_event`
+     * table for diagnostics and are included in feedback exports via
+     * [com.synckro.util.logging.LogExporter], but they are not surfaced in the
+     * Sync history list to keep it focused on:
+     *   - autosync / manual sync started / completed
+     *   - per-file upload / download / delete with success/failure indicator
+     *   - sync errors (those also pass via the level rule below)
+     */
+    val userFacingTags: Set<String> =
+        setOf(
+            // SyncWorker emits sync-started / completed / retry / failed events.
+            com.synckro.domain.model.SyncEventTag.SYNC_WORKER,
+            // SyncOpApplier emits one INFO per file: "Uploaded/Downloaded/
+            // Updated/Deleted ... <relativePath>" and one ERROR per failed op.
+            "SyncOpApplier",
+            // auth-tagged events surface "needs re-link" prompts to the user.
+            "auth",
+        )
+
+    /**
+     * Levels that bypass the [userFacingTags] whitelist so that any error in
+     * the system — regardless of which internal subsystem produced it — is
+     * still visible to the user in the Sync history tab.
+     */
+    val tagBypassMinLevel: SyncEventLevel = SyncEventLevel.WARN
+
+    /**
      * Minimum [SyncEventLevel] that should appear in the UI and exports.
      *
      * Anything below this in the enum's natural order is filtered out, regardless
@@ -37,6 +66,20 @@ object LogVisibilityConfig {
 
     /** True when [level] passes the visibility gate. */
     fun isVisible(level: SyncEventLevel): Boolean = level.ordinal >= minVisibleLevel.ordinal
+
+    /**
+     * True when an event with the given [level] / [tag] is appropriate for the
+     * Sync history list. Errors / warnings are always visible; lower-severity
+     * events are visible only when their tag is in [userFacingTags].
+     */
+    fun isUserFacing(
+        level: SyncEventLevel,
+        tag: String,
+    ): Boolean {
+        if (!isVisible(level)) return false
+        if (level.ordinal >= tagBypassMinLevel.ordinal) return true
+        return userFacingTags.any { it.equals(tag, ignoreCase = true) }
+    }
 
     /**
      * The set of levels selectable from the UI under the current gate. Levels below

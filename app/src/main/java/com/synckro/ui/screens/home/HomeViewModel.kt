@@ -17,6 +17,7 @@ import com.synckro.data.repository.SyncEventRepository
 import com.synckro.data.repository.SyncPairRepository
 import com.synckro.data.worker.SyncScheduler
 import com.synckro.data.worker.SyncWorker
+import com.synckro.domain.model.CloudProviderType
 import com.synckro.domain.model.SyncPair
 import com.synckro.domain.sync.TransferProgress
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -77,6 +78,8 @@ class HomeViewModel
             val pendingDelete: PendingDelete? = null,
             /** Maps account ID → display email/name for showing account context on each pair card. */
             val accountEmailById: Map<String, String> = emptyMap(),
+            /** Maps account ID → provider type for status/account-context rendering. */
+            val accountProviderById: Map<String, CloudProviderType> = emptyMap(),
             /** Whether global auto-sync is currently enabled. */
             val globalAutoSyncEnabled: Boolean = true,
             /**
@@ -98,6 +101,12 @@ class HomeViewModel
             val seenTooltips: Set<String> = emptySet(),
             /** Live transfer progress for each syncing pair; absent when unavailable or finished. */
             val progressByPairId: Map<Long, TransferProgress> = emptyMap(),
+            /**
+             * When `true` the user has explicitly dismissed the battery
+             * optimisation warning card on the Status screen and it should
+             * stay hidden until reset from Settings.
+             */
+            val batteryWarningDismissed: Boolean = false,
         )
 
         /** Pair IDs that have an active "sync now" run; updated optimistically. */
@@ -117,6 +126,9 @@ class HomeViewModel
 
         /** Maps accountId → display email/name, kept in sync with the accounts table. */
         private val accountEmailById = MutableStateFlow<Map<String, String>>(emptyMap())
+        /** Maps accountId → provider, kept in sync with the accounts table. */
+        private val accountProviderById =
+            MutableStateFlow<Map<String, CloudProviderType>>(emptyMap())
 
         /**
          * Stream of recent terminal sync events used to compute
@@ -144,6 +156,8 @@ class HomeViewModel
                 )
             }.combine(accountEmailById) { uiState, emailMap ->
                 uiState.copy(accountEmailById = emailMap)
+            }.combine(accountProviderById) { uiState, providerMap ->
+                uiState.copy(accountProviderById = providerMap)
             }.combine(settingsRepository.globalAutoSyncEnabled) { uiState, globalEnabled ->
                 uiState.copy(
                     globalAutoSyncEnabled = globalEnabled,
@@ -161,6 +175,8 @@ class HomeViewModel
                 uiState.copy(seenTooltips = seenTooltips)
             }.combine(pairProgress) { uiState, prog ->
                 uiState.copy(progressByPairId = prog)
+            }.combine(settingsRepository.batteryWarningDismissed) { uiState, dismissed ->
+                uiState.copy(batteryWarningDismissed = dismissed)
             }.stateIn(
                 scope = viewModelScope,
                 started = SharingStarted.WhileSubscribed(5_000),
@@ -176,6 +192,11 @@ class HomeViewModel
                         accounts.associateBy(
                             keySelector = { it.id },
                             valueTransform = { it.email ?: it.displayName },
+                        )
+                    accountProviderById.value =
+                        accounts.associateBy(
+                            keySelector = { it.id },
+                            valueTransform = { it.provider },
                         )
                 }
                 .launchIn(viewModelScope)
@@ -260,6 +281,17 @@ class HomeViewModel
 
         fun markTooltipSeen(tooltipId: String) {
             viewModelScope.launch { settingsRepository.markTooltipSeen(tooltipId) }
+        }
+
+        /**
+         * Persists the user's "don't show again" choice for the battery
+         * optimisation warning card on the Status screen. Some Android OEMs
+         * grant background permission through a path that does not flip
+         * [android.os.PowerManager.isIgnoringBatteryOptimizations], leaving the
+         * card stuck visible — this lets the user dismiss it for good.
+         */
+        fun dismissBatteryWarning() {
+            viewModelScope.launch { settingsRepository.setBatteryWarningDismissed(true) }
         }
 
         /**

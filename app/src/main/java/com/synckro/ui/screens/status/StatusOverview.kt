@@ -37,6 +37,13 @@ data class StatusOverview(
         val totalFiles: Int,
         val bytesTransferred: Long,
         val totalBytes: Long,
+        /**
+         * Per-file transfers currently in flight, aggregated across every
+         * syncing pair. Used by the Status screen's Sync status card to
+         * surface "which file is being uploaded / downloaded right now"
+         * instead of forcing the user to drill into a sync pair card.
+         */
+        val activeTransfers: List<com.synckro.domain.sync.ActiveTransfer> = emptyList(),
     ) {
         /** True when at least one pair is actively transferring. */
         val isSyncing: Boolean get() = syncingPairs > 0
@@ -76,9 +83,9 @@ data class StatusOverview(
     }
 
     /**
-     * One row in the "Account info" card. Synthesised from the connected
-     * sync pairs so we don't need a second observer on the Accounts table —
-     * the email is looked up from
+     * One row in the "Account info" card. Synthesised from connected sync
+     * pairs plus persisted accounts, so accounts appear even before the first
+     * pair is configured. The email/display label is looked up from
      * [com.synckro.ui.screens.home.HomeViewModel.UiState.accountEmailById].
      *
      * @param provider The cloud provider this account belongs to.
@@ -122,6 +129,7 @@ fun buildStatusOverview(
     progressByPairId: Map<Long, com.synckro.domain.sync.TransferProgress>,
     lastSummaryByPairId: Map<Long, PairSummary>,
     accountEmailById: Map<String, String>,
+    accountProviderById: Map<String, CloudProviderType>,
     pendingConflictCount: Int,
 ): StatusOverview {
     // --- Sync status ---
@@ -129,12 +137,14 @@ fun buildStatusOverview(
     var totalFiles = 0
     var bytesTransferred = 0L
     var totalBytes = 0L
+    val activeTransfers = mutableListOf<com.synckro.domain.sync.ActiveTransfer>()
     for (id in syncingPairIds) {
         val p = progressByPairId[id] ?: continue
         filesCompleted += p.filesCompleted
         totalFiles += p.totalFiles
         bytesTransferred += p.bytesTransferred
         totalBytes += p.totalBytes
+        activeTransfers += p.activeTransfers
     }
     val syncStatus =
         StatusOverview.SyncStatus(
@@ -144,6 +154,7 @@ fun buildStatusOverview(
             totalFiles = totalFiles,
             bytesTransferred = bytesTransferred,
             totalBytes = totalBytes,
+            activeTransfers = activeTransfers,
         )
 
     // --- Recent changes ---
@@ -172,6 +183,10 @@ fun buildStatusOverview(
     for (p in pairs) {
         val key = p.provider to p.accountId
         countByKey[key] = (countByKey[key] ?: 0) + 1
+    }
+    for ((accountId, provider) in accountProviderById) {
+        val key = provider to accountId
+        if (key !in countByKey) countByKey[key] = 0
     }
     val accountRows =
         countByKey.map { (key, count) ->

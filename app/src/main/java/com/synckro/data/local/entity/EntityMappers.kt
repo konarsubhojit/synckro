@@ -22,6 +22,7 @@ internal fun SyncPairEntity.toDomain(needsReLink: Boolean = false): SyncPair =
         provider = provider,
         accountId = accountId,
         remoteFolderId = remoteFolderId,
+        remoteFolderName = remoteFolderName,
         direction = direction,
         conflictPolicy = conflictPolicy,
         includeGlobs = includeGlobs.split('\n').filter { it.isNotBlank() },

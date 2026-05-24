@@ -37,12 +37,22 @@ object Routes {
     const val ONBOARDING = "onboarding"
 
     /**
-     * The top-level host route. Renders [MainScaffold] with its bottom-nav /
-     * navigation-rail destinations (Pairs / Conflicts / Logs / Accounts /
-     * Settings). Replaces the legacy `home`, `accounts`, `conflict_inbox`,
-     * `settings`, and `logs` standalone routes that used to live here.
+     * The top-level host route. Renders [MainScaffold] with its primary
+     * destinations (Status / Sync history / Synced folders). Secondary
+     * destinations (Conflicts / Accounts / Settings) are full-screen routes
+     * pushed on top of this scaffold so they get their own Scaffold + back
+     * arrow instead of being squeezed into an overflow tab.
      */
     const val MAIN = "main"
+
+    /** Full-screen conflicts inbox, pushed on top of [MAIN]. */
+    const val CONFLICTS = "conflicts"
+
+    /** Full-screen accounts management screen, pushed on top of [MAIN]. */
+    const val ACCOUNTS = "accounts?accountId={accountId}"
+
+    /** Full-screen settings root, pushed on top of [MAIN]. */
+    const val SETTINGS = "settings"
 
     /** Optional query parameter `pairId`; defaults to 0 (create mode). */
     const val PAIR_EDITOR = "pair_editor?pairId={pairId}"
@@ -63,6 +73,13 @@ object Routes {
     fun pairDetail(pairId: Long) = "pair_detail/$pairId"
 
     fun logs(pairId: Long) = "main?destination=logs&pairId=$pairId"
+
+    fun accounts(accountId: String? = null): String =
+        if (accountId.isNullOrBlank()) {
+            "accounts?accountId="
+        } else {
+            "accounts?accountId=${Uri.encode(accountId)}"
+        }
 
     fun pickRemoteFolder(provider: CloudProviderType, accountId: String?): String {
         val base = "pick_remote_folder?${PickRemoteFolderViewModel.ARG_PROVIDER}=${provider.name}"
@@ -86,10 +103,6 @@ fun SynckroNavHost(
     // MainScaffold via [onPendingDestinationHandled].
     var pendingMainDestination by remember { mutableStateOf<MainDestination?>(null) }
 
-    // Phase 5d: one-shot accountId that, paired with [pendingMainDestination], asks
-    // the AccountsScreen to briefly highlight (and scroll to) the matching row.
-    // Cleared by MainScaffold via [onPendingAccountHighlightHandled].
-    var pendingAccountHighlight by remember { mutableStateOf<String?>(null) }
     var pendingLogsPairId by remember { mutableStateOf<Long?>(null) }
 
     // Observe navigation commands dispatched from outside the Compose tree
@@ -102,11 +115,10 @@ fun SynckroNavHost(
                 when (event) {
                     is AppNavEvent.OpenAccounts -> {
                         // Pop any full-screen routes (pair editor, folder pickers)
-                        // back to the MainScaffold, then tell MainScaffold to
-                        // select the Accounts tab.
-                        pendingMainDestination = MainDestination.Accounts
-                        pendingAccountHighlight = event.accountId
+                        // back to the MainScaffold, then push the standalone Accounts
+                        // route (Phase 6 promotion to top-level navigation).
                         nav.popBackStack(Routes.MAIN, inclusive = false)
+                        nav.navigate(Routes.accounts(event.accountId)) { launchSingleTop = true }
                     }
                     is AppNavEvent.OpenLogs -> {
                         pendingMainDestination = MainDestination.Logs
@@ -179,12 +191,67 @@ fun SynckroNavHost(
                 onOpenPairDetail = { pairId ->
                     nav.navigate(Routes.pairDetail(pairId)) { launchSingleTop = true }
                 },
+                onOpenConflicts = {
+                    nav.navigate(Routes.CONFLICTS) { launchSingleTop = true }
+                },
+                onOpenAccounts = { accountId ->
+                    nav.navigate(Routes.accounts(accountId)) { launchSingleTop = true }
+                },
+                onOpenSettings = {
+                    nav.navigate(Routes.SETTINGS) { launchSingleTop = true }
+                },
                 pendingDestination = pendingMainDestination,
                 onPendingDestinationHandled = { pendingMainDestination = null },
-                pendingAccountHighlight = pendingAccountHighlight,
-                onPendingAccountHighlightHandled = { pendingAccountHighlight = null },
                 pendingLogsPairId = pendingLogsPairId,
                 onPendingLogsPairHandled = { pendingLogsPairId = null },
+            )
+        }
+        composable(
+            route = Routes.CONFLICTS,
+            enterTransition = { detailEnterTransition() },
+            exitTransition = { detailExitTransition() },
+            popEnterTransition = { detailPopEnterTransition() },
+            popExitTransition = { detailPopExitTransition() },
+        ) {
+            com.synckro.ui.screens.conflictinbox.ConflictInboxScreen(
+                onBack = { nav.popBackStack() },
+            )
+        }
+        composable(
+            route = Routes.ACCOUNTS,
+            enterTransition = { detailEnterTransition() },
+            exitTransition = { detailExitTransition() },
+            popEnterTransition = { detailPopEnterTransition() },
+            popExitTransition = { detailPopExitTransition() },
+            arguments =
+                listOf(
+                    navArgument("accountId") {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
+                    },
+                ),
+        ) { backStackEntry ->
+            val highlightId =
+                backStackEntry.arguments
+                    ?.getString("accountId")
+                    ?.takeUnless { it.isBlank() }
+            com.synckro.ui.screens.accounts.AccountsScreen(
+                activity = activity,
+                onBack = { nav.popBackStack() },
+                highlightAccountId = highlightId,
+            )
+        }
+        composable(
+            route = Routes.SETTINGS,
+            enterTransition = { detailEnterTransition() },
+            exitTransition = { detailExitTransition() },
+            popEnterTransition = { detailPopEnterTransition() },
+            popExitTransition = { detailPopExitTransition() },
+        ) {
+            com.synckro.ui.screens.settings.SettingsScreen(
+                onBack = { nav.popBackStack() },
+                onNavigateToAccounts = { nav.navigate(Routes.accounts()) { launchSingleTop = true } },
             )
         }
         composable(
@@ -360,8 +427,7 @@ fun SynckroNavHost(
                     }
                 },
                 onOpenConflicts = {
-                    // Drop back to MainScaffold so the user can see the global Conflicts inbox.
-                    nav.popBackStack(Routes.MAIN, inclusive = false)
+                    nav.navigate(Routes.CONFLICTS) { launchSingleTop = true }
                 },
                 onOpenLogs = { pairId ->
                     pendingMainDestination = MainDestination.Logs

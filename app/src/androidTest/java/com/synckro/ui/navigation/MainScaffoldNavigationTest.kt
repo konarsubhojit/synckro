@@ -57,19 +57,25 @@ class MainScaffoldNavigationTest {
         overflowNodes.onFirst().performClick()
         composeRule.waitForIdle()
 
-        // Tapping Settings in the overflow shows the settings screen body.
+        // Tapping Settings in the overflow pushes the full-screen Settings route.
         val settingsItem = activity.getString(R.string.nav_dest_settings)
         val settingsSection = activity.getString(R.string.settings_section_appearance)
         composeRule.onNodeWithText(settingsItem).performClick()
+        composeRule.waitForIdle()
         assertTrue(composeRule.onAllNodesWithText(settingsSection).fetchSemanticsNodes().isNotEmpty())
 
-        // Open overflow again and pick Accounts.
+        // Settings now lives on its own route — pop back to MainScaffold so the
+        // overflow icon is visible again, then pick Accounts.
+        composeRule.activityRule.scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
+        composeRule.waitForIdle()
+
         composeRule.onAllNodesWithContentDescription(more, substring = true)
             .onFirst().performClick()
         composeRule.waitForIdle()
         val accountsItem = activity.getString(R.string.nav_dest_accounts)
         val accountsBody = activity.getString(R.string.accounts_body)
         composeRule.onNodeWithText(accountsItem).performClick()
+        composeRule.waitForIdle()
         assertTrue(composeRule.onAllNodesWithText(accountsBody).fetchSemanticsNodes().isNotEmpty())
     }
 

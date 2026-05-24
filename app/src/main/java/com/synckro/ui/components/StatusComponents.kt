@@ -84,6 +84,14 @@ fun SyncStatusCard(status: StatusOverview.SyncStatus) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
+                // Per-file rows: surface which file is currently being
+                // uploaded / downloaded across every running pair, so users
+                // don't have to drill into a sync pair card to find it.
+                if (status.activeTransfers.isNotEmpty()) {
+                    status.activeTransfers.forEach { transfer ->
+                        ActiveTransferRow(transfer = transfer)
+                    }
+                }
             }
             else ->
                 Text(
@@ -95,17 +103,35 @@ fun SyncStatusCard(status: StatusOverview.SyncStatus) {
 }
 
 @Composable
-fun BatteryOptimizationCard(onAction: () -> Unit) {
+fun BatteryOptimizationCard(
+    onAction: () -> Unit,
+    onDismiss: (() -> Unit)? = null,
+) {
     SectionCard(
         modifier = Modifier.fillMaxWidth(),
         containerColor = MaterialTheme.colorScheme.errorContainer,
         contentColor = MaterialTheme.colorScheme.onErrorContainer,
     ) {
-        StatusCardHeader(
-            icon = Icons.Default.Bolt,
-            title = stringResource(R.string.status_card_battery_title),
-            tint = MaterialTheme.colorScheme.onErrorContainer,
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            StatusCardHeader(
+                icon = Icons.Default.Bolt,
+                title = stringResource(R.string.status_card_battery_title),
+                tint = MaterialTheme.colorScheme.onErrorContainer,
+            )
+            if (onDismiss != null) {
+                IconButton(onClick = onDismiss) {
+                    Icon(
+                        Icons.Default.Close,
+                        contentDescription = stringResource(R.string.status_card_battery_dismiss),
+                        tint = MaterialTheme.colorScheme.onErrorContainer,
+                    )
+                }
+            }
+        }
         Text(
             text = stringResource(R.string.status_card_battery_body),
             style = MaterialTheme.typography.bodyMedium,
