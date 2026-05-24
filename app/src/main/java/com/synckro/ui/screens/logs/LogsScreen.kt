@@ -17,9 +17,11 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -68,6 +70,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -373,13 +376,15 @@ fun LogsTabContent(
 ) {
     Column(
         modifier = modifier.fillMaxSize(),
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
+        val maxContentWidth = Modifier.widthIn(max = 900.dp)
         // ── Search field ─────────────────────────────────────────────────
         OutlinedTextField(
             value = state.searchQuery,
             onValueChange = onSearchQueryChange,
             modifier =
-                Modifier
+                maxContentWidth
                     .fillMaxWidth()
                     .padding(horizontal = 12.dp, vertical = 8.dp),
             singleLine = true,
@@ -418,7 +423,7 @@ fun LogsTabContent(
             }
         } else {
             LazyColumn(
-                modifier = Modifier.fillMaxSize(),
+                modifier = maxContentWidth.fillMaxSize(),
                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
@@ -455,18 +460,21 @@ private fun SyncHistoryRow(
 
     val expandLabel = stringResource(R.string.logs_history_expand)
     val collapseLabel = stringResource(R.string.logs_history_collapse)
+    val rowStateLabel = if (expanded) collapseLabel else expandLabel
 
     Card(
         modifier =
             Modifier
                 .fillMaxWidth()
+                .heightIn(min = 48.dp)
                 .animateContentSize()
                 .combinedClickable(
                     onClick = { expanded = !expanded },
                     onLongClick = onLongPress,
                 )
                 .semantics {
-                    contentDescription = if (expanded) collapseLabel else expandLabel
+                    contentDescription = "${event.message}. $rowStateLabel."
+                    stateDescription = rowStateLabel
                 },
         colors =
             CardDefaults.cardColors(

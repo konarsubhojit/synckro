@@ -1,6 +1,5 @@
 package com.synckro.ui.screens.pairs
 
-import android.text.format.Formatter
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -15,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -43,7 +43,6 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarDuration
@@ -76,9 +75,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -94,12 +91,12 @@ import androidx.navigation.navArgument
 import com.synckro.R
 import com.synckro.domain.model.SyncDirection
 import com.synckro.domain.model.SyncPair
-import com.synckro.domain.sync.TransferDirection
 import com.synckro.domain.sync.TransferProgress
 import com.synckro.ui.components.CoachTooltip
 import com.synckro.ui.components.CoachTooltipIds
 import com.synckro.ui.components.EmptyState
 import com.synckro.ui.components.SectionCard
+import com.synckro.ui.components.SyncProgressRows
 import com.synckro.ui.screens.home.HomeViewModel
 import com.synckro.ui.screens.home.PairSummary
 import com.synckro.ui.screens.pairdetail.PairDetailScreen
@@ -586,7 +583,11 @@ private fun SyncPairRow(
     // TODO(#28): Trigger HapticHelper.light() when pair-card swipe gestures are introduced.
 
     SectionCard(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onOpenDetail),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .heightIn(min = 56.dp)
+                .clickable(onClick = onOpenDetail),
         containerColor = cardColor,
         contentColor = cardContentColor,
         // Stripe sits flush to the left edge of the card; reserve zero left padding
@@ -700,124 +701,11 @@ private fun SyncPairRow(
                 if (isSyncing) {
                     val ctx = LocalContext.current
                     val syncingLabel = stringResource(R.string.sync_now_in_progress)
-                    val fraction: Float? = when {
-                        progress != null && progress.totalBytes > 0L ->
-                            (progress.bytesTransferred.toFloat() / progress.totalBytes).coerceIn(0f, 1f)
-                        progress != null && progress.totalFiles > 0 ->
-                            (progress.filesCompleted.toFloat() / progress.totalFiles).coerceIn(0f, 1f)
-                        else -> null
-                    }
-                    Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        if (fraction != null && progress != null) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            ) {
-                                LinearProgressIndicator(
-                                    progress = { fraction },
-                                    modifier = Modifier.weight(1f).semantics {
-                                        contentDescription = "$syncingLabel ${(fraction * 100f).toInt()}%"
-                                        liveRegion = LiveRegionMode.Polite
-                                    },
-                                )
-                                Text(
-                                    text = stringResource(
-                                        R.string.home_sync_progress_files_format,
-                                        progress.filesCompleted,
-                                        progress.totalFiles,
-                                    ),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                        } else {
-                            LinearProgressIndicator(
-                                modifier = Modifier.fillMaxWidth().semantics {
-                                    contentDescription = syncingLabel
-                                    liveRegion = LiveRegionMode.Polite
-                                },
-                            )
-                        }
-                        val activeTransfers = progress?.activeTransfers.orEmpty()
-                        if (activeTransfers.isNotEmpty()) {
-                            activeTransfers.forEach { transfer ->
-                                val directionLabel =
-                                    when (transfer.direction) {
-                                        TransferDirection.UPLOAD ->
-                                            stringResource(R.string.home_sync_transfer_upload)
-                                        TransferDirection.DOWNLOAD ->
-                                            stringResource(R.string.home_sync_transfer_download)
-                                    }
-                                val transferFraction =
-                                    if (transfer.totalBytes > 0L) {
-                                        (transfer.bytesTransferred.toFloat() / transfer.totalBytes.toFloat()).coerceIn(0f, 1f)
-                                    } else {
-                                        null
-                                    }
-                                val sizeDone =
-                                    Formatter.formatShortFileSize(
-                                        ctx,
-                                        transfer.bytesTransferred.coerceAtLeast(0L),
-                                    )
-                                val sizeTotal =
-                                    Formatter.formatShortFileSize(
-                                        ctx,
-                                        transfer.totalBytes.coerceAtLeast(0L),
-                                    )
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                ) {
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            text = "$directionLabel · ${transfer.relativePath}",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis,
-                                        )
-                                        Text(
-                                            text = stringResource(R.string.home_sync_transfer_size_format, sizeDone, sizeTotal),
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        )
-                                    }
-                                    Text(
-                                        text =
-                                            stringResource(
-                                                R.string.home_sync_transfer_progress_percent,
-                                                ((transferFraction ?: 0f) * 100f).toInt(),
-                                            ),
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.semantics {
-                                            contentDescription = "$directionLabel ${transfer.relativePath}"
-                                            liveRegion = LiveRegionMode.Polite
-                                        },
-                                    )
-                                }
-                            }
-                        } else {
-                            progress?.currentFileName?.let { fileName ->
-                                Text(
-                                    text = stringResource(R.string.home_sync_current_file_format, fileName),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.semantics {
-                                        contentDescription = "$syncingLabel: $fileName"
-                                        liveRegion = LiveRegionMode.Polite
-                                    },
-                                )
-                            }
-                        }
-                    }
+                    SyncProgressRows(
+                        progress = progress,
+                        syncingLabel = syncingLabel,
+                        context = ctx,
+                    )
                 }
 
                 // Phase 5a: last-result summary (parsed from the latest terminal SyncEvent).
