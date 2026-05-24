@@ -896,7 +896,15 @@ private fun SecuritySettingsContent(
     var showPinTimeoutDialog by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val pinSetupComingSoon = stringResource(R.string.settings_security_set_pin_coming_soon)
-    val pinTimeoutLabelPattern = stringResource(R.string.settings_security_pin_timeout_minutes_format)
+    val pinTimeoutMinutesFormat = stringResource(R.string.settings_security_pin_timeout_minutes_format)
+    val pinTimeoutOptions =
+        listOf(
+            SettingsRepository.MIN_PIN_TIMEOUT_MINUTES,
+            2,
+            5,
+            10,
+            SettingsRepository.MAX_PIN_TIMEOUT_MINUTES,
+        ).distinct()
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = contentPadding,
@@ -954,8 +962,8 @@ private fun SecuritySettingsContent(
     if (showPinTimeoutDialog) {
         IntOptionsDialog(
             title = stringResource(R.string.settings_security_pin_timeout_title),
-            options = listOf(1, 2, 5, 10, 15),
-            valueFormatter = { pinTimeoutLabelPattern.format(it) },
+            options = pinTimeoutOptions,
+            valueFormatter = { pinTimeoutMinutesFormat.format(it) },
             onSelect = {
                 viewModel.setPinTimeoutMinutes(it)
                 showPinTimeoutDialog = false
