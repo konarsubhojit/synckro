@@ -435,7 +435,7 @@ private fun PairsList(
                     .padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                // Phase 3 (Synced Folders redesign): master "Enable autosync"
+                // Phase 3 (Synced Folders redesign): master "Enable auto-sync"
                 // card pinned to the top of the list. Toggling it reschedules
                 // every pair via HomeViewModel.setGlobalAutoSync.
                 item(key = "master_autosync") {
@@ -468,7 +468,7 @@ private fun PairsList(
 }
 
 /**
- * Phase 3 (Synced Folders redesign): top "Enable autosync" master card.
+ * Phase 3 (Synced Folders redesign): top "Enable auto-sync" master card.
  *
  * Mirrors the Settings → Sync defaults switch so users can pause/resume
  * background sync without leaving the Pairs tab. The body text changes to
