@@ -2,7 +2,6 @@ package com.synckro.ui.screens.status
 
 import android.content.Context
 import android.content.Intent
-import android.net.Uri
 import android.os.PowerManager
 import android.provider.Settings
 import androidx.compose.foundation.layout.Arrangement
@@ -462,12 +461,11 @@ private fun isIgnoringBatteryOptimizations(context: Context): Boolean {
 
 private fun openBatterySettings(context: Context) {
     // Use the user-facing list rather than ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
-    // which Google Play restricts to apps that meet specific criteria.
+    // which Google Play restricts to apps that meet specific criteria. This action
+    // opens the system-wide list of optimized apps; no package URI is honoured.
     val intent =
-        Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS).apply {
-            data = Uri.fromParts("package", context.packageName, null)
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
+        Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     runCatching { context.startActivity(intent) }.onFailure {
         // Fallback to the generic battery-saver settings if the specific intent
         // isn't resolvable on this device.
