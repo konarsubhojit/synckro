@@ -415,8 +415,13 @@ class SyncEngine(
                     hash = entry.contentHash,
                 )
             }
-        val localSnapshotsByPath = localSnapshots.associateBy { it.relativePath }
         val isColdStartWithEmptyIndex = pair.deltaToken == null && preScanIndex.isEmpty()
+        val localSnapshotsByPath =
+            if (isColdStartWithEmptyIndex) {
+                localSnapshots.associateBy { it.relativePath }
+            } else {
+                emptyMap()
+            }
 
         // Build synthetic remote snapshot starting from last-known remote state
         // (pre-scan index rows that have remote metadata), then apply the delta.
