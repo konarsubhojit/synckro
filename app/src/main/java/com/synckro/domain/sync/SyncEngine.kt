@@ -415,6 +415,13 @@ class SyncEngine(
                     hash = entry.contentHash,
                 )
             }
+        val isColdStartWithEmptyIndex = pair.deltaToken == null && preScanIndex.isEmpty()
+        val localSnapshotsByPath =
+            if (isColdStartWithEmptyIndex) {
+                localSnapshots.associateBy { it.relativePath }
+            } else {
+                emptyMap()
+            }
 
         // Build synthetic remote snapshot starting from last-known remote state
         // (pre-scan index rows that have remote metadata), then apply the delta.
@@ -459,8 +466,17 @@ class SyncEngine(
                     // For a rename, seed the baseline from the old path so that a partial
                     // delta (missing size/mtime) does not lose the item entirely.
                     val baseline = if (isRename) syntheticRemote[existingPath!!] else syntheticRemote[change.relativePath]
-                    val resolvedSize = change.sizeBytes ?: baseline?.size
-                    val resolvedMtime = change.mtimeMs ?: baseline?.lastModifiedMs
+                    val coldStartLocalFallback =
+                        if (isColdStartWithEmptyIndex) {
+                            localSnapshotsByPath[change.relativePath]
+                        } else {
+                            null
+                        }
+                    val resolvedSize = change.sizeBytes ?: baseline?.size ?: coldStartLocalFallback?.size
+                    val resolvedMtime =
+                        change.mtimeMs
+                            ?: baseline?.lastModifiedMs
+                            ?: coldStartLocalFallback?.lastModifiedMs
                     if (resolvedSize != null && resolvedMtime != null) {
                         // Remove old path only after we know the new path can be inserted.
                         if (isRename) syntheticRemote.remove(existingPath!!)
