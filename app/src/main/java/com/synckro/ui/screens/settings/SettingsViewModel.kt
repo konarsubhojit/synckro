@@ -437,7 +437,9 @@ class SettingsViewModel
                 runCatching {
                     withContext(Dispatchers.IO) {
                         val source = settingsDataStoreFile()
-                        check(source.exists()) { "Settings file does not exist yet." }
+                        check(source.exists()) {
+                            "No settings file found yet. Save any setting first, then try backing up again."
+                        }
                         val backup = settingsBackupFile()
                         backup.parentFile?.mkdirs()
                         source.copyTo(backup, overwrite = true)
@@ -456,7 +458,9 @@ class SettingsViewModel
                 runCatching {
                     withContext(Dispatchers.IO) {
                         val backup = settingsBackupFile()
-                        check(backup.exists()) { "Settings backup does not exist." }
+                        check(backup.exists()) {
+                            "No settings backup found. Create a backup before restoring."
+                        }
                         val target = settingsDataStoreFile()
                         target.parentFile?.mkdirs()
                         backup.copyTo(target, overwrite = true)
@@ -517,7 +521,15 @@ class SettingsViewModel
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
 
-        private fun settingsDataStoreFile(): File = File(context.filesDir, "datastore/settings.preferences_pb")
+        /**
+         * Mirrors `preferencesDataStoreFile("settings")` from AppModule:
+         * `<filesDir>/datastore/settings.preferences_pb`.
+         */
+        private fun settingsDataStoreFile(): File =
+            File(
+                File(context.filesDir, SETTINGS_DATASTORE_DIRECTORY),
+                SETTINGS_DATASTORE_FILENAME,
+            )
 
         private fun settingsBackupFile(): File = File(context.filesDir, SETTINGS_BACKUP_FILENAME)
 
@@ -527,6 +539,8 @@ class SettingsViewModel
         companion object {
             /** Filename produced by the `generateOssLicenses` Gradle task. */
             const val OSS_LICENSES_ASSET = "oss_licenses.txt"
+            private const val SETTINGS_DATASTORE_DIRECTORY = "datastore"
+            private const val SETTINGS_DATASTORE_FILENAME = "settings.preferences_pb"
             internal const val SETTINGS_BACKUP_FILENAME = "settings.backup.preferences_pb"
             private const val FEEDBACK_EMAIL_PLACEHOLDER = "feedback@example.com"
 
