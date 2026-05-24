@@ -26,10 +26,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
-import androidx.compose.material3.TabRowDefaults
-import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -48,6 +44,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.synckro.R
 import com.synckro.ui.components.CoachTooltipIds
+import com.synckro.ui.components.MainDestinationTabRow
 import com.synckro.ui.screens.accounts.AccountsScreen
 import com.synckro.ui.screens.conflictinbox.ConflictInboxScreen
 import com.synckro.ui.screens.home.HomeViewModel
@@ -243,31 +240,11 @@ fun MainScaffold(
                     .fillMaxSize()
                     .padding(padding),
         ) {
-            val primaryIndex = primaryDestinations.indexOf(selected).takeIf { it >= 0 }
-            // When an overflow destination is active there is no primary tab
-            // selection; we still need a non-negative index for the TabRow API
-            // but we suppress the indicator entirely so the user is not misled
-            // into thinking the first tab is selected.
-            TabRow(
-                selectedTabIndex = primaryIndex ?: 0,
-                indicator = { tabPositions ->
-                    if (primaryIndex != null) {
-                        TabRowDefaults.SecondaryIndicator(
-                            modifier = Modifier.tabIndicatorOffset(tabPositions[primaryIndex]),
-                        )
-                    }
-                },
-            ) {
-                primaryDestinations.forEachIndexed { index, destination ->
-                    val label = stringResource(destination.labelRes)
-                    Tab(
-                        selected = primaryIndex == index,
-                        onClick = { selected = destination },
-                        icon = { Icon(destination.icon, contentDescription = null) },
-                        text = { Text(label) },
-                    )
-                }
-            }
+            MainDestinationTabRow(
+                primaryDestinations = primaryDestinations,
+                selectedDestination = selected,
+                onSelectDestination = { selected = it },
+            )
 
             Box(modifier = Modifier.fillMaxSize()) {
                 AnimatedContent(
