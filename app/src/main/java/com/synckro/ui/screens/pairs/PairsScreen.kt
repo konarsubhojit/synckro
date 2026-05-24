@@ -677,7 +677,14 @@ private fun SyncPairRow(
                     text =
                         stringResource(
                             R.string.pairs_card_remote_folder_label,
-                            pair.remoteFolderId.ifBlank { stringResource(R.string.pairs_card_remote_root) },
+                            // Phase 6: prefer the human-readable folder name
+                            // captured at pair-creation time so the card no
+                            // longer shows the opaque provider id once a sync
+                            // run starts. Falls back to the id and then to
+                            // "Root" for legacy pairs.
+                            pair.remoteFolderName
+                                ?.takeIf { it.isNotBlank() }
+                                ?: pair.remoteFolderId.ifBlank { stringResource(R.string.pairs_card_remote_root) },
                         ),
                 )
                 val localFolderName = rememberLocalFolderName(pair.localTreeUri)

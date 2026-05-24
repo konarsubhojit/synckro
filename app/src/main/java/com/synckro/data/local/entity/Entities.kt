@@ -39,6 +39,13 @@ data class SyncPairEntity(
      */
     val accountId: String? = null,
     val remoteFolderId: String,
+    /**
+     * Human-readable display name of the cloud folder selected by the user at
+     * pair-creation time (e.g. "Camera Roll"). Stored so the UI does not have
+     * to render the opaque provider id when a sync run is in progress.
+     * Existing rows from before v14 receive NULL via [SynckroDatabase.MIGRATION_13_14].
+     */
+    val remoteFolderName: String? = null,
     val direction: SyncDirection,
     val conflictPolicy: ConflictPolicy,
     val includeGlobs: String, // newline-separated

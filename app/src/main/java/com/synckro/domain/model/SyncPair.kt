@@ -23,6 +23,15 @@ data class SyncPair(
      */
     val accountId: String? = null,
     val remoteFolderId: String,
+    /**
+     * Human-readable display name of the cloud folder selected by the user
+     * (e.g. "Camera Roll", "Documents/Receipts"). Persisted at pair-creation
+     * time from the remote folder picker so the Synced Folders / Status UI
+     * can render a meaningful label instead of the opaque provider id once a
+     * sync run starts. `null` for pairs created before this field existed —
+     * callers should fall back to [remoteFolderId] in that case.
+     */
+    val remoteFolderName: String? = null,
     val direction: SyncDirection = SyncDirection.BIDIRECTIONAL,
     val conflictPolicy: ConflictPolicy = ConflictPolicy.NEWEST_WINS,
     val includeGlobs: List<String> = emptyList(),

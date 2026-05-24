@@ -512,11 +512,60 @@ class MigrationTest {
     }
 
     // -------------------------------------------------------------------------
+    // MIGRATION_13_14 – remoteFolderName column on sync_pair
+    // -------------------------------------------------------------------------
+
+    /** Brings [db] from the test bootstrap (v6) up to v13 in one shot. */
+    private fun migrateToV13(db: SupportSQLiteDatabase) {
+        migrateToV12(db)
+        SynckroDatabase.MIGRATION_12_13.migrate(db)
+    }
+
+    @Test
+    fun `MIGRATION_13_14 adds remoteFolderName column to sync_pair`() {
+        migrateToV13(db)
+
+        SynckroDatabase.MIGRATION_13_14.migrate(db)
+
+        assertTrue(
+            "remoteFolderName column must exist in sync_pair after migration",
+            "remoteFolderName" in columnNames(db, "sync_pair"),
+        )
+    }
+
+    @Test
+    fun `MIGRATION_13_14 existing sync_pair rows receive NULL remoteFolderName`() {
+        migrateToV13(db)
+
+        // Insert a sync_pair at v13 (no remoteFolderName column yet).
+        db.execSQL(
+            "INSERT INTO sync_pair (displayName, localTreeUri, provider, remoteFolderId, " +
+                "direction, conflictPolicy, includeGlobs, excludeGlobs, wifiOnly, " +
+                "requiresCharging, scheduleIntervalMinutes, autoSyncEnabled, " +
+                "excludeSubfolders, excludeEmptyFolders) VALUES " +
+                "('Test', 'content://tree/test', 'ONEDRIVE', 'opaque-id', " +
+                "'BIDIRECTIONAL', 'NEWEST_WINS', '', '', 1, 0, 60, 1, 0, 0)",
+        )
+
+        SynckroDatabase.MIGRATION_13_14.migrate(db)
+
+        val cursor =
+            db.query(
+                "SELECT remoteFolderName FROM sync_pair WHERE remoteFolderId = 'opaque-id'",
+                emptyArray<Any?>(),
+            )
+        cursor.use {
+            assertTrue("Expected one row", it.moveToFirst())
+            assertTrue("remoteFolderName should be NULL for legacy rows", it.isNull(0))
+        }
+    }
+
+    // -------------------------------------------------------------------------
     // Full migration chain v1 → v13
     // -------------------------------------------------------------------------
 
     @Test
-    fun `all migrations from v1 to v13 run without error`() {
+    fun `all migrations from v1 to v14 run without error`() {
         val v1Db = openAtV1(context)
         try {
             SynckroDatabase.MIGRATION_1_2.migrate(v1Db)
@@ -531,15 +580,20 @@ class MigrationTest {
             SynckroDatabase.MIGRATION_10_11.migrate(v1Db)
             SynckroDatabase.MIGRATION_11_12.migrate(v1Db)
             SynckroDatabase.MIGRATION_12_13.migrate(v1Db)
+            SynckroDatabase.MIGRATION_13_14.migrate(v1Db)
 
             val fileIndexCols = columnNames(v1Db, "file_index")
             assertTrue(
-                "localDocumentId must exist in file_index after full v1→v13 migration chain",
+                "localDocumentId must exist in file_index after full v1→v14 migration chain",
                 "localDocumentId" in fileIndexCols,
             )
             assertTrue(
-                "remoteThumbnailUrl must exist in file_index after full v1→v13 migration chain",
+                "remoteThumbnailUrl must exist in file_index after full v1→v14 migration chain",
                 "remoteThumbnailUrl" in fileIndexCols,
+            )
+            assertTrue(
+                "remoteFolderName must exist in sync_pair after full v1→v14 migration chain",
+                "remoteFolderName" in columnNames(v1Db, "sync_pair"),
             )
         } finally {
             v1Db.close()

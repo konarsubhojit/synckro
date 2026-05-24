@@ -74,7 +74,7 @@ class EnumConverters {
 
 @Database(
     entities = [AccountEntity::class, SyncPairEntity::class, FileIndexEntity::class, SyncEventEntity::class, ConflictRecordEntity::class, LocalIndexEntity::class],
-    version = 13,
+    version = 14,
     exportSchema = true,
 )
 @TypeConverters(EnumConverters::class)
@@ -365,6 +365,19 @@ abstract class SynckroDatabase : RoomDatabase() {
                 override fun migrate(db: SupportSQLiteDatabase) {
                     db.execSQL("ALTER TABLE `file_index` ADD COLUMN `localDocumentId` TEXT")
                     db.execSQL("ALTER TABLE `file_index` ADD COLUMN `remoteThumbnailUrl` TEXT")
+                }
+            }
+
+        /**
+         * Adds `remoteFolderName` (nullable TEXT) to `sync_pair` so the UI can
+         * display the human-readable cloud folder name picked at pair-creation
+         * time instead of the opaque provider id once a sync run starts.
+         * Existing rows receive NULL; callers fall back to `remoteFolderId`.
+         */
+        val MIGRATION_13_14 =
+            object : Migration(13, 14) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL("ALTER TABLE `sync_pair` ADD COLUMN `remoteFolderName` TEXT")
                 }
             }
     }

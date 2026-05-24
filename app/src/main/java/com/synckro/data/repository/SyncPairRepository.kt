@@ -176,6 +176,7 @@ private fun SyncPair.toEntity(): SyncPairEntity =
         provider = provider,
         accountId = accountId,
         remoteFolderId = remoteFolderId,
+        remoteFolderName = remoteFolderName,
         direction = direction,
         conflictPolicy = conflictPolicy,
         includeGlobs = includeGlobs.joinToString("\n"),
