@@ -39,7 +39,6 @@ import java.util.concurrent.atomic.AtomicInteger
  * - Falls back to file-count mode (totalBytes == 0) when no sizes are available.
  */
 class SyncOpApplierProgressTest {
-
     // -------------------------------------------------------------------------
     // In-memory fakes (mirrors SyncOpApplierTest.InMemoryLocalFileAccess)
     // -------------------------------------------------------------------------
@@ -162,11 +161,12 @@ class SyncOpApplierProgressTest {
 
             val events = mutableListOf<TransferProgress>()
             buildApplier().apply(
-                ops = listOf(
-                    SyncOp.UploadNew("x.txt"),
-                    SyncOp.UploadNew("y.txt"),
-                    SyncOp.UploadNew("z.txt"),
-                ),
+                ops =
+                    listOf(
+                        SyncOp.UploadNew("x.txt"),
+                        SyncOp.UploadNew("y.txt"),
+                        SyncOp.UploadNew("z.txt"),
+                    ),
                 pair = pair(),
                 remoteFilesByPath = emptyMap(),
                 localIndexByPath = emptyMap(),
@@ -409,11 +409,12 @@ class SyncOpApplierProgressTest {
             val content = ByteArray(200) { 0x24 }
             val remote = seedRemote("conflict-local.bin", ByteArray(10) { 0x01 })
             localFs.put("conflict-local.bin", content)
-            val localIndex = indexEntry(
-                "conflict-local.bin",
-                remoteId = remote.id,
-                sizeBytes = content.size.toLong(),
-            )
+            val localIndex =
+                indexEntry(
+                    "conflict-local.bin",
+                    remoteId = remote.id,
+                    sizeBytes = content.size.toLong(),
+                )
 
             val events = mutableListOf<TransferProgress>()
             buildApplier().apply(
@@ -461,11 +462,12 @@ class SyncOpApplierProgressTest {
 
             val events = mutableListOf<TransferProgress>()
             buildApplier().apply(
-                ops = listOf(
-                    SyncOp.DownloadNew("good.bin"),
-                    SyncOp.DownloadNew("bad.bin"),   // no entry in remoteFilesByPath → error
-                    SyncOp.DownloadNew("good.bin"),  // 2nd successful download
-                ),
+                ops =
+                    listOf(
+                        SyncOp.DownloadNew("good.bin"),
+                        SyncOp.DownloadNew("bad.bin"), // no entry in remoteFilesByPath → error
+                        SyncOp.DownloadNew("good.bin"), // 2nd successful download
+                    ),
                 pair = pair(),
                 remoteFilesByPath = mapOf("good.bin" to goodRemote),
                 localIndexByPath = emptyMap(),
@@ -482,7 +484,6 @@ class SyncOpApplierProgressTest {
 }
 
 class SyncOpApplierConcurrentTest {
-
     private class InMemoryLocalFileAccess(
         private val nowMs: Long = 5_000L,
     ) : LocalFileAccess {

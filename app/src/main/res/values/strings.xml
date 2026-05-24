@@ -470,11 +470,42 @@
     <string name="home_auto_sync_paused">Auto-sync paused</string>
 
     <!-- Settings: section headers -->
+    <string name="settings_section_account">Account</string>
+    <string name="settings_section_preferences">Preferences</string>
+    <string name="settings_section_privacy">Privacy &amp; data</string>
+    <string name="settings_section_app">App</string>
     <string name="settings_section_appearance">Appearance</string>
-    <string name="settings_section_sync_defaults">Sync defaults</string>
+    <string name="settings_section_sync_defaults">Sync</string>
     <string name="settings_section_notifications">Notifications</string>
+    <string name="settings_section_battery">Battery &amp; charging</string>
+    <string name="settings_section_security">Security</string>
+    <string name="settings_section_backup">Backup &amp; logs</string>
     <string name="settings_section_storage_logs">Storage &amp; logs</string>
     <string name="settings_section_about">About</string>
+    <string name="settings_section_support">Help &amp; support</string>
+
+    <!-- Settings: main menu entries -->
+    <string name="settings_menu_accounts_title">Accounts</string>
+    <string name="settings_menu_accounts_subtitle">Manage connected cloud accounts</string>
+    <string name="settings_menu_sync_title">Sync</string>
+    <string name="settings_menu_sync_subtitle">Auto-sync, conflict policy and transfer settings</string>
+    <string name="settings_menu_appearance_title">Language &amp; appearance</string>
+    <string name="settings_menu_appearance_subtitle">Dark mode, colors and text size</string>
+    <string name="settings_menu_notifications_title">Notifications</string>
+    <string name="settings_menu_notifications_subtitle">Alerts, sounds and haptics</string>
+    <string name="settings_menu_battery_title">Battery &amp; charging</string>
+    <string name="settings_menu_battery_subtitle">Wi-Fi only and charging conditions</string>
+    <string name="settings_menu_security_title">Security</string>
+    <string name="settings_menu_security_subtitle">Privacy and security settings</string>
+    <string name="settings_menu_backup_title">Backup &amp; logs</string>
+    <string name="settings_menu_backup_subtitle">Log retention, export and cache</string>
+    <string name="settings_menu_about_title">About</string>
+    <string name="settings_menu_about_subtitle">Version, licenses and privacy policy</string>
+    <string name="settings_menu_support_title">Help &amp; support</string>
+    <string name="settings_menu_support_subtitle">Send feedback to the Synckro team</string>
+
+    <!-- Settings: security placeholder -->
+    <string name="settings_security_placeholder">Security settings will be available in a future update.</string>
 
     <!-- Settings: appearance -->
     <string name="settings_dark_mode_title">Dark mode</string>

@@ -15,10 +15,14 @@ sealed class AppNavEvent {
      *   briefly highlighted on arrival (Phase 5d reauth deep-link). `null` opens the
      *   Accounts tab without any specific highlight (the original Phase 1 behaviour).
      */
-    data class OpenAccounts(val accountId: String? = null) : AppNavEvent()
+    data class OpenAccounts(
+        val accountId: String? = null,
+    ) : AppNavEvent()
 
     /** Open the Logs destination filtered to the given sync pair. */
-    data class OpenLogs(val pairId: Long) : AppNavEvent()
+    data class OpenLogs(
+        val pairId: Long,
+    ) : AppNavEvent()
 }
 
 /**

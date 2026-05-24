@@ -85,7 +85,7 @@ class ConflictInboxViewModel
             val selectedCount: Int get() = selectedIds.size
         }
 
-        private val _selectionState = MutableStateFlow(Pair(false, linkedSetOf<Long>()))
+        private val selectionState = MutableStateFlow(Pair(false, linkedSetOf<Long>()))
 
         val state: StateFlow<UiState> =
             combine(
@@ -93,7 +93,7 @@ class ConflictInboxViewModel
                     .observeUnresolved()
                     .map { projectRows(it) },
                 settingsRepository.enableHaptics,
-                _selectionState,
+                selectionState,
             ) { rows, enableHaptics, (isSelectionMode, selectedIds) ->
                 UiState(
                     conflicts = rows,
@@ -132,7 +132,7 @@ class ConflictInboxViewModel
          */
         fun enterSelectionMode(id: Long) {
             Timber.i("ConflictInboxViewModel.enterSelectionMode(id=$id)")
-            _selectionState.value = Pair(true, linkedSetOf(id))
+            selectionState.value = Pair(true, linkedSetOf(id))
         }
 
         /**
@@ -141,7 +141,7 @@ class ConflictInboxViewModel
          * the end of the selection set (preserving insertion order for bulk-apply sequencing).
          */
         fun toggleSelection(id: Long) {
-            _selectionState.update { (isSelectionMode, selectedIds) ->
+            selectionState.update { (isSelectionMode, selectedIds) ->
                 if (!isSelectionMode) return@update Pair(isSelectionMode, selectedIds)
                 val updated: LinkedHashSet<Long> =
                     if (id in selectedIds) {
@@ -158,7 +158,7 @@ class ConflictInboxViewModel
          */
         fun exitSelectionMode() {
             Timber.i("ConflictInboxViewModel.exitSelectionMode()")
-            _selectionState.value = Pair(false, linkedSetOf())
+            selectionState.value = Pair(false, linkedSetOf())
         }
 
         /**
@@ -166,7 +166,7 @@ class ConflictInboxViewModel
          * then exits selection mode.
          */
         fun applyBulkResolution(resolution: String) {
-            val ids = _selectionState.value.second.toList()
+            val ids = selectionState.value.second.toList()
             Timber.i("ConflictInboxViewModel.applyBulkResolution(resolution=$resolution, ids=$ids)")
             exitSelectionMode()
             viewModelScope.launch {

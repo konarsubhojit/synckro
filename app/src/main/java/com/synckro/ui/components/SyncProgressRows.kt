@@ -164,13 +164,14 @@ private fun ActiveTransferRow(
     }
 }
 
-internal fun primaryProgressFraction(progress: TransferProgress?): Float? = when {
-    progress != null && progress.totalBytes > 0L ->
-        (progress.bytesTransferred.toFloat() / progress.totalBytes).coerceIn(0f, 1f)
-    progress != null && progress.totalFiles > 0 ->
-        (progress.filesCompleted.toFloat() / progress.totalFiles).coerceIn(0f, 1f)
-    else -> null
-}
+internal fun primaryProgressFraction(progress: TransferProgress?): Float? =
+    when {
+        progress != null && progress.totalBytes > 0L ->
+            (progress.bytesTransferred.toFloat() / progress.totalBytes).coerceIn(0f, 1f)
+        progress != null && progress.totalFiles > 0 ->
+            (progress.filesCompleted.toFloat() / progress.totalFiles).coerceIn(0f, 1f)
+        else -> null
+    }
 
 internal fun transferProgressFraction(transfer: ActiveTransfer): Float? =
     if (transfer.totalBytes > 0L) {

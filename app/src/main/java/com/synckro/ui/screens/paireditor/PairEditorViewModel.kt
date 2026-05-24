@@ -19,6 +19,7 @@ import com.synckro.domain.model.SyncPair
 import com.synckro.domain.model.isDestructive
 import com.synckro.util.StringProvider
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -30,7 +31,6 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import javax.inject.Inject
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 
 /**
  * Friendly schedule preset options shown in the pair editor.
@@ -490,8 +490,11 @@ class PairEditorViewModel
          */
         fun goToNextStep() {
             _state.update { s ->
-                if (!s.canGoToNextStep || s.currentStep >= TOTAL_STEPS) s
-                else s.copy(currentStep = s.currentStep + 1)
+                if (!s.canGoToNextStep || s.currentStep >= TOTAL_STEPS) {
+                    s
+                } else {
+                    s.copy(currentStep = s.currentStep + 1)
+                }
             }
         }
 
@@ -612,7 +615,7 @@ class PairEditorViewModel
                     syncEventRepository.log(
                         pairId = if (pairId != 0L) pairId else null,
                         level = SyncEventLevel.WARN,
-                        tag = SyncEventTag.PairEditor,
+                        tag = SyncEventTag.PAIR_EDITOR,
                         message = "Save validation failed: $validationError",
                     )
                 }
@@ -637,7 +640,7 @@ class PairEditorViewModel
                 syncEventRepository.log(
                     pairId = if (pairId != 0L) pairId else null,
                     level = SyncEventLevel.INFO,
-                    tag = SyncEventTag.PairEditor,
+                    tag = SyncEventTag.PAIR_EDITOR,
                     message = "Save started: '${s.displayName.trim()}' provider=${s.provider.name}",
                 )
                 runCatching {
@@ -679,7 +682,7 @@ class PairEditorViewModel
                     syncEventRepository.log(
                         pairId = savedId,
                         level = SyncEventLevel.INFO,
-                        tag = SyncEventTag.Scheduler,
+                        tag = SyncEventTag.SCHEDULER,
                         message = "scheduleOrCancel pairId=$savedId globalAutoSync=$globalEnabled pairAutoSync=${s.autoSyncEnabled} interval=${s.scheduleIntervalMinutes}min",
                     )
                     savedId
@@ -689,7 +692,7 @@ class PairEditorViewModel
                     syncEventRepository.log(
                         pairId = savedId,
                         level = SyncEventLevel.INFO,
-                        tag = SyncEventTag.PairEditor,
+                        tag = SyncEventTag.PAIR_EDITOR,
                         message = "Save succeeded: pairId=$savedId '${s.displayName.trim()}'",
                     )
                     onSaved(savedId)
@@ -698,7 +701,7 @@ class PairEditorViewModel
                     syncEventRepository.log(
                         pairId = if (pairId != 0L) pairId else null,
                         level = SyncEventLevel.ERROR,
-                        tag = SyncEventTag.PairEditor,
+                        tag = SyncEventTag.PAIR_EDITOR,
                         message = "Save failed: ${t.message}",
                     )
                     _state.update {

@@ -6,10 +6,10 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -138,12 +138,13 @@ fun PairsScreen(
     val undoMessageFmt = stringResource(R.string.home_delete_undo_message_format)
     LaunchedEffect(pendingDelete?.pair?.id) {
         val pd = pendingDelete ?: return@LaunchedEffect
-        val result = snackbarHostState.showSnackbar(
-            message = String.format(undoMessageFmt, pd.pair.displayName),
-            actionLabel = undoLabel,
-            duration = SnackbarDuration.Short,
-            withDismissAction = true,
-        )
+        val result =
+            snackbarHostState.showSnackbar(
+                message = String.format(undoMessageFmt, pd.pair.displayName),
+                actionLabel = undoLabel,
+                duration = SnackbarDuration.Short,
+                withDismissAction = true,
+            )
         if (result == SnackbarResult.ActionPerformed) {
             viewModel.undoDelete()
         }
@@ -155,13 +156,14 @@ fun PairsScreen(
     val noneMsg = stringResource(R.string.home_sync_all_result_none)
     LaunchedEffect(viewModel) {
         viewModel.syncAllResults.collect { result ->
-            val message = when {
-                result.synced == 0 && result.skipped == 0 -> noneMsg
-                result.skipped == 0 -> String.format(syncedFmt, result.synced)
-                else ->
-                    String.format(syncedFmt, result.synced) +
-                        " · " + String.format(skippedFmt, result.skipped)
-            }
+            val message =
+                when {
+                    result.synced == 0 && result.skipped == 0 -> noneMsg
+                    result.skipped == 0 -> String.format(syncedFmt, result.synced)
+                    else ->
+                        String.format(syncedFmt, result.synced) +
+                            " · " + String.format(skippedFmt, result.skipped)
+                }
             snackbarHostState.showSnackbar(message = message, duration = SnackbarDuration.Short)
         }
     }
@@ -188,7 +190,7 @@ fun PairsScreen(
         PairsListScaffold(
             state = state,
             onAddSyncPair = onAddSyncPair,
-            onMarkFabTooltipSeen = { viewModel.markTooltipSeen(CoachTooltipIds.PairsFab) },
+            onMarkFabTooltipSeen = { viewModel.markTooltipSeen(CoachTooltipIds.PAIRS_FAB) },
             onEditSyncPair = onEditSyncPair,
             onOpenPairDetail = openPairDetail,
             onOpenReauth = onOpenReauth,
@@ -219,7 +221,7 @@ fun PairsScreen(
                 PairsListScaffold(
                     state = state,
                     onAddSyncPair = onAddSyncPair,
-                    onMarkFabTooltipSeen = { viewModel.markTooltipSeen(CoachTooltipIds.PairsFab) },
+                    onMarkFabTooltipSeen = { viewModel.markTooltipSeen(CoachTooltipIds.PAIRS_FAB) },
                     onEditSyncPair = onEditSyncPair,
                     onOpenPairDetail = openPairDetail,
                     onOpenReauth = onOpenReauth,
@@ -289,7 +291,7 @@ private fun PairsListScaffold(
 ) {
     val showFabTooltip =
         state.onboardingCompletedAtMs == null &&
-            CoachTooltipIds.PairsFab !in state.seenTooltips
+            CoachTooltipIds.PAIRS_FAB !in state.seenTooltips
     Scaffold(
         modifier = modifier,
         topBar = {
@@ -299,11 +301,12 @@ private fun PairsListScaffold(
                     val syncAllLabel = stringResource(R.string.home_sync_all_now)
                     IconButton(
                         onClick = { onSyncAllNow() },
-                        enabled = state.pairs.any { p ->
-                            !p.needsReLink &&
-                                p.lastSyncResult != "NEEDS_REAUTH" &&
-                                p.id !in state.syncingPairIds
-                        },
+                        enabled =
+                            state.pairs.any { p ->
+                                !p.needsReLink &&
+                                    p.lastSyncResult != "NEEDS_REAUTH" &&
+                                    p.id !in state.syncingPairIds
+                            },
                     ) {
                         Icon(Icons.Default.Sync, contentDescription = syncAllLabel)
                     }
@@ -427,9 +430,10 @@ private fun PairsList(
             state = pullState,
         ) {
             LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 // Phase 3 (Synced Folders redesign): master "Enable auto-sync"
@@ -500,13 +504,14 @@ private fun GlobalAutoSyncCard(
                     fontWeight = FontWeight.SemiBold,
                 )
                 Text(
-                    text = stringResource(
-                        if (enabled) {
-                            R.string.pairs_master_autosync_body
-                        } else {
-                            R.string.pairs_master_autosync_body_off
-                        },
-                    ),
+                    text =
+                        stringResource(
+                            if (enabled) {
+                                R.string.pairs_master_autosync_body
+                            } else {
+                                R.string.pairs_master_autosync_body_off
+                            },
+                        ),
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
@@ -564,20 +569,23 @@ private fun SyncPairRow(
 
     val status = pairCardStatus(pair = pair, isSyncing = isSyncing, summary = lastSummary)
     val needsReauth = pair.lastSyncResult == "NEEDS_REAUTH"
-    val cardColor = when (status) {
-        PairCardStatus.NEEDS_ACTION -> MaterialTheme.colorScheme.errorContainer
-        else -> MaterialTheme.colorScheme.surfaceVariant
-    }
-    val cardContentColor = when (status) {
-        PairCardStatus.NEEDS_ACTION -> MaterialTheme.colorScheme.onErrorContainer
-        else -> MaterialTheme.colorScheme.onSurfaceVariant
-    }
-    val stripeColor: Color = when (status) {
-        PairCardStatus.SUCCESS -> MaterialTheme.colorScheme.primary
-        PairCardStatus.SYNCING -> MaterialTheme.colorScheme.tertiary
-        PairCardStatus.NEEDS_ACTION -> MaterialTheme.colorScheme.error
-        PairCardStatus.IDLE -> MaterialTheme.colorScheme.outline
-    }
+    val cardColor =
+        when (status) {
+            PairCardStatus.NEEDS_ACTION -> MaterialTheme.colorScheme.errorContainer
+            else -> MaterialTheme.colorScheme.surfaceVariant
+        }
+    val cardContentColor =
+        when (status) {
+            PairCardStatus.NEEDS_ACTION -> MaterialTheme.colorScheme.onErrorContainer
+            else -> MaterialTheme.colorScheme.onSurfaceVariant
+        }
+    val stripeColor: Color =
+        when (status) {
+            PairCardStatus.SUCCESS -> MaterialTheme.colorScheme.primary
+            PairCardStatus.SYNCING -> MaterialTheme.colorScheme.tertiary
+            PairCardStatus.NEEDS_ACTION -> MaterialTheme.colorScheme.error
+            PairCardStatus.IDLE -> MaterialTheme.colorScheme.outline
+        }
     val stripeDescription = stringResource(R.string.home_card_status_stripe)
     val reauthDeepLinkDescription = stringResource(R.string.home_needs_reauth_action_description)
     // TODO(#28): Trigger HapticHelper.light() when pair-card swipe gestures are introduced.
@@ -598,16 +606,18 @@ private fun SyncPairRow(
         // Phase 5a: full-height color stripe communicating status at-a-glance.
         Row(modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
             Box(
-                modifier = Modifier
-                    .width(4.dp)
-                    .fillMaxHeight()
-                    .background(stripeColor)
-                    .semantics { contentDescription = stripeDescription },
+                modifier =
+                    Modifier
+                        .width(4.dp)
+                        .fillMaxHeight()
+                        .background(stripeColor)
+                        .semantics { contentDescription = stripeDescription },
             )
             Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(12.dp),
+                modifier =
+                    Modifier
+                        .weight(1f)
+                        .padding(12.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 Row(
@@ -622,11 +632,12 @@ private fun SyncPairRow(
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.onSurface,
                         )
-                        val providerLabel = when (pair.provider.name) {
-                            "GOOGLE_DRIVE" -> stringResource(R.string.provider_label_google_drive)
-                            "ONEDRIVE" -> stringResource(R.string.provider_label_onedrive)
-                            else -> pair.provider.name
-                        }
+                        val providerLabel =
+                            when (pair.provider.name) {
+                                "GOOGLE_DRIVE" -> stringResource(R.string.provider_label_google_drive)
+                                "ONEDRIVE" -> stringResource(R.string.provider_label_onedrive)
+                                else -> pair.provider.name
+                            }
                         Text(
                             text = if (accountEmail != null) "$providerLabel · $accountEmail" else providerLabel,
                             style = MaterialTheme.typography.labelSmall,
@@ -635,22 +646,25 @@ private fun SyncPairRow(
                     }
                     when {
                         isSyncing -> Unit
-                        pair.needsReLink -> Icon(
-                            Icons.Default.FolderOff,
-                            contentDescription = stringResource(R.string.home_needs_relink),
-                            tint = MaterialTheme.colorScheme.error,
-                        )
-                        needsReauth -> Icon(
-                            Icons.Default.Error,
-                            contentDescription = stringResource(R.string.home_needs_reauth_hint),
-                            tint = MaterialTheme.colorScheme.error,
-                        )
-                        pair.lastSyncResult == "SUCCESS" -> Icon(
-                            Icons.Default.CheckCircle,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(20.dp),
-                        )
+                        pair.needsReLink ->
+                            Icon(
+                                Icons.Default.FolderOff,
+                                contentDescription = stringResource(R.string.home_needs_relink),
+                                tint = MaterialTheme.colorScheme.error,
+                            )
+                        needsReauth ->
+                            Icon(
+                                Icons.Default.Error,
+                                contentDescription = stringResource(R.string.home_needs_reauth_hint),
+                                tint = MaterialTheme.colorScheme.error,
+                            )
+                        pair.lastSyncResult == "SUCCESS" ->
+                            Icon(
+                                Icons.Default.CheckCircle,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp),
+                            )
                         else -> Unit
                     }
                 }
@@ -660,10 +674,11 @@ private fun SyncPairRow(
                 // without opening Pair Detail.
                 PairInfoRow(
                     icon = Icons.Default.Cloud,
-                    text = stringResource(
-                        R.string.pairs_card_remote_folder_label,
-                        pair.remoteFolderId.ifBlank { stringResource(R.string.pairs_card_remote_root) },
-                    ),
+                    text =
+                        stringResource(
+                            R.string.pairs_card_remote_folder_label,
+                            pair.remoteFolderId.ifBlank { stringResource(R.string.pairs_card_remote_root) },
+                        ),
                 )
                 val localFolderName = rememberLocalFolderName(pair.localTreeUri)
                 PairInfoRow(
@@ -672,30 +687,34 @@ private fun SyncPairRow(
                 )
                 PairInfoRow(
                     icon = Icons.Default.CompareArrows,
-                    text = stringResource(
-                        R.string.pairs_card_direction_label,
-                        directionShortLabel(pair.direction),
-                    ),
+                    text =
+                        stringResource(
+                            R.string.pairs_card_direction_label,
+                            directionShortLabel(pair.direction),
+                        ),
                 )
 
                 when {
-                    pair.needsReLink -> StatusBanner(
-                        text = stringResource(R.string.home_needs_relink),
-                        isError = true,
-                    )
-                    needsReauth -> StatusBanner(
-                        text = stringResource(R.string.home_needs_reauth_hint),
-                        isError = true,
-                        // Phase 5d: deep-link to the Accounts tab and highlight the
-                        // affected account. The card's outer Modifier.clickable would
-                        // otherwise open Pair Detail — clickable here consumes the
-                        // click first so the more-specific recovery action wins.
-                        modifier = Modifier
-                            .clickable(onClick = onOpenReauth)
-                            .semantics {
-                                contentDescription = reauthDeepLinkDescription
-                            },
-                    )
+                    pair.needsReLink ->
+                        StatusBanner(
+                            text = stringResource(R.string.home_needs_relink),
+                            isError = true,
+                        )
+                    needsReauth ->
+                        StatusBanner(
+                            text = stringResource(R.string.home_needs_reauth_hint),
+                            isError = true,
+                            // Phase 5d: deep-link to the Accounts tab and highlight the
+                            // affected account. The card's outer Modifier.clickable would
+                            // otherwise open Pair Detail — clickable here consumes the
+                            // click first so the more-specific recovery action wins.
+                            modifier =
+                                Modifier
+                                    .clickable(onClick = onOpenReauth)
+                                    .semantics {
+                                        contentDescription = reauthDeepLinkDescription
+                                    },
+                        )
                 }
 
                 if (isSyncing) {
@@ -725,11 +744,12 @@ private fun SyncPairRow(
                     // Phase 5a: replaced the standalone "Auto-sync on/off" label with
                     // the next-run ETA, which subsumes the on/off state (paused = no ETA).
                     Text(
-                        text = nextRunLabel(
-                            nextRunAtMs = nextRunAtMs,
-                            globalAutoSyncEnabled = globalAutoSyncEnabled,
-                            autoSyncEnabled = pair.autoSyncEnabled,
-                        ),
+                        text =
+                            nextRunLabel(
+                                nextRunAtMs = nextRunAtMs,
+                                globalAutoSyncEnabled = globalAutoSyncEnabled,
+                                autoSyncEnabled = pair.autoSyncEnabled,
+                            ),
                         style = MaterialTheme.typography.bodySmall,
                         color =
                             if (nextRunAtMs == null) {
@@ -738,12 +758,13 @@ private fun SyncPairRow(
                                 MaterialTheme.colorScheme.primary
                             },
                     )
-                    val dateFormatter = remember {
-                        java.text.DateFormat.getDateTimeInstance(
-                            java.text.DateFormat.SHORT,
-                            java.text.DateFormat.SHORT,
-                        )
-                    }
+                    val dateFormatter =
+                        remember {
+                            java.text.DateFormat.getDateTimeInstance(
+                                java.text.DateFormat.SHORT,
+                                java.text.DateFormat.SHORT,
+                            )
+                        }
                     Text(
                         text =
                             if (pair.lastSyncAtMs != null) {
@@ -771,9 +792,10 @@ private fun SyncPairRow(
                     Switch(
                         checked = pair.autoSyncEnabled,
                         onCheckedChange = onSetPairAutoSync,
-                        modifier = Modifier.semantics {
-                            contentDescription = pairAutoSyncDescription
-                        },
+                        modifier =
+                            Modifier.semantics {
+                                contentDescription = pairAutoSyncDescription
+                            },
                     )
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -909,15 +931,16 @@ private fun rememberLocalFolderName(localTreeUri: String): String {
 
 /** Compact direction label used on pair cards (Phase 3 — Synced Folders redesign). */
 @Composable
-private fun directionShortLabel(direction: SyncDirection): String = stringResource(
-    when (direction) {
-        SyncDirection.LOCAL_TO_REMOTE -> R.string.direction_local_to_remote
-        SyncDirection.REMOTE_TO_LOCAL -> R.string.direction_remote_to_local
-        SyncDirection.BIDIRECTIONAL -> R.string.direction_bidirectional
-        SyncDirection.UPLOAD_AND_DELETE_LOCAL_AFTER_N_DAYS -> R.string.direction_upload_delete_local
-        SyncDirection.DOWNLOAD_AND_DELETE_REMOTE_AFTER_N_DAYS -> R.string.direction_download_delete_remote
-    },
-)
+private fun directionShortLabel(direction: SyncDirection): String =
+    stringResource(
+        when (direction) {
+            SyncDirection.LOCAL_TO_REMOTE -> R.string.direction_local_to_remote
+            SyncDirection.REMOTE_TO_LOCAL -> R.string.direction_remote_to_local
+            SyncDirection.BIDIRECTIONAL -> R.string.direction_bidirectional
+            SyncDirection.UPLOAD_AND_DELETE_LOCAL_AFTER_N_DAYS -> R.string.direction_upload_delete_local
+            SyncDirection.DOWNLOAD_AND_DELETE_REMOTE_AFTER_N_DAYS -> R.string.direction_download_delete_remote
+        },
+    )
 
 /**
  * Coarse status used to colour the left-edge stripe on a pair card. Derived
@@ -930,33 +953,36 @@ private fun pairCardStatus(
     pair: SyncPair,
     isSyncing: Boolean,
     summary: PairSummary?,
-): PairCardStatus = when {
-    isSyncing -> PairCardStatus.SYNCING
-    pair.needsReLink -> PairCardStatus.NEEDS_ACTION
-    pair.lastSyncResult == "NEEDS_REAUTH" -> PairCardStatus.NEEDS_ACTION
-    pair.lastSyncResult == "FAILURE" -> PairCardStatus.NEEDS_ACTION
-    pair.lastSyncResult == "SUCCESS" -> PairCardStatus.SUCCESS
-    summary?.outcome == PairSummary.Outcome.SUCCESS -> PairCardStatus.SUCCESS
-    else -> PairCardStatus.IDLE
-}
+): PairCardStatus =
+    when {
+        isSyncing -> PairCardStatus.SYNCING
+        pair.needsReLink -> PairCardStatus.NEEDS_ACTION
+        pair.lastSyncResult == "NEEDS_REAUTH" -> PairCardStatus.NEEDS_ACTION
+        pair.lastSyncResult == "FAILURE" -> PairCardStatus.NEEDS_ACTION
+        pair.lastSyncResult == "SUCCESS" -> PairCardStatus.SUCCESS
+        summary?.outcome == PairSummary.Outcome.SUCCESS -> PairCardStatus.SUCCESS
+        else -> PairCardStatus.IDLE
+    }
 
 @Composable
-private fun summaryColor(outcome: PairSummary.Outcome): Color = when (outcome) {
-    PairSummary.Outcome.SUCCESS -> MaterialTheme.colorScheme.primary
-    PairSummary.Outcome.PARTIAL_FAILURE -> MaterialTheme.colorScheme.tertiary
-    else -> MaterialTheme.colorScheme.error
-}
+private fun summaryColor(outcome: PairSummary.Outcome): Color =
+    when (outcome) {
+        PairSummary.Outcome.SUCCESS -> MaterialTheme.colorScheme.primary
+        PairSummary.Outcome.PARTIAL_FAILURE -> MaterialTheme.colorScheme.tertiary
+        else -> MaterialTheme.colorScheme.error
+    }
 
 @Composable
-private fun lastSummaryLabel(summary: PairSummary): String = when (summary.outcome) {
-    PairSummary.Outcome.SUCCESS ->
-        stringResource(R.string.home_last_result_success_format, summary.applied, summary.conflicts)
-    PairSummary.Outcome.PARTIAL_FAILURE ->
-        stringResource(R.string.home_last_result_partial_format, summary.applied, summary.errors)
-    PairSummary.Outcome.FAILURE -> stringResource(R.string.home_last_result_failure)
-    PairSummary.Outcome.NEEDS_REAUTH -> stringResource(R.string.home_last_result_needs_reauth)
-    PairSummary.Outcome.NEEDS_RELINK -> stringResource(R.string.home_last_result_needs_relink)
-}
+private fun lastSummaryLabel(summary: PairSummary): String =
+    when (summary.outcome) {
+        PairSummary.Outcome.SUCCESS ->
+            stringResource(R.string.home_last_result_success_format, summary.applied, summary.conflicts)
+        PairSummary.Outcome.PARTIAL_FAILURE ->
+            stringResource(R.string.home_last_result_partial_format, summary.applied, summary.errors)
+        PairSummary.Outcome.FAILURE -> stringResource(R.string.home_last_result_failure)
+        PairSummary.Outcome.NEEDS_REAUTH -> stringResource(R.string.home_last_result_needs_reauth)
+        PairSummary.Outcome.NEEDS_RELINK -> stringResource(R.string.home_last_result_needs_relink)
+    }
 
 @Composable
 private fun nextRunLabel(

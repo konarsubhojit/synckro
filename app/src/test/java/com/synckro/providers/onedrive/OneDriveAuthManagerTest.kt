@@ -8,8 +8,8 @@ import com.synckro.domain.auth.AuthResult
 import com.synckro.domain.auth.AuthUiHost
 import com.synckro.domain.model.CloudProviderType
 import kotlinx.coroutines.test.runTest
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -235,7 +235,7 @@ class OneDriveAuthManagerTest {
                     clientId = "",
                     redirectUri = "",
                     testPrefs = testPrefs,
-            )
+                )
 
             assertEquals("legacy@example.com", mgr.getAccountHint())
             assertFalse(testPrefs.contains(OneDriveAuthManager.KEY_ACCOUNT_HINT))

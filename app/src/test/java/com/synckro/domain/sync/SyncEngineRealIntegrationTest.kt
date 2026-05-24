@@ -23,8 +23,8 @@ import com.synckro.domain.model.ConflictRecord
 import com.synckro.domain.model.SyncDirection
 import com.synckro.domain.model.SyncPair
 import com.synckro.domain.provider.CloudProvider
-import com.synckro.domain.provider.CloudProviderFactory
 import com.synckro.domain.provider.CloudProviderException
+import com.synckro.domain.provider.CloudProviderFactory
 import com.synckro.domain.sync.RemoteChange
 import com.synckro.domain.sync.RemoteChangeType
 import com.synckro.domain.sync.RemoteEnumerator
@@ -1048,7 +1048,6 @@ class SyncEngineRealIntegrationTest {
                 remoteFiles.size,
             )
         }
-
 
     // -------------------------------------------------------------------------
     // Conflict policy: NEWEST_WINS (remote wins)

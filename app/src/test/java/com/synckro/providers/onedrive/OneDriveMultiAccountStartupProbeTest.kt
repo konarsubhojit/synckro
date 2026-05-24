@@ -81,7 +81,7 @@ class OneDriveMultiAccountStartupProbeTest {
                 syncEventRepository.log(
                     null,
                     SyncEventLevel.ERROR,
-                    SyncEventTag.Auth,
+                    SyncEventTag.AUTH,
                     match {
                         it.contains("OneDrive MSAL cache compatibility probe failed") &&
                             it.contains("Cache schema mismatch")

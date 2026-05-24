@@ -118,7 +118,9 @@ class OneDriveProviderAuthTest {
             try {
                 provider.ensureAuthenticated()
                 fail("Expected AuthenticationFailed")
-            } catch (_: CloudProviderException.AuthenticationFailed) { /* ok */ }
+            } catch (_: CloudProviderException.AuthenticationFailed) {
+                // ok
+            }
 
             try {
                 provider.ensureAuthenticated()
@@ -142,14 +144,18 @@ class OneDriveProviderAuthTest {
             try {
                 provider.ensureAuthenticated()
                 fail("Expected AuthenticationFailed")
-            } catch (_: CloudProviderException.AuthenticationFailed) { /* ok */ }
+            } catch (_: CloudProviderException.AuthenticationFailed) {
+                // ok
+            }
 
             assertTrue(provider.ensureAuthenticated())
 
             try {
                 provider.ensureAuthenticated()
                 fail("Expected AuthenticationFailed")
-            } catch (_: CloudProviderException.AuthenticationFailed) { /* ok */ }
+            } catch (_: CloudProviderException.AuthenticationFailed) {
+                // ok
+            }
         }
 
     // -------------------------------------------------------------------------
@@ -244,11 +250,14 @@ class OneDriveProviderAuthTest {
     fun `obtainAccessToken proactively refreshes when token is stale`() =
         runTest {
             var fakeTime = 0L
-            val testProvider = OneDriveProvider(
-                fakeAccount.id, authManager, graphClient,
-                clock = { fakeTime },
-                tokenExpiryThresholdMs = OneDriveProvider.TOKEN_EXPIRY_THRESHOLD_MS,
-            )
+            val testProvider =
+                OneDriveProvider(
+                    fakeAccount.id,
+                    authManager,
+                    graphClient,
+                    clock = { fakeTime },
+                    tokenExpiryThresholdMs = OneDriveProvider.TOKEN_EXPIRY_THRESHOLD_MS,
+                )
             // First authentication — acquires a fresh token.
             coEvery { authManager.currentAccounts() } returns listOf(fakeAccount)
             coEvery { authManager.acquireAccessToken(fakeAccount) } returns AuthResult.Success("token-fresh")
@@ -272,11 +281,14 @@ class OneDriveProviderAuthTest {
     fun `obtainAccessToken does not refresh when token is still fresh`() =
         runTest {
             var fakeTime = 0L
-            val testProvider = OneDriveProvider(
-                fakeAccount.id, authManager, graphClient,
-                clock = { fakeTime },
-                tokenExpiryThresholdMs = OneDriveProvider.TOKEN_EXPIRY_THRESHOLD_MS,
-            )
+            val testProvider =
+                OneDriveProvider(
+                    fakeAccount.id,
+                    authManager,
+                    graphClient,
+                    clock = { fakeTime },
+                    tokenExpiryThresholdMs = OneDriveProvider.TOKEN_EXPIRY_THRESHOLD_MS,
+                )
             coEvery { authManager.currentAccounts() } returns listOf(fakeAccount)
             coEvery { authManager.acquireAccessToken(fakeAccount) } returns AuthResult.Success("token-abc")
             coEvery { graphClient.list("token-abc", null) } returns emptyList()

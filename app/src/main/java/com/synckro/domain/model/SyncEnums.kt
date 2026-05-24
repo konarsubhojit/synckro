@@ -5,6 +5,7 @@ enum class SyncDirection {
     LOCAL_TO_REMOTE,
     REMOTE_TO_LOCAL,
     BIDIRECTIONAL,
+
     /**
      * Upload-only backup mode: local files are uploaded to remote but remote
      * changes are never downloaded. After a file has been confirmed in the
@@ -14,6 +15,7 @@ enum class SyncDirection {
      * local deletion, making this equivalent to a pure upload-only mode.
      */
     UPLOAD_AND_DELETE_LOCAL_AFTER_N_DAYS,
+
     /**
      * Download-only offload mode: remote files are downloaded to local but
      * local changes are never uploaded. After a file has been confirmed in the

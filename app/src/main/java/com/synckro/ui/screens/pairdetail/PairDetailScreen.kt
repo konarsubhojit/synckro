@@ -121,10 +121,11 @@ fun PairDetailScreen(
         if (pair == null) {
             // Defensive — should not happen unless the pair was deleted while open.
             Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding)
-                    .padding(16.dp),
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .padding(padding)
+                        .padding(16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Text(
@@ -136,11 +137,12 @@ fun PairDetailScreen(
         }
 
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .verticalScroll(rememberScrollState())
-                .padding(16.dp),
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .verticalScroll(rememberScrollState())
+                    .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             StatusCard(state = state, pair = pair, onOpenAccountsForReauth = { onEdit(pair.id) })
@@ -192,8 +194,11 @@ private fun StatusCard(
 ) {
     val needsReauth = pair.lastSyncResult == "NEEDS_REAUTH"
     val cardColor =
-        if (pair.needsReLink || needsReauth) MaterialTheme.colorScheme.errorContainer
-        else MaterialTheme.colorScheme.surfaceVariant
+        if (pair.needsReLink || needsReauth) {
+            MaterialTheme.colorScheme.errorContainer
+        } else {
+            MaterialTheme.colorScheme.surfaceVariant
+        }
 
     SectionCard(
         modifier = Modifier.fillMaxWidth(),
@@ -248,18 +253,20 @@ private fun StatusCard(
 @Composable
 private fun SyncProgressBlock(progress: TransferProgress?) {
     val syncingLabel = stringResource(R.string.sync_now_in_progress)
-    val fraction: Float? = when {
-        progress != null && progress.totalBytes > 0L ->
-            (progress.bytesTransferred.toFloat() / progress.totalBytes).coerceIn(0f, 1f)
-        progress != null && progress.totalFiles > 0 ->
-            (progress.filesCompleted.toFloat() / progress.totalFiles).coerceIn(0f, 1f)
-        else -> null
-    }
+    val fraction: Float? =
+        when {
+            progress != null && progress.totalBytes > 0L ->
+                (progress.bytesTransferred.toFloat() / progress.totalBytes).coerceIn(0f, 1f)
+            progress != null && progress.totalFiles > 0 ->
+                (progress.filesCompleted.toFloat() / progress.totalFiles).coerceIn(0f, 1f)
+            else -> null
+        }
 
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 4.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(top = 4.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         if (fraction != null && progress != null) {
@@ -270,27 +277,30 @@ private fun SyncProgressBlock(progress: TransferProgress?) {
             ) {
                 LinearProgressIndicator(
                     progress = { fraction },
-                    modifier = Modifier.weight(1f).semantics {
-                        contentDescription = "$syncingLabel ${(fraction * 100f).toInt()}%"
-                        liveRegion = LiveRegionMode.Polite
-                    },
+                    modifier =
+                        Modifier.weight(1f).semantics {
+                            contentDescription = "$syncingLabel ${(fraction * 100f).toInt()}%"
+                            liveRegion = LiveRegionMode.Polite
+                        },
                 )
                 Text(
-                    text = stringResource(
-                        R.string.home_sync_progress_files_format,
-                        progress.filesCompleted,
-                        progress.totalFiles,
-                    ),
+                    text =
+                        stringResource(
+                            R.string.home_sync_progress_files_format,
+                            progress.filesCompleted,
+                            progress.totalFiles,
+                        ),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         } else {
             LinearProgressIndicator(
-                modifier = Modifier.fillMaxWidth().semantics {
-                    contentDescription = syncingLabel
-                    liveRegion = LiveRegionMode.Polite
-                },
+                modifier =
+                    Modifier.fillMaxWidth().semantics {
+                        contentDescription = syncingLabel
+                        liveRegion = LiveRegionMode.Polite
+                    },
             )
         }
 
@@ -301,10 +311,11 @@ private fun SyncProgressBlock(progress: TransferProgress?) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.semantics {
-                    contentDescription = "$syncingLabel: $fileName"
-                    liveRegion = LiveRegionMode.Polite
-                },
+                modifier =
+                    Modifier.semantics {
+                        contentDescription = "$syncingLabel: $fileName"
+                        liveRegion = LiveRegionMode.Polite
+                    },
             )
         }
     }
@@ -337,12 +348,13 @@ private fun RecentEventsCard(events: List<SyncEvent>, onOpenLogs: () -> Unit) {
             return@SectionCard
         }
 
-        val dateFormatter = remember {
-            java.text.DateFormat.getDateTimeInstance(
-                java.text.DateFormat.SHORT,
-                java.text.DateFormat.SHORT,
-            )
-        }
+        val dateFormatter =
+            remember {
+                java.text.DateFormat.getDateTimeInstance(
+                    java.text.DateFormat.SHORT,
+                    java.text.DateFormat.SHORT,
+                )
+            }
         events.forEach { event ->
             Column(modifier = Modifier.fillMaxWidth()) {
                 Text(
@@ -362,31 +374,34 @@ private fun RecentEventsCard(events: List<SyncEvent>, onOpenLogs: () -> Unit) {
 }
 
 @Composable
-private fun eventLevelColor(level: SyncEventLevel): Color = when (level) {
-    SyncEventLevel.ERROR -> MaterialTheme.colorScheme.error
-    SyncEventLevel.WARN -> MaterialTheme.colorScheme.tertiary
-    else -> MaterialTheme.colorScheme.primary
-}
+private fun eventLevelColor(level: SyncEventLevel): Color =
+    when (level) {
+        SyncEventLevel.ERROR -> MaterialTheme.colorScheme.error
+        SyncEventLevel.WARN -> MaterialTheme.colorScheme.tertiary
+        else -> MaterialTheme.colorScheme.primary
+    }
 
 @Composable
 private fun statusIconAndTint(
     pair: com.synckro.domain.model.SyncPair,
-): Pair<ImageVector, Color> = when {
-    pair.needsReLink -> Icons.Default.FolderOff to MaterialTheme.colorScheme.error
-    pair.lastSyncResult == "NEEDS_REAUTH" -> Icons.Default.Error to MaterialTheme.colorScheme.error
-    pair.lastSyncResult == "FAILURE" -> Icons.Default.Error to MaterialTheme.colorScheme.error
-    pair.lastSyncResult == "SUCCESS" -> Icons.Default.CheckCircle to MaterialTheme.colorScheme.primary
-    else -> Icons.Default.Sync to MaterialTheme.colorScheme.primary
-}
+): Pair<ImageVector, Color> =
+    when {
+        pair.needsReLink -> Icons.Default.FolderOff to MaterialTheme.colorScheme.error
+        pair.lastSyncResult == "NEEDS_REAUTH" -> Icons.Default.Error to MaterialTheme.colorScheme.error
+        pair.lastSyncResult == "FAILURE" -> Icons.Default.Error to MaterialTheme.colorScheme.error
+        pair.lastSyncResult == "SUCCESS" -> Icons.Default.CheckCircle to MaterialTheme.colorScheme.primary
+        else -> Icons.Default.Sync to MaterialTheme.colorScheme.primary
+    }
 
 @Composable
-private fun statusText(pair: com.synckro.domain.model.SyncPair): String = when {
-    pair.needsReLink -> stringResource(R.string.pair_detail_status_needs_relink)
-    pair.lastSyncResult == "NEEDS_REAUTH" -> stringResource(R.string.pair_detail_status_needs_reauth)
-    pair.lastSyncResult == "FAILURE" -> stringResource(R.string.pair_detail_status_failure)
-    pair.lastSyncResult == "SUCCESS" -> stringResource(R.string.pair_detail_status_success)
-    else -> stringResource(R.string.pair_detail_status_idle)
-}
+private fun statusText(pair: com.synckro.domain.model.SyncPair): String =
+    when {
+        pair.needsReLink -> stringResource(R.string.pair_detail_status_needs_relink)
+        pair.lastSyncResult == "NEEDS_REAUTH" -> stringResource(R.string.pair_detail_status_needs_reauth)
+        pair.lastSyncResult == "FAILURE" -> stringResource(R.string.pair_detail_status_failure)
+        pair.lastSyncResult == "SUCCESS" -> stringResource(R.string.pair_detail_status_success)
+        else -> stringResource(R.string.pair_detail_status_idle)
+    }
 
 @Composable
 private fun nextRunDescription(state: PairDetailViewModel.UiState): String {

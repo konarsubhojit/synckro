@@ -488,7 +488,8 @@ class MigrationTest {
         )
         val pairId =
             db.query("SELECT id FROM sync_pair LIMIT 1", emptyArray<Any?>()).use {
-                it.moveToFirst(); it.getLong(0)
+                it.moveToFirst()
+                it.getLong(0)
             }
         db.execSQL(
             "INSERT INTO file_index (pairId, relativePath, localSize, localLastModifiedMs) " +

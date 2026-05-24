@@ -11,9 +11,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
 
 object CoachTooltipIds {
-    const val PairsFab = "pairs_fab"
-    const val ConflictsTab = "conflicts_tab"
-    const val LogsExport = "logs_export"
+    const val PAIRS_FAB = "pairs_fab"
+    const val CONFLICTS_TAB = "conflicts_tab"
+    const val LOGS_EXPORT = "logs_export"
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

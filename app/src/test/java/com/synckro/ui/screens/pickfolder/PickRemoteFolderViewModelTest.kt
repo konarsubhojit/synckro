@@ -355,9 +355,10 @@ class PickRemoteFolderViewModelTest {
     @Test
     fun `AuthenticationRequired emits reauthEvent and sets isReauthenticating`() =
         runTest {
-            val authError = com.synckro.domain.provider.CloudProviderException.AuthenticationRequired(
-                "Token expired",
-            )
+            val authError =
+                com.synckro.domain.provider.CloudProviderException.AuthenticationRequired(
+                    "Token expired",
+                )
             coEvery { mockProvider.list(null) } throws authError
 
             val vm = createVm()
@@ -377,9 +378,10 @@ class PickRemoteFolderViewModelTest {
             val registry = mockk<com.synckro.domain.auth.AuthManagerRegistry>()
             coEvery { registry.find(CloudProviderType.FAKE) } returns fakeAuthManager
 
-            val authError = com.synckro.domain.provider.CloudProviderException.AuthenticationRequired(
-                "Token expired",
-            )
+            val authError =
+                com.synckro.domain.provider.CloudProviderException.AuthenticationRequired(
+                    "Token expired",
+                )
             val childFolder = folder("f1", "Docs")
             // First call throws; second succeeds after re-auth.
             coEvery { mockProvider.list(null) } throws authError andThen listOf(childFolder)

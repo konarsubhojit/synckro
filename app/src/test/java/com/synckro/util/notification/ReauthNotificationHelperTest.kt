@@ -27,7 +27,6 @@ import kotlin.math.absoluteValue
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [33])
 class ReauthNotificationHelperTest {
-
     private lateinit var context: Context
     private lateinit var nm: NotificationManager
 
@@ -177,4 +176,3 @@ class ReauthNotificationHelperTest {
         ReauthNotificationHelper.cancelReauthNotification(context, "non-existent-account")
     }
 }
-

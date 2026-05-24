@@ -29,9 +29,6 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-@OptIn(ExperimentalCoroutinesApi::class)
-@RunWith(RobolectricTestRunner::class)
-@Config(sdk = [33])
 /**
  * Unit tests for the [SyncWorker.MAX_RETRY_ATTEMPTS] retry-cap mechanism.
  *
@@ -44,6 +41,9 @@ import org.robolectric.annotation.Config
  * - The cap predicate (`runAttemptCount + 1 >= MAX_RETRY_ATTEMPTS`) correctly classifies
  *   each attempt number as "should retry" or "should escalate".
  */
+@OptIn(ExperimentalCoroutinesApi::class)
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [33])
 class SyncWorkerRetryCapTest {
     private val cap = SyncWorker.MAX_RETRY_ATTEMPTS
     private val context: Context = ApplicationProvider.getApplicationContext()

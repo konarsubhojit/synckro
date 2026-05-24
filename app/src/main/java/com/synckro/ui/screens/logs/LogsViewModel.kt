@@ -12,15 +12,15 @@ import com.synckro.domain.model.CloudProviderType
 import com.synckro.domain.model.SyncEvent
 import com.synckro.domain.model.SyncEventLevel
 import com.synckro.domain.model.SyncEventTag
-import com.synckro.util.logging.LogExporter
 import com.synckro.util.logging.LogExportConfig
+import com.synckro.util.logging.LogExporter
 import com.synckro.util.logging.LogVisibilityConfig
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
@@ -30,7 +30,9 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /** Quick time-window presets for the Logs filter row. */
-enum class TimeWindow(val durationMs: Long) {
+enum class TimeWindow(
+    val durationMs: Long,
+) {
     LAST_HOUR(60 * 60 * 1_000L),
     LAST_24H(24 * 60 * 60 * 1_000L),
     LAST_7D(7 * 24 * 60 * 60 * 1_000L),
@@ -66,6 +68,7 @@ class LogsViewModel
     ) : ViewModel() {
         /** 0 means "show all pairs". */
         private val savedStatePairId: Long = savedStateHandle[KEY_PAIR_ID] ?: 0L
+
         /**
          * Time source (millis since epoch). Defaults to [System.currentTimeMillis].
          * Exposed as `internal var` so unit tests can inject a fixed clock without
@@ -96,19 +99,19 @@ class LogsViewModel
             val hasActiveFilters: Boolean = false,
         )
 
-        private val _pairIdFilter = MutableStateFlow(savedStatePairId.takeIf { it != 0L })
-        private val _levelFilter = MutableStateFlow<SyncEventLevel?>(null)
-        private val _tagFilter = MutableStateFlow<String?>(null)
-        private val _accountFilter = MutableStateFlow<String?>(null)
-        private val _providerFilter = MutableStateFlow<CloudProviderType?>(null)
-        private val _timeWindowFilter = MutableStateFlow<TimeWindow?>(null)
-        private val _searchQuery = MutableStateFlow("")
+        private val pairIdFilterFlow = MutableStateFlow(savedStatePairId.takeIf { it != 0L })
+        private val levelFilterFlow = MutableStateFlow<SyncEventLevel?>(null)
+        private val tagFilterFlow = MutableStateFlow<String?>(null)
+        private val accountFilterFlow = MutableStateFlow<String?>(null)
+        private val providerFilterFlow = MutableStateFlow<CloudProviderType?>(null)
+        private val timeWindowFilterFlow = MutableStateFlow<TimeWindow?>(null)
+        private val searchQueryFlow = MutableStateFlow("")
         private val _exportConfig = MutableStateFlow(LogExportConfig())
 
         val exportConfig: StateFlow<LogExportConfig> = _exportConfig
 
         private val eventsFlow =
-            _pairIdFilter.flatMapLatest { pairId ->
+            pairIdFilterFlow.flatMapLatest { pairId ->
                 if (pairId != null) {
                     syncEventRepository.observeForPair(pairId)
                 } else {
@@ -131,13 +134,12 @@ class LogsViewModel
         val state: StateFlow<UiState> =
             combine(
                 eventsFlow,
-                combine(_levelFilter, _tagFilter, _accountFilter, _providerFilter, _timeWindowFilter) {
-                    level, tag, account, provider, timeWindow ->
+                combine(levelFilterFlow, tagFilterFlow, accountFilterFlow, providerFilterFlow, timeWindowFilterFlow) { level, tag, account, provider, timeWindow ->
                     PartialFilters(level, tag, account, provider, timeWindow)
-                }.combine(_searchQuery) { pf, query ->
+                }.combine(searchQueryFlow) { pf, query ->
                     Filters(pf.level, pf.tag, pf.account, pf.provider, query, pf.timeWindow)
                 },
-                _pairIdFilter,
+                pairIdFilterFlow,
                 pairContexts,
                 accountsFlow,
             ) { events, filters, pairIdFilter, contexts, accounts ->
@@ -156,7 +158,7 @@ class LogsViewModel
                     pairIdFilter = pairIdFilter,
                     hasActiveFilters =
                         pairIdFilter != null ||
-                        filters.level != null ||
+                            filters.level != null ||
                             filters.tag != null ||
                             filters.account != null ||
                             filters.provider != null ||
@@ -230,7 +232,7 @@ class LogsViewModel
          * Kicks off a bundled log export (structured events + Timber files) and emits
          * the result via [exportResult].
          *
-         * Writes a structured [SyncEventTag.Export] entry before and after the export
+         * Writes a structured [SyncEventTag.EXPORT] entry before and after the export
          * so the action itself is visible in the logs screen.
          */
         fun exportLogs() {
@@ -238,7 +240,7 @@ class LogsViewModel
                 syncEventRepository.log(
                     pairId = null,
                     level = SyncEventLevel.INFO,
-                    tag = SyncEventTag.Export,
+                    tag = SyncEventTag.EXPORT,
                     message = "Export started",
                 )
                 val result = runCatching { logExporter.export(_exportConfig.value) }
@@ -247,7 +249,7 @@ class LogsViewModel
                         syncEventRepository.log(
                             pairId = null,
                             level = SyncEventLevel.INFO,
-                            tag = SyncEventTag.Export,
+                            tag = SyncEventTag.EXPORT,
                             message = "Export succeeded",
                         )
                     },
@@ -255,7 +257,7 @@ class LogsViewModel
                         syncEventRepository.log(
                             pairId = null,
                             level = SyncEventLevel.ERROR,
-                            tag = SyncEventTag.Export,
+                            tag = SyncEventTag.EXPORT,
                             message = "Export failed: ${e.message}",
                         )
                     },
@@ -266,39 +268,39 @@ class LogsViewModel
 
         /** Sets (or clears, when [level] is null) the active level filter. */
         fun setLevelFilter(level: SyncEventLevel?) {
-            _levelFilter.value = level
+            levelFilterFlow.value = level
         }
 
         /** Sets (or clears, when [tag] is null) the active tag filter. */
         fun setTagFilter(tag: String?) {
-            _tagFilter.value = tag
+            tagFilterFlow.value = tag
         }
 
         /** Sets (or clears, when [accountId] is null) the active account filter. */
         fun setAccountFilter(accountId: String?) {
-            _accountFilter.value = accountId
+            accountFilterFlow.value = accountId
         }
 
         /** Sets (or clears, when [provider] is null) the active provider filter. */
         fun setProviderFilter(provider: CloudProviderType?) {
-            _providerFilter.value = provider
+            providerFilterFlow.value = provider
         }
 
         /** Sets (or clears, when [pairId] is null/invalid) the active pair filter. */
         fun setPairFilter(pairId: Long?) {
             val normalized = pairId?.takeIf { it > 0L }
-            _pairIdFilter.value = normalized
+            pairIdFilterFlow.value = normalized
             savedStateHandle[KEY_PAIR_ID] = normalized ?: 0L
         }
 
         /** Sets (or clears, when [window] is null) the active time-window filter. */
         fun setTimeWindowFilter(window: TimeWindow?) {
-            _timeWindowFilter.value = window
+            timeWindowFilterFlow.value = window
         }
 
         /** Updates the free-text search query (case-insensitive over message + tag). */
         fun setSearchQuery(query: String) {
-            _searchQuery.value = query
+            searchQueryFlow.value = query
         }
 
         fun setExportRedactPaths(enabled: Boolean) {
@@ -316,12 +318,12 @@ class LogsViewModel
         /** Clears every active filter and resets the search query. */
         fun clearFilters() {
             setPairFilter(null)
-            _levelFilter.value = null
-            _tagFilter.value = null
-            _accountFilter.value = null
-            _providerFilter.value = null
-            _timeWindowFilter.value = null
-            _searchQuery.value = ""
+            levelFilterFlow.value = null
+            tagFilterFlow.value = null
+            accountFilterFlow.value = null
+            providerFilterFlow.value = null
+            timeWindowFilterFlow.value = null
+            searchQueryFlow.value = ""
         }
 
         companion object {

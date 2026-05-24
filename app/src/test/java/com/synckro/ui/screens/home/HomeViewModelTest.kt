@@ -2,8 +2,8 @@ package com.synckro.ui.screens.home
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
-import androidx.work.ExistingWorkPolicy
 import androidx.work.Data
+import androidx.work.ExistingWorkPolicy
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequest
 import androidx.work.WorkInfo
@@ -636,22 +636,23 @@ class HomeViewModelTest {
             val collectJob = launch { vm.state.collect {} }
             advanceUntilIdle()
 
-            eventsFlow.value = listOf(
-                com.synckro.domain.model.SyncEvent(
-                    pairId = 1L,
-                    timestampMs = 200L,
-                    level = com.synckro.domain.model.SyncEventLevel.INFO,
-                    tag = com.synckro.domain.model.SyncEventTag.SyncWorker,
-                    message = "Sync succeeded: 12 applied, 3 conflicts",
-                ),
-                com.synckro.domain.model.SyncEvent(
-                    pairId = 2L,
-                    timestampMs = 100L,
-                    level = com.synckro.domain.model.SyncEventLevel.WARN,
-                    tag = com.synckro.domain.model.SyncEventTag.SyncWorker,
-                    message = "Sync partial failure: 5 applied, 2 errors — boom",
-                ),
-            )
+            eventsFlow.value =
+                listOf(
+                    com.synckro.domain.model.SyncEvent(
+                        pairId = 1L,
+                        timestampMs = 200L,
+                        level = com.synckro.domain.model.SyncEventLevel.INFO,
+                        tag = com.synckro.domain.model.SyncEventTag.SYNC_WORKER,
+                        message = "Sync succeeded: 12 applied, 3 conflicts",
+                    ),
+                    com.synckro.domain.model.SyncEvent(
+                        pairId = 2L,
+                        timestampMs = 100L,
+                        level = com.synckro.domain.model.SyncEventLevel.WARN,
+                        tag = com.synckro.domain.model.SyncEventTag.SYNC_WORKER,
+                        message = "Sync partial failure: 5 applied, 2 errors — boom",
+                    ),
+                )
             advanceUntilIdle()
 
             val summaries = vm.state.value.lastSummaryByPairId
@@ -673,10 +674,11 @@ class HomeViewModelTest {
         val needsReLink = pair(2L).copy(needsReLink = true)
         val needsReauth = pair(3L).copy(lastSyncResult = "NEEDS_REAUTH")
         val inFlight = pair(4L)
-        val (eligible, skipped) = HomeViewModel.partitionForSyncAll(
-            pairs = listOf(healthy, needsReLink, needsReauth, inFlight),
-            syncingPairIds = setOf(inFlight.id),
-        )
+        val (eligible, skipped) =
+            HomeViewModel.partitionForSyncAll(
+                pairs = listOf(healthy, needsReLink, needsReauth, inFlight),
+                syncingPairIds = setOf(inFlight.id),
+            )
         assertEquals(listOf(1L), eligible.map { it.id })
         assertEquals(3, skipped)
     }
@@ -710,17 +712,23 @@ class HomeViewModelTest {
 
             verify {
                 mockWorkManager.enqueueUniqueWork(
-                    SyncWorker.syncNowUniqueName(1L), ExistingWorkPolicy.KEEP, any<OneTimeWorkRequest>(),
+                    SyncWorker.syncNowUniqueName(1L),
+                    ExistingWorkPolicy.KEEP,
+                    any<OneTimeWorkRequest>(),
                 )
             }
             verify {
                 mockWorkManager.enqueueUniqueWork(
-                    SyncWorker.syncNowUniqueName(2L), ExistingWorkPolicy.KEEP, any<OneTimeWorkRequest>(),
+                    SyncWorker.syncNowUniqueName(2L),
+                    ExistingWorkPolicy.KEEP,
+                    any<OneTimeWorkRequest>(),
                 )
             }
             io.mockk.verify(exactly = 0) {
                 mockWorkManager.enqueueUniqueWork(
-                    SyncWorker.syncNowUniqueName(3L), any(), any<OneTimeWorkRequest>(),
+                    SyncWorker.syncNowUniqueName(3L),
+                    any(),
+                    any<OneTimeWorkRequest>(),
                 )
             }
             assertEquals(1, results.size)

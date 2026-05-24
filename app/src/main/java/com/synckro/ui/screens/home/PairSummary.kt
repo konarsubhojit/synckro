@@ -58,7 +58,7 @@ fun aggregatePairSummaries(events: List<SyncEvent>): Map<Long, PairSummary> {
  */
 fun parsePairSummary(event: SyncEvent): PairSummary? {
     val tag = event.tag
-    if (tag != SyncEventTag.SyncWorker && tag != SyncEventTag.Auth) return null
+    if (tag != SyncEventTag.SYNC_WORKER && tag != SyncEventTag.AUTH) return null
     val msg = event.message
     val outcome =
         when {
