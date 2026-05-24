@@ -5,7 +5,6 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.appcompat.app.AppCompatDelegate
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -24,8 +23,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
-import androidx.core.os.LocaleListCompat
-import com.synckro.data.repository.AppLanguagePreference
 import com.synckro.data.repository.DarkModePreference
 import com.synckro.data.repository.SettingsRepository
 import com.synckro.ui.navigation.SynckroNavHost
@@ -38,8 +35,6 @@ import com.synckro.util.navigation.AppNavigationDispatcher
 import com.synckro.util.notification.ReauthNotificationHelper
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.runBlocking
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -52,7 +47,6 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        applyLanguagePreference()
         enableEdgeToEdge()
         // Forward any deep-link navigation action present at launch time.
         dispatchNavigationIntent(intent)
@@ -158,15 +152,5 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
-    }
-
-    private fun applyLanguagePreference() {
-        val languagePreference = runBlocking { settingsRepository.appLanguage.first() }
-        val locales =
-            when (languagePreference) {
-                AppLanguagePreference.SYSTEM -> LocaleListCompat.getEmptyLocaleList()
-                AppLanguagePreference.ENGLISH -> LocaleListCompat.forLanguageTags("en")
-            }
-        AppCompatDelegate.setApplicationLocales(locales)
     }
 }

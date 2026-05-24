@@ -1267,8 +1267,7 @@ private fun LanguageRow(
                         .padding(vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                RadioButton(selected = selected == language, onClick = { onSelected(language) })
-                Spacer(Modifier.height(0.dp))
+                RadioButton(selected = selected == language, onClick = null)
                 Text(stringResource(label), modifier = Modifier.padding(start = 8.dp))
             }
         }
