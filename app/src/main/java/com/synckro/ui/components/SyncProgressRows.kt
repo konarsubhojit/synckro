@@ -1,6 +1,5 @@
 package com.synckro.ui.components
 
-import android.content.Context
 import android.text.format.Formatter
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -13,6 +12,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.contentDescription
@@ -30,7 +31,6 @@ import com.synckro.domain.sync.TransferProgress
 fun SyncProgressRows(
     progress: TransferProgress?,
     syncingLabel: String,
-    context: Context,
     modifier: Modifier = Modifier,
 ) {
     val fraction = primaryProgressFraction(progress)
@@ -56,11 +56,12 @@ fun SyncProgressRows(
                             },
                 )
                 Text(
-                    text = context.getString(
-                        R.string.home_sync_progress_files_format,
-                        progress.filesCompleted,
-                        progress.totalFiles,
-                    ),
+                    text =
+                        stringResource(
+                            R.string.home_sync_progress_files_format,
+                            progress.filesCompleted,
+                            progress.totalFiles,
+                        ),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -79,12 +80,12 @@ fun SyncProgressRows(
         val activeTransfers = progress?.activeTransfers.orEmpty()
         if (activeTransfers.isNotEmpty()) {
             activeTransfers.forEach { transfer ->
-                ActiveTransferRow(transfer = transfer, context = context)
+                ActiveTransferRow(transfer = transfer)
             }
         } else {
             progress?.currentFileName?.let { fileName ->
                 Text(
-                    text = context.getString(R.string.home_sync_current_file_format, fileName),
+                    text = stringResource(R.string.home_sync_current_file_format, fileName),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
@@ -103,12 +104,12 @@ fun SyncProgressRows(
 @Composable
 private fun ActiveTransferRow(
     transfer: ActiveTransfer,
-    context: Context,
 ) {
+    val context = LocalContext.current
     val directionLabel =
         when (transfer.direction) {
-            TransferDirection.UPLOAD -> context.getString(R.string.home_sync_transfer_upload)
-            TransferDirection.DOWNLOAD -> context.getString(R.string.home_sync_transfer_download)
+            TransferDirection.UPLOAD -> stringResource(R.string.home_sync_transfer_upload)
+            TransferDirection.DOWNLOAD -> stringResource(R.string.home_sync_transfer_download)
         }
     val transferFraction = transferProgressFraction(transfer)
     val sizeDone =
@@ -135,13 +136,17 @@ private fun ActiveTransferRow(
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
-                text = context.getString(R.string.home_sync_transfer_size_format, sizeDone, sizeTotal),
+                text = stringResource(R.string.home_sync_transfer_size_format, sizeDone, sizeTotal),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
         Text(
-            text = context.getString(R.string.home_sync_transfer_progress_percent, ((transferFraction ?: 0f) * 100f).toInt()),
+            text =
+                stringResource(
+                    R.string.home_sync_transfer_progress_percent,
+                    ((transferFraction ?: 0f) * 100f).toInt(),
+                ),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,

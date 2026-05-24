@@ -699,12 +699,10 @@ private fun SyncPairRow(
                 }
 
                 if (isSyncing) {
-                    val ctx = LocalContext.current
                     val syncingLabel = stringResource(R.string.sync_now_in_progress)
                     SyncProgressRows(
                         progress = progress,
                         syncingLabel = syncingLabel,
-                        context = ctx,
                     )
                 }
 

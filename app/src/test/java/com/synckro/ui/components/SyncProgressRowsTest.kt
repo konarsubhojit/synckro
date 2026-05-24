@@ -59,4 +59,17 @@ class SyncProgressRowsTest {
 
         assertNull(transferProgressFraction(transfer))
     }
+
+    @Test
+    fun transferProgressFraction_returnsFractionWhenTotalBytesKnown() {
+        val transfer =
+            ActiveTransfer(
+                relativePath = "bar.txt",
+                direction = TransferDirection.DOWNLOAD,
+                bytesTransferred = 75L,
+                totalBytes = 100L,
+            )
+
+        assertEquals(0.75f, transferProgressFraction(transfer))
+    }
 }

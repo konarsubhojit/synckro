@@ -473,7 +473,6 @@ private fun SyncHistoryRow(
                     onLongClick = onLongPress,
                 )
                 .semantics {
-                    contentDescription = "${event.message}. $rowStateLabel."
                     stateDescription = rowStateLabel
                 },
         colors =

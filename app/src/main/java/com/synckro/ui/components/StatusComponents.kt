@@ -277,6 +277,8 @@ private fun AccountRowEntry(row: StatusOverview.AccountRow) {
             when (row.provider) {
                 CloudProviderType.ONEDRIVE -> R.string.provider_label_onedrive
                 CloudProviderType.GOOGLE_DRIVE -> R.string.provider_label_google_drive
+                // FAKE is only used in tests/offline-dev builds; fall back to the
+                // OneDrive label so the UI still renders something sensible.
                 CloudProviderType.FAKE -> R.string.provider_label_onedrive
             },
         )
