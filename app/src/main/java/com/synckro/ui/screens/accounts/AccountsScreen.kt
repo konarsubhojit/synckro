@@ -29,7 +29,6 @@ import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.DriveEta
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.DriveFileRenameOutline
@@ -327,7 +326,7 @@ private fun ProviderIcon(
     val icon =
         when (providerKey) {
             CloudProviderType.ONEDRIVE.name -> Icons.Default.Cloud
-            CloudProviderType.GOOGLE_DRIVE.name -> Icons.Default.DriveEta
+            CloudProviderType.GOOGLE_DRIVE.name -> Icons.Default.Cloud
             else -> Icons.Default.Cloud
         }
     Icon(

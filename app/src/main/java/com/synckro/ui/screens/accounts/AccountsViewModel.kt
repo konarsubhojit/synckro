@@ -239,8 +239,9 @@ class AccountsViewModel
         private suspend fun fetchAllQuotas(rows: List<AccountRow>) {
             val tasks =
                 rows.flatMap { row ->
-                    val providerType = CloudProviderType.entries.firstOrNull { it.name == row.providerKey }
-                        ?: return@flatMap emptyList()
+                    val providerType =
+                        runCatching { CloudProviderType.valueOf(row.providerKey) }.getOrNull()
+                            ?: return@flatMap emptyList()
                     val factory = providerFactories[providerType] ?: return@flatMap emptyList()
                     row.accounts.map { item ->
                         viewModelScope.async {

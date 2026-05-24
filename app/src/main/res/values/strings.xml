@@ -115,9 +115,9 @@
     <string name="accounts_rename_dialog_label">Display name</string>
     <string name="accounts_rename_dialog_confirm">Save</string>
     <string name="accounts_rename_dialog_cancel">Cancel</string>
-    <string name="accounts_rename_failed_format">Couldn\'t rename %1$s.</string>
+    <string name="accounts_rename_failed_format">Couldn\u0027t rename %1$s.</string>
     <!-- Remove account (force-local remove without sign-out) -->
-    <string name="accounts_remove_failed_format">Couldn\'t remove %1$s.</string>
+    <string name="accounts_remove_failed_format">Couldn\u0027t remove %1$s.</string>
     <!-- Disconnect confirmation dialog (orphaned pairs) -->
     <string name="accounts_disconnect_confirm_title">Disconnect %1$s?</string>
     <string name="accounts_disconnect_confirm_body">Disconnecting %1$s will affect %2$d sync pair(s). Choose what to do with them:</string>
