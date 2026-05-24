@@ -15,6 +15,7 @@ import com.synckro.util.logging.LogExporter
 import com.synckro.util.logging.LogVisibilityConfig
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -34,6 +35,7 @@ import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
+import java.io.File
 
 /**
  * Unit tests for [SettingsViewModel]. Drives the view-model against a real
@@ -61,10 +63,12 @@ class SettingsViewModelTest {
     private lateinit var syncScheduler: SyncScheduler
     private lateinit var logExporter: LogExporter
     private lateinit var ctx: Context
+    private lateinit var filesDir: File
 
     @Before
     fun setUp() {
         Dispatchers.setMain(testDispatcher)
+        filesDir = tempFolder.newFolder("files")
         val dataStore =
             PreferenceDataStoreFactory.create(
                 scope = testScope.backgroundScope,
@@ -78,6 +82,7 @@ class SettingsViewModelTest {
         syncScheduler = mockk(relaxed = true)
         logExporter = mockk(relaxed = true)
         ctx = mockk(relaxed = true)
+        every { ctx.filesDir } returns filesDir
     }
 
     @After fun tearDown() = Dispatchers.resetMain()
@@ -342,6 +347,52 @@ class SettingsViewModelTest {
             } finally {
                 LogVisibilityConfig.setExportConfig(originalExportConfig)
             }
+        }
+
+    @Test
+    fun `backupSettings creates backup and emits success event`() =
+        testScope.runTest {
+            val vm = newVm()
+            val settingsFile = File(filesDir, "datastore/settings.preferences_pb")
+            settingsFile.parentFile?.mkdirs()
+            settingsFile.writeText("theme=dark")
+
+            val eventAwait = async { vm.events.first() }
+            vm.backupSettings()
+
+            assertEquals(SettingsViewModel.UiEvent.SettingsBackedUp, eventAwait.await())
+            val backupFile = File(filesDir, SettingsViewModel.SETTINGS_BACKUP_FILENAME)
+            assertTrue(backupFile.exists())
+            assertEquals("theme=dark", backupFile.readText())
+        }
+
+    @Test
+    fun `restoreSettings restores last backup and emits success event`() =
+        testScope.runTest {
+            val vm = newVm()
+            val settingsFile = File(filesDir, "datastore/settings.preferences_pb")
+            settingsFile.parentFile?.mkdirs()
+            settingsFile.writeText("theme=light")
+
+            val backupFile = File(filesDir, SettingsViewModel.SETTINGS_BACKUP_FILENAME)
+            backupFile.writeText("theme=dark")
+
+            val eventAwait = async { vm.events.first() }
+            vm.restoreSettings()
+
+            assertEquals(SettingsViewModel.UiEvent.SettingsRestored, eventAwait.await())
+            assertEquals("theme=dark", settingsFile.readText())
+        }
+
+    @Test
+    fun `restoreSettings emits failure event when backup does not exist`() =
+        testScope.runTest {
+            val vm = newVm()
+
+            val eventAwait = async { vm.events.first() }
+            vm.restoreSettings()
+
+            assertEquals(SettingsViewModel.UiEvent.SettingsRestoreFailed, eventAwait.await())
         }
 
     @Test

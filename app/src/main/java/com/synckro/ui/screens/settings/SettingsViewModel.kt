@@ -110,6 +110,14 @@ class SettingsViewModel
             data class CacheCleared(
                 val freedBytes: Long,
             ) : UiEvent
+
+            data object SettingsBackedUp : UiEvent
+
+            data object SettingsBackupFailed : UiEvent
+
+            data object SettingsRestored : UiEvent
+
+            data object SettingsRestoreFailed : UiEvent
         }
 
         private val _events = MutableSharedFlow<UiEvent>(extraBufferCapacity = 1)
@@ -424,6 +432,44 @@ class SettingsViewModel
             }
         }
 
+        fun backupSettings() {
+            viewModelScope.launch {
+                runCatching {
+                    withContext(Dispatchers.IO) {
+                        val source = settingsDataStoreFile()
+                        check(source.exists()) { "Settings file does not exist yet." }
+                        val backup = settingsBackupFile()
+                        backup.parentFile?.mkdirs()
+                        source.copyTo(backup, overwrite = true)
+                    }
+                }.onSuccess {
+                    _events.emit(UiEvent.SettingsBackedUp)
+                }.onFailure { t ->
+                    Timber.e(t, "SettingsViewModel.backupSettings failed")
+                    _events.emit(UiEvent.SettingsBackupFailed)
+                }
+            }
+        }
+
+        fun restoreSettings() {
+            viewModelScope.launch {
+                runCatching {
+                    withContext(Dispatchers.IO) {
+                        val backup = settingsBackupFile()
+                        check(backup.exists()) { "Settings backup does not exist." }
+                        val target = settingsDataStoreFile()
+                        target.parentFile?.mkdirs()
+                        backup.copyTo(target, overwrite = true)
+                    }
+                }.onSuccess {
+                    _events.emit(UiEvent.SettingsRestored)
+                }.onFailure { t ->
+                    Timber.e(t, "SettingsViewModel.restoreSettings failed")
+                    _events.emit(UiEvent.SettingsRestoreFailed)
+                }
+            }
+        }
+
         // ---------------------------------------------------------------------
         // About
         // ---------------------------------------------------------------------
@@ -471,12 +517,17 @@ class SettingsViewModel
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
 
+        private fun settingsDataStoreFile(): File = File(context.filesDir, "datastore/settings.preferences_pb")
+
+        private fun settingsBackupFile(): File = File(context.filesDir, SETTINGS_BACKUP_FILENAME)
+
         private fun File.sizeRecursive(): Long =
             if (isDirectory) (listFiles()?.sumOf { it.sizeRecursive() } ?: 0L) else length()
 
         companion object {
             /** Filename produced by the `generateOssLicenses` Gradle task. */
             const val OSS_LICENSES_ASSET = "oss_licenses.txt"
+            internal const val SETTINGS_BACKUP_FILENAME = "settings.backup.preferences_pb"
             private const val FEEDBACK_EMAIL_PLACEHOLDER = "feedback@example.com"
 
             internal fun resolveFeedbackEmail(rawEmail: String): FeedbackEmailConfig {

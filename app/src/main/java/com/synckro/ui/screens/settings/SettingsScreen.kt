@@ -155,6 +155,22 @@ fun SettingsScreen(
                             Formatter.formatShortFileSize(ctx, event.freedBytes),
                         ),
                     )
+                SettingsViewModel.UiEvent.SettingsBackedUp ->
+                    snackbarHostState.showSnackbar(
+                        ctx.getString(R.string.settings_backup_settings_done),
+                    )
+                SettingsViewModel.UiEvent.SettingsBackupFailed ->
+                    snackbarHostState.showSnackbar(
+                        ctx.getString(R.string.settings_backup_settings_failed),
+                    )
+                SettingsViewModel.UiEvent.SettingsRestored ->
+                    snackbarHostState.showSnackbar(
+                        ctx.getString(R.string.settings_restore_settings_done_relaunch),
+                    )
+                SettingsViewModel.UiEvent.SettingsRestoreFailed ->
+                    snackbarHostState.showSnackbar(
+                        ctx.getString(R.string.settings_restore_settings_failed),
+                    )
             }
         }
     }
@@ -256,7 +272,6 @@ fun SettingsScreen(
                 )
             SECTION_BACKUP ->
                 BackupSettingsContent(
-                    state = state,
                     viewModel = viewModel,
                     contentPadding = contentPadding,
                 )
@@ -982,7 +997,6 @@ private fun SecuritySettingsContent(
 
 @Composable
 private fun BackupSettingsContent(
-    state: SettingsViewModel.UiState,
     viewModel: SettingsViewModel,
     contentPadding: PaddingValues,
 ) {
@@ -991,23 +1005,17 @@ private fun BackupSettingsContent(
         contentPadding = contentPadding,
     ) {
         item {
-            LogRetentionRow(
-                days = state.logRetentionDays,
-                onSelected = { viewModel.setLogRetentionDays(it.days) },
+            ActionRow(
+                title = stringResource(R.string.settings_backup_settings_title),
+                body = stringResource(R.string.settings_backup_settings_body),
+                onClick = viewModel::backupSettings,
             )
         }
         item {
             ActionRow(
-                title = stringResource(R.string.settings_export_logs_title),
-                body = stringResource(R.string.settings_export_logs_body),
-                onClick = viewModel::exportLogs,
-            )
-        }
-        item {
-            ActionRow(
-                title = stringResource(R.string.settings_clear_cache_title),
-                body = stringResource(R.string.settings_clear_cache_body),
-                onClick = viewModel::clearCache,
+                title = stringResource(R.string.settings_restore_settings_title),
+                body = stringResource(R.string.settings_restore_settings_body),
+                onClick = viewModel::restoreSettings,
             )
         }
     }
