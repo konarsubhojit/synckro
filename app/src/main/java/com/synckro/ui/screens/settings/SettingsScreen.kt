@@ -23,6 +23,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.Help
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.BatteryFull
@@ -32,6 +33,7 @@ import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -50,6 +52,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextField
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -71,6 +74,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.synckro.R
 import com.synckro.data.repository.DarkModePreference
 import com.synckro.data.repository.LogRetentionPreference
+import com.synckro.data.repository.AutoSyncSchedule
+import com.synckro.data.repository.InternetConnectionScope
 import com.synckro.data.repository.SettingsRepository
 import com.synckro.domain.model.ConflictPolicy
 import java.util.Locale
@@ -216,6 +221,7 @@ fun SettingsScreen(
                 SyncSettingsContent(
                     state = state,
                     viewModel = viewModel,
+                    ctx = ctx,
                     contentPadding = contentPadding,
                     onShowConflictPolicyDialog = { conflictPolicyDialog = true },
                 )
@@ -460,13 +466,97 @@ private fun SettingsMenuEntry(
 private fun SyncSettingsContent(
     state: SettingsViewModel.UiState,
     viewModel: SettingsViewModel,
+    ctx: Context,
     contentPadding: PaddingValues,
     onShowConflictPolicyDialog: () -> Unit,
 ) {
+    var showUploadLimitDialog by remember { mutableStateOf(false) }
+    var showDownloadLimitDialog by remember { mutableStateOf(false) }
+    var showRetryWaitDialog by remember { mutableStateOf(false) }
+    var showRetryAttemptsDialog by remember { mutableStateOf(false) }
+    var showScheduleDialog by remember { mutableStateOf(false) }
+    var showConnectionScopeDialog by remember { mutableStateOf(false) }
+    var editingAllowedNetworks by remember { mutableStateOf(false) }
+    var editingDisallowedNetworks by remember { mutableStateOf(false) }
+
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = contentPadding,
     ) {
+        item { SettingsGroupHeader(stringResource(R.string.settings_sync_group_network_limits)) }
+        item {
+            ActionRow(
+                title = stringResource(R.string.settings_mobile_upload_limit_title),
+                body = formatMobileLimit(ctx, state.mobileUploadLimitMb),
+                onClick = { showUploadLimitDialog = true },
+            )
+        }
+        item {
+            ActionRow(
+                title = stringResource(R.string.settings_mobile_download_limit_title),
+                body = formatMobileLimit(ctx, state.mobileDownloadLimitMb),
+                onClick = { showDownloadLimitDialog = true },
+            )
+        }
+        item {
+            SwitchRow(
+                title = stringResource(R.string.settings_warn_mobile_network_title),
+                body = stringResource(R.string.settings_warn_mobile_network_body),
+                checked = state.warnOnMobileNetworkSync,
+                onCheckedChange = viewModel::setWarnOnMobileNetworkSync,
+            )
+        }
+        item { SettingsGroupHeader(stringResource(R.string.settings_sync_group_after_errors)) }
+        item {
+            SwitchRow(
+                title = stringResource(R.string.settings_retry_automatically_title),
+                body = stringResource(R.string.settings_retry_automatically_body),
+                checked = state.retryAutomaticallyAfterError,
+                onCheckedChange = viewModel::setRetryAutomaticallyAfterError,
+            )
+        }
+        item {
+            ActionRow(
+                title = stringResource(R.string.settings_retry_wait_title),
+                body =
+                    stringResource(
+                        R.string.settings_retry_wait_value,
+                        state.retryWaitMinutes,
+                    ),
+                onClick = { showRetryWaitDialog = true },
+            )
+        }
+        item {
+            ActionRow(
+                title = stringResource(R.string.settings_retry_max_attempts_title),
+                body =
+                    stringResource(
+                        R.string.settings_retry_max_attempts_value,
+                        state.retryMaxAttempts,
+                    ),
+                onClick = { showRetryAttemptsDialog = true },
+            )
+        }
+        item { SettingsGroupHeader(stringResource(R.string.settings_sync_group_parallel)) }
+        item {
+            SliderRow(
+                title = stringResource(R.string.settings_parallel_uploads_title),
+                body = stringResource(R.string.settings_parallel_uploads_body),
+                value = state.parallelUploads,
+                max = SettingsRepository.MAX_PARALLEL_TRANSFERS_PER_DIRECTION,
+                onValueChange = viewModel::setParallelUploads,
+            )
+        }
+        item {
+            SliderRow(
+                title = stringResource(R.string.settings_parallel_downloads_title),
+                body = stringResource(R.string.settings_parallel_downloads_body),
+                value = state.parallelDownloads,
+                max = SettingsRepository.MAX_PARALLEL_TRANSFERS_PER_DIRECTION,
+                onValueChange = viewModel::setParallelDownloads,
+            )
+        }
+        item { SettingsGroupHeader(stringResource(R.string.settings_sync_group_background)) }
         item {
             SwitchRow(
                 title = stringResource(R.string.settings_global_auto_sync_title),
@@ -477,18 +567,196 @@ private fun SyncSettingsContent(
         }
         item {
             ActionRow(
-                title = stringResource(R.string.settings_default_conflict_policy_title),
-                body = conflictPolicyLabel(state.defaultConflictPolicy),
-                onClick = onShowConflictPolicyDialog,
+                title = stringResource(R.string.settings_auto_sync_schedule_title),
+                body = autoSyncScheduleLabel(state.autoSyncSchedule),
+                onClick = { showScheduleDialog = true },
             )
         }
         item {
-            ConcurrentTransfersRow(
-                value = state.maxConcurrentTransfers,
-                max = SettingsRepository.MAX_CONCURRENT_TRANSFERS,
-                onValueChange = viewModel::setMaxConcurrentTransfers,
+            SwitchRow(
+                title = stringResource(R.string.settings_auto_sync_charging_only_title),
+                body = stringResource(R.string.settings_auto_sync_charging_only_body),
+                checked = state.autoSyncChargingOnly,
+                onCheckedChange = viewModel::setAutoSyncChargingOnly,
             )
         }
+        item {
+            SliderRow(
+                title = stringResource(R.string.settings_auto_sync_battery_threshold_title),
+                body =
+                    stringResource(
+                        R.string.settings_auto_sync_battery_threshold_value,
+                        state.autoSyncBatteryThresholdPercent,
+                    ),
+                value = state.autoSyncBatteryThresholdPercent,
+                max = 100,
+                min = 0,
+                onValueChange = viewModel::setAutoSyncBatteryThresholdPercent,
+            )
+        }
+        item {
+            WebsiteInfoRow(
+                text = stringResource(R.string.settings_auto_sync_battery_info),
+                onClick = {
+                    runCatching {
+                        ctx.startActivity(
+                            Intent(Intent.ACTION_VIEW, Uri.parse(viewModel.batteryInfoUrl))
+                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                        )
+                    }
+                },
+            )
+        }
+        item { SettingsGroupHeader(stringResource(R.string.settings_sync_group_internet)) }
+        item {
+            ActionRow(
+                title = stringResource(R.string.settings_internet_scope_title),
+                body = internetConnectionScopeLabel(state.internetConnectionScope),
+                onClick = { showConnectionScopeDialog = true },
+            )
+        }
+        item {
+            CheckboxRow(
+                title = stringResource(R.string.settings_sync_metered_wifi_title),
+                body = stringResource(R.string.settings_sync_metered_wifi_body),
+                checked = state.syncOnMeteredWifi,
+                onCheckedChange = viewModel::setSyncOnMeteredWifi,
+            )
+        }
+        item {
+            ActionRow(
+                title = stringResource(R.string.settings_allowed_wifi_networks_title),
+                body = networksSummary(state.allowedWifiNetworks),
+                onClick = { editingAllowedNetworks = true },
+            )
+        }
+        item {
+            ActionRow(
+                title = stringResource(R.string.settings_disallowed_wifi_networks_title),
+                body = networksSummary(state.disallowedWifiNetworks),
+                onClick = { editingDisallowedNetworks = true },
+            )
+        }
+        item {
+            CheckboxRow(
+                title = stringResource(R.string.settings_sync_mobile_roaming_title),
+                body = stringResource(R.string.settings_sync_mobile_roaming_body),
+                checked = state.syncOnMobileRoaming,
+                onCheckedChange = viewModel::setSyncOnMobileRoaming,
+            )
+        }
+        item {
+            CheckboxRow(
+                title = stringResource(R.string.settings_sync_slow_2g_title),
+                body = stringResource(R.string.settings_sync_slow_2g_body),
+                checked = state.syncOnSlow2g,
+                onCheckedChange = viewModel::setSyncOnSlow2g,
+            )
+        }
+    }
+
+    if (showUploadLimitDialog) {
+        IntOptionsDialog(
+            title = stringResource(R.string.settings_mobile_upload_limit_title),
+            options = listOf(25, 100, 250, 500, 1_024, 0),
+            valueFormatter = { formatMobileLimit(ctx, it) },
+            onSelect = {
+                viewModel.setMobileUploadLimitMb(it)
+                showUploadLimitDialog = false
+            },
+            onDismiss = { showUploadLimitDialog = false },
+        )
+    }
+
+    if (showDownloadLimitDialog) {
+        IntOptionsDialog(
+            title = stringResource(R.string.settings_mobile_download_limit_title),
+            options = listOf(25, 100, 250, 500, 1_024, 0),
+            valueFormatter = { formatMobileLimit(ctx, it) },
+            onSelect = {
+                viewModel.setMobileDownloadLimitMb(it)
+                showDownloadLimitDialog = false
+            },
+            onDismiss = { showDownloadLimitDialog = false },
+        )
+    }
+
+    if (showRetryWaitDialog) {
+        IntOptionsDialog(
+            title = stringResource(R.string.settings_retry_wait_title),
+            options = listOf(1, 5, 10, 15, 30, 60),
+            valueFormatter = { ctx.getString(R.string.settings_retry_wait_value, it) },
+            onSelect = {
+                viewModel.setRetryWaitMinutes(it)
+                showRetryWaitDialog = false
+            },
+            onDismiss = { showRetryWaitDialog = false },
+        )
+    }
+
+    if (showRetryAttemptsDialog) {
+        IntOptionsDialog(
+            title = stringResource(R.string.settings_retry_max_attempts_title),
+            options = listOf(1, 2, 3, 5, 7, 10),
+            valueFormatter = { ctx.getString(R.string.settings_retry_max_attempts_value, it) },
+            onSelect = {
+                viewModel.setRetryMaxAttempts(it)
+                showRetryAttemptsDialog = false
+            },
+            onDismiss = { showRetryAttemptsDialog = false },
+        )
+    }
+
+    if (showScheduleDialog) {
+        EnumOptionsDialog(
+            title = stringResource(R.string.settings_auto_sync_schedule_title),
+            values = AutoSyncSchedule.entries,
+            selected = state.autoSyncSchedule,
+            label = { autoSyncScheduleLabel(it) },
+            onSelect = {
+                viewModel.setAutoSyncSchedule(it)
+                showScheduleDialog = false
+            },
+            onDismiss = { showScheduleDialog = false },
+        )
+    }
+
+    if (showConnectionScopeDialog) {
+        EnumOptionsDialog(
+            title = stringResource(R.string.settings_internet_scope_title),
+            values = InternetConnectionScope.entries,
+            selected = state.internetConnectionScope,
+            label = { internetConnectionScopeLabel(it) },
+            onSelect = {
+                viewModel.setInternetConnectionScope(it)
+                showConnectionScopeDialog = false
+            },
+            onDismiss = { showConnectionScopeDialog = false },
+        )
+    }
+
+    if (editingAllowedNetworks) {
+        WifiNetworksDialog(
+            title = stringResource(R.string.settings_allowed_wifi_networks_title),
+            initial = state.allowedWifiNetworks,
+            onSave = {
+                viewModel.setAllowedWifiNetworks(it)
+                editingAllowedNetworks = false
+            },
+            onDismiss = { editingAllowedNetworks = false },
+        )
+    }
+
+    if (editingDisallowedNetworks) {
+        WifiNetworksDialog(
+            title = stringResource(R.string.settings_disallowed_wifi_networks_title),
+            initial = state.disallowedWifiNetworks,
+            onSave = {
+                viewModel.setDisallowedWifiNetworks(it)
+                editingDisallowedNetworks = false
+            },
+            onDismiss = { editingDisallowedNetworks = false },
+        )
     }
 }
 
@@ -748,6 +1016,19 @@ private fun SupportSettingsContent(
 // =============================================================================
 
 @Composable
+private fun SettingsGroupHeader(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.titleSmall,
+        color = MaterialTheme.colorScheme.primary,
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+    )
+}
+
+@Composable
 private fun SwitchRow(
     title: String,
     body: String,
@@ -776,6 +1057,36 @@ private fun SwitchRow(
             checked = checked,
             onCheckedChange = onCheckedChange,
             enabled = enabled,
+        )
+    }
+}
+
+@Composable
+private fun CheckboxRow(
+    title: String,
+    body: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    Row(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge)
+            Text(
+                body,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Checkbox(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
         )
     }
 }
@@ -813,7 +1124,12 @@ private fun DarkModeRow(
     selected: DarkModePreference,
     onSelected: (DarkModePreference) -> Unit,
 ) {
-    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
+    Column(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+    ) {
         Text(
             stringResource(R.string.settings_dark_mode_title),
             style = MaterialTheme.typography.bodyLarge,
@@ -860,6 +1176,7 @@ private fun ConcurrentTransfersRow(value: Int, max: Int, onValueChange: (Int) ->
                 color = MaterialTheme.colorScheme.primary,
             )
         }
+
         Text(
             stringResource(R.string.settings_concurrent_transfers_body),
             style = MaterialTheme.typography.bodySmall,
@@ -872,6 +1189,197 @@ private fun ConcurrentTransfersRow(value: Int, max: Int, onValueChange: (Int) ->
             steps = max - 2,
         )
     }
+}
+
+@Composable
+private fun SliderRow(
+    title: String,
+    body: String,
+    value: Int,
+    max: Int,
+    onValueChange: (Int) -> Unit,
+    min: Int = 1,
+) {
+    Column(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(title, style = MaterialTheme.typography.bodyLarge)
+            Text(
+                text = "$value",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.primary,
+            )
+        }
+        Text(
+            text = body,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Slider(
+            value = value.toFloat(),
+            onValueChange = { onValueChange(it.toInt()) },
+            valueRange = min.toFloat()..max.toFloat(),
+            // For range [min..max], endpoints are implicit; steps = (discrete values - 2).
+            // Example: [1..5] has 5 values and needs 3 steps (2, 3, 4).
+            steps = (max - min - 1).coerceAtLeast(0),
+        )
+    }
+}
+
+@Composable
+private fun WebsiteInfoRow(text: String, onClick: () -> Unit) {
+    Row(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp)
+                .clickable(onClick = onClick),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.primary,
+        )
+        Icon(
+            imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(start = 6.dp),
+        )
+    }
+}
+
+@Composable
+private fun IntOptionsDialog(
+    title: String,
+    options: List<Int>,
+    valueFormatter: (Int) -> String,
+    onSelect: (Int) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            Column {
+                options.forEach { value ->
+                    Row(
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .clickable { onSelect(value) }
+                                .padding(vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(text = valueFormatter(value))
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.home_delete_cancel)) }
+        },
+    )
+}
+
+@Composable
+private fun <T> EnumOptionsDialog(
+    title: String,
+    values: List<T>,
+    selected: T,
+    label: @Composable (T) -> String,
+    onSelect: (T) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            Column {
+                values.forEach { value ->
+                    Row(
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .selectable(
+                                    selected = value == selected,
+                                    onClick = { onSelect(value) },
+                                )
+                                .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        RadioButton(
+                            selected = value == selected,
+                            onClick = { onSelect(value) },
+                        )
+                        Text(
+                            text = label(value),
+                            modifier = Modifier.padding(start = 8.dp),
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.home_delete_cancel)) }
+        },
+    )
+}
+
+@Composable
+private fun WifiNetworksDialog(
+    title: String,
+    initial: Set<String>,
+    onSave: (Set<String>) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var text by remember { mutableStateOf(initial.sorted().joinToString(", ")) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            Column {
+                Text(
+                    text = stringResource(R.string.settings_wifi_networks_dialog_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                TextField(
+                    value = text,
+                    onValueChange = { text = it },
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp),
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    onSave(
+                        text
+                            .split(",")
+                            .map { it.trim() }
+                            .filter { it.isNotBlank() }
+                            .toSet(),
+                    )
+                },
+            ) { Text(stringResource(R.string.settings_save)) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.home_delete_cancel)) }
+        },
+    )
 }
 
 @Composable
@@ -982,6 +1490,43 @@ private fun OssLicensesDialog(
         },
     )
 }
+
+@Composable
+private fun autoSyncScheduleLabel(schedule: AutoSyncSchedule): String =
+    when (schedule) {
+        AutoSyncSchedule.EVERY_15_MINUTES -> stringResource(R.string.settings_auto_sync_schedule_15m)
+        AutoSyncSchedule.EVERY_30_MINUTES -> stringResource(R.string.settings_auto_sync_schedule_30m)
+        AutoSyncSchedule.HOURLY -> stringResource(R.string.settings_auto_sync_schedule_hourly)
+        AutoSyncSchedule.DAILY -> stringResource(R.string.settings_auto_sync_schedule_daily)
+    }
+
+@Composable
+private fun internetConnectionScopeLabel(scope: InternetConnectionScope): String =
+    when (scope) {
+        InternetConnectionScope.WIFI_AND_MOBILE ->
+            stringResource(R.string.settings_internet_scope_wifi_and_mobile)
+        InternetConnectionScope.WIFI_ONLY ->
+            stringResource(R.string.settings_internet_scope_wifi_only)
+        InternetConnectionScope.MOBILE_ONLY ->
+            stringResource(R.string.settings_internet_scope_mobile_only)
+    }
+
+private fun formatMobileLimit(context: Context, valueMb: Int): String =
+    // Non-composable helper to allow usage in dialog valueFormatter lambdas where
+    // stringResource is unavailable.
+    if (valueMb == 0) {
+        context.getString(R.string.settings_mobile_limit_unlimited)
+    } else {
+        context.getString(R.string.settings_mobile_limit_value, valueMb)
+    }
+
+@Composable
+private fun networksSummary(networks: Set<String>): String =
+    if (networks.isEmpty()) {
+        stringResource(R.string.settings_wifi_networks_none)
+    } else {
+        networks.sorted().joinToString(", ")
+    }
 
 @Composable
 private fun conflictPolicyLabel(policy: ConflictPolicy): String =

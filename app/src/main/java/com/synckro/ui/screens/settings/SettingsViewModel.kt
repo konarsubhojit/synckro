@@ -5,7 +5,9 @@ import android.content.Intent
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.synckro.BuildConfig
+import com.synckro.data.repository.AutoSyncSchedule
 import com.synckro.data.repository.DarkModePreference
+import com.synckro.data.repository.InternetConnectionScope
 import com.synckro.data.repository.SettingsRepository
 import com.synckro.data.repository.SyncPairRepository
 import com.synckro.data.worker.SyncScheduler
@@ -51,6 +53,23 @@ class SettingsViewModel
             val defaultChargingOnly: Boolean = false,
             val defaultConflictPolicy: ConflictPolicy = ConflictPolicy.NEWEST_WINS,
             val maxConcurrentTransfers: Int = SettingsRepository.MAX_CONCURRENT_TRANSFERS,
+            val mobileUploadLimitMb: Int = 100,
+            val mobileDownloadLimitMb: Int = 100,
+            val warnOnMobileNetworkSync: Boolean = true,
+            val retryAutomaticallyAfterError: Boolean = true,
+            val retryWaitMinutes: Int = 15,
+            val retryMaxAttempts: Int = 3,
+            val parallelUploads: Int = 3,
+            val parallelDownloads: Int = 3,
+            val autoSyncSchedule: AutoSyncSchedule = AutoSyncSchedule.EVERY_30_MINUTES,
+            val autoSyncChargingOnly: Boolean = false,
+            val autoSyncBatteryThresholdPercent: Int = 20,
+            val internetConnectionScope: InternetConnectionScope = InternetConnectionScope.WIFI_AND_MOBILE,
+            val syncOnMeteredWifi: Boolean = false,
+            val allowedWifiNetworks: Set<String> = emptySet(),
+            val disallowedWifiNetworks: Set<String> = emptySet(),
+            val syncOnMobileRoaming: Boolean = false,
+            val syncOnSlow2g: Boolean = false,
             // Appearance
             val darkMode: DarkModePreference = DarkModePreference.SYSTEM,
             val dynamicColor: Boolean = false,
@@ -96,7 +115,29 @@ class SettingsViewModel
                     settingsRepository.defaultWifiOnly,
                     settingsRepository.defaultChargingOnly,
                     settingsRepository.defaultConflictPolicy,
-                ) { auto, wifi, charging, conflict -> arrayOf(auto, wifi, charging, conflict) },
+                    settingsRepository.mobileUploadLimitMb,
+                    settingsRepository.mobileDownloadLimitMb,
+                    settingsRepository.warnOnMobileNetworkSync,
+                    settingsRepository.retryAutomaticallyAfterError,
+                    settingsRepository.retryWaitMinutes,
+                    settingsRepository.retryMaxAttempts,
+                    settingsRepository.parallelUploads,
+                    settingsRepository.parallelDownloads,
+                    settingsRepository.autoSyncSchedule,
+                    settingsRepository.autoSyncChargingOnly,
+                    settingsRepository.autoSyncBatteryThresholdPercent,
+                    settingsRepository.internetConnectionScope,
+                    settingsRepository.syncOnMeteredWifi,
+                    settingsRepository.allowedWifiNetworks,
+                    settingsRepository.disallowedWifiNetworks,
+                    settingsRepository.syncOnMobileRoaming,
+                    settingsRepository.syncOnSlow2g,
+                ) { syncValues ->
+                    // The vararg combine overload emits Array<Any?>; we keep this grouped
+                    // bundle (instead of a single 20+ parameter combine) for readability.
+                    // It is unpacked below with an explicit index map.
+                    syncValues
+                },
                 combine(
                     settingsRepository.darkMode,
                     settingsRepository.dynamicColor,
@@ -110,11 +151,34 @@ class SettingsViewModel
                 ) { success, failure, haptics, retention -> arrayOf(success, failure, haptics, retention) },
             ) { syncBundle, appearanceBundle, miscBundle ->
                 @Suppress("UNCHECKED_CAST")
+                // syncBundle index map:
+                // 0 autoSync, 1 defaultWifiOnly, 2 defaultChargingOnly, 3 conflictPolicy,
+                // 4 uploadLimitMb, 5 downloadLimitMb, 6 warnMobile, 7 retryAuto,
+                // 8 retryWaitMin, 9 retryMaxAttempts, 10 parallelUploads, 11 parallelDownloads,
+                // 12 schedule, 13 chargingOnly, 14 batteryThreshold, 15 internetScope,
+                // 16 meteredWifi, 17 allowedWifi, 18 disallowedWifi, 19 roaming, 20 slow2g.
                 UiState(
                     globalAutoSyncEnabled = syncBundle[0] as Boolean,
                     defaultWifiOnly = syncBundle[1] as Boolean,
                     defaultChargingOnly = syncBundle[2] as Boolean,
                     defaultConflictPolicy = syncBundle[3] as ConflictPolicy,
+                    mobileUploadLimitMb = syncBundle[4] as Int,
+                    mobileDownloadLimitMb = syncBundle[5] as Int,
+                    warnOnMobileNetworkSync = syncBundle[6] as Boolean,
+                    retryAutomaticallyAfterError = syncBundle[7] as Boolean,
+                    retryWaitMinutes = syncBundle[8] as Int,
+                    retryMaxAttempts = syncBundle[9] as Int,
+                    parallelUploads = syncBundle[10] as Int,
+                    parallelDownloads = syncBundle[11] as Int,
+                    autoSyncSchedule = syncBundle[12] as AutoSyncSchedule,
+                    autoSyncChargingOnly = syncBundle[13] as Boolean,
+                    autoSyncBatteryThresholdPercent = syncBundle[14] as Int,
+                    internetConnectionScope = syncBundle[15] as InternetConnectionScope,
+                    syncOnMeteredWifi = syncBundle[16] as Boolean,
+                    allowedWifiNetworks = syncBundle[17] as Set<String>,
+                    disallowedWifiNetworks = syncBundle[18] as Set<String>,
+                    syncOnMobileRoaming = syncBundle[19] as Boolean,
+                    syncOnSlow2g = syncBundle[20] as Boolean,
                     darkMode = appearanceBundle[0] as DarkModePreference,
                     dynamicColor = appearanceBundle[1] as Boolean,
                     respectFontScale = appearanceBundle[2] as Boolean,
@@ -162,6 +226,74 @@ class SettingsViewModel
 
         fun setMaxConcurrentTransfers(n: Int) {
             viewModelScope.launch { settingsRepository.setMaxConcurrentTransfers(n) }
+        }
+
+        fun setMobileUploadLimitMb(limitMb: Int) {
+            viewModelScope.launch { settingsRepository.setMobileUploadLimitMb(limitMb) }
+        }
+
+        fun setMobileDownloadLimitMb(limitMb: Int) {
+            viewModelScope.launch { settingsRepository.setMobileDownloadLimitMb(limitMb) }
+        }
+
+        fun setWarnOnMobileNetworkSync(enabled: Boolean) {
+            viewModelScope.launch { settingsRepository.setWarnOnMobileNetworkSync(enabled) }
+        }
+
+        fun setRetryAutomaticallyAfterError(enabled: Boolean) {
+            viewModelScope.launch { settingsRepository.setRetryAutomaticallyAfterError(enabled) }
+        }
+
+        fun setRetryWaitMinutes(minutes: Int) {
+            viewModelScope.launch { settingsRepository.setRetryWaitMinutes(minutes) }
+        }
+
+        fun setRetryMaxAttempts(attempts: Int) {
+            viewModelScope.launch { settingsRepository.setRetryMaxAttempts(attempts) }
+        }
+
+        fun setParallelUploads(value: Int) {
+            viewModelScope.launch { settingsRepository.setParallelUploads(value) }
+        }
+
+        fun setParallelDownloads(value: Int) {
+            viewModelScope.launch { settingsRepository.setParallelDownloads(value) }
+        }
+
+        fun setAutoSyncSchedule(schedule: AutoSyncSchedule) {
+            viewModelScope.launch { settingsRepository.setAutoSyncSchedule(schedule) }
+        }
+
+        fun setAutoSyncChargingOnly(enabled: Boolean) {
+            viewModelScope.launch { settingsRepository.setAutoSyncChargingOnly(enabled) }
+        }
+
+        fun setAutoSyncBatteryThresholdPercent(value: Int) {
+            viewModelScope.launch { settingsRepository.setAutoSyncBatteryThresholdPercent(value) }
+        }
+
+        fun setInternetConnectionScope(scope: InternetConnectionScope) {
+            viewModelScope.launch { settingsRepository.setInternetConnectionScope(scope) }
+        }
+
+        fun setSyncOnMeteredWifi(enabled: Boolean) {
+            viewModelScope.launch { settingsRepository.setSyncOnMeteredWifi(enabled) }
+        }
+
+        fun setAllowedWifiNetworks(networks: Set<String>) {
+            viewModelScope.launch { settingsRepository.setAllowedWifiNetworks(networks) }
+        }
+
+        fun setDisallowedWifiNetworks(networks: Set<String>) {
+            viewModelScope.launch { settingsRepository.setDisallowedWifiNetworks(networks) }
+        }
+
+        fun setSyncOnMobileRoaming(enabled: Boolean) {
+            viewModelScope.launch { settingsRepository.setSyncOnMobileRoaming(enabled) }
+        }
+
+        fun setSyncOnSlow2g(enabled: Boolean) {
+            viewModelScope.launch { settingsRepository.setSyncOnSlow2g(enabled) }
         }
 
         // ---------------------------------------------------------------------
@@ -268,6 +400,7 @@ class SettingsViewModel
          * ever needs to vary per build flavor it should move to BuildConfig.
          */
         val privacyPolicyUrl: String = "https://github.com/konarsubhojit/synckro/blob/main/PRIVACY.md"
+        val batteryInfoUrl: String = "https://developer.android.com/topic/performance/power"
 
         fun resetHints() {
             viewModelScope.launch { settingsRepository.resetSeenTooltips() }

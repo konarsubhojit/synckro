@@ -98,6 +98,163 @@ class SettingsRepository
             }
         }
 
+        val mobileUploadLimitMb: Flow<Int> =
+            dataStore.data.map {
+                (it[KEY_MOBILE_UPLOAD_LIMIT_MB] ?: DEFAULT_MOBILE_UPLOAD_LIMIT_MB)
+                    .coerceIn(0, MAX_MOBILE_TRANSFER_LIMIT_MB)
+            }
+
+        suspend fun setMobileUploadLimitMb(limitMb: Int) {
+            dataStore.edit {
+                it[KEY_MOBILE_UPLOAD_LIMIT_MB] = limitMb.coerceIn(0, MAX_MOBILE_TRANSFER_LIMIT_MB)
+            }
+        }
+
+        val mobileDownloadLimitMb: Flow<Int> =
+            dataStore.data.map {
+                (it[KEY_MOBILE_DOWNLOAD_LIMIT_MB] ?: DEFAULT_MOBILE_DOWNLOAD_LIMIT_MB)
+                    .coerceIn(0, MAX_MOBILE_TRANSFER_LIMIT_MB)
+            }
+
+        suspend fun setMobileDownloadLimitMb(limitMb: Int) {
+            dataStore.edit {
+                it[KEY_MOBILE_DOWNLOAD_LIMIT_MB] = limitMb.coerceIn(0, MAX_MOBILE_TRANSFER_LIMIT_MB)
+            }
+        }
+
+        val warnOnMobileNetworkSync: Flow<Boolean> =
+            dataStore.data.map { it[KEY_WARN_ON_MOBILE_NETWORK_SYNC] ?: DEFAULT_WARN_ON_MOBILE_NETWORK_SYNC }
+
+        suspend fun setWarnOnMobileNetworkSync(enabled: Boolean) {
+            dataStore.edit { it[KEY_WARN_ON_MOBILE_NETWORK_SYNC] = enabled }
+        }
+
+        val retryAutomaticallyAfterError: Flow<Boolean> =
+            dataStore.data.map { it[KEY_RETRY_AUTOMATICALLY_AFTER_ERROR] ?: DEFAULT_RETRY_AUTOMATICALLY_AFTER_ERROR }
+
+        suspend fun setRetryAutomaticallyAfterError(enabled: Boolean) {
+            dataStore.edit { it[KEY_RETRY_AUTOMATICALLY_AFTER_ERROR] = enabled }
+        }
+
+        val retryWaitMinutes: Flow<Int> =
+            dataStore.data.map {
+                (it[KEY_RETRY_WAIT_MINUTES] ?: DEFAULT_RETRY_WAIT_MINUTES)
+                    .coerceIn(MIN_RETRY_WAIT_MINUTES, MAX_RETRY_WAIT_MINUTES)
+            }
+
+        suspend fun setRetryWaitMinutes(minutes: Int) {
+            dataStore.edit {
+                it[KEY_RETRY_WAIT_MINUTES] =
+                    minutes.coerceIn(MIN_RETRY_WAIT_MINUTES, MAX_RETRY_WAIT_MINUTES)
+            }
+        }
+
+        val retryMaxAttempts: Flow<Int> =
+            dataStore.data.map {
+                (it[KEY_RETRY_MAX_ATTEMPTS] ?: DEFAULT_RETRY_MAX_ATTEMPTS)
+                    .coerceIn(MIN_RETRY_ATTEMPTS, MAX_RETRY_ATTEMPTS)
+            }
+
+        suspend fun setRetryMaxAttempts(attempts: Int) {
+            dataStore.edit {
+                it[KEY_RETRY_MAX_ATTEMPTS] = attempts.coerceIn(MIN_RETRY_ATTEMPTS, MAX_RETRY_ATTEMPTS)
+            }
+        }
+
+        val parallelUploads: Flow<Int> =
+            dataStore.data.map {
+                (it[KEY_PARALLEL_UPLOADS] ?: DEFAULT_PARALLEL_UPLOADS)
+                    .coerceIn(1, MAX_PARALLEL_TRANSFERS_PER_DIRECTION)
+            }
+
+        suspend fun setParallelUploads(value: Int) {
+            dataStore.edit { it[KEY_PARALLEL_UPLOADS] = value.coerceIn(1, MAX_PARALLEL_TRANSFERS_PER_DIRECTION) }
+        }
+
+        val parallelDownloads: Flow<Int> =
+            dataStore.data.map {
+                (it[KEY_PARALLEL_DOWNLOADS] ?: DEFAULT_PARALLEL_DOWNLOADS)
+                    .coerceIn(1, MAX_PARALLEL_TRANSFERS_PER_DIRECTION)
+            }
+
+        suspend fun setParallelDownloads(value: Int) {
+            dataStore.edit { it[KEY_PARALLEL_DOWNLOADS] = value.coerceIn(1, MAX_PARALLEL_TRANSFERS_PER_DIRECTION) }
+        }
+
+        val autoSyncSchedule: Flow<AutoSyncSchedule> =
+            dataStore.data.map { prefs ->
+                prefs[KEY_AUTO_SYNC_SCHEDULE]
+                    ?.let { runCatching { AutoSyncSchedule.valueOf(it) }.getOrNull() }
+                    ?: DEFAULT_AUTO_SYNC_SCHEDULE
+            }
+
+        suspend fun setAutoSyncSchedule(schedule: AutoSyncSchedule) {
+            dataStore.edit { it[KEY_AUTO_SYNC_SCHEDULE] = schedule.name }
+        }
+
+        val autoSyncChargingOnly: Flow<Boolean> =
+            dataStore.data.map { it[KEY_AUTO_SYNC_CHARGING_ONLY] ?: DEFAULT_AUTO_SYNC_CHARGING_ONLY }
+
+        suspend fun setAutoSyncChargingOnly(enabled: Boolean) {
+            dataStore.edit { it[KEY_AUTO_SYNC_CHARGING_ONLY] = enabled }
+        }
+
+        val autoSyncBatteryThresholdPercent: Flow<Int> =
+            dataStore.data.map {
+                (it[KEY_AUTO_SYNC_BATTERY_THRESHOLD_PERCENT] ?: DEFAULT_AUTO_SYNC_BATTERY_THRESHOLD_PERCENT)
+                    .coerceIn(0, 100)
+            }
+
+        suspend fun setAutoSyncBatteryThresholdPercent(value: Int) {
+            dataStore.edit { it[KEY_AUTO_SYNC_BATTERY_THRESHOLD_PERCENT] = value.coerceIn(0, 100) }
+        }
+
+        val internetConnectionScope: Flow<InternetConnectionScope> =
+            dataStore.data.map { prefs ->
+                prefs[KEY_INTERNET_CONNECTION_SCOPE]
+                    ?.let { runCatching { InternetConnectionScope.valueOf(it) }.getOrNull() }
+                    ?: DEFAULT_INTERNET_CONNECTION_SCOPE
+            }
+
+        suspend fun setInternetConnectionScope(scope: InternetConnectionScope) {
+            dataStore.edit { it[KEY_INTERNET_CONNECTION_SCOPE] = scope.name }
+        }
+
+        val syncOnMeteredWifi: Flow<Boolean> =
+            dataStore.data.map { it[KEY_SYNC_ON_METERED_WIFI] ?: DEFAULT_SYNC_ON_METERED_WIFI }
+
+        suspend fun setSyncOnMeteredWifi(enabled: Boolean) {
+            dataStore.edit { it[KEY_SYNC_ON_METERED_WIFI] = enabled }
+        }
+
+        val allowedWifiNetworks: Flow<Set<String>> =
+            dataStore.data.map { it[KEY_ALLOWED_WIFI_NETWORKS] ?: emptySet() }
+
+        suspend fun setAllowedWifiNetworks(networks: Set<String>) {
+            dataStore.edit { it[KEY_ALLOWED_WIFI_NETWORKS] = networks }
+        }
+
+        val disallowedWifiNetworks: Flow<Set<String>> =
+            dataStore.data.map { it[KEY_DISALLOWED_WIFI_NETWORKS] ?: emptySet() }
+
+        suspend fun setDisallowedWifiNetworks(networks: Set<String>) {
+            dataStore.edit { it[KEY_DISALLOWED_WIFI_NETWORKS] = networks }
+        }
+
+        val syncOnMobileRoaming: Flow<Boolean> =
+            dataStore.data.map { it[KEY_SYNC_ON_MOBILE_ROAMING] ?: DEFAULT_SYNC_ON_MOBILE_ROAMING }
+
+        suspend fun setSyncOnMobileRoaming(enabled: Boolean) {
+            dataStore.edit { it[KEY_SYNC_ON_MOBILE_ROAMING] = enabled }
+        }
+
+        val syncOnSlow2g: Flow<Boolean> =
+            dataStore.data.map { it[KEY_SYNC_ON_SLOW_2G] ?: DEFAULT_SYNC_ON_SLOW_2G }
+
+        suspend fun setSyncOnSlow2g(enabled: Boolean) {
+            dataStore.edit { it[KEY_SYNC_ON_SLOW_2G] = enabled }
+        }
+
         // -------------------------------------------------------------------------
         // Appearance
         // -------------------------------------------------------------------------
@@ -234,6 +391,28 @@ class SettingsRepository
             internal val KEY_DEFAULT_CONFLICT_POLICY = stringPreferencesKey("default_conflict_policy")
             internal val KEY_MAX_CONCURRENT_TRANSFERS =
                 intPreferencesKey("max_concurrent_transfers")
+            internal val KEY_MOBILE_UPLOAD_LIMIT_MB = intPreferencesKey("mobile_upload_limit_mb")
+            internal val KEY_MOBILE_DOWNLOAD_LIMIT_MB = intPreferencesKey("mobile_download_limit_mb")
+            internal val KEY_WARN_ON_MOBILE_NETWORK_SYNC =
+                booleanPreferencesKey("warn_on_mobile_network_sync")
+            internal val KEY_RETRY_AUTOMATICALLY_AFTER_ERROR =
+                booleanPreferencesKey("retry_automatically_after_error")
+            internal val KEY_RETRY_WAIT_MINUTES = intPreferencesKey("retry_wait_minutes")
+            internal val KEY_RETRY_MAX_ATTEMPTS = intPreferencesKey("retry_max_attempts")
+            internal val KEY_PARALLEL_UPLOADS = intPreferencesKey("parallel_uploads")
+            internal val KEY_PARALLEL_DOWNLOADS = intPreferencesKey("parallel_downloads")
+            internal val KEY_AUTO_SYNC_SCHEDULE = stringPreferencesKey("auto_sync_schedule")
+            internal val KEY_AUTO_SYNC_CHARGING_ONLY = booleanPreferencesKey("auto_sync_charging_only")
+            internal val KEY_AUTO_SYNC_BATTERY_THRESHOLD_PERCENT =
+                intPreferencesKey("auto_sync_battery_threshold_percent")
+            internal val KEY_INTERNET_CONNECTION_SCOPE =
+                stringPreferencesKey("internet_connection_scope")
+            internal val KEY_SYNC_ON_METERED_WIFI = booleanPreferencesKey("sync_on_metered_wifi")
+            internal val KEY_ALLOWED_WIFI_NETWORKS = stringSetPreferencesKey("allowed_wifi_networks")
+            internal val KEY_DISALLOWED_WIFI_NETWORKS =
+                stringSetPreferencesKey("disallowed_wifi_networks")
+            internal val KEY_SYNC_ON_MOBILE_ROAMING = booleanPreferencesKey("sync_on_mobile_roaming")
+            internal val KEY_SYNC_ON_SLOW_2G = booleanPreferencesKey("sync_on_slow_2g")
 
             internal val KEY_DARK_MODE = stringPreferencesKey("dark_mode")
             internal val KEY_DYNAMIC_COLOR = booleanPreferencesKey("dynamic_color")
@@ -253,9 +432,30 @@ class SettingsRepository
             internal const val DEFAULT_CHARGING_ONLY = false
             internal val DEFAULT_CONFLICT_POLICY = ConflictPolicy.NEWEST_WINS
             internal const val DEFAULT_MAX_CONCURRENT_TRANSFERS = 3
+            internal const val DEFAULT_MOBILE_UPLOAD_LIMIT_MB = 100
+            internal const val DEFAULT_MOBILE_DOWNLOAD_LIMIT_MB = 100
+            internal const val DEFAULT_WARN_ON_MOBILE_NETWORK_SYNC = true
+            internal const val DEFAULT_RETRY_AUTOMATICALLY_AFTER_ERROR = true
+            internal const val DEFAULT_RETRY_WAIT_MINUTES = 15
+            internal const val DEFAULT_RETRY_MAX_ATTEMPTS = 3
+            internal const val DEFAULT_PARALLEL_UPLOADS = 3
+            internal const val DEFAULT_PARALLEL_DOWNLOADS = 3
+            internal val DEFAULT_AUTO_SYNC_SCHEDULE = AutoSyncSchedule.EVERY_30_MINUTES
+            internal const val DEFAULT_AUTO_SYNC_CHARGING_ONLY = false
+            internal const val DEFAULT_AUTO_SYNC_BATTERY_THRESHOLD_PERCENT = 20
+            internal val DEFAULT_INTERNET_CONNECTION_SCOPE = InternetConnectionScope.WIFI_AND_MOBILE
+            internal const val DEFAULT_SYNC_ON_METERED_WIFI = false
+            internal const val DEFAULT_SYNC_ON_MOBILE_ROAMING = false
+            internal const val DEFAULT_SYNC_ON_SLOW_2G = false
 
             /** Public max cap used by both clamping logic and the settings slider upper bound. */
             const val MAX_CONCURRENT_TRANSFERS = 3
+            const val MAX_MOBILE_TRANSFER_LIMIT_MB = 2_048
+            const val MIN_RETRY_WAIT_MINUTES = 1
+            const val MAX_RETRY_WAIT_MINUTES = 120
+            const val MIN_RETRY_ATTEMPTS = 1
+            const val MAX_RETRY_ATTEMPTS = 10
+            const val MAX_PARALLEL_TRANSFERS_PER_DIRECTION = 5
 
             internal val DEFAULT_DARK_MODE = DarkModePreference.SYSTEM
             internal const val DEFAULT_DYNAMIC_COLOR = false
@@ -268,3 +468,16 @@ class SettingsRepository
             internal const val DEFAULT_LOG_RETENTION_DAYS = 30
         }
     }
+
+enum class AutoSyncSchedule {
+    EVERY_15_MINUTES,
+    EVERY_30_MINUTES,
+    HOURLY,
+    DAILY,
+}
+
+enum class InternetConnectionScope {
+    WIFI_AND_MOBILE,
+    WIFI_ONLY,
+    MOBILE_ONLY,
+}
