@@ -33,12 +33,13 @@ fun LoadingState(
     modifier: Modifier = Modifier,
 ) {
     Box(
-        modifier = modifier
-            .fillMaxSize()
-            .semantics(mergeDescendants = true) {
-                contentDescription = message
-                liveRegion = LiveRegionMode.Polite
-            },
+        modifier =
+            modifier
+                .fillMaxSize()
+                .semantics(mergeDescendants = true) {
+                    contentDescription = message
+                    liveRegion = LiveRegionMode.Polite
+                },
         contentAlignment = Alignment.Center,
     ) {
         Column(

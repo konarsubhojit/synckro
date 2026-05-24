@@ -121,13 +121,14 @@ class PairDetailViewModel
             ) { pair, events, conflictCount, globalEnabled, workProgress ->
                 val summary = events.firstNotNullOfOrNull { parsePairSummary(it) }
                 val now = System.currentTimeMillis()
-                val nextRun = pair?.let {
-                    SyncScheduler.estimateNextRunAtMs(
-                        pair = it,
-                        nowMs = now,
-                        globalAutoSyncEnabled = globalEnabled,
-                    )
-                }
+                val nextRun =
+                    pair?.let {
+                        SyncScheduler.estimateNextRunAtMs(
+                            pair = it,
+                            nowMs = now,
+                            globalAutoSyncEnabled = globalEnabled,
+                        )
+                    }
                 UiState(
                     pair = pair,
                     isLoading = false,

@@ -14,6 +14,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
@@ -22,7 +23,6 @@ import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedCard
@@ -153,9 +153,10 @@ fun PairEditorScreen(
         if (state.isLoading) {
             LoadingState(
                 message = stringResource(R.string.loading_pair_settings),
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding),
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .padding(padding),
             )
         } else {
             Column(
@@ -174,10 +175,11 @@ fun PairEditorScreen(
                 state.saveError?.let { err ->
                     androidx.compose.material3.Card(
                         modifier = Modifier.fillMaxWidth(),
-                        colors = androidx.compose.material3.CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.errorContainer,
-                            contentColor = MaterialTheme.colorScheme.onErrorContainer,
-                        ),
+                        colors =
+                            androidx.compose.material3.CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.errorContainer,
+                                contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                            ),
                     ) {
                         Row(
                             modifier = Modifier.fillMaxWidth().padding(12.dp),
@@ -207,13 +209,14 @@ fun PairEditorScreen(
                     label = { Text(stringResource(R.string.pair_editor_display_name)) },
                     singleLine = true,
                     isError = displayNameInvalid,
-                    supportingText = if (displayNameInvalid) {
-                        {
-                            Text(stringResource(R.string.pair_editor_error_name_required))
-                        }
-                    } else {
-                        null
-                    },
+                    supportingText =
+                        if (displayNameInvalid) {
+                            {
+                                Text(stringResource(R.string.pair_editor_error_name_required))
+                            }
+                        } else {
+                            null
+                        },
                     modifier = Modifier.fillMaxWidth(),
                 )
 
@@ -344,10 +347,11 @@ fun PairEditorScreen(
                                 placeholder = { Text(stringResource(R.string.pair_editor_retention_days_hint)) },
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                 singleLine = true,
-                                isError = state.retentionDaysText.isNotBlank() &&
-                                    state.retentionDaysText
-                                        .toIntOrNull()
-                                        .let { it == null || it !in 0..PairEditorViewModel.MAX_RETENTION_DAYS },
+                                isError =
+                                    state.retentionDaysText.isNotBlank() &&
+                                        state.retentionDaysText
+                                            .toIntOrNull()
+                                            .let { it == null || it !in 0..PairEditorViewModel.MAX_RETENTION_DAYS },
                                 supportingText = {
                                     if (state.retentionDaysText.isNotBlank() &&
                                         state.retentionDaysText
@@ -436,10 +440,11 @@ fun PairEditorScreen(
                             },
                             isError = state.customIntervalError,
                             singleLine = true,
-                            keyboardOptions = KeyboardOptions(
-                                keyboardType = KeyboardType.Number,
-                                imeAction = ImeAction.Done,
-                            ),
+                            keyboardOptions =
+                                KeyboardOptions(
+                                    keyboardType = KeyboardType.Number,
+                                    imeAction = ImeAction.Done,
+                                ),
                             modifier = Modifier.fillMaxWidth(),
                         )
                     }
@@ -790,8 +795,9 @@ private fun SectionHeader(text: String) {
         text = text,
         style = MaterialTheme.typography.titleSmall,
         color = MaterialTheme.colorScheme.primary,
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 4.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(top = 4.dp),
     )
 }

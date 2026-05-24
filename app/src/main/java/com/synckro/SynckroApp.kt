@@ -6,8 +6,8 @@ import android.app.NotificationManager
 import android.os.Build
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
-import com.synckro.providers.onedrive.OneDriveMultiAccountStartupProbe
 import com.synckro.data.worker.SyncWorker
+import com.synckro.providers.onedrive.OneDriveMultiAccountStartupProbe
 import com.synckro.util.logging.FileLoggingTree
 import com.synckro.util.notification.ReauthNotificationHelper
 import com.synckro.util.notification.SyncStatusNotifier
@@ -35,6 +35,7 @@ class SynckroApp :
     Application(),
     Configuration.Provider {
     @Inject lateinit var workerFactory: HiltWorkerFactory
+
     @Inject lateinit var oneDriveMultiAccountStartupProbe: OneDriveMultiAccountStartupProbe
 
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)

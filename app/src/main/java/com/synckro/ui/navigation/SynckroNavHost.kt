@@ -169,6 +169,7 @@ fun SynckroNavHost(
         ) {
             MainScaffold(
                 activity = activity,
+                onClose = { activity.finish() },
                 onAddSyncPair = {
                     nav.navigate(Routes.pairEditor()) { launchSingleTop = true }
                 },

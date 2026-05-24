@@ -31,8 +31,8 @@ import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Folder
-import androidx.compose.material.icons.filled.Inbox
 import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Inbox
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -85,9 +85,9 @@ import com.synckro.domain.model.ConflictRecord
 import com.synckro.ui.components.EmptyState
 import com.synckro.ui.components.LoadingState
 import com.synckro.util.rememberHapticHelper
+import kotlinx.coroutines.launch
 import java.text.DateFormat
 import java.util.Date
-import kotlinx.coroutines.launch
 
 /**
  * Displays the list of unresolved sync conflicts. Each conflict card explains
@@ -212,9 +212,10 @@ fun ConflictInboxScreen(
             state.isLoading -> {
                 LoadingState(
                     message = stringResource(R.string.loading_conflicts),
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(padding),
+                    modifier =
+                        Modifier
+                            .fillMaxSize()
+                            .padding(padding),
                 )
             }
             state.conflicts.isEmpty() -> {
@@ -224,9 +225,10 @@ fun ConflictInboxScreen(
                     icon = Icons.Filled.Inbox,
                     primaryActionLabel = onBack?.let { stringResource(R.string.conflict_inbox_empty_cta) },
                     onPrimaryAction = onBack,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(padding),
+                    modifier =
+                        Modifier
+                            .fillMaxSize()
+                            .padding(padding),
                 )
             }
             else -> {
@@ -295,10 +297,11 @@ fun ConflictInboxScreen(
                                             viewModel.keepBoth(selectedConflict.id)
                                             haptic?.success()
                                         },
-                                        modifier = Modifier
-                                            .fillMaxSize()
-                                            .padding(padding)
-                                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                                        modifier =
+                                            Modifier
+                                                .fillMaxSize()
+                                                .padding(padding)
+                                                .padding(horizontal = 16.dp, vertical = 8.dp),
                                     )
                                 }
                             }
@@ -427,11 +430,12 @@ private fun ConflictCard(
                     onLongClick = {
                         if (!isSelectionMode) onLongPress()
                     },
-                    onLongClickLabel = if (!isSelectionMode) {
-                        stringResource(R.string.conflict_inbox_enter_selection_mode)
-                    } else {
-                        null
-                    },
+                    onLongClickLabel =
+                        if (!isSelectionMode) {
+                            stringResource(R.string.conflict_inbox_enter_selection_mode)
+                        } else {
+                            null
+                        },
                 ),
         colors =
             when {
@@ -454,11 +458,12 @@ private fun ConflictCard(
                     Icon(
                         imageVector = Icons.Default.CheckCircle,
                         contentDescription = null,
-                        tint = if (isSelected) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
-                        },
+                        tint =
+                            if (isSelected) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                            },
                     )
                 } else if (localThumbnailUri != null) {
                     ConflictThumbnail(
@@ -582,10 +587,11 @@ private fun ConflictCard(
             }
 
             Text(
-                text = stringResource(
-                    R.string.conflict_inbox_detected_at,
-                    fmt.format(Date(conflict.detectedAtMs)),
-                ),
+                text =
+                    stringResource(
+                        R.string.conflict_inbox_detected_at,
+                        fmt.format(Date(conflict.detectedAtMs)),
+                    ),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -597,10 +603,11 @@ private fun ConflictCard(
                     shape = MaterialTheme.shapes.small,
                 ) {
                     Text(
-                        text = stringResource(
-                            R.string.conflict_inbox_pending_resolution,
-                            resolutionLabel(conflict.resolution),
-                        ),
+                        text =
+                            stringResource(
+                                R.string.conflict_inbox_pending_resolution,
+                                resolutionLabel(conflict.resolution),
+                            ),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onPrimaryContainer,
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
@@ -668,8 +675,12 @@ internal fun ConflictActionButton(
                 Text(
                     description,
                     style = MaterialTheme.typography.labelSmall,
-                    color = if (isPrimary) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f)
-                            else MaterialTheme.colorScheme.onSurfaceVariant,
+                    color =
+                        if (isPrimary) {
+                            MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f)
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
                 )
             }
         }

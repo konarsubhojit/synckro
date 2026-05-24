@@ -3,15 +3,15 @@ package com.synckro.providers.gdrive
 import com.synckro.domain.auth.AuthResult
 import com.synckro.domain.provider.ChangesPage
 import com.synckro.domain.provider.CloudProvider
-import com.synckro.domain.provider.CloudProviderFactory
 import com.synckro.domain.provider.CloudProviderException
+import com.synckro.domain.provider.CloudProviderFactory
 import com.synckro.domain.provider.RemoteChange
 import com.synckro.domain.provider.RemoteFile
 import timber.log.Timber
 import java.io.InputStream
+import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
-import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Google Drive provider backed by the Drive REST v3 API.
@@ -118,8 +118,8 @@ class GoogleDriveProvider
          * the proactive-refresh window and the actual API call. Replaying after a
          * silent refresh recovers without bothering the user.
          */
-        private suspend fun <T> driveCall(block: suspend () -> T): T {
-            return try {
+        private suspend fun <T> driveCall(block: suspend () -> T): T =
+            try {
                 block()
             } catch (e: DriveApiException) {
                 if (e.statusCode != 401) throw e
@@ -155,7 +155,6 @@ class GoogleDriveProvider
                     throw retry
                 }
             }
-        }
 
         /**
          * Ensures a valid access token is available.

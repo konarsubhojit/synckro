@@ -447,8 +447,9 @@ class SyncEngine(
             // cannot resolve hierarchy in a delta batch.  Without this, nested
             // items could be misclassified as root-level when excludeSubfolders
             // is enabled (the path.contains('/') check would not fire).
-            val canonicalPath = preScanIndexById[change.remoteId]?.relativePath
-                ?: change.relativePath
+            val canonicalPath =
+                preScanIndexById[change.remoteId]?.relativePath
+                    ?: change.relativePath
             if (!isInScope(canonicalPath)) continue
             when (change.type) {
                 RemoteChangeType.ADD, RemoteChangeType.MODIFY -> {
@@ -483,8 +484,9 @@ class SyncEngine(
                     // Prefer the canonical path from the pre-scan index (identified by the
                     // stable remote ID) over change.relativePath, which providers typically
                     // populate with only the item name or the ID itself.
-                    val knownPath = preScanIndexById[change.remoteId]?.relativePath
-                        ?: change.relativePath
+                    val knownPath =
+                        preScanIndexById[change.remoteId]?.relativePath
+                            ?: change.relativePath
                     syntheticRemote.remove(knownPath)
                 }
             }
