@@ -1,9 +1,9 @@
 package com.synckro.providers.onedrive
 
+import io.mockk.mockk
 import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertSame
 import org.junit.Test
-import io.mockk.mockk
 
 class OneDriveProviderFactoryTest {
     @Test

@@ -104,7 +104,9 @@ class GoogleDriveProviderAuthTest {
             try {
                 provider.ensureAuthenticated()
                 fail("Expected AuthenticationFailed")
-            } catch (_: CloudProviderException.AuthenticationFailed) { /* ok */ }
+            } catch (_: CloudProviderException.AuthenticationFailed) {
+                // ok
+            }
 
             // Second call (threshold reached): terminal.
             try {
@@ -130,7 +132,9 @@ class GoogleDriveProviderAuthTest {
             try {
                 provider.ensureAuthenticated()
                 fail("Expected AuthenticationFailed")
-            } catch (_: CloudProviderException.AuthenticationFailed) { /* ok */ }
+            } catch (_: CloudProviderException.AuthenticationFailed) {
+                // ok
+            }
 
             // Successful refresh resets the counter.
             assertTrue(provider.ensureAuthenticated())
@@ -139,7 +143,9 @@ class GoogleDriveProviderAuthTest {
             try {
                 provider.ensureAuthenticated()
                 fail("Expected AuthenticationFailed")
-            } catch (_: CloudProviderException.AuthenticationFailed) { /* ok */ }
+            } catch (_: CloudProviderException.AuthenticationFailed) {
+                // ok
+            }
         }
 
     // -------------------------------------------------------------------------
@@ -234,11 +240,14 @@ class GoogleDriveProviderAuthTest {
     fun `obtainAccessToken proactively refreshes when token is stale`() =
         runTest {
             var fakeTime = 0L
-            val testProvider = GoogleDriveProvider(
-                fakeAccount.id, authManager, restClient,
-                clock = { fakeTime },
-                tokenExpiryThresholdMs = GoogleDriveProvider.TOKEN_EXPIRY_THRESHOLD_MS,
-            )
+            val testProvider =
+                GoogleDriveProvider(
+                    fakeAccount.id,
+                    authManager,
+                    restClient,
+                    clock = { fakeTime },
+                    tokenExpiryThresholdMs = GoogleDriveProvider.TOKEN_EXPIRY_THRESHOLD_MS,
+                )
             // First authentication — acquires a fresh token.
             coEvery { authManager.currentAccounts() } returns listOf(fakeAccount)
             coEvery { authManager.acquireAccessToken(fakeAccount) } returns AuthResult.Success("token-fresh")
@@ -262,11 +271,14 @@ class GoogleDriveProviderAuthTest {
     fun `obtainAccessToken does not refresh when token is still fresh`() =
         runTest {
             var fakeTime = 0L
-            val testProvider = GoogleDriveProvider(
-                fakeAccount.id, authManager, restClient,
-                clock = { fakeTime },
-                tokenExpiryThresholdMs = GoogleDriveProvider.TOKEN_EXPIRY_THRESHOLD_MS,
-            )
+            val testProvider =
+                GoogleDriveProvider(
+                    fakeAccount.id,
+                    authManager,
+                    restClient,
+                    clock = { fakeTime },
+                    tokenExpiryThresholdMs = GoogleDriveProvider.TOKEN_EXPIRY_THRESHOLD_MS,
+                )
             coEvery { authManager.currentAccounts() } returns listOf(fakeAccount)
             coEvery { authManager.acquireAccessToken(fakeAccount) } returns AuthResult.Success("token-abc")
             coEvery { restClient.list("token-abc", null) } returns emptyList()

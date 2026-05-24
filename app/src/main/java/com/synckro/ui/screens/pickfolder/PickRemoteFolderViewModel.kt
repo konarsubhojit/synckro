@@ -165,11 +165,12 @@ class PickRemoteFolderViewModel
          */
         fun signInAndRetry(launchSignIn: suspend (AuthManager) -> AuthResult<Account>) {
             viewModelScope.launch {
-                val manager = authRegistry.find(providerType) ?: run {
-                    Timber.e("PickRemoteFolderViewModel.signInAndRetry: no AuthManager for %s", providerType)
-                    _state.update { it.copy(isLoading = false, isReauthenticating = false, error = "No auth manager for $providerType") }
-                    return@launch
-                }
+                val manager =
+                    authRegistry.find(providerType) ?: run {
+                        Timber.e("PickRemoteFolderViewModel.signInAndRetry: no AuthManager for %s", providerType)
+                        _state.update { it.copy(isLoading = false, isReauthenticating = false, error = "No auth manager for $providerType") }
+                        return@launch
+                    }
                 _state.update { it.copy(isLoading = true, isReauthenticating = true, error = null) }
                 Timber.i("PickRemoteFolderViewModel.signInAndRetry: launching interactive sign-in for %s", providerType)
 

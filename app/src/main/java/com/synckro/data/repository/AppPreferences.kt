@@ -20,7 +20,9 @@ enum class DarkModePreference {
  * value is the integer number of days so the schema is forward-compatible with
  * additional presets without an enum migration.
  */
-enum class LogRetentionPreference(val days: Int) {
+enum class LogRetentionPreference(
+    val days: Int,
+) {
     SEVEN_DAYS(7),
     THIRTY_DAYS(30),
     NINETY_DAYS(90),

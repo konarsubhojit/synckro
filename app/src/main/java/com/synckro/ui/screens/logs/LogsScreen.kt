@@ -14,9 +14,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -70,8 +70,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -84,8 +84,8 @@ import com.synckro.R
 import com.synckro.domain.model.SyncEvent
 import com.synckro.domain.model.SyncEventLevel
 import com.synckro.domain.model.SyncEventTag
-import com.synckro.ui.components.EmptyState
 import com.synckro.ui.components.CoachTooltip
+import com.synckro.ui.components.EmptyState
 import com.synckro.ui.theme.SynckroTheme
 import com.synckro.util.logging.LogExportConfig
 import com.synckro.util.logging.LogExportSink
@@ -687,28 +687,41 @@ internal fun SyncEvent.toLogLine(dateFormat: SimpleDateFormat): String {
 private fun SyncHistoryRowPreview() {
     val fmt = remember { SimpleDateFormat("MM-dd HH:mm:ss.SSS", Locale.US) }
     val baseMs = System.currentTimeMillis()
-    val events = listOf(
-        SyncEvent(
-            id = 1, pairId = 42L, timestampMs = baseMs - 30_000,
-            level = SyncEventLevel.INFO, tag = SyncEventTag.SyncWorker,
-            message = "Sync completed — 12 files uploaded, 3 downloaded.",
-        ),
-        SyncEvent(
-            id = 2, pairId = 42L, timestampMs = baseMs - 5 * 60_000,
-            level = SyncEventLevel.WARN, tag = SyncEventTag.Auth,
-            message = "Token nearing expiry, refreshing in background.",
-        ),
-        SyncEvent(
-            id = 3, pairId = null, timestampMs = baseMs - 2 * 60 * 60_000,
-            level = SyncEventLevel.ERROR, tag = SyncEventTag.SyncWorker,
-            message = "Upload failed: cloud quota exceeded.",
-        ),
-        SyncEvent(
-            id = 4, pairId = 42L, timestampMs = baseMs - 25 * 60 * 60_000,
-            level = SyncEventLevel.DEBUG, tag = SyncEventTag.SyncWorker,
-            message = "Enumerating remote files…",
-        ),
-    )
+    val events =
+        listOf(
+            SyncEvent(
+                id = 1,
+                pairId = 42L,
+                timestampMs = baseMs - 30_000,
+                level = SyncEventLevel.INFO,
+                tag = SyncEventTag.SYNC_WORKER,
+                message = "Sync completed — 12 files uploaded, 3 downloaded.",
+            ),
+            SyncEvent(
+                id = 2,
+                pairId = 42L,
+                timestampMs = baseMs - 5 * 60_000,
+                level = SyncEventLevel.WARN,
+                tag = SyncEventTag.AUTH,
+                message = "Token nearing expiry, refreshing in background.",
+            ),
+            SyncEvent(
+                id = 3,
+                pairId = null,
+                timestampMs = baseMs - 2 * 60 * 60_000,
+                level = SyncEventLevel.ERROR,
+                tag = SyncEventTag.SYNC_WORKER,
+                message = "Upload failed: cloud quota exceeded.",
+            ),
+            SyncEvent(
+                id = 4,
+                pairId = 42L,
+                timestampMs = baseMs - 25 * 60 * 60_000,
+                level = SyncEventLevel.DEBUG,
+                tag = SyncEventTag.SYNC_WORKER,
+                message = "Enumerating remote files…",
+            ),
+        )
     SynckroTheme {
         Surface {
             Column(
@@ -752,9 +765,10 @@ internal fun buildLogExportText(
     }
     val omitted = total - MAX_COPY_SHARE_ENTRIES
     val recent = events.subList(total - MAX_COPY_SHARE_ENTRIES, total)
-    val text = buildString {
-        append("… $omitted earlier entries omitted (showing most recent $MAX_COPY_SHARE_ENTRIES)\n")
-        recent.joinTo(this, separator = "\n") { it.toLogLine(dateFormat) }
-    }
+    val text =
+        buildString {
+            append("… $omitted earlier entries omitted (showing most recent $MAX_COPY_SHARE_ENTRIES)\n")
+            recent.joinTo(this, separator = "\n") { it.toLogLine(dateFormat) }
+        }
     return LogVisibilityConfig.redactForExport(text, config)
 }

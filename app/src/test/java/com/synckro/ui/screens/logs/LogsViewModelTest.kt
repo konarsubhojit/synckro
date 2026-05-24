@@ -8,8 +8,8 @@ import com.synckro.data.repository.SyncEventRepository
 import com.synckro.domain.model.SyncEvent
 import com.synckro.domain.model.SyncEventLevel
 import com.synckro.ui.screens.logs.TimeWindow
-import com.synckro.util.logging.LogExporter
 import com.synckro.util.logging.LogExportConfig
+import com.synckro.util.logging.LogExporter
 import com.synckro.util.logging.LogVisibilityConfig
 import io.mockk.every
 import io.mockk.mockk
@@ -87,12 +87,13 @@ class LogsViewModelTest {
     fun `release variant hides DEBUG entries even when DEBUG filter is set`() =
         runTest(dispatcher) {
             LogVisibilityConfig.minVisibleLevel = SyncEventLevel.INFO
-            eventsFlow.value = listOf(
-                event(1, SyncEventLevel.DEBUG),
-                event(2, SyncEventLevel.INFO),
-                event(3, SyncEventLevel.WARN),
-                event(4, SyncEventLevel.ERROR),
-            )
+            eventsFlow.value =
+                listOf(
+                    event(1, SyncEventLevel.DEBUG),
+                    event(2, SyncEventLevel.INFO),
+                    event(3, SyncEventLevel.WARN),
+                    event(4, SyncEventLevel.ERROR),
+                )
             val vm = newViewModel()
             // Subscribe so the StateFlow starts collecting (WhileSubscribed).
             backgroundScope.launch { vm.state.collect {} }
@@ -118,10 +119,11 @@ class LogsViewModelTest {
     fun `debug variant surfaces DEBUG entries`() =
         runTest(dispatcher) {
             LogVisibilityConfig.minVisibleLevel = SyncEventLevel.DEBUG
-            eventsFlow.value = listOf(
-                event(1, SyncEventLevel.DEBUG),
-                event(2, SyncEventLevel.INFO),
-            )
+            eventsFlow.value =
+                listOf(
+                    event(1, SyncEventLevel.DEBUG),
+                    event(2, SyncEventLevel.INFO),
+                )
             val vm = newViewModel()
             backgroundScope.launch { vm.state.collect {} }
 
@@ -138,12 +140,13 @@ class LogsViewModelTest {
         runTest(dispatcher) {
             // Fix "now" at 2 hours (in ms). Cutoff = now - 1h = 3_600_000.
             val now = 2 * 60 * 60 * 1_000L
-            eventsFlow.value = listOf(
-                event(1, SyncEventLevel.INFO).copy(timestampMs = 0L),              // 2h ago → excluded
-                event(2, SyncEventLevel.INFO).copy(timestampMs = 3_599_999L),      // 1ms before cutoff → excluded
-                event(3, SyncEventLevel.INFO).copy(timestampMs = 3_600_000L),      // exactly at cutoff → included
-                event(4, SyncEventLevel.INFO).copy(timestampMs = now),              // now → included
-            )
+            eventsFlow.value =
+                listOf(
+                    event(1, SyncEventLevel.INFO).copy(timestampMs = 0L), // 2h ago → excluded
+                    event(2, SyncEventLevel.INFO).copy(timestampMs = 3_599_999L), // 1ms before cutoff → excluded
+                    event(3, SyncEventLevel.INFO).copy(timestampMs = 3_600_000L), // exactly at cutoff → included
+                    event(4, SyncEventLevel.INFO).copy(timestampMs = now), // now → included
+                )
             val vm = newViewModel(clock = { now })
             backgroundScope.launch { vm.state.collect {} }
 
@@ -158,11 +161,12 @@ class LogsViewModelTest {
     @Test
     fun `LAST_HOUR filter toggles off on re-selection`() =
         runTest(dispatcher) {
-            val now = 2 * 60 * 60 * 1_000L  // 2h; cutoff = 3_600_000
-            eventsFlow.value = listOf(
-                event(1, SyncEventLevel.INFO).copy(timestampMs = 0L),          // older than 1h → excluded when active
-                event(2, SyncEventLevel.INFO).copy(timestampMs = now),          // recent → included
-            )
+            val now = 2 * 60 * 60 * 1_000L // 2h; cutoff = 3_600_000
+            eventsFlow.value =
+                listOf(
+                    event(1, SyncEventLevel.INFO).copy(timestampMs = 0L), // older than 1h → excluded when active
+                    event(2, SyncEventLevel.INFO).copy(timestampMs = now), // recent → included
+                )
             val vm = newViewModel(clock = { now })
             backgroundScope.launch { vm.state.collect {} }
 
@@ -181,18 +185,19 @@ class LogsViewModelTest {
     @Test
     fun `LAST_24H and LAST_7D filters apply correct durations`() =
         runTest(dispatcher) {
-            val now = 8 * 24 * 60 * 60 * 1_000L  // 8 days in ms
+            val now = 8 * 24 * 60 * 60 * 1_000L // 8 days in ms
             val oneHourAgo = now - 60 * 60 * 1_000L
             val twentyFiveHoursAgo = now - 25 * 60 * 60 * 1_000L
             val sixDaysAgo = now - 6 * 24 * 60 * 60 * 1_000L
             val eightDaysAgo = now - 8 * 24 * 60 * 60 * 1_000L
 
-            eventsFlow.value = listOf(
-                event(1, SyncEventLevel.INFO).copy(timestampMs = eightDaysAgo),    // 8d ago
-                event(2, SyncEventLevel.INFO).copy(timestampMs = twentyFiveHoursAgo), // 25h ago
-                event(3, SyncEventLevel.INFO).copy(timestampMs = sixDaysAgo),       // 6d ago
-                event(4, SyncEventLevel.INFO).copy(timestampMs = oneHourAgo),       // 1h ago
-            )
+            eventsFlow.value =
+                listOf(
+                    event(1, SyncEventLevel.INFO).copy(timestampMs = eightDaysAgo), // 8d ago
+                    event(2, SyncEventLevel.INFO).copy(timestampMs = twentyFiveHoursAgo), // 25h ago
+                    event(3, SyncEventLevel.INFO).copy(timestampMs = sixDaysAgo), // 6d ago
+                    event(4, SyncEventLevel.INFO).copy(timestampMs = oneHourAgo), // 1h ago
+                )
             val vm = newViewModel(clock = { now })
             backgroundScope.launch { vm.state.collect {} }
 
@@ -208,11 +213,12 @@ class LogsViewModelTest {
     @Test
     fun `clearFilters resets time-window filter to null`() =
         runTest(dispatcher) {
-            val now = 2 * 60 * 60 * 1_000L  // 2h; cutoff for LAST_HOUR = 3_600_000
-            eventsFlow.value = listOf(
-                event(1, SyncEventLevel.INFO).copy(timestampMs = 0L),          // older than 1h → excluded when active
-                event(2, SyncEventLevel.INFO).copy(timestampMs = now),          // recent → included
-            )
+            val now = 2 * 60 * 60 * 1_000L // 2h; cutoff for LAST_HOUR = 3_600_000
+            eventsFlow.value =
+                listOf(
+                    event(1, SyncEventLevel.INFO).copy(timestampMs = 0L), // older than 1h → excluded when active
+                    event(2, SyncEventLevel.INFO).copy(timestampMs = now), // recent → included
+                )
             val vm = newViewModel(clock = { now })
             backgroundScope.launch { vm.state.collect {} }
 
@@ -231,13 +237,14 @@ class LogsViewModelTest {
     @Test
     fun `time-window and level filters are AND-ed`() =
         runTest(dispatcher) {
-            val now = 2 * 60 * 60 * 1_000L  // 2 hours
-            eventsFlow.value = listOf(
-                event(1, SyncEventLevel.INFO).copy(timestampMs = 0L),          // old INFO
-                event(2, SyncEventLevel.WARN).copy(timestampMs = 0L),          // old WARN
-                event(3, SyncEventLevel.INFO).copy(timestampMs = now),          // recent INFO
-                event(4, SyncEventLevel.WARN).copy(timestampMs = now),          // recent WARN
-            )
+            val now = 2 * 60 * 60 * 1_000L // 2 hours
+            eventsFlow.value =
+                listOf(
+                    event(1, SyncEventLevel.INFO).copy(timestampMs = 0L), // old INFO
+                    event(2, SyncEventLevel.WARN).copy(timestampMs = 0L), // old WARN
+                    event(3, SyncEventLevel.INFO).copy(timestampMs = now), // recent INFO
+                    event(4, SyncEventLevel.WARN).copy(timestampMs = now), // recent WARN
+                )
             val vm = newViewModel(clock = { now })
             backgroundScope.launch { vm.state.collect {} }
 

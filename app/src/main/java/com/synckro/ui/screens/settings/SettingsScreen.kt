@@ -6,6 +6,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.text.format.Formatter
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -16,11 +17,20 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.automirrored.filled.Help
+import androidx.compose.material.icons.filled.AccountCircle
+import androidx.compose.material.icons.filled.Backup
+import androidx.compose.material.icons.filled.BatteryFull
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -28,12 +38,14 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -41,15 +53,15 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -61,30 +73,51 @@ import com.synckro.data.repository.DarkModePreference
 import com.synckro.data.repository.LogRetentionPreference
 import com.synckro.data.repository.SettingsRepository
 import com.synckro.domain.model.ConflictPolicy
-import kotlinx.coroutines.launch
 import java.util.Locale
 
+// ---- Internal navigation constants ----
+private const val SECTION_SYNC = "sync"
+private const val SECTION_APPEARANCE = "appearance"
+private const val SECTION_NOTIFICATIONS = "notifications"
+private const val SECTION_BATTERY = "battery"
+private const val SECTION_SECURITY = "security"
+private const val SECTION_BACKUP = "backup"
+private const val SECTION_ABOUT = "about"
+private const val SECTION_SUPPORT = "support"
+
 /**
- * Top-level Settings screen. Renders all user-configurable preferences in a
- * [LazyColumn] of grouped sections (Appearance / Sync defaults / Notifications
- * / Storage &amp; logs / About). Side-effects (log export, cache clear,
- * channel deep-link, OSS licenses dialog) are orchestrated here using the
- * one-shot [SettingsViewModel.events] flow so the ViewModel stays free of
- * Android Context-coupled UI concerns.
+ * Top-level Settings screen. Shows a Material3 navigable menu that groups all
+ * user preferences into themed sections (Account / Preferences / Privacy &amp;
+ * data / App). Tapping a section row swaps the content inline to the
+ * corresponding sub-screen; the [TopAppBar] back arrow returns to the root menu.
+ *
+ * Side-effects (log export, cache clear, channel deep-link, OSS licenses
+ * dialog) are orchestrated at this level via the one-shot
+ * [SettingsViewModel.events] flow so the ViewModel stays free of Android
+ * Context-coupled UI concerns.
+ *
+ * @param onBack Called when the user navigates out of the root Settings menu
+ *   (e.g. host scaffold close). `null` hides the back arrow at root level.
+ * @param onNavigateToAccounts Called when the user taps the Accounts menu
+ *   entry. Pass `null` to disable the row (e.g. Accounts is not reachable).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     onBack: (() -> Unit)? = null,
+    onNavigateToAccounts: (() -> Unit)? = null,
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val ctx = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
-    val scope = rememberCoroutineScope()
+    var section by remember { mutableStateOf<String?>(null) }
+    var conflictPolicyDialog by remember { mutableStateOf(false) }
+    var ossDialog by remember { mutableStateOf(false) }
 
-    // One-shot events drive intents/snackbars. `collectAsState` would be wrong
-    // here because we need to react each time, not just to the latest value.
+    // One-shot events drive intents/snackbars. Direct suspend calls inside
+    // `collect` are safe because the LaunchedEffect coroutine is already
+    // suspending when awaiting events.
     LaunchedEffect(viewModel) {
         viewModel.events.collect { event ->
             when (event) {
@@ -118,18 +151,42 @@ fun SettingsScreen(
         }
     }
 
-    // Local UI-only dialog state. These flags are intentionally screen-scoped
-    // rather than in the ViewModel because they have no business-state impact.
-    var conflictPolicyDialog by remember { mutableStateOf(false) }
-    var ossDialog by remember { mutableStateOf(false) }
+    // Back navigation: sub-screens return to the root menu; root menu uses the
+    // caller-supplied onBack (or hides the arrow when onBack is null).
+    val onNavigateBack: (() -> Unit)? =
+        if (section != null) {
+            { section = null }
+        } else {
+            onBack
+        }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(R.string.settings_title)) },
+                title = {
+                    val title =
+                        when (section) {
+                            SECTION_SYNC -> stringResource(R.string.settings_section_sync_defaults)
+                            SECTION_APPEARANCE ->
+                                stringResource(R.string.settings_section_appearance)
+                            SECTION_NOTIFICATIONS ->
+                                stringResource(R.string.settings_section_notifications)
+                            SECTION_BATTERY ->
+                                stringResource(R.string.settings_section_battery)
+                            SECTION_SECURITY ->
+                                stringResource(R.string.settings_section_security)
+                            SECTION_BACKUP ->
+                                stringResource(R.string.settings_section_backup)
+                            SECTION_ABOUT -> stringResource(R.string.settings_section_about)
+                            SECTION_SUPPORT ->
+                                stringResource(R.string.settings_section_support)
+                            else -> stringResource(R.string.settings_title)
+                        }
+                    Text(title)
+                },
                 navigationIcon = {
-                    if (onBack != null) {
-                        IconButton(onClick = onBack) {
+                    if (onNavigateBack != null) {
+                        IconButton(onClick = onNavigateBack) {
                             Icon(
                                 Icons.AutoMirrored.Filled.ArrowBack,
                                 contentDescription = stringResource(R.string.nav_back),
@@ -141,206 +198,66 @@ fun SettingsScreen(
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { padding ->
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding =
-                PaddingValues(
-                    start = 0.dp,
-                    end = 0.dp,
-                    top = padding.calculateTopPadding(),
-                    bottom = padding.calculateBottomPadding() + 24.dp,
-                ),
-        ) {
-            // ---------- Appearance ----------
-            item { SectionHeader(stringResource(R.string.settings_section_appearance)) }
-            item {
-                DarkModeRow(
-                    selected = state.darkMode,
-                    onSelected = viewModel::setDarkMode,
+        val contentPadding =
+            PaddingValues(
+                start = 0.dp,
+                end = 0.dp,
+                top = padding.calculateTopPadding(),
+                bottom = padding.calculateBottomPadding() + 24.dp,
+            )
+        when (section) {
+            null ->
+                SettingsMenu(
+                    contentPadding = contentPadding,
+                    onNavigateToAccounts = onNavigateToAccounts,
+                    onNavigateToSection = { section = it },
                 )
-            }
-            item {
-                val supported = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
-                SwitchRow(
-                    title = stringResource(R.string.settings_dynamic_color_title),
-                    body =
-                        if (supported) {
-                            stringResource(R.string.settings_dynamic_color_body)
-                        } else {
-                            stringResource(R.string.settings_dynamic_color_unsupported)
-                        },
-                    checked = state.dynamicColor && supported,
-                    onCheckedChange = viewModel::setDynamicColor,
-                    enabled = supported,
+            SECTION_SYNC ->
+                SyncSettingsContent(
+                    state = state,
+                    viewModel = viewModel,
+                    contentPadding = contentPadding,
+                    onShowConflictPolicyDialog = { conflictPolicyDialog = true },
                 )
-            }
-            item {
-                SwitchRow(
-                    title = stringResource(R.string.settings_respect_font_scale_title),
-                    body = stringResource(R.string.settings_respect_font_scale_body),
-                    checked = state.respectFontScale,
-                    onCheckedChange = viewModel::setRespectFontScale,
+            SECTION_APPEARANCE ->
+                AppearanceSettingsContent(
+                    state = state,
+                    viewModel = viewModel,
+                    contentPadding = contentPadding,
                 )
-            }
-
-            // ---------- Sync defaults ----------
-            item { SectionHeader(stringResource(R.string.settings_section_sync_defaults)) }
-            item {
-                SwitchRow(
-                    title = stringResource(R.string.settings_global_auto_sync_title),
-                    body = stringResource(R.string.settings_global_auto_sync_body),
-                    checked = state.globalAutoSyncEnabled,
-                    onCheckedChange = viewModel::setGlobalAutoSync,
+            SECTION_NOTIFICATIONS ->
+                NotificationsSettingsContent(
+                    state = state,
+                    viewModel = viewModel,
+                    ctx = ctx,
+                    contentPadding = contentPadding,
                 )
-            }
-            item {
-                SwitchRow(
-                    title = stringResource(R.string.settings_default_wifi_only_title),
-                    body = stringResource(R.string.settings_default_wifi_only_body),
-                    checked = state.defaultWifiOnly,
-                    onCheckedChange = viewModel::setDefaultWifiOnly,
+            SECTION_BATTERY ->
+                BatterySettingsContent(
+                    state = state,
+                    viewModel = viewModel,
+                    contentPadding = contentPadding,
                 )
-            }
-            item {
-                SwitchRow(
-                    title = stringResource(R.string.settings_default_charging_only_title),
-                    body = stringResource(R.string.settings_default_charging_only_body),
-                    checked = state.defaultChargingOnly,
-                    onCheckedChange = viewModel::setDefaultChargingOnly,
+            SECTION_SECURITY -> SecuritySettingsContent(contentPadding = contentPadding)
+            SECTION_BACKUP ->
+                BackupSettingsContent(
+                    state = state,
+                    viewModel = viewModel,
+                    contentPadding = contentPadding,
                 )
-            }
-            item {
-                ActionRow(
-                    title = stringResource(R.string.settings_default_conflict_policy_title),
-                    body = conflictPolicyLabel(state.defaultConflictPolicy),
-                    onClick = { conflictPolicyDialog = true },
+            SECTION_ABOUT ->
+                AboutSettingsContent(
+                    viewModel = viewModel,
+                    ctx = ctx,
+                    contentPadding = contentPadding,
+                    onShowOssDialog = { ossDialog = true },
                 )
-            }
-            item {
-                ConcurrentTransfersRow(
-                    value = state.maxConcurrentTransfers,
-                    max = SettingsRepository.MAX_CONCURRENT_TRANSFERS,
-                    onValueChange = viewModel::setMaxConcurrentTransfers,
+            SECTION_SUPPORT ->
+                SupportSettingsContent(
+                    viewModel = viewModel,
+                    ctx = ctx,
+                    contentPadding = contentPadding,
                 )
-            }
-
-            // ---------- Notifications ----------
-            item { SectionHeader(stringResource(R.string.settings_section_notifications)) }
-            item {
-                SwitchRow(
-                    title = stringResource(R.string.settings_notify_success_title),
-                    body = stringResource(R.string.settings_notify_success_body),
-                    checked = state.notifyOnSuccess,
-                    onCheckedChange = viewModel::setNotifyOnSuccess,
-                )
-            }
-            item {
-                SwitchRow(
-                    title = stringResource(R.string.settings_notify_failure_title),
-                    body = stringResource(R.string.settings_notify_failure_body),
-                    checked = state.notifyOnFailure,
-                    onCheckedChange = viewModel::setNotifyOnFailure,
-                )
-            }
-            item {
-                SwitchRow(
-                    title = stringResource(R.string.settings_enable_haptics_title),
-                    body = stringResource(R.string.settings_enable_haptics_body),
-                    checked = state.enableHaptics,
-                    onCheckedChange = viewModel::setEnableHaptics,
-                )
-            }
-            item {
-                ActionRow(
-                    title = stringResource(R.string.settings_notification_channels_title),
-                    body = stringResource(R.string.settings_notification_channels_body),
-                    onClick = {
-                        runCatching { ctx.startActivity(viewModel.buildChannelSettingsIntent()) }
-                    },
-                )
-            }
-
-            // ---------- Storage & logs ----------
-            item { SectionHeader(stringResource(R.string.settings_section_storage_logs)) }
-            item {
-                LogRetentionRow(
-                    days = state.logRetentionDays,
-                    onSelected = { viewModel.setLogRetentionDays(it.days) },
-                )
-            }
-            item {
-                ActionRow(
-                    title = stringResource(R.string.settings_export_logs_title),
-                    body = stringResource(R.string.settings_export_logs_body),
-                    onClick = viewModel::exportLogs,
-                )
-            }
-            item {
-                ActionRow(
-                    title = stringResource(R.string.settings_clear_cache_title),
-                    body = stringResource(R.string.settings_clear_cache_body),
-                    onClick = viewModel::clearCache,
-                )
-            }
-
-            // ---------- About ----------
-            item { SectionHeader(stringResource(R.string.settings_section_about)) }
-            item {
-                ActionRow(
-                    title = stringResource(R.string.settings_version_title),
-                    body =
-                        stringResource(
-                            R.string.settings_version_format,
-                            viewModel.versionName,
-                            viewModel.versionCode,
-                        ),
-                    onClick = null,
-                )
-            }
-            item {
-                ActionRow(
-                    title = stringResource(R.string.settings_reset_hints_title),
-                    body = stringResource(R.string.settings_reset_hints_body),
-                    onClick = viewModel::resetHints,
-                )
-            }
-            item {
-                ActionRow(
-                    title = stringResource(R.string.settings_privacy_policy_title),
-                    body = stringResource(R.string.settings_privacy_policy_body),
-                    onClick = {
-                        runCatching {
-                            ctx.startActivity(
-                                Intent(Intent.ACTION_VIEW, Uri.parse(viewModel.privacyPolicyUrl))
-                                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-                            )
-                        }
-                    },
-                )
-            }
-            item {
-                ActionRow(
-                    title = stringResource(R.string.settings_oss_licenses_title),
-                    body = stringResource(R.string.settings_oss_licenses_body),
-                    onClick = { ossDialog = true },
-                )
-            }
-            item {
-                val feedbackBody =
-                    if (viewModel.feedbackEmailConfig.isConfigured) {
-                        stringResource(R.string.settings_send_feedback_body)
-                    } else {
-                        stringResource(
-                            R.string.settings_send_feedback_body_unset,
-                            viewModel.feedbackEmailConfig.address,
-                        )
-                    }
-                ActionRow(
-                    title = stringResource(R.string.settings_send_feedback_title),
-                    body = feedbackBody,
-                    onClick = viewModel::sendFeedback,
-                )
-            }
         }
     }
 
@@ -363,12 +280,116 @@ fun SettingsScreen(
     }
 }
 
-// -----------------------------------------------------------------------------
-// Reusable section primitives
-// -----------------------------------------------------------------------------
+// =============================================================================
+// Root menu
+// =============================================================================
+
+/**
+ * Root settings menu: a scrollable list of category rows grouped by labelled
+ * sections. Each row shows a leading icon, a title, a subtitle, and a trailing
+ * arrow indicating navigation to the corresponding sub-screen.
+ */
+@Composable
+private fun SettingsMenu(
+    contentPadding: PaddingValues,
+    onNavigateToAccounts: (() -> Unit)?,
+    onNavigateToSection: (String) -> Unit,
+) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = contentPadding,
+    ) {
+        // ---------- Account ----------
+        item { MenuSectionHeader(stringResource(R.string.settings_section_account)) }
+        item {
+            MenuCard {
+                SettingsMenuEntry(
+                    icon = Icons.Filled.AccountCircle,
+                    title = stringResource(R.string.settings_menu_accounts_title),
+                    subtitle = stringResource(R.string.settings_menu_accounts_subtitle),
+                    onClick = onNavigateToAccounts ?: {},
+                )
+            }
+        }
+
+        // ---------- Preferences ----------
+        item { MenuSectionHeader(stringResource(R.string.settings_section_preferences)) }
+        item {
+            MenuCard {
+                SettingsMenuEntry(
+                    icon = Icons.Filled.Sync,
+                    title = stringResource(R.string.settings_menu_sync_title),
+                    subtitle = stringResource(R.string.settings_menu_sync_subtitle),
+                    onClick = { onNavigateToSection(SECTION_SYNC) },
+                )
+                HorizontalDivider(modifier = Modifier.padding(start = 56.dp))
+                SettingsMenuEntry(
+                    icon = Icons.Filled.Language,
+                    title = stringResource(R.string.settings_menu_appearance_title),
+                    subtitle = stringResource(R.string.settings_menu_appearance_subtitle),
+                    onClick = { onNavigateToSection(SECTION_APPEARANCE) },
+                )
+                HorizontalDivider(modifier = Modifier.padding(start = 56.dp))
+                SettingsMenuEntry(
+                    icon = Icons.Filled.Notifications,
+                    title = stringResource(R.string.settings_menu_notifications_title),
+                    subtitle = stringResource(R.string.settings_menu_notifications_subtitle),
+                    onClick = { onNavigateToSection(SECTION_NOTIFICATIONS) },
+                )
+                HorizontalDivider(modifier = Modifier.padding(start = 56.dp))
+                SettingsMenuEntry(
+                    icon = Icons.Filled.BatteryFull,
+                    title = stringResource(R.string.settings_menu_battery_title),
+                    subtitle = stringResource(R.string.settings_menu_battery_subtitle),
+                    onClick = { onNavigateToSection(SECTION_BATTERY) },
+                )
+            }
+        }
+
+        // ---------- Privacy & data ----------
+        item { MenuSectionHeader(stringResource(R.string.settings_section_privacy)) }
+        item {
+            MenuCard {
+                SettingsMenuEntry(
+                    icon = Icons.Filled.Security,
+                    title = stringResource(R.string.settings_menu_security_title),
+                    subtitle = stringResource(R.string.settings_menu_security_subtitle),
+                    onClick = { onNavigateToSection(SECTION_SECURITY) },
+                )
+                HorizontalDivider(modifier = Modifier.padding(start = 56.dp))
+                SettingsMenuEntry(
+                    icon = Icons.Filled.Backup,
+                    title = stringResource(R.string.settings_menu_backup_title),
+                    subtitle = stringResource(R.string.settings_menu_backup_subtitle),
+                    onClick = { onNavigateToSection(SECTION_BACKUP) },
+                )
+            }
+        }
+
+        // ---------- App ----------
+        item { MenuSectionHeader(stringResource(R.string.settings_section_app)) }
+        item {
+            MenuCard {
+                SettingsMenuEntry(
+                    icon = Icons.Filled.Info,
+                    title = stringResource(R.string.settings_menu_about_title),
+                    subtitle = stringResource(R.string.settings_menu_about_subtitle),
+                    onClick = { onNavigateToSection(SECTION_ABOUT) },
+                )
+                HorizontalDivider(modifier = Modifier.padding(start = 56.dp))
+                SettingsMenuEntry(
+                    icon = Icons.AutoMirrored.Filled.Help,
+                    title = stringResource(R.string.settings_menu_support_title),
+                    subtitle = stringResource(R.string.settings_menu_support_subtitle),
+                    onClick = { onNavigateToSection(SECTION_SUPPORT) },
+                )
+            }
+        }
+    }
+}
 
 @Composable
-private fun SectionHeader(text: String) {
+private fun MenuSectionHeader(text: String) {
     Text(
         text = text,
         style = MaterialTheme.typography.titleSmall,
@@ -376,10 +397,355 @@ private fun SectionHeader(text: String) {
         modifier =
             Modifier
                 .fillMaxWidth()
-                .padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 8.dp),
+                .padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 4.dp),
     )
-    HorizontalDivider()
 }
+
+@Composable
+private fun MenuCard(content: @Composable () -> Unit) {
+    Card(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 4.dp),
+        colors =
+            CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            ),
+    ) {
+        Column { content() }
+    }
+}
+
+@Composable
+private fun SettingsMenuEntry(
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit,
+) {
+    ListItem(
+        headlineContent = { Text(title) },
+        supportingContent = {
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        },
+        leadingContent = {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+            )
+        },
+        trailingContent = {
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        },
+        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+        modifier = Modifier.clickable(onClick = onClick),
+    )
+}
+
+// =============================================================================
+// Sub-screen content composables
+// =============================================================================
+
+@Composable
+private fun SyncSettingsContent(
+    state: SettingsViewModel.UiState,
+    viewModel: SettingsViewModel,
+    contentPadding: PaddingValues,
+    onShowConflictPolicyDialog: () -> Unit,
+) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = contentPadding,
+    ) {
+        item {
+            SwitchRow(
+                title = stringResource(R.string.settings_global_auto_sync_title),
+                body = stringResource(R.string.settings_global_auto_sync_body),
+                checked = state.globalAutoSyncEnabled,
+                onCheckedChange = viewModel::setGlobalAutoSync,
+            )
+        }
+        item {
+            ActionRow(
+                title = stringResource(R.string.settings_default_conflict_policy_title),
+                body = conflictPolicyLabel(state.defaultConflictPolicy),
+                onClick = onShowConflictPolicyDialog,
+            )
+        }
+        item {
+            ConcurrentTransfersRow(
+                value = state.maxConcurrentTransfers,
+                max = SettingsRepository.MAX_CONCURRENT_TRANSFERS,
+                onValueChange = viewModel::setMaxConcurrentTransfers,
+            )
+        }
+    }
+}
+
+@Composable
+private fun AppearanceSettingsContent(
+    state: SettingsViewModel.UiState,
+    viewModel: SettingsViewModel,
+    contentPadding: PaddingValues,
+) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = contentPadding,
+    ) {
+        item {
+            DarkModeRow(
+                selected = state.darkMode,
+                onSelected = viewModel::setDarkMode,
+            )
+        }
+        item {
+            val supported = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+            SwitchRow(
+                title = stringResource(R.string.settings_dynamic_color_title),
+                body =
+                    if (supported) {
+                        stringResource(R.string.settings_dynamic_color_body)
+                    } else {
+                        stringResource(R.string.settings_dynamic_color_unsupported)
+                    },
+                checked = state.dynamicColor && supported,
+                onCheckedChange = viewModel::setDynamicColor,
+                enabled = supported,
+            )
+        }
+        item {
+            SwitchRow(
+                title = stringResource(R.string.settings_respect_font_scale_title),
+                body = stringResource(R.string.settings_respect_font_scale_body),
+                checked = state.respectFontScale,
+                onCheckedChange = viewModel::setRespectFontScale,
+            )
+        }
+    }
+}
+
+@Composable
+private fun NotificationsSettingsContent(
+    state: SettingsViewModel.UiState,
+    viewModel: SettingsViewModel,
+    ctx: Context,
+    contentPadding: PaddingValues,
+) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = contentPadding,
+    ) {
+        item {
+            SwitchRow(
+                title = stringResource(R.string.settings_notify_success_title),
+                body = stringResource(R.string.settings_notify_success_body),
+                checked = state.notifyOnSuccess,
+                onCheckedChange = viewModel::setNotifyOnSuccess,
+            )
+        }
+        item {
+            SwitchRow(
+                title = stringResource(R.string.settings_notify_failure_title),
+                body = stringResource(R.string.settings_notify_failure_body),
+                checked = state.notifyOnFailure,
+                onCheckedChange = viewModel::setNotifyOnFailure,
+            )
+        }
+        item {
+            SwitchRow(
+                title = stringResource(R.string.settings_enable_haptics_title),
+                body = stringResource(R.string.settings_enable_haptics_body),
+                checked = state.enableHaptics,
+                onCheckedChange = viewModel::setEnableHaptics,
+            )
+        }
+        item {
+            ActionRow(
+                title = stringResource(R.string.settings_notification_channels_title),
+                body = stringResource(R.string.settings_notification_channels_body),
+                onClick = {
+                    runCatching { ctx.startActivity(viewModel.buildChannelSettingsIntent()) }
+                },
+            )
+        }
+    }
+}
+
+@Composable
+private fun BatterySettingsContent(
+    state: SettingsViewModel.UiState,
+    viewModel: SettingsViewModel,
+    contentPadding: PaddingValues,
+) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = contentPadding,
+    ) {
+        item {
+            SwitchRow(
+                title = stringResource(R.string.settings_default_wifi_only_title),
+                body = stringResource(R.string.settings_default_wifi_only_body),
+                checked = state.defaultWifiOnly,
+                onCheckedChange = viewModel::setDefaultWifiOnly,
+            )
+        }
+        item {
+            SwitchRow(
+                title = stringResource(R.string.settings_default_charging_only_title),
+                body = stringResource(R.string.settings_default_charging_only_body),
+                checked = state.defaultChargingOnly,
+                onCheckedChange = viewModel::setDefaultChargingOnly,
+            )
+        }
+    }
+}
+
+@Composable
+private fun SecuritySettingsContent(contentPadding: PaddingValues) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = contentPadding,
+    ) {
+        item {
+            Text(
+                text = stringResource(R.string.settings_security_placeholder),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(16.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun BackupSettingsContent(
+    state: SettingsViewModel.UiState,
+    viewModel: SettingsViewModel,
+    contentPadding: PaddingValues,
+) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = contentPadding,
+    ) {
+        item {
+            LogRetentionRow(
+                days = state.logRetentionDays,
+                onSelected = { viewModel.setLogRetentionDays(it.days) },
+            )
+        }
+        item {
+            ActionRow(
+                title = stringResource(R.string.settings_export_logs_title),
+                body = stringResource(R.string.settings_export_logs_body),
+                onClick = viewModel::exportLogs,
+            )
+        }
+        item {
+            ActionRow(
+                title = stringResource(R.string.settings_clear_cache_title),
+                body = stringResource(R.string.settings_clear_cache_body),
+                onClick = viewModel::clearCache,
+            )
+        }
+    }
+}
+
+@Composable
+private fun AboutSettingsContent(
+    viewModel: SettingsViewModel,
+    ctx: Context,
+    contentPadding: PaddingValues,
+    onShowOssDialog: () -> Unit,
+) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = contentPadding,
+    ) {
+        item {
+            ActionRow(
+                title = stringResource(R.string.settings_version_title),
+                body =
+                    stringResource(
+                        R.string.settings_version_format,
+                        viewModel.versionName,
+                        viewModel.versionCode,
+                    ),
+                onClick = null,
+            )
+        }
+        item {
+            ActionRow(
+                title = stringResource(R.string.settings_reset_hints_title),
+                body = stringResource(R.string.settings_reset_hints_body),
+                onClick = viewModel::resetHints,
+            )
+        }
+        item {
+            ActionRow(
+                title = stringResource(R.string.settings_privacy_policy_title),
+                body = stringResource(R.string.settings_privacy_policy_body),
+                onClick = {
+                    runCatching {
+                        ctx.startActivity(
+                            Intent(Intent.ACTION_VIEW, Uri.parse(viewModel.privacyPolicyUrl))
+                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                        )
+                    }
+                },
+            )
+        }
+        item {
+            ActionRow(
+                title = stringResource(R.string.settings_oss_licenses_title),
+                body = stringResource(R.string.settings_oss_licenses_body),
+                onClick = onShowOssDialog,
+            )
+        }
+    }
+}
+
+@Composable
+private fun SupportSettingsContent(
+    viewModel: SettingsViewModel,
+    ctx: Context,
+    contentPadding: PaddingValues,
+) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = contentPadding,
+    ) {
+        item {
+            val feedbackBody =
+                if (viewModel.feedbackEmailConfig.isConfigured) {
+                    stringResource(R.string.settings_send_feedback_body)
+                } else {
+                    stringResource(
+                        R.string.settings_send_feedback_body_unset,
+                        viewModel.feedbackEmailConfig.address,
+                    )
+                }
+            ActionRow(
+                title = stringResource(R.string.settings_send_feedback_title),
+                body = feedbackBody,
+                onClick = viewModel::sendFeedback,
+            )
+        }
+    }
+}
+
+// =============================================================================
+// Reusable row primitives (used by sub-screens)
+// =============================================================================
 
 @Composable
 private fun SwitchRow(
@@ -505,8 +871,8 @@ private fun ConcurrentTransfersRow(value: Int, max: Int, onValueChange: (Int) ->
             valueRange = 1f..max.toFloat(),
             steps = max - 2,
         )
-        }
     }
+}
 
 @Composable
 private fun LogRetentionRow(

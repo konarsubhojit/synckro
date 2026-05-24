@@ -10,12 +10,12 @@ import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
 import androidx.core.app.NotificationCompat
-import dagger.hilt.android.qualifiers.ApplicationContext
 import com.synckro.MainActivity
 import com.synckro.R
 import com.synckro.data.repository.SettingsRepository
 import com.synckro.data.worker.SyncWorker
 import com.synckro.domain.model.SyncPair
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.first
 import timber.log.Timber
 import javax.inject.Inject

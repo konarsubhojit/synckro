@@ -50,7 +50,6 @@ import kotlin.math.absoluteValue
  * which navigates the Compose NavHost directly to the Accounts screen.
  */
 object ReauthNotificationHelper {
-
     /**
      * Intent action placed on the [MainActivity] launch intent by this helper.
      * [MainActivity] forwards this to [com.synckro.util.navigation.AppNavigationDispatcher]

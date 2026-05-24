@@ -181,11 +181,12 @@ private fun AccountProviderCard(
     highlightedAccountId: String? = null,
 ) {
     val needsReauth = row.needsReauth
-    val cardColor = if (needsReauth) {
-        MaterialTheme.colorScheme.errorContainer
-    } else {
-        MaterialTheme.colorScheme.surfaceVariant
-    }
+    val cardColor =
+        if (needsReauth) {
+            MaterialTheme.colorScheme.errorContainer
+        } else {
+            MaterialTheme.colorScheme.surfaceVariant
+        }
     SectionCard(
         modifier = Modifier.fillMaxWidth(),
         containerColor = cardColor,

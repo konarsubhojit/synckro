@@ -112,7 +112,8 @@ class SettingsViewModelTest {
                 assertEquals(30, it.logRetentionDays)
             }
             // Reference s so the linter doesn't complain.
-            @Suppress("UNUSED_EXPRESSION") s
+            @Suppress("UNUSED_EXPRESSION")
+            s
         }
 
     @Test

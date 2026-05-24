@@ -32,24 +32,21 @@ class OneDriveRemoteEnumerator
     constructor(
         private val providerFactory: OneDriveProviderFactory,
         private val graphClient: OneDriveGraphClient,
-    ) : RemoteEnumerator, AccountAwareRemoteEnumerator {
+    ) : RemoteEnumerator,
+        AccountAwareRemoteEnumerator {
         /**
          * Account-unaware entrypoint is unsupported for OneDrive after
          * multi-account migration; callers must use
          * [enumerateForAccount] via [AccountAwareRemoteEnumerator].
          */
-        override suspend fun enumerate(deltaToken: String?, rootFolderId: String): RemoteSnapshot {
-            throw CloudProviderException.AuthenticationRequired("OneDrive enumerate requires an account id.")
-        }
+        override suspend fun enumerate(deltaToken: String?, rootFolderId: String): RemoteSnapshot = throw CloudProviderException.AuthenticationRequired("OneDrive enumerate requires an account id.")
 
         /**
          * Account-unaware entrypoint is unsupported for OneDrive after
          * multi-account migration; callers must use
          * [enumerateFullForAccount] via [AccountAwareRemoteEnumerator].
          */
-        override suspend fun enumerateFull(rootFolderId: String): RemoteSnapshot {
-            throw CloudProviderException.AuthenticationRequired("OneDrive enumerateFull requires an account id.")
-        }
+        override suspend fun enumerateFull(rootFolderId: String): RemoteSnapshot = throw CloudProviderException.AuthenticationRequired("OneDrive enumerateFull requires an account id.")
 
         override suspend fun enumerateForAccount(
             accountId: String,
@@ -117,8 +114,8 @@ class OneDriveRemoteEnumerator
         internal suspend fun enumerateAllWithToken(
             token: String,
             rootFolderId: String,
-        ): RemoteSnapshot {
-            return try {
+        ): RemoteSnapshot =
+            try {
                 val (items, nextDeltaLink) = graphClient.listAll(token, rootFolderId)
                 // Filter out the root folder itself (included by the delta endpoint) and folder items;
                 // only files are relevant for the sync diff.
@@ -135,7 +132,6 @@ class OneDriveRemoteEnumerator
                     else -> throw e
                 }
             }
-        }
 
         private fun providerFor(accountId: String): OneDriveProvider {
             val provider = providerFactory.providerFor(accountId)

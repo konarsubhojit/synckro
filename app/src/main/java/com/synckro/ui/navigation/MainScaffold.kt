@@ -160,7 +160,7 @@ fun MainScaffold(
     val showLogsExportTooltip =
         selected == MainDestination.Logs &&
             state.hasCompletedSyncRun &&
-            CoachTooltipIds.LogsExport !in state.seenTooltips
+            CoachTooltipIds.LOGS_EXPORT !in state.seenTooltips
 
     val primaryDestinations =
         remember {
@@ -194,9 +194,9 @@ fun MainScaffold(
                                 // first time the user discovers the menu so we don't
                                 // re-show stale guidance.
                                 if (pendingConflictCount > 0 &&
-                                    CoachTooltipIds.ConflictsTab !in state.seenTooltips
+                                    CoachTooltipIds.CONFLICTS_TAB !in state.seenTooltips
                                 ) {
-                                    homeViewModel.markTooltipSeen(CoachTooltipIds.ConflictsTab)
+                                    homeViewModel.markTooltipSeen(CoachTooltipIds.CONFLICTS_TAB)
                                 }
                             },
                         ) {
@@ -291,7 +291,7 @@ fun MainScaffold(
                                 onRequestedPairIdHandled = { currentLogsPairId = null },
                                 showExportCoachTooltip = showLogsExportTooltip,
                                 onExportCoachTooltipShown = {
-                                    homeViewModel.markTooltipSeen(CoachTooltipIds.LogsExport)
+                                    homeViewModel.markTooltipSeen(CoachTooltipIds.LOGS_EXPORT)
                                 },
                             )
                         MainDestination.Accounts ->
@@ -304,6 +304,7 @@ fun MainScaffold(
                         MainDestination.Settings ->
                             SettingsScreen(
                                 onBack = null,
+                                onNavigateToAccounts = { selected = MainDestination.Accounts },
                             )
                     }
                 }

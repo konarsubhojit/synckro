@@ -39,7 +39,7 @@ class OneDriveMultiAccountStartupProbe
             syncEventRepository.log(
                 pairId = null,
                 level = SyncEventLevel.ERROR,
-                tag = SyncEventTag.Auth,
+                tag = SyncEventTag.AUTH,
                 message =
                     "OneDrive MSAL cache compatibility probe failed after multi-account migration: " +
                         (error.message ?: error.javaClass.simpleName),

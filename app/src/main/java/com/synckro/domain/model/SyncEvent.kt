@@ -10,15 +10,15 @@ enum class SyncEventLevel { DEBUG, INFO, WARN, ERROR }
  * and ensures that searches in exported CSVs are stable across refactors.
  */
 object SyncEventTag {
-    const val Auth = "Auth"
-    const val Account = "Account"
-    const val PairEditor = "PairEditor"
-    const val Scheduler = "Scheduler"
-    const val SyncWorker = "SyncWorker"
-    const val RemoteEnum = "RemoteEnum"
-    const val OpApplier = "OpApplier"
+    const val AUTH = "Auth"
+    const val ACCOUNT = "Account"
+    const val PAIR_EDITOR = "PairEditor"
+    const val SCHEDULER = "Scheduler"
+    const val SYNC_WORKER = "SyncWorker"
+    const val REMOTE_ENUM = "RemoteEnum"
+    const val OP_APPLIER = "OpApplier"
     const val UI = "UI"
-    const val Export = "Export"
+    const val EXPORT = "Export"
 }
 
 /**

@@ -3,8 +3,8 @@ package com.synckro.data.worker
 import androidx.work.Data
 import androidx.work.workDataOf
 import com.synckro.domain.sync.ActiveTransfer
-import com.synckro.domain.sync.TransferProgress
 import com.synckro.domain.sync.TransferDirection
+import com.synckro.domain.sync.TransferProgress
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test

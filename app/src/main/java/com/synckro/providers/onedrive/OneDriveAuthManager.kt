@@ -9,8 +9,8 @@ import com.microsoft.identity.client.AcquireTokenSilentParameters
 import com.microsoft.identity.client.AuthenticationCallback
 import com.microsoft.identity.client.IAccount
 import com.microsoft.identity.client.IAuthenticationResult
-import com.microsoft.identity.client.IPublicClientApplication
 import com.microsoft.identity.client.IMultipleAccountPublicClientApplication
+import com.microsoft.identity.client.IPublicClientApplication
 import com.microsoft.identity.client.PublicClientApplication
 import com.microsoft.identity.client.SilentAuthenticationCallback
 import com.microsoft.identity.client.exception.MsalClientException
@@ -27,11 +27,11 @@ import com.synckro.domain.model.CloudProviderType
 import com.synckro.ui.auth.ActivityAuthUiHost
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.suspendCancellableCoroutine
+import org.json.JSONObject
 import timber.log.Timber
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.coroutines.resume
-import org.json.JSONObject
 
 /**
  * OneDrive [AuthManager] backed by MSAL (Microsoft Authentication Library).
@@ -52,7 +52,8 @@ class OneDriveAuthManager private constructor(
     private val clientId: String,
     private val redirectUri: String,
     private val prefsOverride: SharedPreferences? = null,
-) : AuthManager, OneDriveCacheCompatibilityChecker {
+) : AuthManager,
+    OneDriveCacheCompatibilityChecker {
     /** Hilt-injected constructor (production path). */
     @Inject
     constructor(
@@ -86,8 +87,8 @@ class OneDriveAuthManager private constructor(
     }
 
     @Suppress("DEPRECATION")
-    private fun createEncryptedPrefs(): SharedPreferences? {
-        return try {
+    private fun createEncryptedPrefs(): SharedPreferences? =
+        try {
             val masterKey =
                 MasterKey.Builder(context)
                     .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
@@ -103,7 +104,6 @@ class OneDriveAuthManager private constructor(
             Timber.e(e, "OneDriveAuthManager: failed to create EncryptedSharedPreferences")
             null
         }
-    }
 
     /** Stores [email] for [accountId], or clears it when [email] is null. */
     internal fun setAccountHint(

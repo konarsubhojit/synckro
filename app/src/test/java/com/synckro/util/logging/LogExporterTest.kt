@@ -33,10 +33,11 @@ class LogExporterTest {
 
     @Test
     fun `buildCsvBytes writes one data row per event`() {
-        val events = listOf(
-            event(id = 1, message = "hello"),
-            event(id = 2, message = "world"),
-        )
+        val events =
+            listOf(
+                event(id = 1, message = "hello"),
+                event(id = 2, message = "world"),
+            )
         val csv = LogExporter.buildCsvBytes(events).toString(Charsets.UTF_8)
         val lines = csv.trim().lines()
         // Header + 2 data rows.
@@ -152,12 +153,13 @@ class LogExporterTest {
         val backup2 = logDir.resolve("synckro-debug.log.2").also { it.writeText("backup2") }
         val outputDir = tmpFolder.newFolder("output")
 
-        val zipFile = LogExporter.buildExportZip(
-            events = emptyList(),
-            logFiles = listOf(primary, backup1, backup2),
-            outputDir = outputDir,
-            timestamp = "20240101-120000",
-        )
+        val zipFile =
+            LogExporter.buildExportZip(
+                events = emptyList(),
+                logFiles = listOf(primary, backup1, backup2),
+                outputDir = outputDir,
+                timestamp = "20240101-120000",
+            )
 
         ZipFile(zipFile).use { zip ->
             val entries = zip.entries().toList().map { it.name }
@@ -236,18 +238,21 @@ class LogExporterTest {
         val original = com.synckro.util.logging.LogVisibilityConfig.minVisibleLevel
         try {
             com.synckro.util.logging.LogVisibilityConfig.minVisibleLevel = SyncEventLevel.INFO
-            val events = listOf(
-                event(id = 1).copy(level = SyncEventLevel.DEBUG),
-                event(id = 2).copy(level = SyncEventLevel.INFO),
-                event(id = 3).copy(level = SyncEventLevel.WARN),
-                event(id = 4).copy(level = SyncEventLevel.ERROR),
-            )
+            val events =
+                listOf(
+                    event(id = 1).copy(level = SyncEventLevel.DEBUG),
+                    event(id = 2).copy(level = SyncEventLevel.INFO),
+                    event(id = 3).copy(level = SyncEventLevel.WARN),
+                    event(id = 4).copy(level = SyncEventLevel.ERROR),
+                )
 
             val filtered = LogExporter.filterVisibleForExport(events)
 
             assertEquals(listOf(2L, 3L, 4L), filtered.map { it.id })
-            assertTrue("DEBUG entries must not appear in release-build exports",
-                filtered.none { it.level == SyncEventLevel.DEBUG })
+            assertTrue(
+                "DEBUG entries must not appear in release-build exports",
+                filtered.none { it.level == SyncEventLevel.DEBUG },
+            )
         } finally {
             com.synckro.util.logging.LogVisibilityConfig.minVisibleLevel = original
         }
@@ -258,10 +263,11 @@ class LogExporterTest {
         val original = com.synckro.util.logging.LogVisibilityConfig.minVisibleLevel
         try {
             com.synckro.util.logging.LogVisibilityConfig.minVisibleLevel = SyncEventLevel.DEBUG
-            val events = listOf(
-                event(id = 1).copy(level = SyncEventLevel.DEBUG),
-                event(id = 2).copy(level = SyncEventLevel.INFO),
-            )
+            val events =
+                listOf(
+                    event(id = 1).copy(level = SyncEventLevel.DEBUG),
+                    event(id = 2).copy(level = SyncEventLevel.INFO),
+                )
 
             val filtered = LogExporter.filterVisibleForExport(events)
 

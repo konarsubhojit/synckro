@@ -148,11 +148,12 @@ class AccountsViewModel
                                         accounts =
                                             row.accounts.map { item ->
                                                 item.copy(
-                                                    needsReauth = providerType != null &&
-                                                        AccountKey(
-                                                            provider = providerType,
-                                                            accountId = item.account.id,
-                                                        ) in accountsNeedingReauth,
+                                                    needsReauth =
+                                                        providerType != null &&
+                                                            AccountKey(
+                                                                provider = providerType,
+                                                                accountId = item.account.id,
+                                                            ) in accountsNeedingReauth,
                                                 )
                                             },
                                     )
@@ -177,10 +178,11 @@ class AccountsViewModel
                             providerAccounts.map { account ->
                                 AccountItem(
                                     account = account,
-                                    needsReauth = AccountKey(
-                                        provider = manager.providerType,
-                                        accountId = account.id,
-                                    ) in accountsNeedingReauth,
+                                    needsReauth =
+                                        AccountKey(
+                                            provider = manager.providerType,
+                                            accountId = account.id,
+                                        ) in accountsNeedingReauth,
                                 )
                             }
                         AccountRow(
@@ -216,15 +218,16 @@ class AccountsViewModel
             clearHighlightJob = null
             _state.update { it.copy(highlightedAccountId = accountId) }
             if (accountId != null) {
-                clearHighlightJob = viewModelScope.launch {
-                    kotlinx.coroutines.delay(HIGHLIGHT_DURATION_MS)
-                    _state.update {
-                        // Only clear if the same id is still highlighted — guards against
-                        // races where the user manually triggered a new highlight.
-                        if (it.highlightedAccountId == accountId) it.copy(highlightedAccountId = null) else it
+                clearHighlightJob =
+                    viewModelScope.launch {
+                        kotlinx.coroutines.delay(HIGHLIGHT_DURATION_MS)
+                        _state.update {
+                            // Only clear if the same id is still highlighted — guards against
+                            // races where the user manually triggered a new highlight.
+                            if (it.highlightedAccountId == accountId) it.copy(highlightedAccountId = null) else it
+                        }
+                        clearHighlightJob = null
                     }
-                    clearHighlightJob = null
-                }
             }
         }
 
@@ -256,7 +259,7 @@ class AccountsViewModel
                     syncEventRepository.log(
                         pairId = null,
                         level = SyncEventLevel.DEBUG,
-                        tag = SyncEventTag.Account,
+                        tag = SyncEventTag.ACCOUNT,
                         message = "Reconcile ${manager.displayName}: ${cachedAccounts.size} account(s)",
                     )
                 }
@@ -267,7 +270,7 @@ class AccountsViewModel
                 syncEventRepository.log(
                     pairId = null,
                     level = SyncEventLevel.WARN,
-                    tag = SyncEventTag.Account,
+                    tag = SyncEventTag.ACCOUNT,
                     message = "Reconcile ${manager.displayName} failed: ${t.message}",
                 )
                 userMessages.reportError(
@@ -307,7 +310,7 @@ class AccountsViewModel
                 syncEventRepository.log(
                     pairId = null,
                     level = SyncEventLevel.INFO,
-                    tag = SyncEventTag.Auth,
+                    tag = SyncEventTag.AUTH,
                     message = "signIn ${manager.displayName}: started",
                 )
                 val result =
@@ -319,7 +322,7 @@ class AccountsViewModel
                         syncEventRepository.log(
                             pairId = null,
                             level = SyncEventLevel.ERROR,
-                            tag = SyncEventTag.Auth,
+                            tag = SyncEventTag.AUTH,
                             message = "signIn ${manager.displayName}: error — ${t.message}",
                         )
                         userMessages.reportError(
@@ -347,15 +350,16 @@ class AccountsViewModel
          */
         fun disconnect(account: Account) {
             viewModelScope.launch {
-                val orphans = runCatching { syncPairRepository.getByAccountId(account.id) }
-                    .getOrElse { t ->
-                        if (t is CancellationException) throw t
-                        Timber.w(t, "AccountsViewModel.disconnect: failed to query pairs for ${account.id}")
-                        // If we can't read the pair list, fall through to the no-confirmation
-                        // path — disconnect is still a user-initiated action and we shouldn't
-                        // refuse it just because the orphan check failed.
-                        emptyList()
-                    }
+                val orphans =
+                    runCatching { syncPairRepository.getByAccountId(account.id) }
+                        .getOrElse { t ->
+                            if (t is CancellationException) throw t
+                            Timber.w(t, "AccountsViewModel.disconnect: failed to query pairs for ${account.id}")
+                            // If we can't read the pair list, fall through to the no-confirmation
+                            // path — disconnect is still a user-initiated action and we shouldn't
+                            // refuse it just because the orphan check failed.
+                            emptyList()
+                        }
                 if (orphans.isEmpty()) {
                     performDisconnect(account)
                     return@launch
@@ -363,17 +367,19 @@ class AccountsViewModel
                 val manager = registry.find(account.provider)
                 val providerDisplayName = manager?.displayName ?: account.provider.name
                 // Other accounts on the same provider that the user can re-bind orphan pairs to.
-                val reassignable = accountRepository
-                    .getByProvider(account.provider)
-                    .filter { it.id != account.id }
+                val reassignable =
+                    accountRepository
+                        .getByProvider(account.provider)
+                        .filter { it.id != account.id }
                 _state.update { cur ->
                     cur.copy(
-                        pendingDisconnect = PendingDisconnect(
-                            account = account,
-                            providerDisplayName = providerDisplayName,
-                            orphanedPairs = orphans,
-                            reassignableAccounts = reassignable,
-                        ),
+                        pendingDisconnect =
+                            PendingDisconnect(
+                                account = account,
+                                providerDisplayName = providerDisplayName,
+                                orphanedPairs = orphans,
+                                reassignableAccounts = reassignable,
+                            ),
                     )
                 }
             }
@@ -404,7 +410,7 @@ class AccountsViewModel
                 syncEventRepository.log(
                     pairId = null,
                     level = SyncEventLevel.INFO,
-                    tag = SyncEventTag.Account,
+                    tag = SyncEventTag.ACCOUNT,
                     message =
                         "Disconnect ${pending.providerDisplayName} (${pending.account.email ?: pending.account.id}): " +
                             "deleted ${pending.orphanedPairs.size} orphan pair(s)",
@@ -437,7 +443,7 @@ class AccountsViewModel
                 syncEventRepository.log(
                     pairId = null,
                     level = SyncEventLevel.INFO,
-                    tag = SyncEventTag.Account,
+                    tag = SyncEventTag.ACCOUNT,
                     message =
                         "Disconnect ${pending.providerDisplayName}: reassigned ${pending.orphanedPairs.size} pair(s) " +
                             "to $toAccountId",
@@ -470,7 +476,7 @@ class AccountsViewModel
                 syncEventRepository.log(
                     pairId = null,
                     level = SyncEventLevel.INFO,
-                    tag = SyncEventTag.Auth,
+                    tag = SyncEventTag.AUTH,
                     message = "signOut ${manager.displayName} (${account.email ?: account.id}): started",
                 )
                 when (val r = manager.signOut(account)) {
@@ -480,7 +486,7 @@ class AccountsViewModel
                         syncEventRepository.log(
                             pairId = null,
                             level = SyncEventLevel.INFO,
-                            tag = SyncEventTag.Auth,
+                            tag = SyncEventTag.AUTH,
                             message = "signOut ${manager.displayName} (${account.email ?: account.id}): success",
                         )
                         userMessages.report(
@@ -497,7 +503,7 @@ class AccountsViewModel
                         syncEventRepository.log(
                             pairId = null,
                             level = SyncEventLevel.ERROR,
-                            tag = SyncEventTag.Auth,
+                            tag = SyncEventTag.AUTH,
                             message = "signOut ${manager.displayName}: error — ${r.message}",
                         )
                         userMessages.reportError(
@@ -515,7 +521,7 @@ class AccountsViewModel
                         syncEventRepository.log(
                             pairId = null,
                             level = SyncEventLevel.WARN,
-                            tag = SyncEventTag.Auth,
+                            tag = SyncEventTag.AUTH,
                             message = "signOut ${manager.displayName}: unexpected result $r",
                         )
                         userMessages.reportError(
@@ -547,7 +553,7 @@ class AccountsViewModel
                     syncEventRepository.log(
                         pairId = null,
                         level = SyncEventLevel.INFO,
-                        tag = SyncEventTag.Auth,
+                        tag = SyncEventTag.AUTH,
                         message = "signIn ${manager.displayName} (${result.value.email ?: result.value.id}): success",
                     )
                     userMessages.report(
@@ -565,7 +571,7 @@ class AccountsViewModel
                     syncEventRepository.log(
                         pairId = null,
                         level = SyncEventLevel.INFO,
-                        tag = SyncEventTag.Auth,
+                        tag = SyncEventTag.AUTH,
                         message = "signIn ${manager.displayName}: cancelled",
                     )
                     userMessages.report(
@@ -579,7 +585,7 @@ class AccountsViewModel
                     syncEventRepository.log(
                         pairId = null,
                         level = SyncEventLevel.WARN,
-                        tag = SyncEventTag.Auth,
+                        tag = SyncEventTag.AUTH,
                         message = "signIn ${manager.displayName}: needs interactive sign-in",
                     )
                     userMessages.report(
@@ -593,7 +599,7 @@ class AccountsViewModel
                     syncEventRepository.log(
                         pairId = null,
                         level = SyncEventLevel.WARN,
-                        tag = SyncEventTag.Auth,
+                        tag = SyncEventTag.AUTH,
                         message = "signIn ${manager.displayName}: not configured — ${result.message}",
                     )
                     userMessages.reportError(
@@ -608,7 +614,7 @@ class AccountsViewModel
                     syncEventRepository.log(
                         pairId = null,
                         level = SyncEventLevel.ERROR,
-                        tag = SyncEventTag.Auth,
+                        tag = SyncEventTag.AUTH,
                         message = "signIn ${manager.displayName}: error — ${result.message}",
                     )
                     userMessages.reportError(

@@ -389,8 +389,9 @@ class SyncSchedulerTest {
 
     @Test
     fun `estimateNextRunAtMs returns lastSync + interval for a healthy pair`() {
-        val p = pair(id = 30L, autoSyncEnabled = true)
-            .copy(lastSyncAtMs = 1_000L, scheduleIntervalMinutes = 60L)
+        val p =
+            pair(id = 30L, autoSyncEnabled = true)
+                .copy(lastSyncAtMs = 1_000L, scheduleIntervalMinutes = 60L)
         val next = SyncScheduler.estimateNextRunAtMs(pair = p, nowMs = 5_000L, globalAutoSyncEnabled = true)
         assertEquals(1_000L + 60L * 60_000L, next)
     }

@@ -95,22 +95,24 @@ fun ConflictResolutionPane(
                         style = MaterialTheme.typography.bodySmall,
                     )
                     Text(
-                        text = stringResource(
-                            R.string.conflict_inbox_file_size_value,
-                            conflict.localSizeBytes?.let { Formatter.formatShortFileSize(ctx, it) }
-                                ?: stringResource(R.string.conflict_inbox_unknown_value),
-                        ),
+                        text =
+                            stringResource(
+                                R.string.conflict_inbox_file_size_value,
+                                conflict.localSizeBytes?.let { Formatter.formatShortFileSize(ctx, it) }
+                                    ?: stringResource(R.string.conflict_inbox_unknown_value),
+                            ),
                         style = MaterialTheme.typography.bodySmall,
                     )
                     Text(
-                        text = stringResource(
-                            R.string.conflict_inbox_file_modified_value,
-                            DateUtils.getRelativeTimeSpanString(
-                                conflict.localLastModifiedMs,
-                                System.currentTimeMillis(),
-                                DateUtils.MINUTE_IN_MILLIS,
+                        text =
+                            stringResource(
+                                R.string.conflict_inbox_file_modified_value,
+                                DateUtils.getRelativeTimeSpanString(
+                                    conflict.localLastModifiedMs,
+                                    System.currentTimeMillis(),
+                                    DateUtils.MINUTE_IN_MILLIS,
+                                ),
                             ),
-                        ),
                         style = MaterialTheme.typography.bodySmall,
                     )
                 }
@@ -133,29 +135,32 @@ fun ConflictResolutionPane(
                         style = MaterialTheme.typography.bodySmall,
                     )
                     Text(
-                        text = stringResource(
-                            R.string.conflict_inbox_file_size_value,
-                            conflict.remoteSizeBytes?.let { Formatter.formatShortFileSize(ctx, it) }
-                                ?: stringResource(R.string.conflict_inbox_unknown_value),
-                        ),
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                    Text(
-                        text = stringResource(
-                            R.string.conflict_inbox_file_modified_value,
-                            DateUtils.getRelativeTimeSpanString(
-                                conflict.remoteLastModifiedMs,
-                                System.currentTimeMillis(),
-                                DateUtils.MINUTE_IN_MILLIS,
+                        text =
+                            stringResource(
+                                R.string.conflict_inbox_file_size_value,
+                                conflict.remoteSizeBytes?.let { Formatter.formatShortFileSize(ctx, it) }
+                                    ?: stringResource(R.string.conflict_inbox_unknown_value),
                             ),
-                        ),
                         style = MaterialTheme.typography.bodySmall,
                     )
                     Text(
-                        text = stringResource(
-                            R.string.conflict_inbox_remote_account_value,
-                            conflict.remoteAccountEmail ?: stringResource(R.string.conflict_inbox_unknown_value),
-                        ),
+                        text =
+                            stringResource(
+                                R.string.conflict_inbox_file_modified_value,
+                                DateUtils.getRelativeTimeSpanString(
+                                    conflict.remoteLastModifiedMs,
+                                    System.currentTimeMillis(),
+                                    DateUtils.MINUTE_IN_MILLIS,
+                                ),
+                            ),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Text(
+                        text =
+                            stringResource(
+                                R.string.conflict_inbox_remote_account_value,
+                                conflict.remoteAccountEmail ?: stringResource(R.string.conflict_inbox_unknown_value),
+                            ),
                         style = MaterialTheme.typography.bodySmall,
                     )
                 }
@@ -173,10 +178,11 @@ fun ConflictResolutionPane(
                     shape = MaterialTheme.shapes.small,
                 ) {
                     Text(
-                        text = stringResource(
-                            R.string.conflict_inbox_pending_resolution,
-                            resolutionLabel(conflict.resolution),
-                        ),
+                        text =
+                            stringResource(
+                                R.string.conflict_inbox_pending_resolution,
+                                resolutionLabel(conflict.resolution),
+                            ),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onPrimaryContainer,
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),

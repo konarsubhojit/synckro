@@ -40,7 +40,9 @@ import javax.inject.Inject
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     @Inject lateinit var userMessages: UserMessageReporter
+
     @Inject lateinit var appNavigationDispatcher: AppNavigationDispatcher
+
     @Inject lateinit var settingsRepository: SettingsRepository
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -93,9 +95,10 @@ class MainActivity : ComponentActivity() {
                         snackbarHost = {
                             SnackbarHost(
                                 hostState = snackbarHostState,
-                                modifier = Modifier.semantics {
-                                    liveRegion = LiveRegionMode.Polite
-                                },
+                                modifier =
+                                    Modifier.semantics {
+                                        liveRegion = LiveRegionMode.Polite
+                                    },
                             ) { data ->
                                 // Using the default snackbar with Material3 theming;
                                 // colors are driven by the explicit dark/light scheme.
