@@ -566,7 +566,7 @@ private fun SyncHistoryRowDetails(
         modifier =
             Modifier
                 .fillMaxWidth()
-                .padding(start = 56.dp, end = 12.dp, bottom = 12.dp),
+                .padding(start = DETAIL_LABEL_WIDTH + 12.dp, end = 12.dp, bottom = 12.dp),
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
         DetailLine(
@@ -592,6 +592,13 @@ private fun SyncHistoryRowDetails(
     }
 }
 
+/**
+ * Width of the label column in [DetailLine]. Kept as a named constant so the
+ * start indent of [SyncHistoryRowDetails] stays in lock-step with the label
+ * column when one of them is tuned.
+ */
+private val DETAIL_LABEL_WIDTH = 56.dp
+
 @Composable
 private fun DetailLine(
     label: String,
@@ -604,7 +611,7 @@ private fun DetailLine(
             text = label,
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.width(56.dp),
+            modifier = Modifier.width(DETAIL_LABEL_WIDTH),
         )
         Text(
             text = value,
@@ -635,6 +642,11 @@ private fun levelIcon(level: SyncEventLevel): ImageVector =
  * Short, human-friendly relative timestamp ("2 min ago", "yesterday", "Mar 5", …)
  * used for the right-aligned time column in the sync-history list. Falls back
  * to a numeric date when the event is older than ~a week.
+ *
+ * Future timestamps (negative delta — e.g. caused by a clock skew between the
+ * device and the sync provider) are clamped to "just now" so the UI never
+ * displays a confusing "in 3 minutes" line for an event that has already been
+ * recorded.
  */
 internal fun relativeTimestamp(timestampMs: Long, now: Long = System.currentTimeMillis()): String {
     val delta = now - timestampMs
