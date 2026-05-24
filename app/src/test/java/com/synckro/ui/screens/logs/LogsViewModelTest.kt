@@ -79,7 +79,10 @@ class LogsViewModelTest {
             pairId = null,
             timestampMs = id,
             level = level,
-            tag = "T",
+            // Use a user-facing tag so the Sync history whitelist (see
+            // [LogVisibilityConfig.isUserFacing]) does not strip the row before
+            // the per-test filters under exercise even run.
+            tag = "SyncWorker",
             message = "msg-$id",
         )
 
@@ -279,5 +282,30 @@ class LogsViewModelTest {
                 LogExportConfig(redactPaths = false, redactAccountIds = true),
                 vm.exportConfig.value,
             )
+        }
+
+    @Test
+    fun `sync history hides non-user-facing tags below WARN level`() =
+        runTest(dispatcher) {
+            LogVisibilityConfig.minVisibleLevel = SyncEventLevel.INFO
+            eventsFlow.value =
+                listOf(
+                    // SyncWorker INFO — user-facing autosync/manual sync events.
+                    event(1, SyncEventLevel.INFO),
+                    // Infra INFO — should be hidden from the history tab.
+                    event(2, SyncEventLevel.INFO).copy(tag = "Account"),
+                    event(3, SyncEventLevel.INFO).copy(tag = "PairEditor"),
+                    event(4, SyncEventLevel.INFO).copy(tag = "Scheduler"),
+                    // SyncOpApplier INFO — per-file user-facing message.
+                    event(5, SyncEventLevel.INFO).copy(tag = "SyncOpApplier"),
+                    // Any WARN or ERROR is always surfaced regardless of tag.
+                    event(6, SyncEventLevel.WARN).copy(tag = "Scheduler"),
+                    event(7, SyncEventLevel.ERROR).copy(tag = "PairEditor"),
+                )
+            val vm = newViewModel()
+            backgroundScope.launch { vm.state.collect {} }
+
+            advanceUntilIdle()
+            assertEquals(listOf(1L, 5L, 6L, 7L), vm.state.value.events.map { it.id })
         }
 }

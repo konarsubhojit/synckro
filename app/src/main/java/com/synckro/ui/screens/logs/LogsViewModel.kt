@@ -199,6 +199,12 @@ class LogsViewModel
             // even an explicit DEBUG selection (which shouldn't be reachable from
             // the UI in release) cannot surface DEBUG rows.
             if (!LogVisibilityConfig.isVisible(e.level)) return false
+            // Sync history is intentionally focused on user-facing sync activity
+            // (autosync / manual sync start / completed, per-file upload /
+            // download with success or failure, and any sync errors). Other
+            // system / infra tags are still persisted and included in the
+            // feedback-email export — they are just not surfaced here.
+            if (!LogVisibilityConfig.isUserFacing(e.level, e.tag)) return false
             if (f.level != null && e.level != f.level) return false
             if (f.tag != null && e.tag != f.tag) return false
             if (f.timeWindow != null) {
