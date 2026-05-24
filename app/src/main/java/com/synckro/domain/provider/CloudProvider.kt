@@ -3,6 +3,17 @@ package com.synckro.domain.provider
 import java.io.InputStream
 
 /**
+ * Storage quota reported by a cloud provider. Both fields are in bytes.
+ *
+ * @param usedBytes Bytes currently consumed by the account.
+ * @param totalBytes Total storage capacity of the account.
+ */
+data class StorageQuota(
+    val usedBytes: Long,
+    val totalBytes: Long,
+)
+
+/**
  * Provider-agnostic view of a remote file or folder. Fields that are not
  * available on a given provider should be left null rather than faked.
  */
@@ -149,4 +160,16 @@ interface CloudProvider {
      * @return A ChangesPage containing the list of changes, a token for the next page, and a flag indicating whether more pages exist.
      */
     suspend fun changesSince(token: String?): ChangesPage
+
+    /**
+     * Fetches the storage quota for the authenticated account.
+     *
+     * Returns `null` when quota information is not available (e.g. the provider
+     * does not support quota queries, authentication has not been established,
+     * or the network request fails).
+     *
+     * Implementations are encouraged to call [ensureAuthenticated] before
+     * making the quota request.
+     */
+    suspend fun getStorageQuota(): StorageQuota? = null
 }

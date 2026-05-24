@@ -18,11 +18,15 @@ import com.synckro.domain.model.CloudProviderType
 import com.synckro.domain.model.SyncEventLevel
 import com.synckro.domain.model.SyncEventTag
 import com.synckro.domain.model.SyncPair
+import com.synckro.domain.provider.CloudProviderFactory
+import com.synckro.domain.provider.StorageQuota
 import com.synckro.util.error.UserMessage
 import com.synckro.util.error.UserMessageReporter
 import com.synckro.util.notification.ReauthNotificationHelper
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -56,14 +60,17 @@ class AccountsViewModel
         private val syncScheduler: SyncScheduler,
         private val userMessages: UserMessageReporter,
         private val syncEventRepository: SyncEventRepository,
+        private val providerFactories: Map<CloudProviderType, @JvmSuppressWildcards CloudProviderFactory> = emptyMap(),
     ) : ViewModel() {
         /**
          * A single connected account, augmented with a flag that indicates
-         * whether this specific account needs re-authentication.
+         * whether this specific account needs re-authentication, and the
+         * optional storage quota fetched from the cloud provider.
          */
         data class AccountItem(
             val account: Account,
             val needsReauth: Boolean = false,
+            val storageQuota: StorageQuota? = null,
         )
 
         data class AccountRow(
@@ -81,6 +88,14 @@ class AccountsViewModel
              * and the periodic worker isn't silently looping in the background.
              */
             val needsReauth: Boolean = false,
+        )
+
+        /**
+         * The account (if any) currently being renamed. The UI shows a dialog
+         * with a text field pre-filled with [account.displayName].
+         */
+        data class PendingRename(
+            val account: Account,
         )
 
         /**
@@ -108,6 +123,11 @@ class AccountsViewModel
              * confirmation (i.e. the account currently owns one or more sync pairs).
              */
             val pendingDisconnect: PendingDisconnect? = null,
+            /**
+             * Set when the user taps "Rename" from an account card's overflow menu.
+             * The UI shows a dialog with a text field pre-filled with the current name.
+             */
+            val pendingRename: PendingRename? = null,
             /**
              * Phase 5d: the account id (if any) that should be visually highlighted
              * and brought into view after a deep-link from the pair card or the
@@ -203,6 +223,57 @@ class AccountsViewModel
                         highlightedAccountId = cur.highlightedAccountId,
                     )
                 }
+
+                // Fetch storage quotas for all accounts in parallel, after the rows
+                // are already visible (so the UI renders quickly with a placeholder).
+                fetchAllQuotas(rows)
+            }
+        }
+
+        /**
+         * Fetches storage quotas for every account across all provider rows in
+         * parallel. Each quota is fetched via the corresponding [CloudProviderFactory]
+         * and merged back into the existing [UiState.rows] without triggering a full
+         * reload. Failures are silently discarded — quota display is best-effort.
+         */
+        private suspend fun fetchAllQuotas(rows: List<AccountRow>) {
+            val tasks =
+                rows.flatMap { row ->
+                    val providerType =
+                        runCatching { CloudProviderType.valueOf(row.providerKey) }.getOrNull()
+                            ?: return@flatMap emptyList()
+                    val factory = providerFactories[providerType] ?: return@flatMap emptyList()
+                    row.accounts.map { item ->
+                        viewModelScope.async {
+                            val quota =
+                                runCatching {
+                                    factory.providerFor(item.account.id).getStorageQuota()
+                                }.getOrNull()
+                            Triple(row.providerKey, item.account.id, quota)
+                        }
+                    }
+                }
+
+            if (tasks.isEmpty()) return
+            val results = tasks.awaitAll()
+
+            _state.update { cur ->
+                cur.copy(
+                    rows =
+                        cur.rows.map { row ->
+                            row.copy(
+                                accounts =
+                                    row.accounts.map { item ->
+                                        val quota =
+                                            results
+                                                .firstOrNull { (pk, id, _) ->
+                                                    pk == row.providerKey && id == item.account.id
+                                                }?.third
+                                        if (quota != null) item.copy(storageQuota = quota) else item
+                                    },
+                            )
+                        },
+                )
             }
         }
 
@@ -388,6 +459,89 @@ class AccountsViewModel
         /** Cancels the pending disconnect dialog without making any changes. */
         fun cancelDisconnect() {
             _state.update { it.copy(pendingDisconnect = null) }
+        }
+
+        // ---- Rename ----------------------------------------------------------------
+
+        /**
+         * Stages a rename for [account] by setting [UiState.pendingRename]. The UI
+         * presents a text-field dialog pre-filled with the current display name;
+         * the user confirms via [confirmRename] or cancels via [cancelRename].
+         */
+        fun startRename(account: Account) {
+            _state.update { it.copy(pendingRename = PendingRename(account)) }
+        }
+
+        /** Dismisses the rename dialog without saving. */
+        fun cancelRename() {
+            _state.update { it.copy(pendingRename = null) }
+        }
+
+        /**
+         * Applies the rename by writing [newName] to Room for the pending account.
+         * Refreshes the displayed rows afterwards so the new name is reflected
+         * immediately. Does nothing when [newName] is blank or unchanged.
+         */
+        fun confirmRename(newName: String) {
+            val pending = _state.value.pendingRename ?: return
+            _state.update { it.copy(pendingRename = null) }
+            val trimmed = newName.trim()
+            if (trimmed.isEmpty() || trimmed == pending.account.displayName) return
+            viewModelScope.launch {
+                runCatching {
+                    accountRepository.rename(pending.account.id, trimmed)
+                }.onFailure { t ->
+                    if (t is CancellationException) throw t
+                    Timber.e(t, "AccountsViewModel.confirmRename: failed for ${pending.account.id}")
+                    userMessages.reportError(
+                        context.getString(R.string.accounts_rename_failed_format, pending.account.displayName),
+                        t,
+                    )
+                }
+                refresh()
+            }
+        }
+
+        // ---- Force-remove ----------------------------------------------------------
+
+        /**
+         * Force-removes [account] from the local Room database **without** attempting
+         * a provider sign-out. Useful when the token is already invalid (e.g. the
+         * account was deleted externally). Orphaned sync pairs are deleted first.
+         */
+        fun remove(account: Account) {
+            viewModelScope.launch {
+                // Cancel schedulers for any pairs bound to this account.
+                val orphans =
+                    runCatching { syncPairRepository.getByAccountId(account.id) }.getOrElse { emptyList() }
+                orphans.forEach { pair ->
+                    runCatching { syncScheduler.cancel(pair.id) }
+                        .onFailure { Timber.w(it, "Failed to cancel scheduler for pair ${pair.id} on remove") }
+                }
+                runCatching { syncPairRepository.deleteByAccountId(account.id) }
+                    .onFailure { Timber.e(it, "Failed to delete pairs for removed account ${account.id}") }
+                runCatching { accountRepository.delete(account.id) }
+                    .onFailure { t ->
+                        if (t is CancellationException) throw t
+                        Timber.e(t, "AccountsViewModel.remove: failed for ${account.id}")
+                        userMessages.reportError(
+                            context.getString(
+                                R.string.accounts_remove_failed_format,
+                                account.email ?: account.displayName,
+                            ),
+                            t,
+                        )
+                    }
+                syncEventRepository.log(
+                    pairId = null,
+                    level = SyncEventLevel.INFO,
+                    tag = SyncEventTag.ACCOUNT,
+                    message =
+                        "Force-remove ${account.provider.name} (${account.email ?: account.id}): " +
+                            "deleted ${orphans.size} orphan pair(s)",
+                )
+                refresh()
+            }
         }
 
         /**

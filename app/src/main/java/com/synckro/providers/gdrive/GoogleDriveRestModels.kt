@@ -110,6 +110,27 @@ internal data class DriveTrashRequest(
     val trashed: Boolean,
 )
 
+/**
+ * Response from the Drive `about` endpoint (`GET /about?fields=storageQuota`).
+ * Storage quota values are returned as decimal strings by the Google Drive API.
+ */
+@Serializable
+internal data class DriveAbout(
+    val storageQuota: DriveStorageQuota? = null,
+)
+
+/**
+ * Storage quota block returned inside [DriveAbout].
+ * All byte counts are decimal-string encoded by the API.
+ */
+@Serializable
+internal data class DriveStorageQuota(
+    /** Bytes used across Drive, Gmail, and Google Photos. */
+    val usage: String? = null,
+    /** Total storage limit in bytes, or `null` for unlimited plans. */
+    val limit: String? = null,
+)
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------

@@ -7,6 +7,7 @@ import com.synckro.domain.provider.CloudProviderException
 import com.synckro.domain.provider.CloudProviderFactory
 import com.synckro.domain.provider.RemoteChange
 import com.synckro.domain.provider.RemoteFile
+import com.synckro.domain.provider.StorageQuota
 import timber.log.Timber
 import java.io.InputStream
 import java.util.concurrent.ConcurrentHashMap
@@ -314,6 +315,23 @@ class OneDriveProvider
                     hasMore = false,
                 )
             }
+
+        /**
+         * Fetches storage quota from `GET /me/drive`.
+         *
+         * Returns `null` when the account is not authenticated or the quota
+         * fields are missing from the Graph API response (e.g. personal OneDrive
+         * accounts sometimes omit `total`).
+         */
+        override suspend fun getStorageQuota(): StorageQuota? =
+            runCatching {
+                graphCall {
+                    val drive = graphClient.getDriveInfo(obtainAccessToken())
+                    val used = drive.quota?.used ?: return@graphCall null
+                    val total = drive.quota.total ?: return@graphCall null
+                    StorageQuota(usedBytes = used, totalBytes = total)
+                }
+            }.getOrNull()
 
         companion object {
             /** Tokens older than this threshold are proactively refreshed before any API call. */

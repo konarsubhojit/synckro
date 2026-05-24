@@ -7,6 +7,7 @@ import com.synckro.domain.provider.CloudProviderException
 import com.synckro.domain.provider.CloudProviderFactory
 import com.synckro.domain.provider.RemoteChange
 import com.synckro.domain.provider.RemoteFile
+import com.synckro.domain.provider.StorageQuota
 import timber.log.Timber
 import java.io.InputStream
 import java.util.concurrent.ConcurrentHashMap
@@ -321,6 +322,23 @@ class GoogleDriveProvider
                     hasMore = false,
                 )
             }
+
+        /**
+         * Fetches storage quota from `GET /about?fields=storageQuota`.
+         *
+         * Returns `null` when the account is not authenticated or the quota
+         * fields are missing (e.g. Google Workspace accounts with unlimited
+         * storage report a `null` limit).
+         */
+        override suspend fun getStorageQuota(): StorageQuota? =
+            runCatching {
+                driveCall {
+                    val about = restClient.getAbout(obtainAccessToken())
+                    val used = about.storageQuota?.usage?.toLongOrNull() ?: return@driveCall null
+                    val total = about.storageQuota.limit?.toLongOrNull() ?: return@driveCall null
+                    StorageQuota(usedBytes = used, totalBytes = total)
+                }
+            }.getOrNull()
 
         companion object {
             /** Tokens older than this threshold are proactively refreshed before any API call. */
