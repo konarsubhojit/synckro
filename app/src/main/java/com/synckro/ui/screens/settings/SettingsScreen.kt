@@ -1124,7 +1124,12 @@ private fun DarkModeRow(
     selected: DarkModePreference,
     onSelected: (DarkModePreference) -> Unit,
 ) {
-    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
+    Column(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+    ) {
         Text(
             stringResource(R.string.settings_dark_mode_title),
             style = MaterialTheme.typography.bodyLarge,
@@ -1195,7 +1200,12 @@ private fun SliderRow(
     onValueChange: (Int) -> Unit,
     min: Int = 1,
 ) {
-    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
+    Column(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+    ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -1217,6 +1227,8 @@ private fun SliderRow(
             value = value.toFloat(),
             onValueChange = { onValueChange(it.toInt()) },
             valueRange = min.toFloat()..max.toFloat(),
+            // For range [min..max], endpoints are implicit; steps = (discrete values - 2).
+            // Example: [1..5] has 5 values and needs 3 steps (2, 3, 4).
             steps = (max - min - 1).coerceAtLeast(0),
         )
     }
@@ -1344,7 +1356,10 @@ private fun WifiNetworksDialog(
                 TextField(
                     value = text,
                     onValueChange = { text = it },
-                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp),
                 )
             }
         },
@@ -1496,11 +1511,13 @@ private fun internetConnectionScopeLabel(scope: InternetConnectionScope): String
             stringResource(R.string.settings_internet_scope_mobile_only)
     }
 
-private fun formatMobileLimit(ctx: Context, valueMb: Int): String =
+private fun formatMobileLimit(context: Context, valueMb: Int): String =
+    // Non-composable helper to allow usage in dialog valueFormatter lambdas where
+    // stringResource is unavailable.
     if (valueMb == 0) {
-        ctx.getString(R.string.settings_mobile_limit_unlimited)
+        context.getString(R.string.settings_mobile_limit_unlimited)
     } else {
-        ctx.getString(R.string.settings_mobile_limit_value, valueMb)
+        context.getString(R.string.settings_mobile_limit_value, valueMb)
     }
 
 @Composable

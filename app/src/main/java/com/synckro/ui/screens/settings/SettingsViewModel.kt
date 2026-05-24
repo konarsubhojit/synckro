@@ -132,8 +132,11 @@ class SettingsViewModel
                     settingsRepository.disallowedWifiNetworks,
                     settingsRepository.syncOnMobileRoaming,
                     settingsRepository.syncOnSlow2g,
-                ) { values ->
-                    values
+                ) { syncValues ->
+                    // The vararg combine overload emits Array<Any?>; we keep this grouped
+                    // bundle (instead of a single 20+ parameter combine) for readability.
+                    // It is unpacked below with an explicit index map.
+                    syncValues
                 },
                 combine(
                     settingsRepository.darkMode,
@@ -148,6 +151,12 @@ class SettingsViewModel
                 ) { success, failure, haptics, retention -> arrayOf(success, failure, haptics, retention) },
             ) { syncBundle, appearanceBundle, miscBundle ->
                 @Suppress("UNCHECKED_CAST")
+                // syncBundle index map:
+                // 0 autoSync, 1 defaultWifiOnly, 2 defaultChargingOnly, 3 conflictPolicy,
+                // 4 uploadLimitMb, 5 downloadLimitMb, 6 warnMobile, 7 retryAuto,
+                // 8 retryWaitMin, 9 retryMaxAttempts, 10 parallelUploads, 11 parallelDownloads,
+                // 12 schedule, 13 chargingOnly, 14 batteryThreshold, 15 internetScope,
+                // 16 meteredWifi, 17 allowedWifi, 18 disallowedWifi, 19 roaming, 20 slow2g.
                 UiState(
                     globalAutoSyncEnabled = syncBundle[0] as Boolean,
                     defaultWifiOnly = syncBundle[1] as Boolean,

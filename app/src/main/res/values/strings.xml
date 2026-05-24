@@ -557,7 +557,7 @@
     <string name="settings_auto_sync_charging_only_body">Run automatic background sync only when the device is charging.</string>
     <string name="settings_auto_sync_battery_threshold_title">Battery level threshold</string>
     <string name="settings_auto_sync_battery_threshold_value">Minimum battery: %1$d%%</string>
-    <string name="settings_auto_sync_battery_info">Website info about Android battery optimizations</string>
+    <string name="settings_auto_sync_battery_info">Learn about battery optimization settings</string>
     <string name="settings_sync_group_internet">Internet connection</string>
     <string name="settings_internet_scope_title">Wi-Fi / mobile data scope</string>
     <string name="settings_internet_scope_wifi_and_mobile">Wi-Fi and mobile data</string>
