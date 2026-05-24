@@ -445,7 +445,11 @@ class SettingsViewModel
 
                         runCatching {
                             val backup = settingsBackupFile()
-                            backup.parentFile?.mkdirs()
+                            backup.parentFile?.let { parent ->
+                                if (!parent.exists() && !parent.mkdirs()) {
+                                    error("Unable to create backup directory: ${parent.absolutePath}")
+                                }
+                            }
                             source.copyTo(backup, overwrite = true)
                         }.fold(
                             onSuccess = { BackupSettingsResult.SUCCESS },
@@ -472,7 +476,11 @@ class SettingsViewModel
 
                         runCatching {
                             val target = settingsDataStoreFile()
-                            target.parentFile?.mkdirs()
+                            target.parentFile?.let { parent ->
+                                if (!parent.exists() && !parent.mkdirs()) {
+                                    error("Unable to create settings directory: ${parent.absolutePath}")
+                                }
+                            }
                             backup.copyTo(target, overwrite = true)
                         }.fold(
                             onSuccess = { RestoreSettingsResult.SUCCESS },
