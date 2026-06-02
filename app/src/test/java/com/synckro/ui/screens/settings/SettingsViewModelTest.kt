@@ -64,11 +64,13 @@ class SettingsViewModelTest {
     private lateinit var logExporter: LogExporter
     private lateinit var ctx: Context
     private lateinit var filesDir: File
+    private lateinit var cacheDir: File
 
     @Before
     fun setUp() {
         Dispatchers.setMain(testDispatcher)
         filesDir = tempFolder.newFolder("files")
+        cacheDir = tempFolder.newFolder("cache")
         val dataStore =
             PreferenceDataStoreFactory.create(
                 scope = testScope.backgroundScope,
@@ -83,6 +85,7 @@ class SettingsViewModelTest {
         logExporter = mockk(relaxed = true)
         ctx = mockk(relaxed = true)
         every { ctx.filesDir } returns filesDir
+        every { ctx.cacheDir } returns cacheDir
     }
 
     @After fun tearDown() = Dispatchers.resetMain()
@@ -347,6 +350,35 @@ class SettingsViewModelTest {
             } finally {
                 LogVisibilityConfig.setExportConfig(originalExportConfig)
             }
+        }
+
+    @Test
+    fun `exportLogs emits share event on success`() =
+        testScope.runTest {
+            val vm = newVm()
+            val exportUri = mockk<android.net.Uri>(relaxed = true)
+            coEvery { logExporter.export() } returns exportUri
+
+            val eventAwait = async { vm.events.first() }
+            vm.exportLogs()
+
+            assertEquals(SettingsViewModel.UiEvent.ShareLogs(exportUri), eventAwait.await())
+            coVerify(exactly = 1) { logExporter.export() }
+        }
+
+    @Test
+    fun `clearCache deletes cache contents and emits freed size`() =
+        testScope.runTest {
+            val vm = newVm()
+            File(cacheDir, "a.tmp").writeText("abc")
+            val nestedDir = File(cacheDir, "nested").apply { mkdirs() }
+            File(nestedDir, "b.tmp").writeText("defg")
+
+            val eventAwait = async { vm.events.first() }
+            vm.clearCache()
+
+            assertEquals(SettingsViewModel.UiEvent.CacheCleared(7), eventAwait.await())
+            assertTrue(cacheDir.listFiles().isNullOrEmpty())
         }
 
     @Test

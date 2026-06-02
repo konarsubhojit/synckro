@@ -280,6 +280,7 @@ fun SettingsScreen(
                 )
             SECTION_BACKUP ->
                 BackupSettingsContent(
+                    state = state,
                     viewModel = viewModel,
                     contentPadding = contentPadding,
                 )
@@ -515,6 +516,21 @@ private fun SyncSettingsContent(
         modifier = Modifier.fillMaxSize(),
         contentPadding = contentPadding,
     ) {
+        item { SettingsGroupHeader(stringResource(R.string.settings_section_sync_defaults)) }
+        item {
+            ActionRow(
+                title = stringResource(R.string.settings_default_conflict_policy_title),
+                body = conflictPolicyLabel(state.defaultConflictPolicy),
+                onClick = onShowConflictPolicyDialog,
+            )
+        }
+        item {
+            ConcurrentTransfersRow(
+                value = state.maxConcurrentTransfers,
+                max = SettingsRepository.MAX_CONCURRENT_TRANSFERS,
+                onValueChange = viewModel::setMaxConcurrentTransfers,
+            )
+        }
         item { SettingsGroupHeader(stringResource(R.string.settings_sync_group_network_limits)) }
         item {
             ActionRow(
@@ -1005,6 +1021,7 @@ private fun SecuritySettingsContent(
 
 @Composable
 private fun BackupSettingsContent(
+    state: SettingsViewModel.UiState,
     viewModel: SettingsViewModel,
     contentPadding: PaddingValues,
 ) {
@@ -1012,6 +1029,26 @@ private fun BackupSettingsContent(
         modifier = Modifier.fillMaxSize(),
         contentPadding = contentPadding,
     ) {
+        item {
+            LogRetentionRow(
+                days = state.logRetentionDays,
+                onSelected = { viewModel.setLogRetentionDays(it.days) },
+            )
+        }
+        item {
+            ActionRow(
+                title = stringResource(R.string.settings_export_logs_title),
+                body = stringResource(R.string.settings_export_logs_body),
+                onClick = viewModel::exportLogs,
+            )
+        }
+        item {
+            ActionRow(
+                title = stringResource(R.string.settings_clear_cache_title),
+                body = stringResource(R.string.settings_clear_cache_body),
+                onClick = viewModel::clearCache,
+            )
+        }
         item {
             ActionRow(
                 title = stringResource(R.string.settings_backup_settings_title),
