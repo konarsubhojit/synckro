@@ -15,6 +15,8 @@ import com.synckro.data.local.dao.LocalIndexDao
 import com.synckro.data.local.dao.SyncEventDao
 import com.synckro.data.local.dao.SyncPairDao
 import com.synckro.data.local.db.SynckroDatabase
+import com.synckro.data.local.fs.ContentResolverLocalFolderAccessChecker
+import com.synckro.data.local.fs.LocalFolderAccessChecker
 import com.synckro.data.local.fs.LocalFsEnumerator
 import com.synckro.data.local.fs.SafLocalFileAccess
 import com.synckro.data.repository.ConflictRepository
@@ -220,6 +222,11 @@ object AppModule {
 
     @Provides @Singleton
     fun provideStringProvider(impl: ContextStringProvider): StringProvider = impl
+
+    @Provides @Singleton
+    fun provideLocalFolderAccessChecker(
+        impl: ContentResolverLocalFolderAccessChecker,
+    ): LocalFolderAccessChecker = impl
 
     /**
      * Provides the shared [OkHttpClient] used by all network components (OneDrive Graph API, …).

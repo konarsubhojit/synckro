@@ -32,6 +32,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -243,6 +244,43 @@ class HomeViewModelTest {
             )
         }
     }
+
+    @Test
+    fun `manualSyncBlockedReason classifies ineligible pairs and returns null when eligible`() {
+        val healthy = pair(1L)
+        assertEquals(null, HomeViewModel.manualSyncBlockedReason(healthy, emptySet()))
+        assertEquals(
+            HomeViewModel.ManualSyncBlockedReason.ALREADY_SYNCING,
+            HomeViewModel.manualSyncBlockedReason(healthy, setOf(1L)),
+        )
+        assertEquals(
+            HomeViewModel.ManualSyncBlockedReason.NEEDS_RELINK,
+            HomeViewModel.manualSyncBlockedReason(healthy.copy(needsReLink = true), emptySet()),
+        )
+        assertEquals(
+            HomeViewModel.ManualSyncBlockedReason.NEEDS_REAUTH,
+            HomeViewModel.manualSyncBlockedReason(healthy.copy(lastSyncResult = "NEEDS_REAUTH"), emptySet()),
+        )
+        assertEquals(
+            HomeViewModel.ManualSyncBlockedReason.PAUSED,
+            HomeViewModel.manualSyncBlockedReason(healthy.copy(autoSyncEnabled = false), emptySet()),
+        )
+    }
+
+    @Test
+    fun `syncNow emits a blocked reason instead of failing silently for ineligible pair`() =
+        runTest {
+            val vm = createVm()
+            val emissions = mutableListOf<HomeViewModel.ManualSyncBlockedReason>()
+            val job = launch { vm.syncNowBlocked.toList(emissions) }
+            runCurrent()
+
+            vm.syncNow(pair(8L).copy(autoSyncEnabled = false))
+            runCurrent()
+
+            assertEquals(listOf(HomeViewModel.ManualSyncBlockedReason.PAUSED), emissions)
+            job.cancel()
+        }
 
     @Test
     fun `syncNow for different pairs enqueues with different work names`() {

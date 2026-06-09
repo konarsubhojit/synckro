@@ -236,8 +236,15 @@ fun PairEditorScreen(
                     value = localFolderDisplayName,
                     onValueChange = {},
                     readOnly = true,
+                    isError = state.localFolderAccessLost,
                     label = { Text(stringResource(R.string.pair_editor_local_folder)) },
                     placeholder = { Text(stringResource(R.string.pair_editor_local_folder_hint)) },
+                    supportingText =
+                        if (state.localFolderAccessLost) {
+                            { Text(stringResource(R.string.pair_editor_error_folder_access_lost)) }
+                        } else {
+                            null
+                        },
                     trailingIcon = {
                         IconButton(onClick = {
                             onPickFolder(state.localTreeUri.ifEmpty { null })

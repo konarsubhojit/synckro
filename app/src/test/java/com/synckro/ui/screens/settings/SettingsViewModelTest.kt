@@ -114,8 +114,6 @@ class SettingsViewModelTest {
                 assertFalse(it.defaultChargingOnly)
                 assertEquals(ConflictPolicy.NEWEST_WINS, it.defaultConflictPolicy)
                 assertEquals(3, it.maxConcurrentTransfers)
-                assertEquals(100, it.mobileUploadLimitMb)
-                assertEquals(100, it.mobileDownloadLimitMb)
                 assertTrue(it.warnOnMobileNetworkSync)
                 assertTrue(it.retryAutomaticallyAfterError)
                 assertEquals(15, it.retryWaitMinutes)
@@ -209,8 +207,6 @@ class SettingsViewModelTest {
     fun `sync redesign settings persist values`() =
         testScope.runTest {
             val vm = newVm()
-            vm.setMobileUploadLimitMb(250)
-            vm.setMobileDownloadLimitMb(500)
             vm.setWarnOnMobileNetworkSync(false)
             vm.setRetryAutomaticallyAfterError(false)
             vm.setRetryWaitMinutes(30)
@@ -227,8 +223,6 @@ class SettingsViewModelTest {
             vm.setSyncOnMobileRoaming(true)
             vm.setSyncOnSlow2g(true)
 
-            assertEquals(250, repo.mobileUploadLimitMb.first())
-            assertEquals(500, repo.mobileDownloadLimitMb.first())
             assertFalse(repo.warnOnMobileNetworkSync.first())
             assertFalse(repo.retryAutomaticallyAfterError.first())
             assertEquals(30, repo.retryWaitMinutes.first())

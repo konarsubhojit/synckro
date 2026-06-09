@@ -503,8 +503,6 @@ private fun SyncSettingsContent(
     contentPadding: PaddingValues,
     onShowConflictPolicyDialog: () -> Unit,
 ) {
-    var showUploadLimitDialog by remember { mutableStateOf(false) }
-    var showDownloadLimitDialog by remember { mutableStateOf(false) }
     var showRetryWaitDialog by remember { mutableStateOf(false) }
     var showRetryAttemptsDialog by remember { mutableStateOf(false) }
     var showScheduleDialog by remember { mutableStateOf(false) }
@@ -532,20 +530,6 @@ private fun SyncSettingsContent(
             )
         }
         item { SettingsGroupHeader(stringResource(R.string.settings_sync_group_network_limits)) }
-        item {
-            ActionRow(
-                title = stringResource(R.string.settings_mobile_upload_limit_title),
-                body = formatMobileLimit(ctx, state.mobileUploadLimitMb),
-                onClick = { showUploadLimitDialog = true },
-            )
-        }
-        item {
-            ActionRow(
-                title = stringResource(R.string.settings_mobile_download_limit_title),
-                body = formatMobileLimit(ctx, state.mobileDownloadLimitMb),
-                onClick = { showDownloadLimitDialog = true },
-            )
-        }
         item {
             SwitchRow(
                 title = stringResource(R.string.settings_warn_mobile_network_title),
@@ -701,32 +685,6 @@ private fun SyncSettingsContent(
                 onCheckedChange = viewModel::setSyncOnSlow2g,
             )
         }
-    }
-
-    if (showUploadLimitDialog) {
-        IntOptionsDialog(
-            title = stringResource(R.string.settings_mobile_upload_limit_title),
-            options = listOf(25, 100, 250, 500, 1_024, 0),
-            valueFormatter = { formatMobileLimit(ctx, it) },
-            onSelect = {
-                viewModel.setMobileUploadLimitMb(it)
-                showUploadLimitDialog = false
-            },
-            onDismiss = { showUploadLimitDialog = false },
-        )
-    }
-
-    if (showDownloadLimitDialog) {
-        IntOptionsDialog(
-            title = stringResource(R.string.settings_mobile_download_limit_title),
-            options = listOf(25, 100, 250, 500, 1_024, 0),
-            valueFormatter = { formatMobileLimit(ctx, it) },
-            onSelect = {
-                viewModel.setMobileDownloadLimitMb(it)
-                showDownloadLimitDialog = false
-            },
-            onDismiss = { showDownloadLimitDialog = false },
-        )
     }
 
     if (showRetryWaitDialog) {
@@ -1717,15 +1675,6 @@ private fun internetConnectionScopeLabel(scope: InternetConnectionScope): String
             stringResource(R.string.settings_internet_scope_wifi_only)
         InternetConnectionScope.MOBILE_ONLY ->
             stringResource(R.string.settings_internet_scope_mobile_only)
-    }
-
-private fun formatMobileLimit(context: Context, valueMb: Int): String =
-    // Non-composable helper to allow usage in dialog valueFormatter lambdas where
-    // stringResource is unavailable.
-    if (valueMb == 0) {
-        context.getString(R.string.settings_mobile_limit_unlimited)
-    } else {
-        context.getString(R.string.settings_mobile_limit_value, valueMb)
     }
 
 @Composable

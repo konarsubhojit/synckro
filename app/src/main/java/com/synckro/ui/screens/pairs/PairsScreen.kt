@@ -168,6 +168,25 @@ fun PairsScreen(
         }
     }
 
+    // Issue #250: explain why a manual "Sync now" tap was rejected instead of
+    // failing silently.
+    val blockedAlreadySyncing = stringResource(R.string.home_sync_now_blocked_already_syncing)
+    val blockedNeedsRelink = stringResource(R.string.home_sync_now_blocked_needs_relink)
+    val blockedNeedsReauth = stringResource(R.string.home_sync_now_blocked_needs_reauth)
+    val blockedPaused = stringResource(R.string.home_sync_now_blocked_paused)
+    LaunchedEffect(viewModel) {
+        viewModel.syncNowBlocked.collect { reason ->
+            val message =
+                when (reason) {
+                    HomeViewModel.ManualSyncBlockedReason.ALREADY_SYNCING -> blockedAlreadySyncing
+                    HomeViewModel.ManualSyncBlockedReason.NEEDS_RELINK -> blockedNeedsRelink
+                    HomeViewModel.ManualSyncBlockedReason.NEEDS_REAUTH -> blockedNeedsReauth
+                    HomeViewModel.ManualSyncBlockedReason.PAUSED -> blockedPaused
+                }
+            snackbarHostState.showSnackbar(message = message, duration = SnackbarDuration.Short)
+        }
+    }
+
     LaunchedEffect(isLargeListDetail, selectedPairId) {
         val currentId = selectedPairId ?: return@LaunchedEffect
         if (isLargeListDetail && !scaffoldNavigator.canNavigateBack()) {

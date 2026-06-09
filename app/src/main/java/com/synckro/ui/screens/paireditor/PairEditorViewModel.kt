@@ -4,6 +4,7 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.synckro.R
+import com.synckro.data.local.fs.LocalFolderAccessChecker
 import com.synckro.data.repository.AccountRepository
 import com.synckro.data.repository.SettingsRepository
 import com.synckro.data.repository.SyncEventRepository
@@ -79,6 +80,7 @@ class PairEditorViewModel
         private val syncEventRepository: SyncEventRepository,
         private val accountRepository: AccountRepository,
         private val settingsRepository: SettingsRepository,
+        private val localFolderAccessChecker: LocalFolderAccessChecker,
     ) : ViewModel() {
         private val pairId: Long = savedStateHandle.get<Long>("pairId") ?: 0L
 
@@ -169,6 +171,15 @@ class PairEditorViewModel
              */
             val accountDisappeared: Boolean = false,
             /**
+             * True when the persisted local SAF tree URI ([localTreeUri]) no longer
+             * has a read+write permission grant — e.g. access was revoked after the
+             * pair was created. Drives an inline error under the local-folder field
+             * prompting the user to re-pick the folder, and blocks [save] until a
+             * folder with valid access is selected. Set when loading an existing
+             * pair and re-checked at save time; cleared by [onLocalFolderPicked].
+             */
+            val localFolderAccessLost: Boolean = false,
+            /**
              * Current wizard step (1..[TOTAL_STEPS]) in create mode. Ignored in
              * edit mode, which renders all sections in a single scroll. Step 1
              * collects name + local folder, step 2 collects provider + account +
@@ -208,15 +219,17 @@ class PairEditorViewModel
                     !isSaving &&
                         displayName.isNotBlank() &&
                         localTreeUri.isNotBlank() &&
+                        !localFolderAccessLost &&
                         remoteFolderId.isNotBlank() &&
                         accountId != null
 
             /**
              * Wizard step-1 validation: name + local folder. Required so the
-             * "Next" button is disabled until both fields are populated.
+             * "Next" button is disabled until both fields are populated and the
+             * chosen folder still has valid access.
              */
             val step1Valid: Boolean
-                get() = displayName.isNotBlank() && localTreeUri.isNotBlank()
+                get() = displayName.isNotBlank() && localTreeUri.isNotBlank() && !localFolderAccessLost
 
             /**
              * Wizard step-2 validation: provider + account + remote folder. The
@@ -380,13 +393,20 @@ class PairEditorViewModel
                 if (entity != null) {
                     val preset = SyncSchedulePreset.fromMinutes(entity.scheduleIntervalMinutes)
                     _state.update {
+                        // Keep the user's freshly picked folder (and its valid access)
+                        // if they chose one before this load completed; otherwise fall
+                        // back to the persisted URI and verify its access grant.
+                        val effectiveUri = if (userPickedFolder) it.localTreeUri else entity.localTreeUri
                         it.copy(
                             isLoading = false,
                             displayName = entity.displayName,
                             // If the user already picked a folder before this coroutine
                             // finished, keep their choice instead of clobbering it with
                             // the persisted value.
-                            localTreeUri = if (userPickedFolder) it.localTreeUri else entity.localTreeUri,
+                            localTreeUri = effectiveUri,
+                            localFolderAccessLost =
+                                effectiveUri.isNotBlank() &&
+                                    !localFolderAccessChecker.hasReadWriteAccess(effectiveUri),
                             provider = entity.provider,
                             accountId = entity.accountId,
                             remoteFolderId = entity.remoteFolderId,
@@ -439,6 +459,10 @@ class PairEditorViewModel
             _state.update {
                 it.copy(
                     localTreeUri = uri,
+                    // A freshly picked folder always carries a valid persisted grant
+                    // (PickLocalFolderScreen takes read+write permission), so clear any
+                    // prior "access lost" state.
+                    localFolderAccessLost = false,
                     localPathDisplay = if (displayPath.isNotEmpty()) displayPath else it.localPathDisplay,
                 )
             }
@@ -602,6 +626,8 @@ class PairEditorViewModel
                 when {
                     s.displayName.isBlank() -> strings.getString(R.string.pair_editor_error_name_required)
                     s.localTreeUri.isBlank() -> strings.getString(R.string.pair_editor_error_folder_required)
+                    !localFolderAccessChecker.hasReadWriteAccess(s.localTreeUri) ->
+                        strings.getString(R.string.pair_editor_error_folder_access_lost)
                     s.remoteFolderId.isBlank() -> strings.getString(R.string.pair_editor_error_remote_folder_required)
                     s.accountId == null -> strings.getString(R.string.pair_editor_account_required)
                     retentionDaysText.isNotBlank() &&
@@ -612,6 +638,9 @@ class PairEditorViewModel
 
             if (validationError != null) {
                 val nameError = s.displayName.isBlank()
+                val folderAccessError =
+                    s.localTreeUri.isNotBlank() &&
+                        !localFolderAccessChecker.hasReadWriteAccess(s.localTreeUri)
                 viewModelScope.launch {
                     syncEventRepository.log(
                         pairId = if (pairId != 0L) pairId else null,
@@ -625,6 +654,7 @@ class PairEditorViewModel
                         saveError = validationError,
                         saveErrorEvent = it.saveErrorEvent + 1L,
                         nameRequiredError = nameError,
+                        localFolderAccessLost = folderAccessError,
                     )
                 }
                 return

@@ -55,6 +55,7 @@ import com.synckro.domain.model.SyncEventLevel
 import com.synckro.domain.sync.TransferProgress
 import com.synckro.ui.components.LoadingState
 import com.synckro.ui.components.SectionCard
+import com.synckro.ui.screens.home.HomeViewModel
 
 /**
  * Per-pair detail screen (Phase 5c — issue #163).
@@ -154,7 +155,13 @@ fun PairDetailScreen(
             ) {
                 Button(
                     onClick = { onSyncNow(pair.id) },
-                    enabled = !state.isSyncing,
+                    // Disable for pairs that are not eligible for a manual sync
+                    // (already syncing, paused, or needing re-link / re-auth) so the
+                    // action never fails silently (issue #250). The status card above
+                    // explains the needs-action state.
+                    enabled =
+                        !state.isSyncing &&
+                            HomeViewModel.isPairEligibleForManualSync(pair, emptySet()),
                     modifier = Modifier.weight(1f),
                 ) {
                     Icon(Icons.Default.Sync, contentDescription = null, modifier = Modifier.size(18.dp))

@@ -28,6 +28,10 @@
     <string name="home_sync_all_result_synced_format">Started sync for %1$d pair(s)</string>
     <string name="home_sync_all_result_skipped_format">%1$d skipped (paused/needs action)</string>
     <string name="home_sync_all_result_none">No pairs to sync</string>
+    <string name="home_sync_now_blocked_already_syncing">Already syncing this pair…</string>
+    <string name="home_sync_now_blocked_needs_relink">Can\'t sync: folder access lost. Tap Edit to re-select the folder.</string>
+    <string name="home_sync_now_blocked_needs_reauth">Can\'t sync: sign-in required. Tap Reconnect to re-authenticate.</string>
+    <string name="home_sync_now_blocked_paused">Can\'t sync: auto-sync is paused for this pair. Turn it on to sync.</string>
     <string name="accounts_action">Accounts</string>
     <string name="home_edit_pair">Edit pair</string>
     <string name="home_delete_pair">Delete pair</string>
@@ -159,6 +163,7 @@
     <string name="pair_editor_exclude_empty_folders">Exclude empty folders</string>
     <string name="pair_editor_error_name_required">Display name is required</string>
     <string name="pair_editor_error_folder_required">Please select a local folder</string>
+    <string name="pair_editor_error_folder_access_lost">Access to this folder was lost. Tap the folder icon to re-select it.</string>
     <string name="pair_editor_error_remote_folder_required">Please pick a cloud folder before saving.</string>
     <string name="pair_editor_error_save_failed">Save failed</string>
 
@@ -561,10 +566,6 @@
     <string name="settings_concurrent_transfers_body">How many files are uploaded or downloaded at the same time (1–3). A higher value speeds up large syncs but uses more battery and data.</string>
     <string name="settings_concurrent_transfers_value_format">%1$d at a time</string>
     <string name="settings_sync_group_network_limits">Wi-Fi &amp; mobile network</string>
-    <string name="settings_mobile_upload_limit_title">Upload file size limit (mobile)</string>
-    <string name="settings_mobile_download_limit_title">Download file size limit (mobile)</string>
-    <string name="settings_mobile_limit_unlimited">Unlimited</string>
-    <string name="settings_mobile_limit_value">%1$d MB</string>
     <string name="settings_warn_mobile_network_title">Warn if sync on mobile network</string>
     <string name="settings_warn_mobile_network_body">Show a warning before syncing over mobile data.</string>
     <string name="settings_sync_group_after_errors">After sync errors</string>
