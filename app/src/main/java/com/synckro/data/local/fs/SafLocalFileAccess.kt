@@ -1,6 +1,7 @@
 package com.synckro.data.local.fs
 
 import android.content.ContentResolver
+import android.content.Context
 import android.net.Uri
 import android.provider.DocumentsContract
 import com.synckro.data.scanner.DefaultDocumentChildrenQuery
@@ -8,8 +9,10 @@ import com.synckro.data.scanner.DocumentChildrenQuery
 import com.synckro.data.scanner.RawDocChild
 import com.synckro.domain.sync.LocalFileAccess
 import com.synckro.domain.sync.LocalFileStat
+import dagger.hilt.android.qualifiers.ApplicationContext
 import timber.log.Timber
 import java.io.InputStream
+import javax.inject.Inject
 
 /**
  * SAF-backed [LocalFileAccess] scoped to a single document-tree URI.
@@ -181,3 +184,40 @@ internal class SafLocalFileAccess(
             )
         }
 }
+
+/**
+ * Checks whether the app still holds a persisted read **and** write SAF
+ * permission grant for a given local document-tree URI.
+ *
+ * A grant can disappear after a pair is created — for example if the user
+ * clears the app's persisted permissions or the storage volume is removed.
+ * The pair editor uses this at save time and when loading an existing pair so
+ * the lost access is surfaced immediately instead of only failing later during
+ * a sync run (see [SyncPairRepository] which computes `needsReLink` the same
+ * way for already-persisted pairs).
+ */
+interface LocalFolderAccessChecker {
+    /**
+     * @return `true` when [treeUri] currently has both
+     *   [android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION] and
+     *   [android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION] persisted,
+     *   matching the flags requested when a folder is picked. Returns `false`
+     *   for a blank URI.
+     */
+    fun hasReadWriteAccess(treeUri: String): Boolean
+}
+
+class ContentResolverLocalFolderAccessChecker
+    @Inject
+    constructor(
+        @ApplicationContext private val context: Context,
+    ) : LocalFolderAccessChecker {
+        override fun hasReadWriteAccess(treeUri: String): Boolean {
+            if (treeUri.isBlank()) return false
+            return context.contentResolver.persistedUriPermissions.any { perm ->
+                perm.isReadPermission &&
+                    perm.isWritePermission &&
+                    perm.uri.toString() == treeUri
+            }
+        }
+    }

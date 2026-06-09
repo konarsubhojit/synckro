@@ -2,6 +2,7 @@ package com.synckro.ui.screens.paireditor
 
 import androidx.lifecycle.SavedStateHandle
 import com.synckro.R
+import com.synckro.data.local.fs.LocalFolderAccessChecker
 import com.synckro.data.repository.AccountRepository
 import com.synckro.data.repository.SettingsRepository
 import com.synckro.data.repository.SyncEventRepository
@@ -42,6 +43,7 @@ class PairEditorViewModelTest {
     private lateinit var mockEventRepository: SyncEventRepository
     private lateinit var mockAccountRepository: AccountRepository
     private lateinit var mockSettingsRepository: SettingsRepository
+    private lateinit var mockAccessChecker: LocalFolderAccessChecker
 
     @Before
     fun setUp() {
@@ -80,6 +82,12 @@ class PairEditorViewModelTest {
                 every { defaultChargingOnly } returns flowOf(false)
                 every { defaultConflictPolicy } returns flowOf(ConflictPolicy.NEWEST_WINS)
             }
+        // Default: every picked/persisted folder still has valid access so existing
+        // save tests are unaffected. Access-lost paths override this per-test.
+        mockAccessChecker =
+            mockk {
+                every { hasReadWriteAccess(any()) } returns true
+            }
     }
 
     @After
@@ -96,6 +104,7 @@ class PairEditorViewModelTest {
             syncEventRepository = mockEventRepository,
             accountRepository = mockAccountRepository,
             settingsRepository = mockSettingsRepository,
+            localFolderAccessChecker = mockAccessChecker,
         )
 
     /**
@@ -122,6 +131,7 @@ class PairEditorViewModelTest {
             syncEventRepository = mockEventRepository,
             accountRepository = mockAccountRepository,
             settingsRepository = mockSettingsRepository,
+            localFolderAccessChecker = mockAccessChecker,
         )
 
     // -------------------------------------------------------------------------
@@ -300,6 +310,70 @@ class PairEditorViewModelTest {
             assertEquals("Please pick a cloud folder before saving.", vm.state.value.saveError)
             assertTrue(vm.state.value.saveErrorEvent > initialEvent)
             coVerify(exactly = 0) { mockRepo.upsert(any()) }
+        }
+
+    @Test
+    fun `save with revoked local folder access sets localFolderAccessLost and does not upsert`() =
+        runTest {
+            every { mockAccessChecker.hasReadWriteAccess(any()) } returns false
+
+            val vm = createVmWithFolder()
+            vm.onDisplayNameChange("Test Pair")
+            vm.onRemoteFolderPicked("remote-id", "Remote")
+            advanceUntilIdle()
+            vm.onAccountChange("test-account")
+
+            var savedId: Long? = null
+            vm.save { savedId = it }
+            advanceUntilIdle()
+
+            assertNull("onSaved must not be called when folder access is lost", savedId)
+            assertTrue(vm.state.value.localFolderAccessLost)
+            assertNotNull(vm.state.value.saveError)
+            assertFalse(vm.state.value.canSave)
+            coVerify(exactly = 0) { mockRepo.upsert(any()) }
+        }
+
+    @Test
+    fun `loadExisting flags localFolderAccessLost when persisted folder access revoked`() =
+        runTest {
+            every { mockAccessChecker.hasReadWriteAccess(any()) } returns false
+            coEvery { mockRepo.getById(5L) } returns
+                SyncPair(
+                    id = 5L,
+                    displayName = "Existing Pair",
+                    localTreeUri = "content://old/uri",
+                    provider = CloudProviderType.FAKE,
+                    remoteFolderId = "remote",
+                )
+
+            val vm = createVm(pairId = 5L)
+            advanceUntilIdle()
+
+            assertTrue(vm.state.value.localFolderAccessLost)
+        }
+
+    @Test
+    fun `onLocalFolderPicked clears localFolderAccessLost`() =
+        runTest {
+            every { mockAccessChecker.hasReadWriteAccess(any()) } returns false
+            coEvery { mockRepo.getById(5L) } returns
+                SyncPair(
+                    id = 5L,
+                    displayName = "Existing Pair",
+                    localTreeUri = "content://old/uri",
+                    provider = CloudProviderType.FAKE,
+                    remoteFolderId = "remote",
+                )
+            val vm = createVm(pairId = 5L)
+            advanceUntilIdle()
+            assertTrue(vm.state.value.localFolderAccessLost)
+
+            // Re-picking a folder grants fresh read+write access, so the flag clears.
+            vm.onLocalFolderPicked("content://new/uri", "Downloads")
+
+            assertFalse(vm.state.value.localFolderAccessLost)
+            assertEquals("content://new/uri", vm.state.value.localTreeUri)
         }
 
     @Test
@@ -485,6 +559,7 @@ class PairEditorViewModelTest {
                     syncEventRepository = mockEventRepository,
                     accountRepository = mockAccountRepository,
                     settingsRepository = mockSettingsRepository,
+                    localFolderAccessChecker = mockAccessChecker,
                 )
             advanceUntilIdle()
 
@@ -521,6 +596,7 @@ class PairEditorViewModelTest {
                     syncEventRepository = mockEventRepository,
                     accountRepository = mockAccountRepository,
                     settingsRepository = mockSettingsRepository,
+                    localFolderAccessChecker = mockAccessChecker,
                 )
             advanceUntilIdle()
 

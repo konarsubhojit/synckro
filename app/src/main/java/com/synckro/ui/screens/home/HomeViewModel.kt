@@ -346,6 +346,34 @@ class HomeViewModel
             val skipped: Int,
         )
 
+        /**
+         * Reason a manual "Sync now" request was rejected for a pair, surfaced via
+         * [syncNowBlocked] so the UI can explain the block with a snackbar instead
+         * of the action failing silently (issue #250).
+         */
+        enum class ManualSyncBlockedReason {
+            /** A one-shot sync for this pair is already in flight. */
+            ALREADY_SYNCING,
+
+            /** Local SAF folder access was lost; the pair must be re-linked. */
+            NEEDS_RELINK,
+
+            /** The cloud account token was revoked; the pair must be re-authenticated. */
+            NEEDS_REAUTH,
+
+            /** Auto-sync is turned off for this pair (manually paused by the user). */
+            PAUSED,
+        }
+
+        private val _syncNowBlocked = MutableSharedFlow<ManualSyncBlockedReason>(extraBufferCapacity = 1)
+
+        /**
+         * One-shot stream emitted whenever [syncNow] is called for a pair that is
+         * not eligible for a manual sync. The Pairs screen collects this and shows
+         * a reason-specific snackbar so the user understands why nothing happened.
+         */
+        val syncNowBlocked: SharedFlow<ManualSyncBlockedReason> = _syncNowBlocked.asSharedFlow()
+
         private val _syncAllResults = MutableSharedFlow<SyncAllResult>(extraBufferCapacity = 1)
 
         /**
@@ -397,8 +425,12 @@ class HomeViewModel
          */
         fun syncNow(pair: SyncPair) {
             val currentSyncing = state.value.syncingPairIds
-            if (!isPairEligibleForManualSync(pair, currentSyncing)) {
-                Timber.i("HomeViewModel.syncNow(id=${pair.id}) skipped: pair not eligible for manual sync")
+            val blockedReason = manualSyncBlockedReason(pair, currentSyncing)
+            if (blockedReason != null) {
+                Timber.i(
+                    "HomeViewModel.syncNow(id=${pair.id}) skipped: not eligible ($blockedReason)",
+                )
+                _syncNowBlocked.tryEmit(blockedReason)
                 return
             }
             Timber.i("HomeViewModel.syncNow(id=${pair.id})")
@@ -535,10 +567,24 @@ class HomeViewModel
             fun isPairEligibleForManualSync(
                 pair: SyncPair,
                 syncingPairIds: Set<Long>,
-            ): Boolean {
-                val unhealthy = pair.needsReLink || pair.lastSyncResult == "NEEDS_REAUTH"
-                val inFlight = pair.id in syncingPairIds
-                return pair.autoSyncEnabled && !unhealthy && !inFlight
-            }
+            ): Boolean = manualSyncBlockedReason(pair, syncingPairIds) == null
+
+            /**
+             * Classifies *why* a manual "Sync now" is not currently possible for
+             * [pair], or returns `null` when the pair is eligible. Surfaced to the
+             * UI (via [syncNowBlocked]) so an ineligible "Sync now" tap explains
+             * itself instead of failing silently (issue #250).
+             */
+            fun manualSyncBlockedReason(
+                pair: SyncPair,
+                syncingPairIds: Set<Long>,
+            ): ManualSyncBlockedReason? =
+                when {
+                    pair.id in syncingPairIds -> ManualSyncBlockedReason.ALREADY_SYNCING
+                    pair.needsReLink -> ManualSyncBlockedReason.NEEDS_RELINK
+                    pair.lastSyncResult == "NEEDS_REAUTH" -> ManualSyncBlockedReason.NEEDS_REAUTH
+                    !pair.autoSyncEnabled -> ManualSyncBlockedReason.PAUSED
+                    else -> null
+                }
         }
     }
