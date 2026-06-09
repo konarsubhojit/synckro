@@ -54,8 +54,6 @@ class SettingsViewModel
             val defaultChargingOnly: Boolean = false,
             val defaultConflictPolicy: ConflictPolicy = ConflictPolicy.NEWEST_WINS,
             val maxConcurrentTransfers: Int = SettingsRepository.MAX_CONCURRENT_TRANSFERS,
-            val mobileUploadLimitMb: Int = 100,
-            val mobileDownloadLimitMb: Int = 100,
             val warnOnMobileNetworkSync: Boolean = true,
             val retryAutomaticallyAfterError: Boolean = true,
             val retryWaitMinutes: Int = 15,
@@ -134,8 +132,6 @@ class SettingsViewModel
                     settingsRepository.defaultWifiOnly,
                     settingsRepository.defaultChargingOnly,
                     settingsRepository.defaultConflictPolicy,
-                    settingsRepository.mobileUploadLimitMb,
-                    settingsRepository.mobileDownloadLimitMb,
                     settingsRepository.warnOnMobileNetworkSync,
                     settingsRepository.retryAutomaticallyAfterError,
                     settingsRepository.retryWaitMinutes,
@@ -177,32 +173,30 @@ class SettingsViewModel
                 @Suppress("UNCHECKED_CAST")
                 // syncBundle index map:
                 // 0 autoSync, 1 defaultWifiOnly, 2 defaultChargingOnly, 3 conflictPolicy,
-                // 4 uploadLimitMb, 5 downloadLimitMb, 6 warnMobile, 7 retryAuto,
-                // 8 retryWaitMin, 9 retryMaxAttempts, 10 parallelUploads, 11 parallelDownloads,
-                // 12 schedule, 13 chargingOnly, 14 batteryThreshold, 15 internetScope,
-                // 16 meteredWifi, 17 allowedWifi, 18 disallowedWifi, 19 roaming, 20 slow2g.
+                // 4 warnMobile, 5 retryAuto, 6 retryWaitMin, 7 retryMaxAttempts,
+                // 8 parallelUploads, 9 parallelDownloads, 10 schedule, 11 chargingOnly,
+                // 12 batteryThreshold, 13 internetScope, 14 meteredWifi, 15 allowedWifi,
+                // 16 disallowedWifi, 17 roaming, 18 slow2g.
                 UiState(
                     globalAutoSyncEnabled = syncBundle[0] as Boolean,
                     defaultWifiOnly = syncBundle[1] as Boolean,
                     defaultChargingOnly = syncBundle[2] as Boolean,
                     defaultConflictPolicy = syncBundle[3] as ConflictPolicy,
-                    mobileUploadLimitMb = syncBundle[4] as Int,
-                    mobileDownloadLimitMb = syncBundle[5] as Int,
-                    warnOnMobileNetworkSync = syncBundle[6] as Boolean,
-                    retryAutomaticallyAfterError = syncBundle[7] as Boolean,
-                    retryWaitMinutes = syncBundle[8] as Int,
-                    retryMaxAttempts = syncBundle[9] as Int,
-                    parallelUploads = syncBundle[10] as Int,
-                    parallelDownloads = syncBundle[11] as Int,
-                    autoSyncSchedule = syncBundle[12] as AutoSyncSchedule,
-                    autoSyncChargingOnly = syncBundle[13] as Boolean,
-                    autoSyncBatteryThresholdPercent = syncBundle[14] as Int,
-                    internetConnectionScope = syncBundle[15] as InternetConnectionScope,
-                    syncOnMeteredWifi = syncBundle[16] as Boolean,
-                    allowedWifiNetworks = syncBundle[17] as Set<String>,
-                    disallowedWifiNetworks = syncBundle[18] as Set<String>,
-                    syncOnMobileRoaming = syncBundle[19] as Boolean,
-                    syncOnSlow2g = syncBundle[20] as Boolean,
+                    warnOnMobileNetworkSync = syncBundle[4] as Boolean,
+                    retryAutomaticallyAfterError = syncBundle[5] as Boolean,
+                    retryWaitMinutes = syncBundle[6] as Int,
+                    retryMaxAttempts = syncBundle[7] as Int,
+                    parallelUploads = syncBundle[8] as Int,
+                    parallelDownloads = syncBundle[9] as Int,
+                    autoSyncSchedule = syncBundle[10] as AutoSyncSchedule,
+                    autoSyncChargingOnly = syncBundle[11] as Boolean,
+                    autoSyncBatteryThresholdPercent = syncBundle[12] as Int,
+                    internetConnectionScope = syncBundle[13] as InternetConnectionScope,
+                    syncOnMeteredWifi = syncBundle[14] as Boolean,
+                    allowedWifiNetworks = syncBundle[15] as Set<String>,
+                    disallowedWifiNetworks = syncBundle[16] as Set<String>,
+                    syncOnMobileRoaming = syncBundle[17] as Boolean,
+                    syncOnSlow2g = syncBundle[18] as Boolean,
                     darkMode = appearanceBundle[0] as DarkModePreference,
                     appLanguage = appearanceBundle[1] as AppLanguagePreference,
                     dynamicColor = appearanceBundle[2] as Boolean,
@@ -255,14 +249,6 @@ class SettingsViewModel
 
         fun setMaxConcurrentTransfers(n: Int) {
             viewModelScope.launch { settingsRepository.setMaxConcurrentTransfers(n) }
-        }
-
-        fun setMobileUploadLimitMb(limitMb: Int) {
-            viewModelScope.launch { settingsRepository.setMobileUploadLimitMb(limitMb) }
-        }
-
-        fun setMobileDownloadLimitMb(limitMb: Int) {
-            viewModelScope.launch { settingsRepository.setMobileDownloadLimitMb(limitMb) }
         }
 
         fun setWarnOnMobileNetworkSync(enabled: Boolean) {

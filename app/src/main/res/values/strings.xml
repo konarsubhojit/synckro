@@ -561,10 +561,6 @@
     <string name="settings_concurrent_transfers_body">How many files are uploaded or downloaded at the same time (1–3). A higher value speeds up large syncs but uses more battery and data.</string>
     <string name="settings_concurrent_transfers_value_format">%1$d at a time</string>
     <string name="settings_sync_group_network_limits">Wi-Fi &amp; mobile network</string>
-    <string name="settings_mobile_upload_limit_title">Upload file size limit (mobile)</string>
-    <string name="settings_mobile_download_limit_title">Download file size limit (mobile)</string>
-    <string name="settings_mobile_limit_unlimited">Unlimited</string>
-    <string name="settings_mobile_limit_value">%1$d MB</string>
     <string name="settings_warn_mobile_network_title">Warn if sync on mobile network</string>
     <string name="settings_warn_mobile_network_body">Show a warning before syncing over mobile data.</string>
     <string name="settings_sync_group_after_errors">After sync errors</string>

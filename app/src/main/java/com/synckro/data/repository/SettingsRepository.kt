@@ -98,30 +98,6 @@ class SettingsRepository
             }
         }
 
-        val mobileUploadLimitMb: Flow<Int> =
-            dataStore.data.map {
-                (it[KEY_MOBILE_UPLOAD_LIMIT_MB] ?: DEFAULT_MOBILE_UPLOAD_LIMIT_MB)
-                    .coerceIn(0, MAX_MOBILE_TRANSFER_LIMIT_MB)
-            }
-
-        suspend fun setMobileUploadLimitMb(limitMb: Int) {
-            dataStore.edit {
-                it[KEY_MOBILE_UPLOAD_LIMIT_MB] = limitMb.coerceIn(0, MAX_MOBILE_TRANSFER_LIMIT_MB)
-            }
-        }
-
-        val mobileDownloadLimitMb: Flow<Int> =
-            dataStore.data.map {
-                (it[KEY_MOBILE_DOWNLOAD_LIMIT_MB] ?: DEFAULT_MOBILE_DOWNLOAD_LIMIT_MB)
-                    .coerceIn(0, MAX_MOBILE_TRANSFER_LIMIT_MB)
-            }
-
-        suspend fun setMobileDownloadLimitMb(limitMb: Int) {
-            dataStore.edit {
-                it[KEY_MOBILE_DOWNLOAD_LIMIT_MB] = limitMb.coerceIn(0, MAX_MOBILE_TRANSFER_LIMIT_MB)
-            }
-        }
-
         val warnOnMobileNetworkSync: Flow<Boolean> =
             dataStore.data.map { it[KEY_WARN_ON_MOBILE_NETWORK_SYNC] ?: DEFAULT_WARN_ON_MOBILE_NETWORK_SYNC }
 
@@ -466,8 +442,6 @@ class SettingsRepository
             internal val KEY_DEFAULT_CONFLICT_POLICY = stringPreferencesKey("default_conflict_policy")
             internal val KEY_MAX_CONCURRENT_TRANSFERS =
                 intPreferencesKey("max_concurrent_transfers")
-            internal val KEY_MOBILE_UPLOAD_LIMIT_MB = intPreferencesKey("mobile_upload_limit_mb")
-            internal val KEY_MOBILE_DOWNLOAD_LIMIT_MB = intPreferencesKey("mobile_download_limit_mb")
             internal val KEY_WARN_ON_MOBILE_NETWORK_SYNC =
                 booleanPreferencesKey("warn_on_mobile_network_sync")
             internal val KEY_RETRY_AUTOMATICALLY_AFTER_ERROR =
@@ -513,8 +487,6 @@ class SettingsRepository
             internal const val DEFAULT_CHARGING_ONLY = false
             internal val DEFAULT_CONFLICT_POLICY = ConflictPolicy.NEWEST_WINS
             internal const val DEFAULT_MAX_CONCURRENT_TRANSFERS = 3
-            internal const val DEFAULT_MOBILE_UPLOAD_LIMIT_MB = 100
-            internal const val DEFAULT_MOBILE_DOWNLOAD_LIMIT_MB = 100
             internal const val DEFAULT_WARN_ON_MOBILE_NETWORK_SYNC = true
             internal const val DEFAULT_RETRY_AUTOMATICALLY_AFTER_ERROR = true
             internal const val DEFAULT_RETRY_WAIT_MINUTES = 15
@@ -531,7 +503,6 @@ class SettingsRepository
 
             /** Public max cap used by both clamping logic and the settings slider upper bound. */
             const val MAX_CONCURRENT_TRANSFERS = 3
-            const val MAX_MOBILE_TRANSFER_LIMIT_MB = 2_048
             const val MIN_RETRY_WAIT_MINUTES = 1
             const val MAX_RETRY_WAIT_MINUTES = 120
             const val MIN_RETRY_ATTEMPTS = 1
