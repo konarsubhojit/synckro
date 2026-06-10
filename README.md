@@ -3,27 +3,33 @@
 An Android app that syncs a folder on the phone's internal storage or SD card with
 a folder on **OneDrive** or **Google Drive**.
 
-> Status: **early scaffolding**. The project structure, core abstractions, and a
-> runnable Compose shell are in place. Cloud provider implementations
-> (OneDrive / Google Drive) currently return `false` from
-> `ensureAuthenticated()` and throw `NotYetImplementedException` for provider
-> operations, and the real sync engine is intentionally minimal —
-> its file-diff logic is pure Kotlin and unit-tested, and everything plugs into
-> a `FakeCloudProvider` so that the pipeline can be developed end-to-end without
-> any network access.
+> Status: **actively developed and functional**. Both cloud providers (Google Drive
+> and OneDrive) are fully implemented with OAuth 2.0 / MSAL authentication,
+> incremental change enumeration, resumable uploads, multi-account support, and
+> transparent token-refresh retry. The sync engine performs bidirectional
+> file-diff/apply with configurable conflict policies and runs as a
+> WorkManager foreground service with exponential backoff.
 
-## Features (planned)
+## Features
 
 - Pick a local folder (internal or SD card) via the Storage Access Framework.
+  See **[docs/sync-pairs.md](docs/sync-pairs.md)** for a full walkthrough.
 - Link it to a folder on OneDrive or Google Drive.
-- Connect multiple Google Drive or OneDrive accounts and bind each sync pair to a specific account.
+- Connect multiple Google Drive or OneDrive accounts and bind each sync pair to a
+  specific account.
 - Bidirectional sync with configurable conflict policy (newest-wins / keep-both /
   prefer-local / prefer-remote).
-- Periodic background sync (WorkManager) with constraints (Wi-Fi only,
-  charging-only, etc.).
-- Manual "Sync now".
-- Conflict inbox, per-pair logs, retries with exponential backoff.
-- **Bulk conflict resolution** — long-press to enter selection mode; resolve many conflicts at once with Keep local / Keep remote / Keep both. See [docs/conflict-inbox.md](docs/conflict-inbox.md).
+- Upload-only backup and download-only offload modes with optional automatic
+  retention-based deletion.
+- Periodic background sync (WorkManager) with per-pair schedule presets
+  (15 min / 30 min / 1 h / 24 h / custom interval) and constraints
+  (Wi-Fi only, charging-only). See **[docs/scheduling.md](docs/scheduling.md)**.
+- Manual "Sync now" from the Home screen or Pair Detail screen.
+- **Conflict inbox** with per-conflict and bulk resolution (Keep local / Keep
+  remote / Keep both) — long-press any row to enter selection mode and resolve
+  many conflicts at once. See **[docs/conflict-inbox.md](docs/conflict-inbox.md)**.
+- Per-pair sync logs, retries with exponential backoff, and re-authentication
+  notifications. See **[docs/error-recovery.md](docs/error-recovery.md)**.
 
 ## Tech stack
 
@@ -48,7 +54,7 @@ Currently a single-module project (`:app`) with a clean package layout so it can
 be split into Gradle modules later without code churn:
 
 ```text
-app/src/main/java/com/konarsubhojit/synckro/
+app/src/main/java/com/synckro/
 ├── SynckroApp.kt                       # Hilt Application
 ├── MainActivity.kt                     # Compose entry point
 ├── ui/                                 # Compose screens, theme, navigation
@@ -61,8 +67,8 @@ app/src/main/java/com/konarsubhojit/synckro/
 │   └── worker/SyncWorker.kt            # WorkManager worker + scheduler
 ├── providers/
 │   ├── fake/FakeCloudProvider.kt       # In-memory provider for tests / dev
-│   ├── onedrive/OneDriveProvider.kt    # Stub
-│   └── gdrive/GoogleDriveProvider.kt   # Stub
+│   ├── onedrive/OneDriveProvider.kt    # Full MSAL + Graph implementation
+│   └── gdrive/GoogleDriveProvider.kt   # Full Credential Manager + Drive v3 implementation
 └── di/                                 # Hilt modules
 ```
 
@@ -76,6 +82,10 @@ app/src/main/java/com/konarsubhojit/synckro/
    end-to-end walkthrough of signing into the app with Google Drive and
    OneDrive, including provider-side console setup, first-run consent flows,
    and troubleshooting tips.
+4. Follow **[docs/sync-pairs.md](docs/sync-pairs.md)** to create your first
+   sync pair, configure the sync schedule, and trigger a manual sync.
+5. Consult **[docs/error-recovery.md](docs/error-recovery.md)** if a sync run
+   fails or you receive a re-authentication notification.
 
 ## Building
 
@@ -127,16 +137,25 @@ The release artifact is for internal/dev testing only. It reuses the same
 
 ## Roadmap
 
-Near-term work:
+Completed work (current release):
 
-1. Wire up SAF folder picker and persist tree URIs.
-2. Implement real local-folder enumeration against a `DocumentFile` tree and
-   populate Room index.
-3. Implement OneDrive provider (MSAL auth + Graph `/me/drive/root:/.../:/delta`
-   + resumable upload sessions).
-4. Implement Google Drive provider (OAuth + Drive v3 `changes.list` + resumable
-   upload).
-5. Per-pair settings screen.
+- [x] SAF folder picker and persisted tree URIs.
+- [x] Local-folder enumeration against a `DocumentFile` tree with Room index.
+- [x] OneDrive provider (MSAL auth + Graph `/me/drive/root:/.../:/delta` + resumable upload).
+- [x] Google Drive provider (Credential Manager + Drive v3 `changes.list` + resumable upload).
+- [x] Per-pair settings screen (direction, conflict policy, schedule, globs, constraints).
+- [x] Multi-account support (multiple Google Drive / OneDrive identities).
+- [x] Conflict inbox with bulk resolution.
+- [x] Re-authentication notifications with deep-link back to Accounts screen.
+- [x] Sync logs, per-pair sync history, and log export.
+- [x] Concurrent transfer support with configurable parallelism.
+
+Near-term planned work:
+
+- [ ] Storage-quota display improvements (inline progress bar on account cards).
+- [ ] Onboarding wizard improvements for first-time users.
+- [ ] Selective sync tree view (browse and choose sub-folders to include/exclude).
+- [ ] Android widget showing last-sync timestamps and quick "Sync now" buttons.
 
 ## License
 
