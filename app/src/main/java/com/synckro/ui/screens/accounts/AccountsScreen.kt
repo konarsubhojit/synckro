@@ -73,6 +73,8 @@ import com.synckro.domain.auth.Account
 import com.synckro.domain.model.CloudProviderType
 import com.synckro.domain.provider.StorageQuota
 import com.synckro.ui.auth.ActivityAuthUiHost
+import com.synckro.ui.components.ErrorState
+import com.synckro.ui.components.LoadingState
 import com.synckro.ui.components.SectionCard
 
 /**
@@ -140,57 +142,75 @@ fun AccountsScreen(
             )
         },
     ) { padding ->
-        Column(
-            modifier =
-                Modifier
-                    .padding(padding)
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
-                    .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            // Introductory instruction banner
-            SectionCard(
-                modifier = Modifier.fillMaxWidth(),
-                containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                contentPadding = PaddingValues(12.dp),
-            ) {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalAlignment = Alignment.Top,
+        when {
+            state.isLoading -> {
+                LoadingState(
+                    message = stringResource(R.string.loading_accounts),
+                    modifier = Modifier.fillMaxSize().padding(padding),
+                )
+            }
+            state.error != null -> {
+                ErrorState(
+                    title = stringResource(R.string.error_state_accounts_title),
+                    body = stringResource(R.string.error_state_accounts_body),
+                    onRetry = viewModel::refresh,
+                    modifier = Modifier.fillMaxSize().padding(padding),
+                )
+            }
+            else -> {
+                Column(
+                    modifier =
+                        Modifier
+                            .padding(padding)
+                            .fillMaxSize()
+                            .verticalScroll(rememberScrollState())
+                            .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
-                    Icon(
-                        Icons.Default.Info,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSecondaryContainer,
-                        modifier = Modifier.size(20.dp),
-                    )
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(
-                            text = stringResource(R.string.accounts_body),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSecondaryContainer,
-                        )
-                        Text(
-                            text = stringResource(R.string.accounts_body_hint),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    // Introductory instruction banner
+                    SectionCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                        contentPadding = PaddingValues(12.dp),
+                    ) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            verticalAlignment = Alignment.Top,
+                        ) {
+                            Icon(
+                                Icons.Default.Info,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                                modifier = Modifier.size(20.dp),
+                            )
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text(
+                                    text = stringResource(R.string.accounts_body),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                )
+                                Text(
+                                    text = stringResource(R.string.accounts_body_hint),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                )
+                            }
+                        }
+                    }
+
+                    state.rows.forEach { row ->
+                        AccountProviderSection(
+                            row = row,
+                            highlightedAccountId = state.highlightedAccountId,
+                            onConnect = {
+                                viewModel.connect(row.providerKey) { manager -> manager.signIn(host) }
+                            },
+                            onSignOut = { viewModel.disconnect(it) },
+                            onRename = { viewModel.startRename(it) },
+                            onRemove = { viewModel.remove(it) },
                         )
                     }
                 }
-            }
-
-            state.rows.forEach { row ->
-                AccountProviderSection(
-                    row = row,
-                    highlightedAccountId = state.highlightedAccountId,
-                    onConnect = {
-                        viewModel.connect(row.providerKey) { manager -> manager.signIn(host) }
-                    },
-                    onSignOut = { viewModel.disconnect(it) },
-                    onRename = { viewModel.startRename(it) },
-                    onRemove = { viewModel.remove(it) },
-                )
             }
         }
     }

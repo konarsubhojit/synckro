@@ -12,6 +12,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -78,6 +79,8 @@ class ConflictInboxViewModel
         data class UiState(
             val conflicts: List<ConflictRow> = emptyList(),
             val isLoading: Boolean = true,
+            /** Non-null when the conflicts flow terminates with an error. */
+            val error: String? = null,
             val isSelectionMode: Boolean = false,
             val selectedIds: Set<Long> = emptySet(),
             val enableHaptics: Boolean = true,
@@ -102,6 +105,9 @@ class ConflictInboxViewModel
                     selectedIds = selectedIds,
                     enableHaptics = enableHaptics,
                 )
+            }.catch { e ->
+                Timber.w(e, "ConflictInboxViewModel: flow error")
+                emit(UiState(isLoading = false, error = e.message ?: e.javaClass.simpleName))
             }.stateIn(
                 scope = viewModelScope,
                 started = SharingStarted.WhileSubscribed(5_000),

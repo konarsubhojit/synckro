@@ -95,6 +95,8 @@ import com.synckro.domain.sync.TransferProgress
 import com.synckro.ui.components.CoachTooltip
 import com.synckro.ui.components.CoachTooltipIds
 import com.synckro.ui.components.EmptyState
+import com.synckro.ui.components.ErrorState
+import com.synckro.ui.components.LoadingState
 import com.synckro.ui.components.SectionCard
 import com.synckro.ui.components.SyncProgressRows
 import com.synckro.ui.screens.home.HomeViewModel
@@ -459,6 +461,21 @@ private fun PairsList(
     globalAutoSyncEnabled: Boolean,
     modifier: Modifier = Modifier,
 ) {
+    if (state.isLoading) {
+        LoadingState(
+            message = stringResource(R.string.loading_pairs),
+            modifier = modifier.fillMaxSize(),
+        )
+        return
+    }
+    if (state.error != null) {
+        ErrorState(
+            title = stringResource(R.string.error_state_pairs_title),
+            body = stringResource(R.string.error_state_pairs_body),
+            modifier = modifier.fillMaxSize(),
+        )
+        return
+    }
     if (!state.isLoading && state.pairs.isEmpty()) {
         // Phase 2: replaced the bespoke 3-step LazyColumn empty state with the
         // shared [EmptyState] component. The deeper onboarding flow lives in

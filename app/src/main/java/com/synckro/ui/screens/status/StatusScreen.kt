@@ -35,6 +35,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.synckro.R
 import com.synckro.ui.components.AccountsCard
 import com.synckro.ui.components.BatteryOptimizationCard
+import com.synckro.ui.components.LoadingState
 import com.synckro.ui.components.RecentChangesCard
 import com.synckro.ui.components.SyncStatusCard
 import com.synckro.ui.components.WarningBanner
@@ -56,6 +57,15 @@ fun StatusScreen(
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+
+    if (state.isLoading) {
+        LoadingState(
+            message = stringResource(R.string.loading_status),
+            modifier = modifier.fillMaxSize(),
+        )
+        return
+    }
+
     val overview =
         remember(
             state.pairs,

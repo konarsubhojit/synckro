@@ -415,6 +415,23 @@
     <string name="loading_folders">Loading folders…</string>
     <string name="loading_pair_settings">Loading pair settings…</string>
     <string name="loading_conflicts">Loading conflicts…</string>
+    <string name="loading_accounts">Loading accounts…</string>
+    <string name="loading_status">Loading status…</string>
+    <string name="loading_pairs">Loading sync pairs…</string>
+    <string name="loading_logs">Loading logs…</string>
+
+    <!-- Error states (ErrorState composable) -->
+    <string name="error_state_retry">Retry</string>
+    <string name="error_state_accounts_title">Couldn\'t load accounts</string>
+    <string name="error_state_accounts_body">Check your internet connection and try again.</string>
+    <string name="error_state_conflicts_title">Couldn\'t load conflicts</string>
+    <string name="error_state_conflicts_body">An error occurred while loading your conflicts. Try again.</string>
+    <string name="error_state_pair_detail_title">Couldn\'t load sync pair</string>
+    <string name="error_state_pair_detail_body">An error occurred while loading the sync pair details. Try again.</string>
+    <string name="error_state_logs_title">Couldn\'t load logs</string>
+    <string name="error_state_logs_body">An error occurred while loading the sync log. Try again.</string>
+    <string name="error_state_pairs_title">Couldn\'t load sync pairs</string>
+    <string name="error_state_pairs_body">An error occurred while loading your sync pairs. Try again.</string>
 
     <!-- Empty states with primary CTAs -->
     <string name="home_empty_title">No sync pairs yet</string>
