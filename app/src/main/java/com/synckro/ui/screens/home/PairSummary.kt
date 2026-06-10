@@ -94,3 +94,51 @@ private fun extractCount(msg: String, keyword: String): Int {
     val regex = Regex("(\\d+)\\s+$keyword")
     return regex.find(msg)?.groupValues?.get(1)?.toIntOrNull() ?: 0
 }
+
+/**
+ * Returns `true` when [summary]'s outcome represents a terminal failure that
+ * should be surfaced as a generic "sync failed" message rather than a
+ * file-count summary.
+ */
+fun isSyncNowResultFailure(summary: PairSummary): Boolean =
+    summary.outcome == PairSummary.Outcome.FAILURE ||
+        summary.outcome == PairSummary.Outcome.NEEDS_REAUTH ||
+        summary.outcome == PairSummary.Outcome.NEEDS_RELINK
+
+/**
+ * Builds the snackbar message and optional action label for a completed
+ * "Sync now" result.  All display strings are passed in as parameters so this
+ * function stays platform-free and unit-testable (issue #262).
+ *
+ * @param summary             Terminal sync result to format.
+ * @param appliedStr          Already-quantified string for the file count alone,
+ *   e.g. "Synced: 3 files changed" — caller uses plural resources to produce it.
+ * @param appliedConflictsStr Already-quantified string combining file count and
+ *   conflict count, e.g. "Synced: 3 files changed · 1 conflict" — caller uses
+ *   plural resources to produce both parts.
+ * @param nothingToSyncStr    Displayed when [PairSummary.applied] == 0 and
+ *   [PairSummary.conflicts] == 0.
+ * @param failedStr           Displayed for terminal failure outcomes.
+ * @param viewConflictsStr    Action-button label offered when conflicts > 0.
+ * @return A pair of (message, actionLabel) — actionLabel is `null` when there
+ *   are no conflicts to review.
+ */
+fun buildSyncNowSnackbar(
+    summary: PairSummary,
+    appliedStr: String,
+    appliedConflictsStr: String,
+    nothingToSyncStr: String,
+    failedStr: String,
+    viewConflictsStr: String,
+): Pair<String, String?> {
+    val isFailure = isSyncNowResultFailure(summary)
+    val message =
+        when {
+            isFailure -> failedStr
+            summary.applied == 0 && summary.conflicts == 0 -> nothingToSyncStr
+            summary.conflicts > 0 -> appliedConflictsStr
+            else -> appliedStr
+        }
+    val actionLabel = if (!isFailure && summary.conflicts > 0) viewConflictsStr else null
+    return message to actionLabel
+}

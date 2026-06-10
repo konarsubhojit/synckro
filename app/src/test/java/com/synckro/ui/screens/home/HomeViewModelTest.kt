@@ -87,6 +87,7 @@ class HomeViewModelTest {
         mockSyncEventRepository =
             mockk {
                 every { observeAll(any()) } returns eventsFlow
+                every { observeForPair(any(), any()) } returns flowOf(emptyList())
             }
         context = ApplicationProvider.getApplicationContext()
         every { mockRepo.observeAll(any()) } returns pairsFlow
@@ -502,6 +503,83 @@ class HomeViewModelTest {
 
             assertFalse(10L in vm.state.value.progressByPairId)
             assertFalse(10L in vm.state.value.syncingPairIds)
+            collectJob.cancel()
+        }
+
+    @Test
+    fun `syncNow emits SyncNowResult with parsed summary after worker succeeds`() =
+        runTest {
+            val successEvent =
+                com.synckro.domain.model.SyncEvent(
+                    pairId = 5L,
+                    timestampMs = System.currentTimeMillis(),
+                    level = com.synckro.domain.model.SyncEventLevel.INFO,
+                    tag = com.synckro.domain.model.SyncEventTag.SYNC_WORKER,
+                    message = "Sync succeeded: 3 applied, 1 conflicts",
+                )
+            every { mockSyncEventRepository.observeForPair(5L, any()) } returns
+                flowOf(listOf(successEvent))
+            val finishedInfo =
+                mockk<WorkInfo> {
+                    every { state } returns WorkInfo.State.SUCCEEDED
+                    every { progress } returns Data.EMPTY
+                }
+            every { mockWorkManager.getWorkInfosForUniqueWorkFlow(SyncWorker.syncNowUniqueName(5L)) } returns
+                flowOf(listOf(finishedInfo))
+
+            val vm = createVm()
+            val collectJob = launch { vm.state.collect {} }
+            advanceUntilIdle()
+
+            val results = mutableListOf<HomeViewModel.SyncNowResult>()
+            val resultsJob = launch { vm.syncNowResult.collect { results += it } }
+            advanceUntilIdle()
+
+            vm.syncNow(pair(5L))
+            advanceUntilIdle()
+
+            assertEquals(1, results.size)
+            val result = results[0]
+            assertEquals(5L, result.pairId)
+            assertEquals(PairSummary.Outcome.SUCCESS, result.summary?.outcome)
+            assertEquals(3, result.summary?.applied)
+            assertEquals(1, result.summary?.conflicts)
+
+            resultsJob.cancel()
+            collectJob.cancel()
+        }
+
+    @Test
+    fun `syncNow emits SyncNowResult with null summary when worker cancelled before writing event`() =
+        runTest {
+            // observeForPair returns an empty list — simulates the worker being
+            // cancelled before it wrote a terminal event.
+            every { mockSyncEventRepository.observeForPair(6L, any()) } returns
+                flowOf(emptyList())
+            val cancelledInfo =
+                mockk<WorkInfo> {
+                    every { state } returns WorkInfo.State.CANCELLED
+                    every { progress } returns Data.EMPTY
+                }
+            every { mockWorkManager.getWorkInfosForUniqueWorkFlow(SyncWorker.syncNowUniqueName(6L)) } returns
+                flowOf(listOf(cancelledInfo))
+
+            val vm = createVm()
+            val collectJob = launch { vm.state.collect {} }
+            advanceUntilIdle()
+
+            val results = mutableListOf<HomeViewModel.SyncNowResult>()
+            val resultsJob = launch { vm.syncNowResult.collect { results += it } }
+            advanceUntilIdle()
+
+            vm.syncNow(pair(6L))
+            advanceUntilIdle()
+
+            assertEquals(1, results.size)
+            assertEquals(6L, results[0].pairId)
+            assertEquals(null, results[0].summary)
+
+            resultsJob.cancel()
             collectJob.cancel()
         }
 

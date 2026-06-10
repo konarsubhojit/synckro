@@ -32,6 +32,13 @@
     <string name="home_sync_now_blocked_needs_relink">Can\'t sync: folder access lost. Tap Edit to re-select the folder.</string>
     <string name="home_sync_now_blocked_needs_reauth">Can\'t sync: sign-in required. Tap Reconnect to re-authenticate.</string>
     <string name="home_sync_now_blocked_paused">Can\'t sync: auto-sync is paused for this pair. Turn it on to sync.</string>
+    <!-- Issue #262: post-sync result snackbar messages. -->
+    <string name="home_sync_now_result_nothing_to_sync">Nothing to sync — already up to date</string>
+    <string name="home_sync_now_result_failed">Sync failed</string>
+    <!-- Separator used between file-count and conflict-count in the result snackbar. -->
+    <string name="home_sync_now_result_separator"> · </string>
+    <!-- Action label on the result snackbar when conflicts > 0. -->
+    <string name="home_sync_now_result_view_conflicts">View</string>
     <string name="accounts_action">Accounts</string>
     <string name="home_edit_pair">Edit pair</string>
     <string name="home_delete_pair">Delete pair</string>
@@ -659,6 +666,6 @@
     <string name="settings_send_feedback_body_unset">Feedback email isn\u0027t configured in this build; draft uses %1$s.</string>
     <string name="settings_send_feedback_subject">Synckro feedback - %1$s</string>
     <string name="settings_send_feedback_template">App version: %1$s\nAndroid version: %2$s\nDevice: %3$s %4$s\nLocale: %5$s\n\nDescribe what happened:\n</string>
-    <string name="settings_send_feedback_no_app">Couldn\u0027t open an email app to send feedback.</string>
+    <string name="settings_send_feedback_no_app">Couldn\'t open an email app to send feedback.</string>
 
 </resources>
