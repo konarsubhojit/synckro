@@ -352,6 +352,64 @@ class AccountsViewModelTest {
             io.mockk.coVerify(exactly = 0) { accountRepository.rename(any(), any()) }
         }
 
+    @Test
+    fun `refresh sets error state when an unexpected exception is thrown`() =
+        runTest {
+            val registry =
+                AuthManagerRegistry(
+                    mapOf(
+                        CloudProviderType.GOOGLE_DRIVE to
+                            mockk {
+                                every { displayName } returns "Google Drive"
+                                every { providerType } returns CloudProviderType.GOOGLE_DRIVE
+                                coEvery { isConfigured() } throws RuntimeException("network failure")
+                            },
+                    ),
+                )
+            val vm = createVm(registry)
+            advanceUntilIdle()
+
+            assertFalse(vm.state.value.isLoading)
+            assertNotNull(vm.state.value.error)
+            assertTrue(vm.state.value.rows.isEmpty())
+        }
+
+    @Test
+    fun `refresh clears error state on a successful retry`() =
+        runTest {
+            val account = account("gd-1", CloudProviderType.GOOGLE_DRIVE, "alpha@gmail.com")
+            var callCount = 0
+            val registry =
+                AuthManagerRegistry(
+                    mapOf(
+                        CloudProviderType.GOOGLE_DRIVE to
+                            mockk {
+                                every { displayName } returns "Google Drive"
+                                every { providerType } returns CloudProviderType.GOOGLE_DRIVE
+                                coEvery { isConfigured() } answers {
+                                    if (callCount++ == 0) throw RuntimeException("first call fails") else false
+                                }
+                                coEvery { currentAccounts() } returns listOf(account)
+                            },
+                    ),
+                )
+            coEvery { accountRepository.getByProvider(CloudProviderType.GOOGLE_DRIVE) } returns listOf(account)
+
+            val vm = createVm(registry)
+            advanceUntilIdle()
+
+            // First call threw — error should be set.
+            assertNotNull(vm.state.value.error)
+
+            // Retry.
+            vm.refresh()
+            advanceUntilIdle()
+
+            assertNull(vm.state.value.error)
+            assertFalse(vm.state.value.isLoading)
+            assertEquals(1, vm.state.value.rows.size)
+        }
+
     private fun account(
         id: String,
         provider: CloudProviderType,

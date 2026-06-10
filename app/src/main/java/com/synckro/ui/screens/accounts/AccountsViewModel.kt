@@ -119,6 +119,11 @@ class AccountsViewModel
             val rows: List<AccountRow> = emptyList(),
             val isLoading: Boolean = true,
             /**
+             * Non-null when [refresh] fails. The UI should render an [ErrorState]
+             * and offer a retry that re-invokes [refresh].
+             */
+            val error: String? = null,
+            /**
              * Set when the user requested a disconnect that needs explicit
              * confirmation (i.e. the account currently owns one or more sync pairs).
              */
@@ -189,8 +194,9 @@ class AccountsViewModel
         fun refresh() {
             viewModelScope.launch {
                 Timber.d("AccountsViewModel.refresh()")
-                val flaggedProviders = accountsNeedingReauth.mapTo(HashSet(accountsNeedingReauth.size)) { it.provider }
-                val rows =
+                _state.update { it.copy(isLoading = true, error = null) }
+                runCatching {
+                    val flaggedProviders = accountsNeedingReauth.mapTo(HashSet(accountsNeedingReauth.size)) { it.provider }
                     registry.all.map { manager ->
                         // Reconcile: merge accounts from manager's token cache with persisted accounts
                         val providerAccounts = reconcileAccounts(manager)
@@ -213,20 +219,29 @@ class AccountsViewModel
                             needsReauth = manager.providerType in flaggedProviders,
                         )
                     }
-                _state.update { cur ->
-                    // Preserve highlightedAccountId across refresh — Phase 5d deep-links
-                    // can race against reconcile. All other fields default-reset to
-                    // their UiState() initial values, matching the previous behaviour.
-                    UiState(
-                        rows = rows,
-                        isLoading = false,
-                        highlightedAccountId = cur.highlightedAccountId,
-                    )
+                }.onSuccess { rows ->
+                    _state.update { cur ->
+                        // Preserve highlightedAccountId across refresh — Phase 5d deep-links
+                        // can race against reconcile. All other fields default-reset to
+                        // their UiState() initial values, matching the previous behaviour.
+                        UiState(
+                            rows = rows,
+                            isLoading = false,
+                            highlightedAccountId = cur.highlightedAccountId,
+                        )
+                    }
+                    // Fetch storage quotas for all accounts in parallel, after the rows
+                    // are already visible (so the UI renders quickly with a placeholder).
+                    fetchAllQuotas(rows)
+                }.onFailure { e ->
+                    Timber.w(e, "AccountsViewModel.refresh() failed")
+                    _state.update { cur ->
+                        cur.copy(
+                            isLoading = false,
+                            error = e.message ?: e.javaClass.simpleName,
+                        )
+                    }
                 }
-
-                // Fetch storage quotas for all accounts in parallel, after the rows
-                // are already visible (so the UI renders quickly with a placeholder).
-                fetchAllQuotas(rows)
             }
         }
 

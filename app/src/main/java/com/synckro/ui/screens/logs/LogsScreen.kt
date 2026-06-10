@@ -86,6 +86,8 @@ import com.synckro.domain.model.SyncEventLevel
 import com.synckro.domain.model.SyncEventTag
 import com.synckro.ui.components.CoachTooltip
 import com.synckro.ui.components.EmptyState
+import com.synckro.ui.components.ErrorState
+import com.synckro.ui.components.LoadingState
 import com.synckro.ui.theme.SynckroTheme
 import com.synckro.util.logging.LogExportConfig
 import com.synckro.util.logging.LogExportSink
@@ -372,6 +374,7 @@ fun LogsTabContent(
     onTriggerSync: () -> Unit,
     dateFormat: SimpleDateFormat,
     onRowLongPress: (SyncEvent) -> Unit,
+    onRetry: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -400,39 +403,56 @@ fun LogsTabContent(
                 }
             },
         )
-        // ── Events list / empty state ────────────────────────────────────
-        if (!state.isLoading && state.events.isEmpty()) {
-            if (state.hasActiveFilters) {
-                EmptyState(
-                    title = stringResource(R.string.logs_empty_filtered_title),
-                    body = stringResource(R.string.logs_empty_filtered_body),
-                    icon = Icons.Filled.History,
-                    primaryActionLabel = stringResource(R.string.logs_empty_filtered_cta),
-                    onPrimaryAction = onClearFilters,
-                    modifier = Modifier.fillMaxSize(),
-                )
-            } else {
-                EmptyState(
-                    title = stringResource(R.string.logs_empty_title),
-                    body = stringResource(R.string.logs_empty_body),
-                    icon = Icons.Filled.History,
-                    primaryActionLabel = stringResource(R.string.logs_empty_trigger_sync_cta),
-                    onPrimaryAction = onTriggerSync,
+        // ── Loading / error / empty / list ───────────────────────────────
+        when {
+            state.isLoading -> {
+                LoadingState(
+                    message = stringResource(R.string.loading_logs),
                     modifier = Modifier.fillMaxSize(),
                 )
             }
-        } else {
-            LazyColumn(
-                modifier = maxContentWidth.fillMaxSize(),
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                items(state.events, key = { it.id }) { event ->
-                    SyncHistoryRow(
-                        event = event,
-                        dateFormat = dateFormat,
-                        onLongPress = { onRowLongPress(event) },
+            state.error != null -> {
+                ErrorState(
+                    title = stringResource(R.string.error_state_logs_title),
+                    body = stringResource(R.string.error_state_logs_body),
+                    onRetry = onRetry,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+            state.events.isEmpty() -> {
+                if (state.hasActiveFilters) {
+                    EmptyState(
+                        title = stringResource(R.string.logs_empty_filtered_title),
+                        body = stringResource(R.string.logs_empty_filtered_body),
+                        icon = Icons.Filled.History,
+                        primaryActionLabel = stringResource(R.string.logs_empty_filtered_cta),
+                        onPrimaryAction = onClearFilters,
+                        modifier = Modifier.fillMaxSize(),
                     )
+                } else {
+                    EmptyState(
+                        title = stringResource(R.string.logs_empty_title),
+                        body = stringResource(R.string.logs_empty_body),
+                        icon = Icons.Filled.History,
+                        primaryActionLabel = stringResource(R.string.logs_empty_trigger_sync_cta),
+                        onPrimaryAction = onTriggerSync,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
+            }
+            else -> {
+                LazyColumn(
+                    modifier = maxContentWidth.fillMaxSize(),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    items(state.events, key = { it.id }) { event ->
+                        SyncHistoryRow(
+                            event = event,
+                            dateFormat = dateFormat,
+                            onLongPress = { onRowLongPress(event) },
+                        )
+                    }
                 }
             }
         }

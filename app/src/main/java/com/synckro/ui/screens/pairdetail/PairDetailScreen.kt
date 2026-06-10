@@ -59,6 +59,7 @@ import com.synckro.R
 import com.synckro.domain.model.SyncEvent
 import com.synckro.domain.model.SyncEventLevel
 import com.synckro.domain.sync.TransferProgress
+import com.synckro.ui.components.ErrorState
 import com.synckro.ui.components.LoadingState
 import com.synckro.ui.components.SectionCard
 import com.synckro.ui.screens.home.HomeViewModel
@@ -171,6 +172,14 @@ fun PairDetailScreen(
         if (state.isLoading) {
             LoadingState(
                 message = stringResource(R.string.pair_detail_loading),
+                modifier = Modifier.fillMaxSize().padding(padding),
+            )
+            return@Scaffold
+        }
+        if (state.error != null) {
+            ErrorState(
+                title = stringResource(R.string.error_state_pair_detail_title),
+                body = stringResource(R.string.error_state_pair_detail_body),
                 modifier = Modifier.fillMaxSize().padding(padding),
             )
             return@Scaffold

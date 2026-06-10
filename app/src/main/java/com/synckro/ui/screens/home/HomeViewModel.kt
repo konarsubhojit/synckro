@@ -30,6 +30,7 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
@@ -70,6 +71,8 @@ class HomeViewModel
         data class UiState(
             val pairs: List<SyncPair> = emptyList(),
             val isLoading: Boolean = true,
+            /** Non-null when the pairs flow terminates with an error. */
+            val error: String? = null,
             /** Number of pending (unresolved) conflicts across all pairs. */
             val pendingConflictCount: Int = 0,
             /** IDs of pairs that currently have an in-flight one-shot "sync now" job. */
@@ -177,6 +180,9 @@ class HomeViewModel
                 uiState.copy(progressByPairId = prog)
             }.combine(settingsRepository.batteryWarningDismissed) { uiState, dismissed ->
                 uiState.copy(batteryWarningDismissed = dismissed)
+            }.catch { e ->
+                Timber.w(e, "HomeViewModel: state flow error")
+                emit(UiState(isLoading = false, error = e.message ?: e.javaClass.simpleName))
             }.stateIn(
                 scope = viewModelScope,
                 started = SharingStarted.WhileSubscribed(5_000),

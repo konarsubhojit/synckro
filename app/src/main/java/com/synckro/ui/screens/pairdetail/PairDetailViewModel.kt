@@ -25,6 +25,7 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import timber.log.Timber
 import javax.inject.Inject
 
 /**
@@ -65,6 +66,8 @@ class PairDetailViewModel
         data class UiState(
             val pair: SyncPair? = null,
             val isLoading: Boolean = true,
+            /** Non-null when the state flow terminates with an error. */
+            val error: String? = null,
             /** Most recent terminal sync result for the pair, or `null` if never synced. */
             val lastSummary: PairSummary? = null,
             /** Last [RECENT_EVENT_LIMIT] events for the pair, newest first. */
@@ -140,6 +143,9 @@ class PairDetailViewModel
                     isSyncing = workProgress.isSyncing,
                     progress = workProgress.progress,
                 )
+            }.catch { e ->
+                Timber.w(e, "PairDetailViewModel: state flow error")
+                emit(UiState(isLoading = false, error = e.message ?: e.javaClass.simpleName))
             }.stateIn(
                 scope = viewModelScope,
                 started = SharingStarted.WhileSubscribed(5_000),

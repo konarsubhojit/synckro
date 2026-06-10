@@ -17,6 +17,7 @@ import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -27,6 +28,8 @@ import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -491,6 +494,22 @@ class ConflictInboxViewModelTest {
             coVerifyOrder {
                 conflictRepository.resolve(7L, ConflictRecord.RESOLUTION_KEEP_BOTH)
             }
+
+            collectJob.cancel()
+        }
+
+    @Test
+    fun `error state is set when observeUnresolved emits an exception`() =
+        runTest {
+            every { conflictRepository.observeUnresolved() } returns
+                flow { throw RuntimeException("db failure") }
+
+            val vm = createVm()
+            val collectJob = launch { vm.state.collect {} }
+            advanceUntilIdle()
+
+            assertNotNull(vm.state.value.error)
+            assertFalse(vm.state.value.isLoading)
 
             collectJob.cancel()
         }

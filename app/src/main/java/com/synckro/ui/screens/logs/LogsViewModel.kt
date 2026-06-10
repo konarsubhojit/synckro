@@ -22,11 +22,13 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import timber.log.Timber
 import javax.inject.Inject
 
 /** Quick time-window presets for the Logs filter row. */
@@ -79,6 +81,8 @@ class LogsViewModel
         data class UiState(
             val events: List<SyncEvent> = emptyList(),
             val isLoading: Boolean = true,
+            /** Non-null when the events flow terminates with an error. */
+            val error: String? = null,
             /** Active level filter; null means show all levels. */
             val levelFilter: SyncEventLevel? = null,
             /** Active tag filter; null means show all tags. */
@@ -165,6 +169,9 @@ class LogsViewModel
                             filters.timeWindow != null ||
                             q.isNotEmpty(),
                 )
+            }.catch { e ->
+                Timber.w(e, "LogsViewModel: state flow error")
+                emit(UiState(isLoading = false, error = e.message ?: e.javaClass.simpleName))
             }.stateIn(
                 scope = viewModelScope,
                 started = SharingStarted.WhileSubscribed(5_000),

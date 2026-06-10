@@ -83,6 +83,7 @@ import coil.request.ImageRequest
 import com.synckro.R
 import com.synckro.domain.model.ConflictRecord
 import com.synckro.ui.components.EmptyState
+import com.synckro.ui.components.ErrorState
 import com.synckro.ui.components.LoadingState
 import com.synckro.util.rememberHapticHelper
 import kotlinx.coroutines.launch
@@ -212,6 +213,16 @@ fun ConflictInboxScreen(
             state.isLoading -> {
                 LoadingState(
                     message = stringResource(R.string.loading_conflicts),
+                    modifier =
+                        Modifier
+                            .fillMaxSize()
+                            .padding(padding),
+                )
+            }
+            state.error != null -> {
+                ErrorState(
+                    title = stringResource(R.string.error_state_conflicts_title),
+                    body = stringResource(R.string.error_state_conflicts_body),
                     modifier =
                         Modifier
                             .fillMaxSize()
