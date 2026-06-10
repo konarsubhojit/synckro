@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Issue #262: post-sync result snackbar — file count portion. -->
+    <!-- Used by PairsScreen and PairDetailScreen after a manual "Sync now" completes. -->
+    <plurals name="home_sync_now_result_applied">
+        <item quantity="one">Synced: 1 file changed</item>
+        <item quantity="other">Synced: %1$d files changed</item>
+    </plurals>
+
+    <!-- Conflict count portion appended to the file-count string when conflicts > 0. -->
+    <plurals name="home_sync_now_result_conflicts">
+        <item quantity="one">1 conflict</item>
+        <item quantity="other">%1$d conflicts</item>
+    </plurals>
+</resources>

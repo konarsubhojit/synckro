@@ -49,6 +49,7 @@ import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -62,6 +63,7 @@ import com.synckro.ui.components.LoadingState
 import com.synckro.ui.components.SectionCard
 import com.synckro.ui.screens.home.HomeViewModel
 import com.synckro.ui.screens.home.PairSummary
+import com.synckro.ui.screens.home.buildSyncNowSnackbar
 
 /**
  * Per-pair detail screen (Phase 5c — issue #163).
@@ -88,8 +90,8 @@ fun PairDetailScreen(
 
     // Issue #262: show a post-sync result snackbar whenever a "Sync now" run
     // for THIS pair terminates, so the user always gets explicit feedback.
-    val syncNowResultApplied = stringResource(R.string.home_sync_now_result_applied_format)
-    val syncNowResultAppliedConflicts = stringResource(R.string.home_sync_now_result_applied_conflicts_format)
+    val syncNowResultResources = LocalContext.current.resources
+    val syncNowResultSeparator = stringResource(R.string.home_sync_now_result_separator)
     val syncNowResultNothing = stringResource(R.string.home_sync_now_result_nothing_to_sync)
     val syncNowResultFailed = stringResource(R.string.home_sync_now_result_failed)
     val syncNowResultViewConflicts = stringResource(R.string.home_sync_now_result_view_conflicts)
@@ -97,19 +99,29 @@ fun PairDetailScreen(
         homeViewModel.syncNowResult.collect { result ->
             if (result.pairId != viewModel.pairId) return@collect
             val summary = result.summary ?: return@collect
-            val isFailure =
-                summary.outcome == PairSummary.Outcome.FAILURE ||
-                    summary.outcome == PairSummary.Outcome.NEEDS_REAUTH ||
-                    summary.outcome == PairSummary.Outcome.NEEDS_RELINK
-            val message =
-                when {
-                    isFailure -> syncNowResultFailed
-                    summary.applied == 0 && summary.conflicts == 0 -> syncNowResultNothing
-                    summary.conflicts > 0 ->
-                        String.format(syncNowResultAppliedConflicts, summary.applied, summary.conflicts)
-                    else -> String.format(syncNowResultApplied, summary.applied)
-                }
-            val actionLabel = if (!isFailure && summary.conflicts > 0) syncNowResultViewConflicts else null
+            val appliedStr =
+                syncNowResultResources.getQuantityString(
+                    R.plurals.home_sync_now_result_applied,
+                    summary.applied,
+                    summary.applied,
+                )
+            val appliedConflictsStr =
+                appliedStr +
+                    syncNowResultSeparator +
+                    syncNowResultResources.getQuantityString(
+                        R.plurals.home_sync_now_result_conflicts,
+                        summary.conflicts,
+                        summary.conflicts,
+                    )
+            val (message, actionLabel) =
+                buildSyncNowSnackbar(
+                    summary = summary,
+                    appliedStr = appliedStr,
+                    appliedConflictsStr = appliedConflictsStr,
+                    nothingToSyncStr = syncNowResultNothing,
+                    failedStr = syncNowResultFailed,
+                    viewConflictsStr = syncNowResultViewConflicts,
+                )
             val snackResult =
                 snackbarHostState.showSnackbar(
                     message = message,
@@ -121,7 +133,6 @@ fun PairDetailScreen(
             }
         }
     }
-
     Scaffold(
         topBar = {
             TopAppBar(

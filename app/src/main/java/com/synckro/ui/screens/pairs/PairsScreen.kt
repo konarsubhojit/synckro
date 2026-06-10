@@ -99,6 +99,7 @@ import com.synckro.ui.components.SectionCard
 import com.synckro.ui.components.SyncProgressRows
 import com.synckro.ui.screens.home.HomeViewModel
 import com.synckro.ui.screens.home.PairSummary
+import com.synckro.ui.screens.home.buildSyncNowSnackbar
 import com.synckro.ui.screens.pairdetail.PairDetailScreen
 import kotlinx.coroutines.launch
 
@@ -190,27 +191,37 @@ fun PairsScreen(
     // Issue #262: surface the terminal sync result so the user always gets
     // explicit feedback after a "Sync now" tap, regardless of how many files
     // changed. If conflicts were detected, an action deep-links to the inbox.
-    val syncNowResultApplied = stringResource(R.string.home_sync_now_result_applied_format)
-    val syncNowResultAppliedConflicts = stringResource(R.string.home_sync_now_result_applied_conflicts_format)
+    val syncNowResultResources = LocalContext.current.resources
+    val syncNowResultSeparator = stringResource(R.string.home_sync_now_result_separator)
     val syncNowResultNothing = stringResource(R.string.home_sync_now_result_nothing_to_sync)
     val syncNowResultFailed = stringResource(R.string.home_sync_now_result_failed)
     val syncNowResultViewConflicts = stringResource(R.string.home_sync_now_result_view_conflicts)
     LaunchedEffect(viewModel) {
         viewModel.syncNowResult.collect { result ->
             val summary = result.summary ?: return@collect
-            val isFailure =
-                summary.outcome == PairSummary.Outcome.FAILURE ||
-                    summary.outcome == PairSummary.Outcome.NEEDS_REAUTH ||
-                    summary.outcome == PairSummary.Outcome.NEEDS_RELINK
-            val message =
-                when {
-                    isFailure -> syncNowResultFailed
-                    summary.applied == 0 && summary.conflicts == 0 -> syncNowResultNothing
-                    summary.conflicts > 0 ->
-                        String.format(syncNowResultAppliedConflicts, summary.applied, summary.conflicts)
-                    else -> String.format(syncNowResultApplied, summary.applied)
-                }
-            val actionLabel = if (!isFailure && summary.conflicts > 0) syncNowResultViewConflicts else null
+            val appliedStr =
+                syncNowResultResources.getQuantityString(
+                    R.plurals.home_sync_now_result_applied,
+                    summary.applied,
+                    summary.applied,
+                )
+            val appliedConflictsStr =
+                appliedStr +
+                    syncNowResultSeparator +
+                    syncNowResultResources.getQuantityString(
+                        R.plurals.home_sync_now_result_conflicts,
+                        summary.conflicts,
+                        summary.conflicts,
+                    )
+            val (message, actionLabel) =
+                buildSyncNowSnackbar(
+                    summary = summary,
+                    appliedStr = appliedStr,
+                    appliedConflictsStr = appliedConflictsStr,
+                    nothingToSyncStr = syncNowResultNothing,
+                    failedStr = syncNowResultFailed,
+                    viewConflictsStr = syncNowResultViewConflicts,
+                )
             val snackResult =
                 snackbarHostState.showSnackbar(
                     message = message,
