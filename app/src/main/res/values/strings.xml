@@ -32,6 +32,15 @@
     <string name="home_sync_now_blocked_needs_relink">Can\'t sync: folder access lost. Tap Edit to re-select the folder.</string>
     <string name="home_sync_now_blocked_needs_reauth">Can\'t sync: sign-in required. Tap Reconnect to re-authenticate.</string>
     <string name="home_sync_now_blocked_paused">Can\'t sync: auto-sync is paused for this pair. Turn it on to sync.</string>
+    <!-- Issue #262: post-sync result snackbar messages. -->
+    <!-- %1$d = files applied (uploads + downloads + deletes). -->
+    <string name="home_sync_now_result_applied_format">Synced: %1$d file(s) changed</string>
+    <!-- %1$d = files applied, %2$d = conflicts detected. -->
+    <string name="home_sync_now_result_applied_conflicts_format">Synced: %1$d file(s) changed · %2$d conflict(s)</string>
+    <string name="home_sync_now_result_nothing_to_sync">Nothing to sync — already up to date</string>
+    <string name="home_sync_now_result_failed">Sync failed</string>
+    <!-- Action label on the result snackbar when conflicts > 0. -->
+    <string name="home_sync_now_result_view_conflicts">View</string>
     <string name="accounts_action">Accounts</string>
     <string name="home_edit_pair">Edit pair</string>
     <string name="home_delete_pair">Delete pair</string>

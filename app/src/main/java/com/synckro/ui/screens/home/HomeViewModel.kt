@@ -374,6 +374,33 @@ class HomeViewModel
          */
         val syncNowBlocked: SharedFlow<ManualSyncBlockedReason> = _syncNowBlocked.asSharedFlow()
 
+        /**
+         * Result of a completed [syncNow] run, surfaced via [syncNowResult] so the UI
+         * can show a post-sync summary snackbar with counts and a deep-link to the
+         * conflict inbox when conflicts were detected (issue #262).
+         *
+         * @param pairId   The id of the pair that finished syncing.
+         * @param pairName Display name of the pair (used in multi-pair screens where
+         *   the result must identify which pair completed).
+         * @param summary  Parsed terminal sync result, or `null` when the worker was
+         *   cancelled before writing a terminal event.
+         */
+        data class SyncNowResult(
+            val pairId: Long,
+            val pairName: String,
+            val summary: PairSummary?,
+        )
+
+        private val _syncNowResult = MutableSharedFlow<SyncNowResult>(extraBufferCapacity = 1)
+
+        /**
+         * One-shot stream emitted whenever a [syncNow] worker reaches a terminal
+         * state (succeeded, failed, or cancelled). The UI collects this to show a
+         * snackbar summarising the outcome so the user is never left wondering
+         * whether anything happened (issue #262).
+         */
+        val syncNowResult: SharedFlow<SyncNowResult> = _syncNowResult.asSharedFlow()
+
         private val _syncAllResults = MutableSharedFlow<SyncAllResult>(extraBufferCapacity = 1)
 
         /**
@@ -496,6 +523,24 @@ class HomeViewModel
                 // ExistingWorkPolicy.KEEP preserves the in-flight job.
                 pairProgress.update { it - pair.id }
                 syncingIds.update { it - pair.id }
+                // Surface the terminal result (issue #262): read the most-recent
+                // event for this pair (the worker writes it before returning
+                // Result.success/failure, so it should be present by now) and
+                // emit the parsed summary. A null summary means the worker was
+                // cancelled before writing a terminal event; the UI treats that
+                // as a silent no-op rather than showing a misleading message.
+                val latestEvents =
+                    runCatching {
+                        syncEventRepository.observeForPair(pair.id, 1).first()
+                    }.getOrNull()
+                val summary = latestEvents?.firstNotNullOfOrNull { parsePairSummary(it) }
+                _syncNowResult.tryEmit(
+                    SyncNowResult(
+                        pairId = pair.id,
+                        pairName = pair.displayName,
+                        summary = summary,
+                    ),
+                )
             }
         }
 

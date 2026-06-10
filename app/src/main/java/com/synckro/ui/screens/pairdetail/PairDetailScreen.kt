@@ -30,9 +30,14 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -56,6 +61,7 @@ import com.synckro.domain.sync.TransferProgress
 import com.synckro.ui.components.LoadingState
 import com.synckro.ui.components.SectionCard
 import com.synckro.ui.screens.home.HomeViewModel
+import com.synckro.ui.screens.home.PairSummary
 
 /**
  * Per-pair detail screen (Phase 5c — issue #163).
@@ -74,9 +80,47 @@ fun PairDetailScreen(
     onOpenConflicts: () -> Unit,
     onOpenLogs: (Long) -> Unit,
     viewModel: PairDetailViewModel = hiltViewModel(),
+    homeViewModel: HomeViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val pair = state.pair
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    // Issue #262: show a post-sync result snackbar whenever a "Sync now" run
+    // for THIS pair terminates, so the user always gets explicit feedback.
+    val syncNowResultApplied = stringResource(R.string.home_sync_now_result_applied_format)
+    val syncNowResultAppliedConflicts = stringResource(R.string.home_sync_now_result_applied_conflicts_format)
+    val syncNowResultNothing = stringResource(R.string.home_sync_now_result_nothing_to_sync)
+    val syncNowResultFailed = stringResource(R.string.home_sync_now_result_failed)
+    val syncNowResultViewConflicts = stringResource(R.string.home_sync_now_result_view_conflicts)
+    LaunchedEffect(homeViewModel, viewModel.pairId) {
+        homeViewModel.syncNowResult.collect { result ->
+            if (result.pairId != viewModel.pairId) return@collect
+            val summary = result.summary ?: return@collect
+            val isFailure =
+                summary.outcome == PairSummary.Outcome.FAILURE ||
+                    summary.outcome == PairSummary.Outcome.NEEDS_REAUTH ||
+                    summary.outcome == PairSummary.Outcome.NEEDS_RELINK
+            val message =
+                when {
+                    isFailure -> syncNowResultFailed
+                    summary.applied == 0 && summary.conflicts == 0 -> syncNowResultNothing
+                    summary.conflicts > 0 ->
+                        String.format(syncNowResultAppliedConflicts, summary.applied, summary.conflicts)
+                    else -> String.format(syncNowResultApplied, summary.applied)
+                }
+            val actionLabel = if (!isFailure && summary.conflicts > 0) syncNowResultViewConflicts else null
+            val snackResult =
+                snackbarHostState.showSnackbar(
+                    message = message,
+                    actionLabel = actionLabel,
+                    duration = SnackbarDuration.Long,
+                )
+            if (snackResult == SnackbarResult.ActionPerformed) {
+                onOpenConflicts()
+            }
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -111,6 +155,7 @@ fun PairDetailScreen(
                 },
             )
         },
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
     ) { padding ->
         if (state.isLoading) {
             LoadingState(

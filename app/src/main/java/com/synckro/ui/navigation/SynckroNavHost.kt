@@ -434,6 +434,7 @@ fun SynckroNavHost(
                     pendingLogsPairId = pairId
                     nav.popBackStack(Routes.MAIN, inclusive = false)
                 },
+                homeViewModel = sharedHomeViewModel,
             )
         }
     }
