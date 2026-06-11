@@ -477,6 +477,7 @@ private fun SyncHistoryRow(
 
     val levelColor = levelColor(event.level)
     val levelIcon = levelIcon(event.level)
+    val levelLabel = stringResource(levelLabelRes(event.level))
 
     val expandLabel = stringResource(R.string.logs_history_expand)
     val collapseLabel = stringResource(R.string.logs_history_collapse)
@@ -521,7 +522,7 @@ private fun SyncHistoryRow(
                 ) {}
                 Icon(
                     imageVector = levelIcon,
-                    contentDescription = null,
+                    contentDescription = levelLabel,
                     tint = levelColor,
                     modifier = Modifier.size(18.dp),
                 )
@@ -663,6 +664,14 @@ private fun levelIcon(level: SyncEventLevel): ImageVector =
         SyncEventLevel.INFO -> Icons.Default.CheckCircle
         SyncEventLevel.WARN -> Icons.Default.Warning
         SyncEventLevel.ERROR -> Icons.Default.ErrorOutline
+    }
+
+private fun levelLabelRes(level: SyncEventLevel): Int =
+    when (level) {
+        SyncEventLevel.DEBUG -> R.string.logs_level_debug
+        SyncEventLevel.INFO -> R.string.logs_level_info
+        SyncEventLevel.WARN -> R.string.logs_level_warn
+        SyncEventLevel.ERROR -> R.string.logs_level_error
     }
 
 /**

@@ -468,7 +468,12 @@ private fun ConflictCard(
                 if (isSelectionMode) {
                     Icon(
                         imageVector = Icons.Default.CheckCircle,
-                        contentDescription = null,
+                        contentDescription =
+                            if (isSelected) {
+                                stringResource(R.string.conflict_inbox_selected)
+                            } else {
+                                stringResource(R.string.conflict_inbox_not_selected)
+                            },
                         tint =
                             if (isSelected) {
                                 MaterialTheme.colorScheme.primary
@@ -486,7 +491,7 @@ private fun ConflictCard(
                 } else {
                     Icon(
                         imageVector = fileTypeIcon,
-                        contentDescription = null,
+                        contentDescription = fileTypeLabel,
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }

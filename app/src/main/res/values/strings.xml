@@ -59,6 +59,11 @@
     <string name="home_last_result_needs_reauth">Last run: re-authentication required</string>
     <string name="home_last_result_needs_relink">Last run: folder access lost</string>
     <string name="home_card_status_stripe">Status indicator</string>
+    <!-- Per-status descriptions for the colour stripe on pair cards (used by screen readers). -->
+    <string name="home_card_status_stripe_success">Status: Healthy</string>
+    <string name="home_card_status_stripe_syncing">Status: Syncing</string>
+    <string name="home_card_status_stripe_needs_action">Status: Needs attention</string>
+    <string name="home_card_status_stripe_idle">Status: Not yet synced</string>
     <!-- Live sync progress shown on pair cards -->
     <string name="home_sync_progress_files_format">%1$d / %2$d</string>
     <string name="home_sync_current_file_format">%1$s</string>
@@ -118,6 +123,8 @@
     <string name="accounts_reauth_required">Sign-in expired or access was revoked. Sync stopped — tap to re-authenticate.</string>
     <string name="accounts_reauth_button">Re-authenticate %1$s</string>
     <string name="accounts_avatar_description">Account avatar for %1$s</string>
+    <!-- Content description for the Connected check icon in the provider section header. -->
+    <string name="accounts_provider_connected">Connected</string>
     <!-- Storage quota line: "X GB (Y%) of Z TB used" -->
     <string name="accounts_storage_used_format">%1$s (%2$d%%) of %3$s used</string>
     <string name="accounts_storage_fetching">Fetching storage usage…</string>
@@ -371,6 +378,11 @@
     <string name="logs_history_expand">Show event details</string>
     <string name="logs_history_collapse">Hide event details</string>
     <string name="logs_history_level_label">Level</string>
+    <!-- Content descriptions for the level icon on each log entry row. -->
+    <string name="logs_level_debug">Debug</string>
+    <string name="logs_level_info">Info</string>
+    <string name="logs_level_warn">Warning</string>
+    <string name="logs_level_error">Error</string>
     <string name="logs_history_tag_label">Tag</string>
     <string name="logs_history_pair_label">Pair</string>
     <string name="logs_history_full_time_label">When</string>
