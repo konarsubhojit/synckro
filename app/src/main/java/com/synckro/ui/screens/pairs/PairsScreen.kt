@@ -667,7 +667,13 @@ private fun SyncPairRow(
             PairCardStatus.NEEDS_ACTION -> MaterialTheme.colorScheme.error
             PairCardStatus.IDLE -> MaterialTheme.colorScheme.outline
         }
-    val stripeDescription = stringResource(R.string.home_card_status_stripe)
+    val stripeDescription =
+        when (status) {
+            PairCardStatus.SUCCESS -> stringResource(R.string.home_card_status_stripe_success)
+            PairCardStatus.SYNCING -> stringResource(R.string.home_card_status_stripe_syncing)
+            PairCardStatus.NEEDS_ACTION -> stringResource(R.string.home_card_status_stripe_needs_action)
+            PairCardStatus.IDLE -> stringResource(R.string.home_card_status_stripe_idle)
+        }
     val reauthDeepLinkDescription = stringResource(R.string.home_needs_reauth_action_description)
     // TODO(#28): Trigger HapticHelper.light() when pair-card swipe gestures are introduced.
 
@@ -742,7 +748,7 @@ private fun SyncPairRow(
                         pair.lastSyncResult == "SUCCESS" ->
                             Icon(
                                 Icons.Default.CheckCircle,
-                                contentDescription = null,
+                                contentDescription = stringResource(R.string.pair_detail_status_success),
                                 tint = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.size(20.dp),
                             )

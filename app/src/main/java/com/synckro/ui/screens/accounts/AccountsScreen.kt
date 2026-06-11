@@ -262,7 +262,7 @@ private fun AccountProviderSection(
             if (row.accounts.isNotEmpty() && !needsReauth) {
                 Icon(
                     Icons.Default.CheckCircle,
-                    contentDescription = null,
+                    contentDescription = stringResource(R.string.accounts_provider_connected),
                     tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(20.dp),
                 )
