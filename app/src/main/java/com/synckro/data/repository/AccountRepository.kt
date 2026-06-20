@@ -105,6 +105,7 @@ class AccountRepository
             Timber.i("AccountRepository.rename(id=$id, newDisplayName=$newDisplayName)")
             accountDao.updateDisplayName(id, newDisplayName)
         }
+
         /**
          * Observes all accounts for a given [providerType], emitting the
          * current snapshot and any subsequent updates whenever the underlying

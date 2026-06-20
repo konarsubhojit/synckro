@@ -697,4 +697,13 @@
     <string name="settings_send_feedback_template">App version: %1$s\nAndroid version: %2$s\nDevice: %3$s %4$s\nLocale: %5$s\n\nDescribe what happened:\n</string>
     <string name="settings_send_feedback_no_app">Couldn\'t open an email app to send feedback.</string>
 
+    <!-- Pair editor: local storage limit -->
+    <string name="pair_editor_section_storage_limit">Storage limit</string>
+    <string name="pair_editor_storage_limit_title">Limit local synced storage</string>
+    <string name="pair_editor_storage_limit_body">Stop downloading before this sync pair exceeds the selected size.</string>
+    <string name="pair_editor_storage_limit_value_label">Storage limit</string>
+    <string name="pair_editor_storage_limit_unit_mb">MB</string>
+    <string name="pair_editor_storage_limit_unit_gb">GB</string>
+    <string name="pair_editor_storage_limit_invalid">Enter a storage limit greater than zero.</string>
+
 </resources>

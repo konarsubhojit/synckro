@@ -555,6 +555,7 @@ class SettingsViewModel
             private const val SETTINGS_DATASTORE_FILENAME = "settings.preferences_pb"
             internal const val SETTINGS_BACKUP_FILENAME = "settings.backup.preferences_pb"
             private const val FEEDBACK_EMAIL_PLACEHOLDER = "feedback@example.com"
+
             private enum class BackupSettingsResult {
                 SUCCESS,
                 NO_SETTINGS,

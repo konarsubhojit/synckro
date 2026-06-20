@@ -129,6 +129,7 @@ class HomeViewModel
 
         /** Maps accountId → display email/name, kept in sync with the accounts table. */
         private val accountEmailById = MutableStateFlow<Map<String, String>>(emptyMap())
+
         /** Maps accountId → provider, kept in sync with the accounts table. */
         private val accountProviderById =
             MutableStateFlow<Map<String, CloudProviderType>>(emptyMap())

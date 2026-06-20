@@ -511,6 +511,62 @@ fun PairEditorScreen(
                     minLines = 2,
                 )
 
+                // Storage limit
+                SectionHeader(text = stringResource(R.string.pair_editor_section_storage_limit))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = stringResource(R.string.pair_editor_storage_limit_title),
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        Text(
+                            text = stringResource(R.string.pair_editor_storage_limit_body),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(
+                        checked = state.storageLimitEnabled,
+                        onCheckedChange = viewModel::onStorageLimitEnabledChange,
+                    )
+                }
+
+                if (state.storageLimitEnabled) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.Top,
+                    ) {
+                        OutlinedTextField(
+                            value = state.storageLimitValueText,
+                            onValueChange = viewModel::onStorageLimitValueChange,
+                            label = { Text(stringResource(R.string.pair_editor_storage_limit_value_label)) },
+                            isError = state.storageLimitValueError,
+                            supportingText = {
+                                if (state.storageLimitValueError) {
+                                    Text(
+                                        text = stringResource(R.string.pair_editor_storage_limit_invalid),
+                                        color = MaterialTheme.colorScheme.error,
+                                    )
+                                }
+                            },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.weight(1f),
+                        )
+                        StorageLimitUnitDropdown(
+                            isMb = state.storageLimitUnitIsMb,
+                            onSelect = viewModel::onStorageLimitUnitChange,
+                            modifier = Modifier.weight(0.6f),
+                        )
+                    }
+                }
+
                 Spacer(Modifier.height(8.dp))
 
                 Button(
@@ -807,4 +863,53 @@ private fun SectionHeader(text: String) {
                 .fillMaxWidth()
                 .padding(top = 4.dp),
     )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun StorageLimitUnitDropdown(
+    isMb: Boolean,
+    onSelect: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val label = if (isMb) stringResource(R.string.pair_editor_storage_limit_unit_mb) else stringResource(R.string.pair_editor_storage_limit_unit_gb)
+
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { expanded = it },
+        modifier = modifier,
+    ) {
+        OutlinedTextField(
+            value = label,
+            onValueChange = {},
+            readOnly = true,
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
+            modifier =
+                Modifier
+                    .menuAnchor(MenuAnchorType.PrimaryNotEditable)
+                    .fillMaxWidth(),
+        )
+        ExposedDropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+        ) {
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.pair_editor_storage_limit_unit_gb)) },
+                onClick = {
+                    onSelect(false)
+                    expanded = false
+                },
+                contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding,
+            )
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.pair_editor_storage_limit_unit_mb)) },
+                onClick = {
+                    onSelect(true)
+                    expanded = false
+                },
+                contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding,
+            )
+        }
+    }
 }

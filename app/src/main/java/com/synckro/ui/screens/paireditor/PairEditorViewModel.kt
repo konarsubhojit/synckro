@@ -132,6 +132,12 @@ class PairEditorViewModel
              * Empty string means no automatic deletion (null retention).
              */
             val retentionDaysText: String = "",
+            /** When true, the local storage limit toggle is enabled. */
+            val storageLimitEnabled: Boolean = false,
+            /** Numeric value entered by the user for the storage limit (digits only). */
+            val storageLimitValueText: String = "",
+            /** When true, the unit is MB; when false, GB. */
+            val storageLimitUnitIsMb: Boolean = false,
             val isSaving: Boolean = false,
             /**
              * Persistent error message shown as an inline banner on the editor.
@@ -209,6 +215,29 @@ class PairEditorViewModel
                         parsedCustomInterval < 15L
 
             /**
+             * Parses [storageLimitValueText] as a positive Long, or null if blank/invalid/zero.
+             * The raw value is in the unit selected by [storageLimitUnitIsMb].
+             */
+            private val parsedStorageLimitValue: Long?
+                get() = storageLimitValueText.trim().toLongOrNull()?.takeIf { it > 0L }
+
+            /** True when the limit toggle is on but the value is blank or not a positive number. */
+            val storageLimitValueError: Boolean
+                get() = storageLimitEnabled && (storageLimitValueText.isBlank() || parsedStorageLimitValue == null)
+
+            /**
+             * Resolved storage limit in bytes to persist, or null when the
+             * limit is disabled or the value is invalid.
+             */
+            val resolvedStorageLimitBytes: Long?
+                get() {
+                    if (!storageLimitEnabled) return null
+                    val value = parsedStorageLimitValue ?: return null
+                    val multiplier = if (storageLimitUnitIsMb) 1_000_000L else 1_000_000_000L
+                    return value * multiplier
+                }
+
+            /**
              * Whether the form is in a state that should allow Save. Used to
              * disable the Save button when required fields are missing — most
              * importantly, when no account has been picked for the chosen
@@ -221,7 +250,8 @@ class PairEditorViewModel
                         localTreeUri.isNotBlank() &&
                         !localFolderAccessLost &&
                         remoteFolderId.isNotBlank() &&
-                        accountId != null
+                        accountId != null &&
+                        !storageLimitValueError
 
             /**
              * Wizard step-1 validation: name + local folder. Required so the
@@ -423,6 +453,22 @@ class PairEditorViewModel
                             excludeSubfolders = entity.excludeSubfolders,
                             excludeEmptyFolders = entity.excludeEmptyFolders,
                             retentionDaysText = entity.retentionDays?.toString() ?: "",
+                            storageLimitEnabled = entity.localStorageLimitBytes != null,
+                            storageLimitValueText =
+                                entity.localStorageLimitBytes
+                                    ?.let { bytes ->
+                                        // Prefer GB when the value is a whole number of GBs,
+                                        // otherwise fall back to MB.
+                                        if (bytes % 1_000_000_000L == 0L) {
+                                            (bytes / 1_000_000_000L).toString()
+                                        } else {
+                                            (bytes / 1_000_000L).toString()
+                                        }
+                                    } ?: "",
+                            storageLimitUnitIsMb =
+                                entity.localStorageLimitBytes
+                                    ?.let { bytes -> bytes % 1_000_000_000L != 0L }
+                                    ?: false,
                         )
                     }
                     // Capture the loaded baseline so unsaved-changes detection
@@ -604,6 +650,12 @@ class PairEditorViewModel
 
         fun onRetentionDaysChange(value: String) = _state.update { it.copy(retentionDaysText = value.filter { ch -> ch.isDigit() }) }
 
+        fun onStorageLimitEnabledChange(value: Boolean) = _state.update { it.copy(storageLimitEnabled = value) }
+
+        fun onStorageLimitValueChange(value: String) = _state.update { it.copy(storageLimitValueText = value.filter { ch -> ch.isDigit() }) }
+
+        fun onStorageLimitUnitChange(isMb: Boolean) = _state.update { it.copy(storageLimitUnitIsMb = isMb) }
+
         /**
          * Validates and persists the current form state. Calls [onSaved] with the
          * persisted row ID on success, or sets [UiState.saveError] on failure.
@@ -633,6 +685,8 @@ class PairEditorViewModel
                     retentionDaysText.isNotBlank() &&
                         (retentionDays == null || retentionDays !in 0..MAX_RETENTION_DAYS) ->
                         strings.getString(R.string.pair_editor_retention_days_error)
+                    s.storageLimitValueError ->
+                        strings.getString(R.string.pair_editor_storage_limit_invalid)
                     else -> null
                 }
 
@@ -705,6 +759,7 @@ class PairEditorViewModel
                             excludeSubfolders = s.excludeSubfolders,
                             excludeEmptyFolders = s.excludeEmptyFolders,
                             retentionDays = retentionDays,
+                            localStorageLimitBytes = s.resolvedStorageLimitBytes,
                         )
                     val savedId = syncPairRepository.upsert(pair)
                     // Schedule or cancel depending on both the global setting and
@@ -819,6 +874,9 @@ class PairEditorViewModel
             val excludeSubfolders: Boolean,
             val excludeEmptyFolders: Boolean,
             val retentionDaysText: String,
+            val storageLimitEnabled: Boolean,
+            val storageLimitValueText: String,
+            val storageLimitUnitIsMb: Boolean,
         ) {
             companion object {
                 fun of(s: UiState) =
@@ -840,6 +898,9 @@ class PairEditorViewModel
                         excludeSubfolders = s.excludeSubfolders,
                         excludeEmptyFolders = s.excludeEmptyFolders,
                         retentionDaysText = s.retentionDaysText,
+                        storageLimitEnabled = s.storageLimitEnabled,
+                        storageLimitValueText = s.storageLimitValueText,
+                        storageLimitUnitIsMb = s.storageLimitUnitIsMb,
                     )
             }
         }

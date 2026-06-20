@@ -74,7 +74,7 @@ class EnumConverters {
 
 @Database(
     entities = [AccountEntity::class, SyncPairEntity::class, FileIndexEntity::class, SyncEventEntity::class, ConflictRecordEntity::class, LocalIndexEntity::class],
-    version = 14,
+    version = 15,
     exportSchema = true,
 )
 @TypeConverters(EnumConverters::class)
@@ -378,6 +378,19 @@ abstract class SynckroDatabase : RoomDatabase() {
             object : Migration(13, 14) {
                 override fun migrate(db: SupportSQLiteDatabase) {
                     db.execSQL("ALTER TABLE `sync_pair` ADD COLUMN `remoteFolderName` TEXT")
+                }
+            }
+
+        /**
+         * Adds `localStorageLimitBytes` (nullable INTEGER) to `sync_pair`.
+         * When set, sync skips remote-to-local downloads that would cause the
+         * locally-synced content for this pair to exceed the configured limit.
+         * Existing rows receive NULL (no limit), preserving prior sync behaviour.
+         */
+        val MIGRATION_14_15 =
+            object : Migration(14, 15) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL("ALTER TABLE `sync_pair` ADD COLUMN `localStorageLimitBytes` INTEGER")
                 }
             }
     }
