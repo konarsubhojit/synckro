@@ -75,6 +75,11 @@ data class SyncPairEntity(
      * See [SyncPair.excludeEmptyFolders] for the full rationale.
      */
     val excludeEmptyFolders: Boolean = false,
+    /**
+     * Maximum bytes of local synced content for this pair.  Null means no limit.
+     * See [SyncPair.localStorageLimitBytes] for the full rationale.
+     */
+    val localStorageLimitBytes: Long? = null,
 )
 
 @Entity(

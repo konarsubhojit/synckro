@@ -39,4 +39,5 @@ internal fun SyncPairEntity.toDomain(needsReLink: Boolean = false): SyncPair =
         retentionDays = retentionDays,
         excludeSubfolders = excludeSubfolders,
         excludeEmptyFolders = excludeEmptyFolders,
+        localStorageLimitBytes = localStorageLimitBytes,
     )

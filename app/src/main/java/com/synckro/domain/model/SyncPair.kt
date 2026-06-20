@@ -92,4 +92,15 @@ data class SyncPair(
      * uploaded into them).
      */
     val excludeEmptyFolders: Boolean = false,
+    /**
+     * Maximum number of bytes that remote-to-local downloads may occupy in the
+     * local sync folder for this pair.  `null` means no limit — existing sync
+     * behaviour is preserved.
+     *
+     * When set, the sync engine skips any download ([SyncOp.DownloadNew] or
+     * [SyncOp.UpdateLocal]) that would cause the total locally-synced content
+     * for this pair to exceed this value, and logs a WARN event for each
+     * skipped file.  Upload operations are never blocked by this limit.
+     */
+    val localStorageLimitBytes: Long? = null,
 )

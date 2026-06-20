@@ -190,4 +190,5 @@ private fun SyncPair.toEntity(): SyncPairEntity =
         retentionDays = retentionDays,
         excludeSubfolders = excludeSubfolders,
         excludeEmptyFolders = excludeEmptyFolders,
+        localStorageLimitBytes = localStorageLimitBytes,
     )

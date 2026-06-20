@@ -619,13 +619,45 @@ class SyncEngine(
                 }
                 .toMap()
 
+        // -----------------------------------------------------------------
+        // Storage-limit filtering — runs when a per-pair limit is configured.
+        // Skipped downloads are logged as WARN events; never passed to the
+        // applier so no remote stream is opened for them.
+        // -----------------------------------------------------------------
+        val localIndexByPath = preScanIndexByPath + coldStartReconciliation.linkedEntriesByPath
+        val opsToApply: List<SyncOp>
+        if (pair.localStorageLimitBytes != null) {
+            val currentLocalUsageBytes = localEnum.snapshot.sumOf { it.sizeBytes }
+            val plan =
+                StorageLimitPlanner.plan(
+                    ops = ops,
+                    remoteFilesByPath = remoteFilesByPath,
+                    localIndexByPath = localIndexByPath,
+                    currentLocalUsageBytes = currentLocalUsageBytes,
+                    limitBytes = pair.localStorageLimitBytes,
+                )
+            for (skipped in plan.skipped) {
+                val message =
+                    when (skipped.reason) {
+                        StorageLimitPlanner.SkippedDownload.Reason.WOULD_EXCEED_LIMIT ->
+                            "Skipped download due to local storage limit: ${skipped.relativePath} would exceed the configured limit (${pair.localStorageLimitBytes} bytes)."
+                        StorageLimitPlanner.SkippedDownload.Reason.UNKNOWN_SIZE ->
+                            "Skipped download due to local storage limit: ${skipped.relativePath} has unknown size."
+                    }
+                evtRepo.log(pair.id, SyncEventLevel.WARN, TAG, message)
+            }
+            opsToApply = plan.allowedOps
+        } else {
+            opsToApply = ops
+        }
+
         logStep(6, "applying sync operations")
         val applyResult =
             applier.apply(
-                ops = ops,
+                ops = opsToApply,
                 pair = pair,
                 remoteFilesByPath = remoteFilesByPath,
-                localIndexByPath = preScanIndexByPath + coldStartReconciliation.linkedEntriesByPath,
+                localIndexByPath = localIndexByPath,
                 maxConcurrent = maxConcurrent,
                 onProgress = onProgress,
             )
