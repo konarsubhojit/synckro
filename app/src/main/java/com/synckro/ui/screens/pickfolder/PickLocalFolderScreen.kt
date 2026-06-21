@@ -61,20 +61,27 @@ fun PickLocalFolderScreen(
 ) {
     val context = LocalContext.current
     var pickedUri by rememberSaveable { mutableStateOf(initialUri) }
+    var pickerError by rememberSaveable { mutableStateOf<String?>(null) }
 
     val launcher =
         rememberLauncherForActivityResult(
             contract = ActivityResultContracts.OpenDocumentTree(),
         ) { uri: Uri? ->
             if (uri != null) {
-                // Persist read+write access so the permission survives app restarts
-                // and device reboots.  Both flags are required; omitting WRITE would
-                // allow only listing files.
-                context.contentResolver.takePersistableUriPermission(
-                    uri,
-                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
-                )
-                pickedUri = uri.toString()
+                runCatching {
+                    // Persist read+write access so the permission survives app restarts
+                    // and device reboots.  Both flags are required; omitting WRITE would
+                    // allow only listing files.
+                    context.contentResolver.takePersistableUriPermission(
+                        uri,
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+                    )
+                }.onSuccess {
+                    pickedUri = uri.toString()
+                    pickerError = null
+                }.onFailure {
+                    pickerError = context.getString(R.string.pick_folder_error_permission)
+                }
             }
         }
 
@@ -108,7 +115,10 @@ fun PickLocalFolderScreen(
             )
 
             OutlinedButton(
-                onClick = { launcher.launch(pickedUri?.let(Uri::parse)) },
+                onClick = {
+                    pickerError = null
+                    launcher.launch(pickedUri?.let(Uri::parse))
+                },
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Icon(
@@ -116,7 +126,22 @@ fun PickLocalFolderScreen(
                     contentDescription = null,
                     modifier = Modifier.padding(end = 8.dp),
                 )
-                Text(stringResource(R.string.pick_folder_button))
+                Text(
+                    text =
+                        if (pickedUri == null) {
+                            stringResource(R.string.pick_folder_button)
+                        } else {
+                            stringResource(R.string.pick_folder_change_button)
+                        },
+                )
+            }
+
+            pickerError?.let { error ->
+                Text(
+                    text = error,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
             }
 
             pickedUri?.let { uriString ->

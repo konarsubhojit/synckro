@@ -51,6 +51,10 @@ class PickRemoteFolderViewModel
             val error: String? = null,
             /** True while an interactive re-authentication flow is in progress. */
             val isReauthenticating: Boolean = false,
+            /** Current search/filter query for the folders shown at this level. */
+            val searchQuery: String = "",
+            /** Unfiltered folders at the current level. */
+            val allItems: List<RemoteFile> = emptyList(),
             /** Folders at the current level (files are filtered out). */
             val items: List<RemoteFile> = emptyList(),
             /** Navigation path from root to the current folder. Always has at least one entry. */
@@ -125,6 +129,16 @@ class PickRemoteFolderViewModel
             loadFolder(_state.value.currentFolderId)
         }
 
+        /** Updates [UiState.searchQuery] and applies it to the current folder list. */
+        fun onSearchQueryChange(query: String) {
+            _state.update {
+                it.copy(
+                    searchQuery = query,
+                    items = filterFolders(it.allItems, query),
+                )
+            }
+        }
+
         /** Creates a new folder in the currently displayed location and reloads that location. */
         fun createFolder(name: String) {
             val trimmedName = name.trim()
@@ -140,7 +154,13 @@ class PickRemoteFolderViewModel
                         .filter { it.isFolder }
                         .sortedBy { it.name.lowercase() }
                 }.onSuccess { folders ->
-                    _state.update { it.copy(isLoading = false, items = folders) }
+                    _state.update {
+                        it.copy(
+                            isLoading = false,
+                            allItems = folders,
+                            items = filterFolders(folders, it.searchQuery),
+                        )
+                    }
                 }.onFailure { t ->
                     Timber.e(t, "PickRemoteFolderViewModel: failed to create folder '%s' in %s", trimmedName, parentId)
                     if (t is CloudProviderException.AuthenticationRequired) {
@@ -229,7 +249,14 @@ class PickRemoteFolderViewModel
                         .filter { it.isFolder }
                         .sortedBy { it.name.lowercase() }
                 }.onSuccess { folders ->
-                    _state.update { it.copy(isLoading = false, items = folders) }
+                    _state.update {
+                        it.copy(
+                            isLoading = false,
+                            searchQuery = "",
+                            allItems = folders,
+                            items = folders,
+                        )
+                    }
                 }.onFailure { t ->
                     Timber.e(t, "PickRemoteFolderViewModel: failed to list folder %s", folderId)
                     if (t is CloudProviderException.AuthenticationRequired) {
@@ -268,5 +295,14 @@ class PickRemoteFolderViewModel
             const val ARG_PROVIDER = "provider"
             const val ARG_ACCOUNT_ID = "accountId"
             private const val ROOT_FOLDER_ID = "root"
+        }
+
+        private fun filterFolders(
+            folders: List<RemoteFile>,
+            query: String,
+        ): List<RemoteFile> {
+            val normalizedQuery = query.trim()
+            if (normalizedQuery.isEmpty()) return folders
+            return folders.filter { it.name.contains(normalizedQuery, ignoreCase = true) }
         }
     }

@@ -217,8 +217,10 @@
     <string name="pick_folder_title">Pick local folder</string>
     <string name="pick_folder_body">Select the folder on your device that you want to keep in sync. Both internal storage and SD card folders are supported.</string>
     <string name="pick_folder_button">Browse folders…</string>
+    <string name="pick_folder_change_button">Change folder…</string>
     <string name="pick_folder_selected_label">Selected folder</string>
     <string name="pick_folder_confirm">Use this folder</string>
+    <string name="pick_folder_error_permission">Couldn\u0027t keep access to this folder. Please choose it again.</string>
     <string name="pick_folder_needs_relink">Folder access was revoked. Tap to re-select the folder.</string>
 
     <!-- Pick remote (cloud) folder browser -->
@@ -233,6 +235,9 @@
     <string name="pick_remote_folder_create_folder_title">Create new folder</string>
     <string name="pick_remote_folder_create_folder_name">Folder name</string>
     <string name="pick_remote_folder_create_folder_confirm">Create</string>
+    <string name="pick_remote_folder_search_label">Search folders</string>
+    <string name="pick_remote_folder_search_placeholder">Type a folder name</string>
+    <string name="pick_remote_folder_empty_filtered">No folders match your search.</string>
 
     <!-- Accounts – snackbar / status messages surfaced by AccountsViewModel -->
     <string name="accounts_unknown_provider_format">Unknown provider: %1$s</string>

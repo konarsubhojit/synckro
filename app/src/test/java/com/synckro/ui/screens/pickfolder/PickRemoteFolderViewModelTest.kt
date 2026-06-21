@@ -141,6 +141,29 @@ class PickRemoteFolderViewModelTest {
             assertTrue(vm.state.value.items.all { it.isFolder })
         }
 
+    @Test
+    fun `search query filters folders by name case-insensitively`() =
+        runTest {
+            val folders =
+                listOf(
+                    folder("f1", "Projects"),
+                    folder("f2", "Photos"),
+                    folder("f3", "Archive"),
+                )
+            coEvery { mockProvider.list(null) } returns folders
+
+            val vm = createVm()
+            advanceUntilIdle()
+
+            vm.onSearchQueryChange("pro")
+            advanceUntilIdle()
+
+            val state = vm.state.value
+            assertEquals("pro", state.searchQuery)
+            assertEquals(listOf("Projects"), state.items.map { it.name })
+            assertEquals(3, state.allItems.size)
+        }
+
     // -------------------------------------------------------------------------
     // Navigation
     // -------------------------------------------------------------------------
@@ -164,6 +187,27 @@ class PickRemoteFolderViewModelTest {
             assertEquals("child1", state.breadcrumbs.last().folderId)
             assertEquals("child1", state.currentFolderId)
             coVerify { mockProvider.list("child1") }
+        }
+
+    @Test
+    fun `navigating to another folder level resets search query`() =
+        runTest {
+            val childFolder = folder("child1", "Documents")
+            coEvery { mockProvider.list(null) } returns listOf(childFolder)
+            coEvery { mockProvider.list("child1") } returns emptyList()
+
+            val vm = createVm()
+            advanceUntilIdle()
+
+            vm.onSearchQueryChange("docs")
+            advanceUntilIdle()
+            vm.navigateInto(childFolder)
+            advanceUntilIdle()
+
+            val state = vm.state.value
+            assertEquals("", state.searchQuery)
+            assertTrue(state.items.isEmpty())
+            assertTrue(state.allItems.isEmpty())
         }
 
     @Test
