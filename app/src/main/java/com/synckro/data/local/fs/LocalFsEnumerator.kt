@@ -323,6 +323,8 @@ class LocalFsEnumerator internal constructor(
     }
 
     companion object {
+        private val GLOB_META_CHARS = setOf('\\', '*', '?', '{', '}', '[', ']')
+
         /**
          * Computes the SHA-256 digest of [stream] and returns it as a lowercase hex string.
          * The caller is responsible for closing the stream; this function does not close it.
@@ -356,6 +358,15 @@ class LocalFsEnumerator internal constructor(
             var i = 0
             while (i < glob.length) {
                 when (val c = glob[i]) {
+                    '\\' -> {
+                        if (i + 1 < glob.length) {
+                            sb.append(Regex.escape(glob[i + 1].toString()))
+                            i += 2
+                            continue
+                        } else {
+                            sb.append(Regex.escape(c.toString()))
+                        }
+                    }
                     '*' -> {
                         if (i + 1 < glob.length && glob[i + 1] == '*') {
                             sb.append(".*")
@@ -396,5 +407,19 @@ class LocalFsEnumerator internal constructor(
             sb.append('$')
             return Regex(sb.toString())
         }
+
+        /**
+         * Escapes a literal path segment so it can be embedded safely in a generated
+         * glob pattern without being interpreted as glob syntax.
+         */
+        internal fun escapeGlobLiteral(literal: String): String =
+            buildString(literal.length) {
+                literal.forEach { ch ->
+                    if (ch in GLOB_META_CHARS) {
+                        append('\\')
+                    }
+                    append(ch)
+                }
+            }
     }
 }

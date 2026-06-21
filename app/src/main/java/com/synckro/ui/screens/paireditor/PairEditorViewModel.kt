@@ -67,6 +67,119 @@ internal fun isValidGlobPattern(pattern: String): Boolean {
     return runCatching { LocalFsEnumerator.globToRegex(pattern) }.isSuccess
 }
 
+internal data class SelectiveSyncFileTypeOption(
+    val key: String,
+    val extensions: List<String>,
+) {
+    /**
+     * Exclude-glob generated for this preset, matching the configured extensions
+     * anywhere in the tree, using either a single-extension glob or a brace
+     * group when multiple extensions belong to the same preset.
+     */
+    val excludeGlob: String
+        get() =
+            buildString {
+                append("**/*.")
+                if (extensions.size == 1) {
+                    append(extensions.single())
+                } else {
+                    append('{')
+                    append(extensions.joinToString(","))
+                    append('}')
+                }
+            }
+}
+
+internal data class SelectiveSyncSelections(
+    val manualExcludeGlobs: List<String>,
+    val excludedFolderNames: Set<String>,
+    val excludedTypeKeys: Set<String>,
+)
+
+internal val selectiveSyncFileTypeOptions: List<SelectiveSyncFileTypeOption> =
+    listOf(
+        SelectiveSyncFileTypeOption(
+            key = "photos",
+            extensions = listOf("jpg", "jpeg", "png", "gif", "webp", "heic", "heif", "dng"),
+        ),
+        SelectiveSyncFileTypeOption(
+            key = "videos",
+            extensions = listOf("mp4", "mov", "mkv", "avi", "webm"),
+        ),
+        SelectiveSyncFileTypeOption(
+            key = "documents",
+            extensions = listOf("pdf", "doc", "docx", "txt", "rtf", "md", "xls", "xlsx", "ppt", "pptx"),
+        ),
+        SelectiveSyncFileTypeOption(
+            key = "audio",
+            extensions = listOf("mp3", "m4a", "wav", "flac", "ogg"),
+        ),
+        SelectiveSyncFileTypeOption(
+            key = "archives",
+            extensions = listOf("zip", "rar", "7z", "tar", "gz"),
+        ),
+    )
+
+/**
+ * Generates the exclude-glob used by the selective-sync folder checklist to
+ * skip everything underneath the named top-level folder. Any glob metacharacters
+ * in [folderName] are escaped first so the folder name is matched literally.
+ */
+internal fun selectiveSyncFolderExcludeGlob(folderName: String): String =
+    "${LocalFsEnumerator.escapeGlobLiteral(folderName)}/**"
+
+internal fun parseSelectiveSyncSelections(
+    excludeGlobsText: String,
+    availableFolderNames: List<String>,
+): SelectiveSyncSelections {
+    val folderPatternToName =
+        availableFolderNames.associateBy(::selectiveSyncFolderExcludeGlob)
+    val typePatternToKey =
+        selectiveSyncFileTypeOptions.associate { option -> option.excludeGlob to option.key }
+
+    val manual = mutableListOf<String>()
+    val excludedFolders = mutableSetOf<String>()
+    val excludedTypes = mutableSetOf<String>()
+
+    excludeGlobsText
+        .lineSequence()
+        .map { it.trim() }
+        .filter { it.isNotBlank() }
+        .forEach { glob ->
+            when {
+                folderPatternToName.containsKey(glob) -> excludedFolders += folderPatternToName.getValue(glob)
+                typePatternToKey.containsKey(glob) -> excludedTypes += typePatternToKey.getValue(glob)
+                else -> manual += glob
+            }
+        }
+
+    return SelectiveSyncSelections(
+        manualExcludeGlobs = manual,
+        excludedFolderNames = excludedFolders,
+        excludedTypeKeys = excludedTypes,
+    )
+}
+
+internal fun buildSelectiveExcludeGlobsText(
+    manualExcludeGlobs: List<String>,
+    excludedFolderNames: Set<String>,
+    availableFolderNames: List<String>,
+    excludedTypeKeys: Set<String>,
+): String =
+    buildList {
+        addAll(manualExcludeGlobs)
+        addAll(
+            selectiveSyncFileTypeOptions
+                .filter { it.key in excludedTypeKeys }
+                .map { it.excludeGlob },
+        )
+        addAll(
+            availableFolderNames
+                .filter { it in excludedFolderNames }
+                .map(::selectiveSyncFolderExcludeGlob),
+        )
+    }.joinToString("\n")
+
 /**
  * ViewModel for [PairEditorScreen]. Supports both create (pairId == 0) and edit
  * (pairId > 0) modes. The local folder URI result from [PickLocalFolderScreen] is
