@@ -356,6 +356,14 @@ class LocalFsEnumerator internal constructor(
             var i = 0
             while (i < glob.length) {
                 when (val c = glob[i]) {
+                    '\\' -> {
+                        if (i + 1 < glob.length) {
+                            sb.append(Regex.escape(glob[i + 1].toString()))
+                            i++ // consume escaped char
+                        } else {
+                            sb.append(Regex.escape(c.toString()))
+                        }
+                    }
                     '*' -> {
                         if (i + 1 < glob.length && glob[i + 1] == '*') {
                             sb.append(".*")
@@ -396,5 +404,19 @@ class LocalFsEnumerator internal constructor(
             sb.append('$')
             return Regex(sb.toString())
         }
+
+        /**
+         * Escapes a literal path segment so it can be embedded safely in a generated
+         * glob pattern without being interpreted as glob syntax.
+         */
+        internal fun escapeGlobLiteral(literal: String): String =
+            buildString(literal.length) {
+                literal.forEach { ch ->
+                    if (ch in setOf('\\', '*', '?', '{', '}', '[', ']')) {
+                        append('\\')
+                    }
+                    append(ch)
+                }
+            }
     }
 }

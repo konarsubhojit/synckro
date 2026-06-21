@@ -845,6 +845,45 @@ class PairEditorViewModelTest {
         assertTrue(vm.state.value.invalidIncludeGlobLines.isEmpty())
     }
 
+    @Test
+    fun `parseSelectiveSyncSelections separates generated folder and type globs from manual excludes`() {
+        val folders = listOf("Camera", "Trips [2024]")
+        val typeGlob = selectiveSyncFileTypeOptions.first { it.key == "photos" }.excludeGlob
+        val folderGlob = selectiveSyncFolderExcludeGlob("Trips [2024]")
+
+        val selections =
+            parseSelectiveSyncSelections(
+                excludeGlobsText = listOf("*.tmp", typeGlob, folderGlob).joinToString("\n"),
+                availableFolderNames = folders,
+            )
+
+        assertEquals(listOf("*.tmp"), selections.manualExcludeGlobs)
+        assertEquals(setOf("Trips [2024]"), selections.excludedFolderNames)
+        assertEquals(setOf("photos"), selections.excludedTypeKeys)
+    }
+
+    @Test
+    fun `buildSelectiveExcludeGlobsText preserves manual globs and appends generated selections`() {
+        val folders = listOf("Camera", "Trips [2024]")
+
+        val globs =
+            buildSelectiveExcludeGlobsText(
+                manualExcludeGlobs = listOf("*.tmp"),
+                excludedFolderNames = setOf("Trips [2024]"),
+                availableFolderNames = folders,
+                excludedTypeKeys = setOf("documents"),
+            )
+
+        assertEquals(
+            listOf(
+                "*.tmp",
+                selectiveSyncFileTypeOptions.first { it.key == "documents" }.excludeGlob,
+                selectiveSyncFolderExcludeGlob("Trips [2024]"),
+            ),
+            globs.lines(),
+        )
+    }
+
     // -------------------------------------------------------------------------
     // Custom interval clamping
     // -------------------------------------------------------------------------

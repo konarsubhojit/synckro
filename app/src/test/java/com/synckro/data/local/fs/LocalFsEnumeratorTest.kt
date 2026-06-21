@@ -1044,6 +1044,22 @@ class LocalFsEnumeratorTest {
     }
 
     @Test
+    fun `globToRegex backslash escapes wildcard characters`() {
+        val regex = LocalFsEnumerator.globToRegex("docs/\\*.txt")
+        assertTrue(regex.matches("docs/*.txt"))
+        assertTrue(!regex.matches("docs/file.txt"))
+    }
+
+    @Test
+    fun `escapeGlobLiteral generates literal-safe folder patterns`() {
+        val folderPattern = "${LocalFsEnumerator.escapeGlobLiteral("Trips [2024]?")}/**"
+        val regex = LocalFsEnumerator.globToRegex(folderPattern)
+
+        assertTrue(regex.matches("Trips [2024]?/photo.jpg"))
+        assertTrue(!regex.matches("Trips x2024x/photo.jpg"))
+    }
+
+    @Test
     fun `sha256Hex returns correct digest`() {
         // SHA-256("") = e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
         val hash = LocalFsEnumerator.sha256Hex(ByteArray(0).inputStream())

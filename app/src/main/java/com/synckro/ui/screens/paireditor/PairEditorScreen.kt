@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -16,6 +17,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -44,6 +46,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -87,6 +90,43 @@ fun PairEditorScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val context = LocalContext.current
+    val topLevelFolderNames =
+        remember(state.localTreeUri) {
+            if (state.localTreeUri.isBlank()) {
+                emptyList()
+            } else {
+                runCatching {
+                    val treeUri = android.net.Uri.parse(state.localTreeUri)
+                    DocumentFile
+                        .fromTreeUri(context, treeUri)
+                        ?.listFiles()
+                        ?.filter { it.isDirectory }
+                        ?.mapNotNull { file ->
+                            file.name
+                                ?.trim()
+                                ?.takeIf { it.isNotEmpty() }
+                        }
+                        ?.distinct()
+                        ?.sorted()
+                        .orEmpty()
+                }.getOrDefault(emptyList())
+            }
+        }
+    val selectiveSyncSelections =
+        remember(state.excludeGlobsText, topLevelFolderNames) {
+            parseSelectiveSyncSelections(
+                excludeGlobsText = state.excludeGlobsText,
+                availableFolderNames = topLevelFolderNames,
+            )
+        }
+    val selectiveTypeLabels =
+        mapOf(
+            "photos" to stringResource(R.string.pair_editor_selective_sync_type_photos),
+            "videos" to stringResource(R.string.pair_editor_selective_sync_type_videos),
+            "documents" to stringResource(R.string.pair_editor_selective_sync_type_documents),
+            "audio" to stringResource(R.string.pair_editor_selective_sync_type_audio),
+            "archives" to stringResource(R.string.pair_editor_selective_sync_type_archives),
+        )
 
     // Drive the transient "save failed" snackbar from the one-shot
     // [saveErrorEvent] counter so dismissing it does NOT also clear the
@@ -472,6 +512,156 @@ fun PairEditorScreen(
                 // Exclude subfolders toggle
                 SectionHeader(text = stringResource(R.string.pair_editor_section_filters))
 
+                Text(
+                    text = stringResource(R.string.pair_editor_selective_sync_help),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+
+                OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text(
+                            text = stringResource(R.string.pair_editor_selective_sync_folders_title),
+                            style = MaterialTheme.typography.titleSmall,
+                        )
+                        Text(
+                            text =
+                                when {
+                                    state.localTreeUri.isBlank() ->
+                                        stringResource(R.string.pair_editor_selective_sync_folders_pick_first)
+                                    topLevelFolderNames.isEmpty() ->
+                                        stringResource(R.string.pair_editor_selective_sync_folders_none_found)
+                                    else ->
+                                        stringResource(R.string.pair_editor_selective_sync_folders_body)
+                                },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        topLevelFolderNames.forEach { folderName ->
+                            val checked = folderName !in selectiveSyncSelections.excludedFolderNames
+                            SelectiveSyncCheckboxRow(
+                                label = folderName,
+                                checked = checked,
+                                enabled = state.localTreeUri.isNotBlank(),
+                                onCheckedChange = { isChecked ->
+                                    val updatedExcludedFolders =
+                                        selectiveSyncSelections.excludedFolderNames.toMutableSet().apply {
+                                            if (isChecked) {
+                                                remove(folderName)
+                                            } else {
+                                                add(folderName)
+                                            }
+                                        }
+                                    viewModel.onExcludeGlobsChange(
+                                        buildSelectiveExcludeGlobsText(
+                                            manualExcludeGlobs = selectiveSyncSelections.manualExcludeGlobs,
+                                            excludedFolderNames = updatedExcludedFolders,
+                                            availableFolderNames = topLevelFolderNames,
+                                            excludedTypeKeys = selectiveSyncSelections.excludedTypeKeys,
+                                        ),
+                                    )
+                                },
+                            )
+                        }
+                    }
+                }
+
+                OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text(
+                            text = stringResource(R.string.pair_editor_selective_sync_types_title),
+                            style = MaterialTheme.typography.titleSmall,
+                        )
+                        Text(
+                            text = stringResource(R.string.pair_editor_selective_sync_types_body),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        selectiveSyncFileTypeOptions.forEach { option ->
+                            val checked = option.key !in selectiveSyncSelections.excludedTypeKeys
+                            SelectiveSyncCheckboxRow(
+                                label = selectiveTypeLabels[option.key] ?: option.key,
+                                checked = checked,
+                                onCheckedChange = { isChecked ->
+                                    val updatedExcludedTypes =
+                                        selectiveSyncSelections.excludedTypeKeys.toMutableSet().apply {
+                                            if (isChecked) {
+                                                remove(option.key)
+                                            } else {
+                                                add(option.key)
+                                            }
+                                        }
+                                    viewModel.onExcludeGlobsChange(
+                                        buildSelectiveExcludeGlobsText(
+                                            manualExcludeGlobs = selectiveSyncSelections.manualExcludeGlobs,
+                                            excludedFolderNames = selectiveSyncSelections.excludedFolderNames,
+                                            availableFolderNames = topLevelFolderNames,
+                                            excludedTypeKeys = updatedExcludedTypes,
+                                        ),
+                                    )
+                                },
+                            )
+                        }
+                    }
+                }
+
+                OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Text(
+                            text = stringResource(R.string.pair_editor_selective_sync_preview_title),
+                            style = MaterialTheme.typography.titleSmall,
+                        )
+                        Text(
+                            text =
+                                when {
+                                    state.excludeSubfolders ->
+                                        stringResource(R.string.pair_editor_selective_sync_preview_root_only)
+                                    selectiveSyncSelections.excludedFolderNames.isEmpty() ->
+                                        stringResource(R.string.pair_editor_selective_sync_preview_all_folders)
+                                    else ->
+                                        stringResource(
+                                            R.string.pair_editor_selective_sync_preview_skip_folders,
+                                            selectiveSyncSelections.excludedFolderNames
+                                                .sorted()
+                                                .joinToString(", "),
+                                        )
+                                },
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        Text(
+                            text =
+                                if (selectiveSyncSelections.excludedTypeKeys.isEmpty()) {
+                                    stringResource(R.string.pair_editor_selective_sync_preview_all_types)
+                                } else {
+                                    stringResource(
+                                        R.string.pair_editor_selective_sync_preview_skip_types,
+                                        selectiveSyncSelections.excludedTypeKeys
+                                            .map { selectiveTypeLabels[it] ?: it }
+                                            .sorted()
+                                            .joinToString(", "),
+                                    )
+                                },
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        if (state.includeGlobsText.isNotBlank()) {
+                            Text(
+                                text = stringResource(R.string.pair_editor_selective_sync_preview_include_override),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -502,6 +692,11 @@ fun PairEditorScreen(
                         onCheckedChange = viewModel::onExcludeEmptyFoldersChange,
                     )
                 }
+
+                Text(
+                    text = stringResource(R.string.pair_editor_selective_sync_advanced_patterns),
+                    style = MaterialTheme.typography.titleSmall,
+                )
 
                 // Include globs
                 OutlinedTextField(
@@ -624,6 +819,39 @@ fun PairEditorScreen(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun SelectiveSyncCheckboxRow(
+    label: String,
+    checked: Boolean,
+    enabled: Boolean = true,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    Row(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .toggleable(
+                    value = checked,
+                    enabled = enabled,
+                    role = Role.Checkbox,
+                    onValueChange = onCheckedChange,
+                )
+                .padding(vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Checkbox(
+            checked = checked,
+            onCheckedChange = null,
+            enabled = enabled,
+        )
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyMedium,
+        )
     }
 }
 
