@@ -436,6 +436,7 @@ class SyncEngine(
                     size = remoteSize,
                     lastModifiedMs = remoteMtime,
                     hash = idx.remoteEtag,
+                    stableId = idx.remoteId,
                 )
         }
         // Apply remote delta: ADD/MODIFY override the baseline; DELETE removes.
@@ -486,12 +487,17 @@ class SyncEngine(
                                 size = resolvedSize,
                                 lastModifiedMs = resolvedMtime,
                                 hash = change.etag,
+                                stableId = change.remoteId,
                             )
                     } else if (isRename && baseline != null) {
                         // Partial metadata on rename with no baseline fallback: copy the old
                         // snapshot to the new path so the item isn't silently dropped.
                         syntheticRemote.remove(existingPath!!)
-                        syntheticRemote[change.relativePath] = baseline.copy(relativePath = change.relativePath)
+                        syntheticRemote[change.relativePath] =
+                            baseline.copy(
+                                relativePath = change.relativePath,
+                                stableId = change.remoteId,
+                            )
                     }
                     // If no size/mtime available (neither delta nor baseline), skip rather
                     // than inserting a FS(0, 0) stub that would trigger spurious ops.

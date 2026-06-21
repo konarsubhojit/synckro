@@ -180,6 +180,49 @@ class OneDriveRemoteEnumeratorTest {
         }
 
     @Test
+    fun `enumerate uses parentReference path for moved child when parent item is absent from batch`() =
+        runTest {
+            val deltaLinkUrl = server.url("/me/drive/root/delta?skiptoken=moved").toString()
+            server.enqueue(
+                MockResponse()
+                    .setResponseCode(200)
+                    .setBody(
+                        """
+                        {
+                          "value": [
+                            {
+                              "id": "file-root",
+                              "name": "keep.txt",
+                              "parentReference": {
+                                "id": "sync-root-id",
+                                "path": "/drive/root:/Synced"
+                              },
+                              "file": {"mimeType": "text/plain"},
+                              "size": 1
+                            },
+                            {
+                              "id": "file-moved",
+                              "name": "report.txt",
+                              "parentReference": {
+                                "id": "folder-archive",
+                                "path": "/drive/root:/Synced/archive"
+                              },
+                              "file": {"mimeType": "text/plain"},
+                              "size": 42
+                            }
+                          ],
+                          "@odata.deltaLink": "https://graph.example.com/delta-link-moved"
+                        }
+                        """.trimIndent(),
+                    ),
+            )
+
+            val snapshot = enumerator.enumerateWithToken(token, deltaToken = deltaLinkUrl, rootFolderId = "sync-root-id")
+
+            assertEquals("archive/report.txt", snapshot.changes[1].relativePath)
+        }
+
+    @Test
     fun `enumerate follows nextLink across multiple pages before returning deltaLink`() =
         runTest {
             // Page 1: nextLink → page 2.

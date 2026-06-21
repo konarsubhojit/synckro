@@ -1567,13 +1567,18 @@ class SyncEngineRealIntegrationTest {
             val renameResult = renameEngine.runOnce(pair.copy(deltaToken = storedToken))
 
             assertTrue("Rename run should succeed", renameResult is SyncEngine.Result.Success)
-            // SyncDiffer sees: "original.txt" absent from syntheticRemote → DeleteLocal
-            //                  "renamed.txt" present in syntheticRemote, absent locally → DownloadNew
+            // Same-stable-ID rename with unchanged content should be handled as a
+            // local move without a redundant download.
             assertEquals(
-                "Same-stable-ID rename should produce DeleteLocal + DownloadNew (2 ops)",
-                2,
+                "Same-stable-ID rename should produce a single MoveLocal op",
+                1,
                 (renameResult as SyncEngine.Result.Success).applied,
             )
+            assertNotNull(localFileAccess.openRead("renamed.txt"))
+            assertTrue(localFileAccess.openRead("original.txt") == null)
+            val renamedIndex = localIndexDao.getForPair(pair.id).single()
+            assertEquals("renamed.txt", renamedIndex.relativePath)
+            assertEquals(originalRemoteFile.id, renamedIndex.remoteId)
         }
 
     // -------------------------------------------------------------------------

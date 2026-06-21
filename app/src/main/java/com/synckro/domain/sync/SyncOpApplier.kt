@@ -75,6 +75,29 @@ interface LocalFileAccess {
      * @return [LocalFileStat] for the file, or `null` if the file does not exist.
      */
     fun stat(relativePath: String): LocalFileStat?
+
+    /**
+     * Moves a local file to [toRelativePath], overwriting any existing target.
+     *
+     * The default implementation performs a local copy followed by source deletion,
+     * which avoids a cloud re-download for pure remote renames/moves even when the
+     * underlying storage backend has no native rename primitive.
+     *
+     * @return [LocalFileStat] for the moved file at its new path, or `null` if the source file does not exist.
+     */
+    fun move(
+        fromRelativePath: String,
+        toRelativePath: String,
+    ): LocalFileStat? {
+        if (fromRelativePath == toRelativePath) return stat(fromRelativePath)
+        val sourceStat = stat(fromRelativePath) ?: return null
+        val source = openRead(fromRelativePath) ?: return null
+        val movedStat = write(toRelativePath, source, sourceStat.mimeType)
+        check(delete(fromRelativePath)) {
+            "Failed to remove local source after move: $fromRelativePath"
+        }
+        return movedStat
+    }
 }
 
 /**
@@ -321,6 +344,20 @@ class SyncOpApplier(
                                 )
                             }
 
+                            is SyncOp.MoveLocal -> {
+                                val index =
+                                    localIndexByPath[op.fromRelativePath]
+                                        ?: error("No index entry for MoveLocal source: ${op.fromRelativePath}")
+                                applyMoveLocal(op, pair, index)
+                                applied++
+                                eventRepository.log(
+                                    pair.id,
+                                    SyncEventLevel.INFO,
+                                    TAG,
+                                    "Moved local file: ${op.fromRelativePath} -> ${op.relativePath}",
+                                )
+                            }
+
                             is SyncOp.DeleteLocalRetention -> {
                                 val index = localIndexByPath[op.relativePath]
                                 if (index?.remoteId == null) {
@@ -536,6 +573,20 @@ class SyncOpApplier(
                                                 SyncEventLevel.INFO,
                                                 TAG,
                                                 "Deleted local file: ${op.relativePath}",
+                                            )
+                                        }
+
+                                        is SyncOp.MoveLocal -> {
+                                            val index =
+                                                localIndexByPath[op.fromRelativePath]
+                                                    ?: error("No index entry for MoveLocal source: ${op.fromRelativePath}")
+                                            applyMoveLocal(op, pair, index)
+                                            atomicApplied.incrementAndGet()
+                                            eventRepository.log(
+                                                pair.id,
+                                                SyncEventLevel.INFO,
+                                                TAG,
+                                                "Moved local file: ${op.fromRelativePath} -> ${op.relativePath}",
                                             )
                                         }
 
@@ -823,6 +874,24 @@ class SyncOpApplier(
         localIndexDao.delete(pair.id, op.relativePath)
     }
 
+    private suspend fun applyMoveLocal(
+        op: SyncOp.MoveLocal,
+        pair: SyncPair,
+        sourceIndex: LocalIndexEntity,
+    ) {
+        val stat =
+            localFileAccess.move(op.fromRelativePath, op.relativePath)
+                ?: error("Local file not found for MoveLocal: ${op.fromRelativePath}")
+        localIndexDao.delete(pair.id, op.fromRelativePath)
+        localIndexDao.upsert(
+            sourceIndex.copy(
+                relativePath = op.relativePath,
+                sizeBytes = stat.sizeBytes,
+                mtimeMs = stat.mtimeMs,
+            ),
+        )
+    }
+
     private suspend fun applyConflict(
         op: SyncOp.Conflict,
         pair: SyncPair,
@@ -1038,6 +1107,7 @@ class SyncOpApplier(
             is SyncOp.UpdateLocal -> "UpdateLocal(${op.relativePath})"
             is SyncOp.DeleteRemote -> "DeleteRemote(${op.relativePath})"
             is SyncOp.DeleteLocal -> "DeleteLocal(${op.relativePath})"
+            is SyncOp.MoveLocal -> "MoveLocal(${op.fromRelativePath} -> ${op.relativePath})"
             is SyncOp.DeleteLocalRetention -> "DeleteLocalRetention(${op.relativePath})"
             is SyncOp.DeleteRemoteRetention -> "DeleteRemoteRetention(${op.relativePath})"
             is SyncOp.Conflict -> "Conflict(${op.relativePath})"
@@ -1047,7 +1117,7 @@ class SyncOpApplier(
         when (op) {
             is SyncOp.UploadNew, is SyncOp.UpdateRemote -> TransferDirection.UPLOAD
             is SyncOp.DownloadNew, is SyncOp.UpdateLocal -> TransferDirection.DOWNLOAD
-            is SyncOp.DeleteRemote, is SyncOp.DeleteLocal -> null
+            is SyncOp.DeleteRemote, is SyncOp.DeleteLocal, is SyncOp.MoveLocal -> null
             is SyncOp.DeleteLocalRetention, is SyncOp.DeleteRemoteRetention -> null
             is SyncOp.Conflict -> null
         }
@@ -1071,7 +1141,7 @@ class SyncOpApplier(
             is SyncOp.UploadNew -> localIndexByPath[op.relativePath]?.sizeBytes ?: 0L
             is SyncOp.UpdateRemote -> localIndexByPath[op.relativePath]?.sizeBytes ?: 0L
             is SyncOp.Conflict -> conflictTransferBytes(op, pair, remoteFilesByPath, localIndexByPath)
-            is SyncOp.DeleteRemote, is SyncOp.DeleteLocal -> 0L
+            is SyncOp.DeleteRemote, is SyncOp.DeleteLocal, is SyncOp.MoveLocal -> 0L
             is SyncOp.DeleteLocalRetention, is SyncOp.DeleteRemoteRetention -> 0L
         }
 

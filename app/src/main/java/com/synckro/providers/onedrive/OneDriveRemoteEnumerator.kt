@@ -160,18 +160,53 @@ internal fun buildPathCache(
     rootFolderId: String,
 ): Map<String, String> {
     val cache = mutableMapOf<String, String>()
-    for (item in items) {
-        if (item.id.isEmpty()) continue
-        val parentId = item.parentReference?.id
-        val path =
+    val rootReferencePath =
+        items.firstNotNullOfOrNull { item ->
             when {
-                rootFolderId.isNotEmpty() && parentId == rootFolderId -> item.name
-                parentId != null && cache.containsKey(parentId) -> "${cache[parentId]}/${item.name}"
-                else -> item.name // parent not in this batch; fall back to leaf name
+                item.id == rootFolderId ->
+                    item.parentReference?.path?.let { parentPath ->
+                        if (item.name.isEmpty()) parentPath else "$parentPath/${item.name}"
+                    }
+                item.parentReference?.id == rootFolderId -> item.parentReference.path
+                else -> null
             }
-        cache[item.id] = path
+        }
+
+    repeat(items.size) {
+        var progressed = false
+        for (item in items) {
+            if (item.id.isEmpty()) continue
+            val parentId = item.parentReference?.id
+            val path =
+                when {
+                    rootFolderId.isNotEmpty() && parentId == rootFolderId -> item.name
+                    parentId != null && cache.containsKey(parentId) -> "${cache[parentId]}/${item.name}"
+                    else -> pathFromParentReference(item, rootReferencePath)
+                } ?: continue
+            if (cache[item.id] != path) {
+                cache[item.id] = path
+                progressed = true
+            }
+        }
+        if (!progressed) return@repeat
+    }
+    for (item in items) {
+        if (item.id.isNotEmpty() && item.id !in cache) {
+            cache[item.id] = item.name
+        }
     }
     return cache
+}
+
+private fun pathFromParentReference(
+    item: GraphDriveItem,
+    rootReferencePath: String?,
+): String? {
+    val parentPath = item.parentReference?.path ?: return null
+    val rootPath = rootReferencePath ?: return null
+    if (!parentPath.startsWith(rootPath)) return null
+    val relativeParent = parentPath.removePrefix(rootPath).trimStart('/')
+    return if (relativeParent.isEmpty()) item.name else "$relativeParent/${item.name}"
 }
 
 /**

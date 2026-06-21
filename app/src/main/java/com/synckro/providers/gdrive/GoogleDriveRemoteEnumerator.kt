@@ -171,17 +171,30 @@ internal fun buildPathCache(
     rootFolderId: String,
 ): Map<String, String> {
     val cache = mutableMapOf<String, String>()
+    repeat(changes.size) {
+        var progressed = false
+        for (change in changes) {
+            val file = change.file ?: continue
+            if (file.id.isEmpty()) continue
+            val parentId = file.parents?.firstOrNull()
+            val path =
+                when {
+                    rootFolderId.isNotEmpty() && parentId == rootFolderId -> file.name
+                    parentId != null && cache.containsKey(parentId) -> "${cache[parentId]}/${file.name}"
+                    else -> null
+                } ?: continue
+            if (cache[file.id] != path) {
+                cache[file.id] = path
+                progressed = true
+            }
+        }
+        if (!progressed) return@repeat
+    }
     for (change in changes) {
         val file = change.file ?: continue
-        if (file.id.isEmpty()) continue
-        val parentId = file.parents?.firstOrNull()
-        val path =
-            when {
-                rootFolderId.isNotEmpty() && parentId == rootFolderId -> file.name
-                parentId != null && cache.containsKey(parentId) -> "${cache[parentId]}/${file.name}"
-                else -> file.name // parent not in this batch; fall back to leaf name
-            }
-        cache[file.id] = path
+        if (file.id.isNotEmpty() && file.id !in cache) {
+            cache[file.id] = file.name
+        }
     }
     return cache
 }
