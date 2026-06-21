@@ -793,4 +793,83 @@ class PairEditorViewModelTest {
         vm.clearSaveError()
         assertNull(vm.state.value.saveError)
     }
+
+    // -------------------------------------------------------------------------
+    // Glob pattern validation
+    // -------------------------------------------------------------------------
+
+    @Test
+    fun `isValidGlobPattern accepts common patterns`() {
+        assertTrue("bare filename", isValidGlobPattern("*.jpg"))
+        assertTrue("double-star path", isValidGlobPattern("docs/**"))
+        assertTrue("question mark", isValidGlobPattern("report?.pdf"))
+        assertTrue("alternation", isValidGlobPattern("{jpg,png}"))
+        assertTrue("character class", isValidGlobPattern("[abc].txt"))
+        assertTrue("literal filename", isValidGlobPattern("README.md"))
+        assertTrue("nested path", isValidGlobPattern("src/**/*.kt"))
+    }
+
+    @Test
+    fun `isValidGlobPattern rejects blank and invalid patterns`() {
+        assertFalse("blank string", isValidGlobPattern(""))
+        assertFalse("whitespace only", isValidGlobPattern("   "))
+        assertFalse("inverted range in character class", isValidGlobPattern("[z-a]"))
+    }
+
+    @Test
+    fun `invalidIncludeGlobLines returns empty list when all patterns are valid`() {
+        val vm = createVm()
+        vm.onIncludeGlobsChange("*.jpg\ndocs/**\nreport?.pdf")
+        assertTrue(vm.state.value.invalidIncludeGlobLines.isEmpty())
+    }
+
+    @Test
+    fun `invalidIncludeGlobLines flags patterns that fail regex compilation`() {
+        val vm = createVm()
+        // [z-a] is an inverted character class that fails Regex construction.
+        vm.onIncludeGlobsChange("[z-a]")
+        assertEquals(listOf("[z-a]"), vm.state.value.invalidIncludeGlobLines)
+    }
+
+    @Test
+    fun `invalidExcludeGlobLines flags only invalid lines among a mixed set`() {
+        val vm = createVm()
+        vm.onExcludeGlobsChange("*.tmp\n[z-a]\n*.log")
+        assertEquals(listOf("[z-a]"), vm.state.value.invalidExcludeGlobLines)
+    }
+
+    @Test
+    fun `invalidGlobLines ignores blank lines`() {
+        val vm = createVm()
+        vm.onIncludeGlobsChange("*.jpg\n\n  \n*.png")
+        assertTrue(vm.state.value.invalidIncludeGlobLines.isEmpty())
+    }
+
+    // -------------------------------------------------------------------------
+    // Custom interval clamping
+    // -------------------------------------------------------------------------
+
+    @Test
+    fun `customIntervalError is true when interval is below 15`() {
+        val vm = createVm()
+        vm.onSchedulePresetChange(SyncSchedulePreset.CUSTOM)
+        vm.onCustomIntervalChange("5")
+        assertTrue(vm.state.value.customIntervalError)
+    }
+
+    @Test
+    fun `customIntervalError is false when interval equals 15`() {
+        val vm = createVm()
+        vm.onSchedulePresetChange(SyncSchedulePreset.CUSTOM)
+        vm.onCustomIntervalChange("15")
+        assertFalse(vm.state.value.customIntervalError)
+    }
+
+    @Test
+    fun `scheduleIntervalMinutes clamps sub-15 custom value to 15`() {
+        val vm = createVm()
+        vm.onSchedulePresetChange(SyncSchedulePreset.CUSTOM)
+        vm.onCustomIntervalChange("5")
+        assertEquals(15L, vm.state.value.scheduleIntervalMinutes)
+    }
 }

@@ -169,10 +169,12 @@
     <string name="pair_editor_schedule_daily">Daily</string>
     <string name="pair_editor_schedule_custom">Custom</string>
     <string name="pair_editor_save">Save</string>
-    <string name="pair_editor_schedule_interval_min_warning">Minimum interval is 15 minutes (WorkManager limit)</string>
+    <string name="pair_editor_schedule_interval_min_warning">Minimum sync interval is 15 minutes (WorkManager limit). Values below 15 will be rounded up automatically.</string>
     <string name="pair_editor_include_globs">Include patterns (one per line)</string>
     <string name="pair_editor_exclude_globs">Exclude patterns (one per line)</string>
     <string name="pair_editor_globs_hint">e.g. *.jpg or docs/**</string>
+    <string name="pair_editor_globs_help">One pattern per line. Use * to match within a folder (e.g. *.jpg), ** to match across folders (e.g. docs/**), ? for any single character, and {a,b} for alternatives. Leave blank to include all files.</string>
+    <string name="pair_editor_globs_invalid_pattern">Invalid pattern — will be ignored: %1$s</string>
     <string name="pair_editor_exclude_subfolders">Exclude subfolders (root files only)</string>
     <string name="pair_editor_exclude_empty_folders">Exclude empty folders</string>
     <string name="pair_editor_error_name_required">Display name is required</string>
@@ -192,12 +194,25 @@
     <string name="conflict_policy_prefer_remote">Prefer remote</string>
     <string name="conflict_policy_keep_both">Keep both</string>
 
+    <!-- Conflict-policy inline descriptions shown below the dropdown -->
+    <string name="conflict_policy_desc_newest_wins">The file with the newer last-modified timestamp is kept; the older copy is overwritten.</string>
+    <string name="conflict_policy_desc_prefer_local">The local copy always wins on conflict. Remote changes are discarded.</string>
+    <string name="conflict_policy_desc_prefer_remote">The remote copy always wins on conflict. Local changes are discarded.</string>
+    <string name="conflict_policy_desc_keep_both">Both copies are preserved by renaming the conflicting file. No data is lost, but duplicates may accumulate.</string>
+
     <!-- Sync-direction display names -->
     <string name="direction_local_to_remote">Upload only (Local → Remote)</string>
     <string name="direction_remote_to_local">Download only (Remote → Local)</string>
     <string name="direction_bidirectional">Bidirectional</string>
     <string name="direction_upload_delete_local">⚠ Upload + delete local after N days</string>
     <string name="direction_download_delete_remote">⚠ Download + delete remote after N days</string>
+
+    <!-- Sync-direction inline descriptions shown below the dropdown -->
+    <string name="direction_desc_local_to_remote">Pushes files from your device to the cloud only. Changes made in the cloud are ignored.</string>
+    <string name="direction_desc_remote_to_local">Pulls files from the cloud to your device only. Local-only changes are ignored.</string>
+    <string name="direction_desc_bidirectional">Changes on either side are propagated to the other. Conflicts are resolved using your chosen conflict policy above.</string>
+    <string name="direction_desc_upload_delete_local">Backs up local files to the cloud, then permanently deletes them from your device once the retention period expires. Files are only deleted after a successful upload.</string>
+    <string name="direction_desc_download_delete_remote">Downloads remote files to your device, then permanently deletes them from the cloud once the retention period expires. Files are only deleted after a successful download.</string>
 
     <!-- Confirmation dialog shown when the user selects a destructive sync direction -->
     <string name="pair_editor_destructive_mode_title">Enable automatic deletion?</string>
@@ -209,8 +224,8 @@
     <!-- Retention days configuration (shown for retention sync modes) -->
     <string name="pair_editor_retention_days">Delete after (days)</string>
     <string name="pair_editor_retention_days_hint">Leave blank to disable automatic deletion</string>
-    <string name="pair_editor_retention_days_info_upload">Local files are deleted based on their last-modified time, only after they have been safely uploaded to the cloud.</string>
-    <string name="pair_editor_retention_days_info_download">Remote files are deleted based on their last-modified time, only after they have been safely downloaded to this device.</string>
+    <string name="pair_editor_retention_days_info_upload">Uploaded files are permanently deleted from this device once their last-modified date is older than the retention period AND the upload has been confirmed. Enter 0 to delete immediately after upload.</string>
+    <string name="pair_editor_retention_days_info_download">Downloaded files are permanently deleted from the cloud once their last-modified date is older than the retention period AND the download has been confirmed. Enter 0 to delete immediately after download.</string>
     <string name="pair_editor_retention_days_error">Enter a number of days between 0 and 36500</string>
 
     <!-- Pick local folder (SAF tree-URI picker) -->
