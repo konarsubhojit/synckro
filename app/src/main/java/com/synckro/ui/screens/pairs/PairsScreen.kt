@@ -198,6 +198,8 @@ fun PairsScreen(
     val syncNowResultNothing = stringResource(R.string.home_sync_now_result_nothing_to_sync)
     val syncNowResultFailed = stringResource(R.string.home_sync_now_result_failed)
     val syncNowResultViewConflicts = stringResource(R.string.home_sync_now_result_view_conflicts)
+    val deltaResetGenericNotice = stringResource(R.string.home_delta_token_reset_notice_generic)
+    val deltaResetPairNoticeFmt = stringResource(R.string.home_delta_token_reset_notice_pair_format)
     LaunchedEffect(viewModel) {
         viewModel.syncNowResult.collect { result ->
             val summary = result.summary ?: return@collect
@@ -233,6 +235,14 @@ fun PairsScreen(
             if (snackResult == SnackbarResult.ActionPerformed) {
                 onOpenConflicts()
             }
+        }
+    }
+    LaunchedEffect(viewModel) {
+        viewModel.deltaTokenResetNotices.collect { notice ->
+            val message =
+                notice.pairName?.let { String.format(deltaResetPairNoticeFmt, it) }
+                    ?: deltaResetGenericNotice
+            snackbarHostState.showSnackbar(message = message, duration = SnackbarDuration.Short)
         }
     }
 

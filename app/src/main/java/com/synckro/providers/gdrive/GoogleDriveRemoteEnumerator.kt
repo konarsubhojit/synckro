@@ -96,6 +96,7 @@ class GoogleDriveRemoteEnumerator
                             return RemoteSnapshot(
                                 changes = baseChanges.mapNotNull { it.toRemoteChange(buildPathCache(baseChanges, rootFolderId)) },
                                 newDeltaToken = baseToken,
+                                isDeltaTokenReset = true,
                             )
                         }
                         else -> throw e

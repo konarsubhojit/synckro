@@ -21,6 +21,7 @@ import com.synckro.domain.model.CloudProviderType
 import com.synckro.domain.model.ConflictPolicy
 import com.synckro.domain.model.ConflictRecord
 import com.synckro.domain.model.SyncDirection
+import com.synckro.domain.model.SyncEventTag
 import com.synckro.domain.model.SyncPair
 import com.synckro.domain.provider.CloudProvider
 import com.synckro.domain.provider.CloudProviderException
@@ -309,6 +310,72 @@ class SyncEngineRealIntegrationTest {
                 "lastFullScanAtMs ($scanAt) should be within the test window [$beforeMs, $afterMs]",
                 scanAt!! in beforeMs..afterMs,
             )
+        }
+
+    @Test
+    fun `runReal logs delta-token reset event when provider reports incremental token expiry`() =
+        runTest {
+            val pair = insertPair()
+            val resetEnumerator =
+                object : RemoteEnumerator {
+                    override suspend fun enumerate(deltaToken: String?, rootFolderId: String): RemoteSnapshot =
+                        RemoteSnapshot(
+                            changes = emptyList(),
+                            newDeltaToken = "fresh-token-after-reset",
+                            isDeltaTokenReset = true,
+                        )
+                }
+
+            val result = buildEngine(resetEnumerator).runOnce(pair.copy(deltaToken = "expired-token"))
+
+            assertTrue("Expected Success for reset fallback, got: $result", result is SyncEngine.Result.Success)
+            val events = eventRepository.getAll()
+            assertTrue(
+                "Expected delta-token reset warning event in sync log",
+                events.any {
+                    it.tag == SyncEventTag.REMOTE_ENUM &&
+                        it.message.startsWith(SyncEngine.DELTA_TOKEN_RESET_EVENT_PREFIX)
+                },
+            )
+        }
+
+    @Test
+    fun `runReal performs periodic full remote re-enumeration for stale incremental state`() =
+        runTest {
+            val pair = insertPair()
+            var incrementalCalls = 0
+            var fullCalls = 0
+            val reenumeratingEnumerator =
+                object : RemoteEnumerator {
+                    override suspend fun enumerate(deltaToken: String?, rootFolderId: String): RemoteSnapshot {
+                        incrementalCalls++
+                        return RemoteSnapshot(
+                            changes = emptyList(),
+                            newDeltaToken = "incremental-token",
+                        )
+                    }
+
+                    override suspend fun enumerateFull(rootFolderId: String): RemoteSnapshot {
+                        fullCalls++
+                        return RemoteSnapshot(
+                            changes = emptyList(),
+                            newDeltaToken = "full-token",
+                        )
+                    }
+                }
+
+            val stalePair =
+                pair.copy(
+                    deltaToken = "existing-incremental-token",
+                    lastFullScanAtMs = 0L,
+                )
+            val result = buildEngine(reenumeratingEnumerator).runOnce(stalePair)
+
+            assertTrue("Expected Success for periodic full re-enumeration, got: $result", result is SyncEngine.Result.Success)
+            assertEquals("incremental enumerate should be skipped for stale state", 0, incrementalCalls)
+            assertEquals("full enumerate should run once for stale state", 1, fullCalls)
+            val updated = syncPairDao.getById(pair.id)
+            assertEquals("full-token", updated?.lastDeltaToken)
         }
 
     @Test

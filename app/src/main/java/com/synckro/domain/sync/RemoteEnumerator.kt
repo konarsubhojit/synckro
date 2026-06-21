@@ -77,6 +77,11 @@ data class RemoteChange(
 data class RemoteSnapshot(
     val changes: List<RemoteChange>,
     val newDeltaToken: String,
+    /**
+     * `true` when the provider had to discard an expired incremental token
+     * (e.g. HTTP 410 Gone) and re-establish a fresh baseline token.
+     */
+    val isDeltaTokenReset: Boolean = false,
 )
 
 /**

@@ -18,7 +18,10 @@ import com.synckro.data.repository.SyncPairRepository
 import com.synckro.data.worker.SyncScheduler
 import com.synckro.data.worker.SyncWorker
 import com.synckro.domain.model.CloudProviderType
+import com.synckro.domain.model.SyncEvent
+import com.synckro.domain.model.SyncEventTag
 import com.synckro.domain.model.SyncPair
+import com.synckro.domain.sync.SyncEngine
 import com.synckro.domain.sync.TransferProgress
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -40,6 +43,8 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 
 /**
@@ -206,6 +211,9 @@ class HomeViewModel
                             valueTransform = { it.provider },
                         )
                 }
+                .launchIn(viewModelScope)
+            recentEvents
+                .onEach(::emitDeltaTokenResetNotices)
                 .launchIn(viewModelScope)
         }
 
@@ -398,6 +406,11 @@ class HomeViewModel
             val summary: PairSummary?,
         )
 
+        data class DeltaTokenResetNotice(
+            val pairId: Long?,
+            val pairName: String?,
+        )
+
         private val _syncNowResult = MutableSharedFlow<SyncNowResult>(extraBufferCapacity = 1)
 
         /**
@@ -408,7 +421,15 @@ class HomeViewModel
          */
         val syncNowResult: SharedFlow<SyncNowResult> = _syncNowResult.asSharedFlow()
 
+        private val _deltaTokenResetNotices = MutableSharedFlow<DeltaTokenResetNotice>(extraBufferCapacity = 1)
+
+        /** One-shot notices emitted when a provider delta token expires and is reset. */
+        val deltaTokenResetNotices: SharedFlow<DeltaTokenResetNotice> = _deltaTokenResetNotices.asSharedFlow()
+
         private val _syncAllResults = MutableSharedFlow<SyncAllResult>(extraBufferCapacity = 1)
+
+        private val deltaResetCursorInitialized = AtomicBoolean(false)
+        private val latestSeenDeltaResetEventId = AtomicLong(0L)
 
         /**
          * One-shot stream of [SyncAllResult]s, emitted whenever [syncAllNow]
@@ -571,6 +592,37 @@ class HomeViewModel
                 if (next != null) out[p.id] = next
             }
             return out
+        }
+
+        private fun emitDeltaTokenResetNotices(events: List<SyncEvent>) {
+            val newestId = events.maxOfOrNull { it.id } ?: 0L
+            if (deltaResetCursorInitialized.compareAndSet(false, true)) {
+                latestSeenDeltaResetEventId.set(newestId)
+                return
+            }
+            val previousCursor = latestSeenDeltaResetEventId.get()
+            events
+                .asSequence()
+                .filter { event ->
+                    event.id > previousCursor &&
+                        event.tag == SyncEventTag.REMOTE_ENUM &&
+                        event.message.startsWith(SyncEngine.DELTA_TOKEN_RESET_EVENT_PREFIX)
+                }.sortedBy { it.id }
+                .forEach { event ->
+                    val pairName =
+                        event.pairId?.let { pairId ->
+                            state.value.pairs.firstOrNull { it.id == pairId }?.displayName
+                        }
+                    _deltaTokenResetNotices.tryEmit(
+                        DeltaTokenResetNotice(
+                            pairId = event.pairId,
+                            pairName = pairName,
+                        ),
+                    )
+                }
+            if (newestId > previousCursor) {
+                latestSeenDeltaResetEventId.updateAndGet { maxOf(it, newestId) }
+            }
         }
 
         companion object {
