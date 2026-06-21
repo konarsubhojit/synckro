@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.synckro.R
 import com.synckro.data.local.fs.LocalFolderAccessChecker
+import com.synckro.data.local.fs.LocalFsEnumerator
 import com.synckro.data.repository.AccountRepository
 import com.synckro.data.repository.SettingsRepository
 import com.synckro.data.repository.SyncEventRepository
@@ -57,62 +58,13 @@ enum class SyncSchedulePreset(
 
 /**
  * Returns `true` when [pattern] is a non-blank string that compiles to a valid
- * glob-based regular expression. A pattern is considered invalid only when the
- * resulting regex construction throws (e.g. a malformed character class such as
- * `[z-a]`). Common constructs like `*`, `**`, `?`, `{a,b}`, and `[abc]` always
- * succeed.
- *
- * This mirrors the conversion logic in `LocalFsEnumerator.globToRegex` so the
- * ViewModel can surface validation errors before the sync engine silently drops
- * uncompilable patterns.
+ * glob-based regular expression. Delegates to [LocalFsEnumerator.globToRegex] so
+ * validation is always consistent with what the sync engine will actually accept:
+ * a pattern that passes here will never be silently dropped at sync time.
  */
 internal fun isValidGlobPattern(pattern: String): Boolean {
     if (pattern.isBlank()) return false
-    return runCatching {
-        val sb = StringBuilder("^")
-        var i = 0
-        while (i < pattern.length) {
-            when (val c = pattern[i]) {
-                '*' -> {
-                    if (i + 1 < pattern.length && pattern[i + 1] == '*') {
-                        sb.append(".*")
-                        i++
-                    } else {
-                        sb.append("[^/]*")
-                    }
-                }
-                '?' -> sb.append("[^/]")
-                '.' -> sb.append("\\.")
-                '{' -> {
-                    val end = pattern.indexOf('}', i + 1)
-                    if (end == -1) {
-                        sb.append(Regex.escape(c.toString()))
-                    } else {
-                        val alternatives = pattern.substring(i + 1, end).split(',')
-                        sb.append("(?:")
-                        alternatives.joinTo(sb, "|") { Regex.escape(it) }
-                        sb.append(')')
-                        i = end
-                    }
-                }
-                '[' -> {
-                    val end = pattern.indexOf(']', i + 1)
-                    if (end == -1) {
-                        sb.append(Regex.escape(c.toString()))
-                    } else {
-                        sb.append('[')
-                        sb.append(pattern.substring(i + 1, end))
-                        sb.append(']')
-                        i = end
-                    }
-                }
-                else -> sb.append(Regex.escape(c.toString()))
-            }
-            i++
-        }
-        sb.append('$')
-        Regex(sb.toString())
-    }.isSuccess
+    return runCatching { LocalFsEnumerator.globToRegex(pattern) }.isSuccess
 }
 
 /**

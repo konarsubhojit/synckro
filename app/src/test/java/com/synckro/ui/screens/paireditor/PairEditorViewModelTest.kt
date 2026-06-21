@@ -800,20 +800,20 @@ class PairEditorViewModelTest {
 
     @Test
     fun `isValidGlobPattern accepts common patterns`() {
-        assertTrue("bare filename", isValidGlobPattern("*.jpg"))
-        assertTrue("double-star path", isValidGlobPattern("docs/**"))
-        assertTrue("question mark", isValidGlobPattern("report?.pdf"))
-        assertTrue("alternation", isValidGlobPattern("{jpg,png}"))
-        assertTrue("character class", isValidGlobPattern("[abc].txt"))
-        assertTrue("literal filename", isValidGlobPattern("README.md"))
-        assertTrue("nested path", isValidGlobPattern("src/**/*.kt"))
+        assertTrue(isValidGlobPattern("*.jpg"))
+        assertTrue(isValidGlobPattern("docs/**"))
+        assertTrue(isValidGlobPattern("report?.pdf"))
+        assertTrue(isValidGlobPattern("{jpg,png}"))
+        assertTrue(isValidGlobPattern("[abc].txt"))
+        assertTrue(isValidGlobPattern("README.md"))
+        assertTrue(isValidGlobPattern("src/**/*.kt"))
     }
 
     @Test
     fun `isValidGlobPattern rejects blank and invalid patterns`() {
-        assertFalse("blank string", isValidGlobPattern(""))
-        assertFalse("whitespace only", isValidGlobPattern("   "))
-        assertFalse("inverted range in character class", isValidGlobPattern("[z-a]"))
+        assertFalse(isValidGlobPattern(""))
+        assertFalse(isValidGlobPattern("   "))
+        assertFalse(isValidGlobPattern("[z-a]"))
     }
 
     @Test
