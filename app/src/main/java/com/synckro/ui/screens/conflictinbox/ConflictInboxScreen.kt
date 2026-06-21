@@ -1,5 +1,6 @@
 package com.synckro.ui.screens.conflictinbox
 
+import android.content.Context
 import android.net.Uri
 import android.provider.DocumentsContract
 import android.text.format.DateUtils
@@ -33,9 +34,12 @@ import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Inbox
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -73,12 +77,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.ImageLoader
 import coil.compose.AsyncImage
 import coil.compose.AsyncImagePainter
 import coil.memory.MemoryCache
+import coil.request.CachePolicy
 import coil.request.ImageRequest
 import com.synckro.R
 import com.synckro.domain.model.ConflictRecord
@@ -89,6 +95,7 @@ import com.synckro.util.rememberHapticHelper
 import kotlinx.coroutines.launch
 import java.text.DateFormat
 import java.util.Date
+import kotlin.math.absoluteValue
 
 /**
  * Displays the list of unresolved sync conflicts. Each conflict card explains
@@ -120,6 +127,7 @@ fun ConflictInboxScreen(
     val scaffoldNavigator = rememberListDetailPaneScaffoldNavigator<Any>()
     val coroutineScope = rememberCoroutineScope()
     var selectedConflictId by rememberSaveable { mutableStateOf<Long?>(null) }
+    var resolveAllMenuExpanded by rememberSaveable { mutableStateOf(false) }
 
     // Intercept system back while in selection mode to exit without popping the screen.
     BackHandler(enabled = state.isSelectionMode) {
@@ -205,6 +213,46 @@ fun ConflictInboxScreen(
                             }
                         }
                     },
+                    actions = {
+                        IconButton(
+                            onClick = { resolveAllMenuExpanded = true },
+                            enabled = state.conflicts.isNotEmpty(),
+                        ) {
+                            Icon(
+                                Icons.Default.MoreVert,
+                                contentDescription = stringResource(R.string.conflict_inbox_resolve_all_actions),
+                            )
+                        }
+                        DropdownMenu(
+                            expanded = resolveAllMenuExpanded,
+                            onDismissRequest = { resolveAllMenuExpanded = false },
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.conflict_inbox_resolve_all_keep_local)) },
+                                onClick = {
+                                    resolveAllMenuExpanded = false
+                                    viewModel.resolveAllKeepLocal()
+                                    haptic?.success()
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.conflict_inbox_resolve_all_keep_remote)) },
+                                onClick = {
+                                    resolveAllMenuExpanded = false
+                                    viewModel.resolveAllKeepRemote()
+                                    haptic?.success()
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.conflict_inbox_resolve_all_keep_both)) },
+                                onClick = {
+                                    resolveAllMenuExpanded = false
+                                    viewModel.resolveAllKeepBoth()
+                                    haptic?.success()
+                                },
+                            )
+                        }
+                    },
                 )
             }
         },
@@ -256,7 +304,30 @@ fun ConflictInboxScreen(
                         },
                         onToggleSelection = viewModel::toggleSelection,
                         onResolved = { haptic?.success() },
+                        onOpenConflict = { selectedConflictId = it },
                     )
+                    val selectedConflict = state.conflicts.firstOrNull { it.id == selectedConflictId }
+                    if (selectedConflict != null && !state.isSelectionMode) {
+                        ConflictPreviewDialog(
+                            conflict = selectedConflict,
+                            onDismiss = { selectedConflictId = null },
+                            onKeepLocal = {
+                                viewModel.keepLocal(selectedConflict.id)
+                                selectedConflictId = null
+                                haptic?.success()
+                            },
+                            onKeepRemote = {
+                                viewModel.keepRemote(selectedConflict.id)
+                                selectedConflictId = null
+                                haptic?.success()
+                            },
+                            onKeepBoth = {
+                                viewModel.keepBoth(selectedConflict.id)
+                                selectedConflictId = null
+                                haptic?.success()
+                            },
+                        )
+                    }
                 } else {
                     NavigableListDetailPaneScaffold(
                         navigator = scaffoldNavigator,
@@ -377,6 +448,30 @@ private fun ConflictListPane(
             )
         }
         item { Spacer(Modifier.height(8.dp)) }
+    }
+}
+
+@Composable
+private fun ConflictPreviewDialog(
+    conflict: ConflictInboxViewModel.ConflictRow,
+    onDismiss: () -> Unit,
+    onKeepLocal: () -> Unit,
+    onKeepRemote: () -> Unit,
+    onKeepBoth: () -> Unit,
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            shape = MaterialTheme.shapes.large,
+            tonalElevation = 4.dp,
+        ) {
+            ConflictResolutionPane(
+                conflict = conflict,
+                onKeepLocal = onKeepLocal,
+                onKeepRemote = onKeepRemote,
+                onKeepBoth = onKeepBoth,
+                modifier = Modifier.padding(4.dp),
+            )
+        }
     }
 }
 
@@ -564,6 +659,7 @@ private fun ConflictCard(
                             fallbackIcon = fileTypeIcon,
                             imageLoader = imageLoader,
                             contentDescription = stringResource(R.string.conflict_inbox_remote_label),
+                            cachedOnly = true,
                         )
                     }
                     Text(
@@ -600,6 +696,21 @@ private fun ConflictCard(
                         style = MaterialTheme.typography.bodySmall,
                     )
                 }
+            }
+            val sizeDeltaLabel =
+                remember(conflict.localSizeBytes, conflict.remoteSizeBytes) {
+                    formatFileSizeDeltaLabel(
+                        context = ctx,
+                        localSizeBytes = conflict.localSizeBytes,
+                        remoteSizeBytes = conflict.remoteSizeBytes,
+                    )
+                }
+            if (sizeDeltaLabel != null) {
+                Text(
+                    text = stringResource(R.string.conflict_inbox_file_size_delta_value, sizeDeltaLabel),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
 
             Text(
@@ -722,6 +833,22 @@ internal fun resolutionLabel(resolution: String): String =
         else -> resolution
     }
 
+internal fun formatFileSizeDeltaLabel(
+    context: Context,
+    localSizeBytes: Long?,
+    remoteSizeBytes: Long?,
+): String? {
+    if (localSizeBytes == null || remoteSizeBytes == null) return null
+    if (localSizeBytes == remoteSizeBytes) return null
+    val diff = (localSizeBytes - remoteSizeBytes).absoluteValue
+    val humanReadable = Formatter.formatShortFileSize(context, diff)
+    return if (localSizeBytes > remoteSizeBytes) {
+        context.getString(R.string.conflict_inbox_file_size_delta_local_larger, humanReadable)
+    } else {
+        context.getString(R.string.conflict_inbox_file_size_delta_remote_larger, humanReadable)
+    }
+}
+
 internal fun fileTypeLabelRes(fileTypeIcon: ConflictInboxViewModel.FileTypeIcon): Int =
     when (fileTypeIcon) {
         ConflictInboxViewModel.FileTypeIcon.FOLDER -> R.string.conflict_inbox_file_type_folder
@@ -757,16 +884,21 @@ internal fun ConflictThumbnail(
     fallbackIcon: ImageVector,
     imageLoader: ImageLoader,
     contentDescription: String?,
+    cachedOnly: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val ctx = LocalContext.current
     val size = 48.dp
+    val thumbnailCachePolicy = if (cachedOnly) CachePolicy.READ_ONLY else CachePolicy.ENABLED
     val request =
         ImageRequest
             .Builder(ctx)
             .data(thumbnailUri)
             .crossfade(true)
             .size(coil.size.Size(128, 128))
+            .memoryCachePolicy(thumbnailCachePolicy)
+            .diskCachePolicy(thumbnailCachePolicy)
+            .networkCachePolicy(thumbnailCachePolicy)
             .build()
 
     // Track whether the most recent load attempt failed so we can show the

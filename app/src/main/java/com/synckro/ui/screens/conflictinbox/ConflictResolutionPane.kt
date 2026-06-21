@@ -128,6 +128,7 @@ fun ConflictResolutionPane(
                             fallbackIcon = fileTypeIcon,
                             imageLoader = imageLoader,
                             contentDescription = stringResource(R.string.conflict_inbox_remote_label),
+                            cachedOnly = true,
                         )
                     }
                     Text(
@@ -164,6 +165,21 @@ fun ConflictResolutionPane(
                         style = MaterialTheme.typography.bodySmall,
                     )
                 }
+            }
+            val sizeDeltaLabel =
+                remember(conflict.localSizeBytes, conflict.remoteSizeBytes) {
+                    formatFileSizeDeltaLabel(
+                        context = ctx,
+                        localSizeBytes = conflict.localSizeBytes,
+                        remoteSizeBytes = conflict.remoteSizeBytes,
+                    )
+                }
+            if (sizeDeltaLabel != null) {
+                Text(
+                    text = stringResource(R.string.conflict_inbox_file_size_delta_value, sizeDeltaLabel),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
 
             Text(
