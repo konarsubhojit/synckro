@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.synckro.R
 import com.synckro.data.local.fs.LocalFolderAccessChecker
+import com.synckro.data.local.fs.LocalFsEnumerator
 import com.synckro.data.repository.AccountRepository
 import com.synckro.data.repository.SettingsRepository
 import com.synckro.data.repository.SyncEventRepository
@@ -53,6 +54,17 @@ enum class SyncSchedulePreset(
         fun fromMinutes(minutes: Long): SyncSchedulePreset =
             entries.firstOrNull { it != CUSTOM && it.minutes == minutes } ?: CUSTOM
     }
+}
+
+/**
+ * Returns `true` when [pattern] is a non-blank string that compiles to a valid
+ * glob-based regular expression. Delegates to [LocalFsEnumerator.globToRegex] so
+ * validation is always consistent with what the sync engine will actually accept:
+ * a pattern that passes here will never be silently dropped at sync time.
+ */
+internal fun isValidGlobPattern(pattern: String): Boolean {
+    if (pattern.isBlank()) return false
+    return runCatching { LocalFsEnumerator.globToRegex(pattern) }.isSuccess
 }
 
 /**
@@ -207,12 +219,37 @@ class PairEditorViewModel
                     return parsedCustomInterval.coerceAtLeast(15L)
                 }
 
-            /** True when the custom interval text is non-empty but does not parse as a valid long ≥ 15. */
+            /** True when the custom interval text is non-empty but does not parse as a valid long ≥ 15.
+             *  Note: saving is NOT blocked -- the persisted interval is automatically clamped to 15.
+             *  The UI should present this as a warning rather than a blocking error. */
             val customIntervalError: Boolean
                 get() =
                     schedulePreset == SyncSchedulePreset.CUSTOM &&
                         customIntervalText.isNotEmpty() &&
                         parsedCustomInterval < 15L
+
+            /**
+             * Non-blank include-glob lines that fail [isValidGlobPattern]. These
+             * will be silently ignored by the sync engine; surfacing them in the UI
+             * lets the user fix them before saving.
+             */
+            val invalidIncludeGlobLines: List<String>
+                get() =
+                    includeGlobsText
+                        .split('\n')
+                        .map { it.trim() }
+                        .filter { it.isNotBlank() && !isValidGlobPattern(it) }
+
+            /**
+             * Non-blank exclude-glob lines that fail [isValidGlobPattern]. Mirrors
+             * [invalidIncludeGlobLines] for the exclude side.
+             */
+            val invalidExcludeGlobLines: List<String>
+                get() =
+                    excludeGlobsText
+                        .split('\n')
+                        .map { it.trim() }
+                        .filter { it.isNotBlank() && !isValidGlobPattern(it) }
 
             /**
              * Parses [storageLimitValueText] as a positive Long, or null if blank/invalid/zero.

@@ -319,11 +319,23 @@ fun PairEditorScreen(
                     modifier = Modifier.fillMaxWidth(),
                 )
 
+                Text(
+                    text = conflictPolicyDescription(state.conflictPolicy),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+
                 // Sync direction selector
                 DirectionDropdown(
                     selected = state.direction,
                     onSelect = viewModel::onDirectionChangeRequested,
                     modifier = Modifier.fillMaxWidth(),
+                )
+
+                Text(
+                    text = directionDescription(state.direction),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
 
                 // Retention days – only shown for the two cleanup modes
@@ -441,11 +453,11 @@ fun PairEditorScreen(
                                 if (state.customIntervalError) {
                                     Text(
                                         text = stringResource(R.string.pair_editor_schedule_interval_min_warning),
-                                        color = MaterialTheme.colorScheme.error,
+                                        color = MaterialTheme.colorScheme.tertiary,
                                     )
                                 }
                             },
-                            isError = state.customIntervalError,
+                            isError = false,
                             singleLine = true,
                             keyboardOptions =
                                 KeyboardOptions(
@@ -501,6 +513,16 @@ fun PairEditorScreen(
                     minLines = 2,
                 )
 
+                if (state.invalidIncludeGlobLines.isNotEmpty()) {
+                    state.invalidIncludeGlobLines.forEach { bad ->
+                        Text(
+                            text = stringResource(R.string.pair_editor_globs_invalid_pattern, bad),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                }
+
                 // Exclude globs
                 OutlinedTextField(
                     value = state.excludeGlobsText,
@@ -509,6 +531,22 @@ fun PairEditorScreen(
                     placeholder = { Text(stringResource(R.string.pair_editor_globs_hint)) },
                     modifier = Modifier.fillMaxWidth(),
                     minLines = 2,
+                )
+
+                if (state.invalidExcludeGlobLines.isNotEmpty()) {
+                    state.invalidExcludeGlobLines.forEach { bad ->
+                        Text(
+                            text = stringResource(R.string.pair_editor_globs_invalid_pattern, bad),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                }
+
+                Text(
+                    text = stringResource(R.string.pair_editor_globs_help),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
 
                 // Storage limit
@@ -829,6 +867,15 @@ private fun conflictPolicyLabel(policy: ConflictPolicy): String =
     }
 
 @Composable
+private fun conflictPolicyDescription(policy: ConflictPolicy): String =
+    when (policy) {
+        ConflictPolicy.NEWEST_WINS -> stringResource(R.string.conflict_policy_desc_newest_wins)
+        ConflictPolicy.PREFER_LOCAL -> stringResource(R.string.conflict_policy_desc_prefer_local)
+        ConflictPolicy.PREFER_REMOTE -> stringResource(R.string.conflict_policy_desc_prefer_remote)
+        ConflictPolicy.KEEP_BOTH -> stringResource(R.string.conflict_policy_desc_keep_both)
+    }
+
+@Composable
 private fun directionLabel(dir: SyncDirection): String =
     when (dir) {
         SyncDirection.LOCAL_TO_REMOTE -> stringResource(R.string.direction_local_to_remote)
@@ -836,6 +883,16 @@ private fun directionLabel(dir: SyncDirection): String =
         SyncDirection.BIDIRECTIONAL -> stringResource(R.string.direction_bidirectional)
         SyncDirection.UPLOAD_AND_DELETE_LOCAL_AFTER_N_DAYS -> stringResource(R.string.direction_upload_delete_local)
         SyncDirection.DOWNLOAD_AND_DELETE_REMOTE_AFTER_N_DAYS -> stringResource(R.string.direction_download_delete_remote)
+    }
+
+@Composable
+private fun directionDescription(dir: SyncDirection): String =
+    when (dir) {
+        SyncDirection.LOCAL_TO_REMOTE -> stringResource(R.string.direction_desc_local_to_remote)
+        SyncDirection.REMOTE_TO_LOCAL -> stringResource(R.string.direction_desc_remote_to_local)
+        SyncDirection.BIDIRECTIONAL -> stringResource(R.string.direction_desc_bidirectional)
+        SyncDirection.UPLOAD_AND_DELETE_LOCAL_AFTER_N_DAYS -> stringResource(R.string.direction_desc_upload_delete_local)
+        SyncDirection.DOWNLOAD_AND_DELETE_REMOTE_AFTER_N_DAYS -> stringResource(R.string.direction_desc_download_delete_remote)
     }
 
 @Composable
