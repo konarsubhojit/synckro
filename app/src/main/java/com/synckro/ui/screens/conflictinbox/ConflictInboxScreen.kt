@@ -839,7 +839,7 @@ internal fun formatFileSizeDeltaLabel(
     remoteSizeBytes: Long?,
 ): String? {
     if (localSizeBytes == null || remoteSizeBytes == null) return null
-    if (localSizeBytes == remoteSizeBytes) return Formatter.formatShortFileSize(context, 0)
+    if (localSizeBytes == remoteSizeBytes) return null
     val diff = (localSizeBytes - remoteSizeBytes).absoluteValue
     val humanReadable = Formatter.formatShortFileSize(context, diff)
     return if (localSizeBytes > remoteSizeBytes) {
@@ -889,15 +889,16 @@ internal fun ConflictThumbnail(
 ) {
     val ctx = LocalContext.current
     val size = 48.dp
+    val thumbnailCachePolicy = if (cachedOnly) CachePolicy.READ_ONLY else CachePolicy.ENABLED
     val request =
         ImageRequest
             .Builder(ctx)
             .data(thumbnailUri)
             .crossfade(true)
             .size(coil.size.Size(128, 128))
-            .memoryCachePolicy(if (cachedOnly) CachePolicy.READ_ONLY else CachePolicy.ENABLED)
-            .diskCachePolicy(if (cachedOnly) CachePolicy.READ_ONLY else CachePolicy.ENABLED)
-            .networkCachePolicy(if (cachedOnly) CachePolicy.READ_ONLY else CachePolicy.ENABLED)
+            .memoryCachePolicy(thumbnailCachePolicy)
+            .diskCachePolicy(thumbnailCachePolicy)
+            .networkCachePolicy(thumbnailCachePolicy)
             .build()
 
     // Track whether the most recent load attempt failed so we can show the

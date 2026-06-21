@@ -196,10 +196,19 @@ class ConflictInboxViewModel
          * Applies [resolution] to all currently visible unresolved conflicts, in list order.
          */
         fun applyResolutionToAll(resolution: String) {
-            val ids = state.value.conflicts.asSequence().filter { it.resolution == null }.map { it.id }.toList()
-            Timber.i("ConflictInboxViewModel.applyResolutionToAll(resolution=$resolution, ids=$ids)")
+            // Capture a snapshot up-front so this run behaves deterministically even if
+            // repository emissions change while we're iterating.
+            val unresolvedConflictIds =
+                state.value.conflicts
+                    .asSequence()
+                    .filter { it.resolution == null }
+                    .map { it.id }
+                    .toList()
+            Timber.i(
+                "ConflictInboxViewModel.applyResolutionToAll(resolution=$resolution, ids=$unresolvedConflictIds)",
+            )
             viewModelScope.launch {
-                for (id in ids) {
+                for (id in unresolvedConflictIds) {
                     runCatching { conflictRepository.resolve(id, resolution) }
                         .onFailure { Timber.w(it, "ConflictInboxViewModel: failed to resolve-all conflict %d", id) }
                 }

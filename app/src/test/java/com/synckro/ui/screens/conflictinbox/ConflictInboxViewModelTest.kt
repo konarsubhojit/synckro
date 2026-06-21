@@ -529,6 +529,64 @@ class ConflictInboxViewModelTest {
         }
 
     @Test
+    fun `resolveAllKeepLocal applies KEEP_LOCAL to all unresolved conflicts in list order`() =
+        runTest {
+            every { conflictRepository.observeUnresolved() } returns
+                MutableStateFlow(
+                    listOf(
+                        makeConflict(id = 21L),
+                        makeConflict(id = 22L),
+                    ),
+                )
+            coEvery { fileIndexDao.getForPair(any()) } returns emptyList()
+            coEvery { syncPairRepository.getById(any()) } returns null
+            coEvery { accountRepository.getAll() } returns emptyList()
+
+            val vm = createVm()
+            val collectJob = launch { vm.state.collect {} }
+            advanceUntilIdle()
+
+            vm.resolveAllKeepLocal()
+            advanceUntilIdle()
+
+            coVerifyOrder {
+                conflictRepository.resolve(21L, ConflictRecord.RESOLUTION_KEEP_LOCAL)
+                conflictRepository.resolve(22L, ConflictRecord.RESOLUTION_KEEP_LOCAL)
+            }
+
+            collectJob.cancel()
+        }
+
+    @Test
+    fun `resolveAllKeepBoth applies KEEP_BOTH to all unresolved conflicts in list order`() =
+        runTest {
+            every { conflictRepository.observeUnresolved() } returns
+                MutableStateFlow(
+                    listOf(
+                        makeConflict(id = 31L),
+                        makeConflict(id = 32L),
+                    ),
+                )
+            coEvery { fileIndexDao.getForPair(any()) } returns emptyList()
+            coEvery { syncPairRepository.getById(any()) } returns null
+            coEvery { accountRepository.getAll() } returns emptyList()
+
+            val vm = createVm()
+            val collectJob = launch { vm.state.collect {} }
+            advanceUntilIdle()
+
+            vm.resolveAllKeepBoth()
+            advanceUntilIdle()
+
+            coVerifyOrder {
+                conflictRepository.resolve(31L, ConflictRecord.RESOLUTION_KEEP_BOTH)
+                conflictRepository.resolve(32L, ConflictRecord.RESOLUTION_KEEP_BOTH)
+            }
+
+            collectJob.cancel()
+        }
+
+    @Test
     fun `error state is set when observeUnresolved emits an exception`() =
         runTest {
             every { conflictRepository.observeUnresolved() } returns
