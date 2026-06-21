@@ -22,6 +22,7 @@ import androidx.compose.material.icons.automirrored.filled.NavigateNext
 import androidx.compose.material.icons.filled.CreateNewFolder
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -164,6 +165,25 @@ fun PickRemoteFolderScreen(
 
             HorizontalDivider()
 
+            OutlinedTextField(
+                value = state.searchQuery,
+                onValueChange = viewModel::onSearchQueryChange,
+                singleLine = true,
+                enabled = !state.isLoading && !state.isReauthenticating && state.error == null,
+                label = { Text(stringResource(R.string.pick_remote_folder_search_label)) },
+                placeholder = { Text(stringResource(R.string.pick_remote_folder_search_placeholder)) },
+                leadingIcon = {
+                    Icon(
+                        Icons.Filled.Search,
+                        contentDescription = null,
+                    )
+                },
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 10.dp),
+            )
+
             Box(modifier = Modifier.weight(1f)) {
                 when {
                     state.isReauthenticating -> {
@@ -189,7 +209,9 @@ fun PickRemoteFolderScreen(
                     state.items.isEmpty() -> {
                         Text(
                             text =
-                                if (state.currentFolderId == null) {
+                                if (state.searchQuery.isNotBlank()) {
+                                    stringResource(R.string.pick_remote_folder_empty_filtered)
+                                } else if (state.currentFolderId == null) {
                                     stringResource(R.string.pick_remote_folder_empty_root)
                                 } else {
                                     stringResource(R.string.pick_remote_folder_empty)
