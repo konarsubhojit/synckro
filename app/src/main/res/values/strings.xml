@@ -195,7 +195,7 @@
     <string name="conflict_policy_keep_both">Keep both</string>
 
     <!-- Conflict-policy inline descriptions shown below the dropdown -->
-    <string name="conflict_policy_desc_newest_wins">The file with the newer last-modified timestamp is kept; the older copy is overwritten.</string>
+    <string name="conflict_policy_desc_newest_wins">The file with the newer last-modified timestamp is kept and the older copy is overwritten.</string>
     <string name="conflict_policy_desc_prefer_local">The local copy always wins on conflict. Remote changes are discarded.</string>
     <string name="conflict_policy_desc_prefer_remote">The remote copy always wins on conflict. Local changes are discarded.</string>
     <string name="conflict_policy_desc_keep_both">Both copies are preserved by renaming the conflicting file. No data is lost, but duplicates may accumulate.</string>
