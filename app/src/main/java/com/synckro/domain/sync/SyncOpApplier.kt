@@ -93,8 +93,9 @@ interface LocalFileAccess {
         val sourceStat = stat(fromRelativePath) ?: return null
         val source = openRead(fromRelativePath) ?: return null
         val movedStat = write(toRelativePath, source, sourceStat.mimeType)
-        check(delete(fromRelativePath)) {
-            "Failed to remove local source after move: $fromRelativePath"
+        if (!delete(fromRelativePath)) {
+            delete(toRelativePath)
+            error("Failed to remove local source after move: $fromRelativePath")
         }
         return movedStat
     }

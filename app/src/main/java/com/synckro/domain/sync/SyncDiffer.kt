@@ -119,9 +119,20 @@ object SyncDiffer {
         val localByPath = local.associateBy { it.relativePath }
         val remoteByPath = remote.associateBy { it.relativePath }
         val indexByPath = lastIndex.associateBy { it.relativePath }
+        val duplicateRemoteIds =
+            lastIndex
+                .mapNotNull { it.remoteId }
+                .groupingBy { it }
+                .eachCount()
+                .filterValues { it > 1 }
+                .keys
         val indexByRemoteId =
             lastIndex
-                .mapNotNull { entry -> entry.remoteId?.let { it to entry } }
+                .mapNotNull { entry ->
+                    entry.remoteId
+                        ?.takeUnless { it in duplicateRemoteIds }
+                        ?.let { it to entry }
+                }
                 .toMap()
         val remoteMovesBySourcePath =
             buildMap<String, SyncOp.MoveLocal> {
