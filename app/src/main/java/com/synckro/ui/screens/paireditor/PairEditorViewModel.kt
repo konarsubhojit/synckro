@@ -115,6 +115,11 @@ internal val selectiveSyncFileTypeOptions: List<SelectiveSyncFileTypeOption> =
         ),
     )
 
+/**
+ * Generates the exclude-glob used by the selective-sync folder checklist to
+ * skip everything underneath the named top-level folder. Any glob metacharacters
+ * in [folderName] are escaped first so the folder name is matched literally.
+ */
 internal fun selectiveSyncFolderExcludeGlob(folderName: String): String =
     "${LocalFsEnumerator.escapeGlobLiteral(folderName)}/**"
 

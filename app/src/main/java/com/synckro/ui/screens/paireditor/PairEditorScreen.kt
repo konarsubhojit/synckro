@@ -58,6 +58,8 @@ import com.synckro.domain.model.CloudProviderType
 import com.synckro.domain.model.ConflictPolicy
 import com.synckro.domain.model.SyncDirection
 import com.synckro.ui.components.LoadingState
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * Screen for creating or editing a [SyncPair]. The title and save-button label
@@ -90,34 +92,10 @@ fun PairEditorScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val context = LocalContext.current
-    val topLevelFolderNames =
-        remember(state.localTreeUri) {
-            if (state.localTreeUri.isBlank()) {
-                emptyList()
-            } else {
-                runCatching {
-                    val treeUri = android.net.Uri.parse(state.localTreeUri)
-                    DocumentFile
-                        .fromTreeUri(context, treeUri)
-                        ?.listFiles()
-                        ?.filter { it.isDirectory }
-                        ?.mapNotNull { file ->
-                            file.name
-                                ?.trim()
-                                ?.takeIf { it.isNotEmpty() }
-                        }
-                        ?.distinct()
-                        ?.sorted()
-                        .orEmpty()
-                }.getOrDefault(emptyList())
-            }
-        }
-    val selectiveSyncSelections =
-        remember(state.excludeGlobsText, topLevelFolderNames) {
-            parseSelectiveSyncSelections(
-                excludeGlobsText = state.excludeGlobsText,
-                availableFolderNames = topLevelFolderNames,
-            )
+    var topLevelFolderNames by remember { mutableStateOf(emptyList<String>()) }
+    var selectiveSyncSelections by
+        remember {
+            mutableStateOf(SelectiveSyncSelections(emptyList(), emptySet(), emptySet()))
         }
     val selectiveTypeLabels =
         mapOf(
@@ -127,6 +105,41 @@ fun PairEditorScreen(
             "audio" to stringResource(R.string.pair_editor_selective_sync_type_audio),
             "archives" to stringResource(R.string.pair_editor_selective_sync_type_archives),
         )
+
+    LaunchedEffect(state.localTreeUri, context) {
+        topLevelFolderNames =
+            if (state.localTreeUri.isBlank()) {
+                emptyList()
+            } else {
+                withContext(Dispatchers.IO) {
+                    runCatching {
+                        val treeUri = android.net.Uri.parse(state.localTreeUri)
+                        DocumentFile
+                            .fromTreeUri(context, treeUri)
+                            ?.listFiles()
+                            ?.filter { it.isDirectory }
+                            ?.mapNotNull { file ->
+                                file.name
+                                    ?.trim()
+                                    ?.takeIf { it.isNotEmpty() }
+                            }
+                            ?.distinct()
+                            ?.sorted()
+                            .orEmpty()
+                    }.getOrDefault(emptyList())
+                }
+            }
+    }
+
+    LaunchedEffect(state.excludeGlobsText, topLevelFolderNames) {
+        selectiveSyncSelections =
+            withContext(Dispatchers.Default) {
+                parseSelectiveSyncSelections(
+                    excludeGlobsText = state.excludeGlobsText,
+                    availableFolderNames = topLevelFolderNames,
+                )
+            }
+    }
 
     // Drive the transient "save failed" snackbar from the one-shot
     // [saveErrorEvent] counter so dismissing it does NOT also clear the

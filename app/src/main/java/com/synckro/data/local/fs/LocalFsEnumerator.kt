@@ -359,7 +359,8 @@ class LocalFsEnumerator internal constructor(
                     '\\' -> {
                         if (i + 1 < glob.length) {
                             sb.append(Regex.escape(glob[i + 1].toString()))
-                            i++ // consume escaped char
+                            i += 2
+                            continue
                         } else {
                             sb.append(Regex.escape(c.toString()))
                         }
