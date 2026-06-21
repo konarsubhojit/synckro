@@ -171,8 +171,10 @@ internal fun buildPathCache(
     rootFolderId: String,
 ): Map<String, String> {
     val cache = mutableMapOf<String, String>()
-    repeat(changes.size) {
-        var progressed = false
+    var remainingPasses = changes.size
+    var progressed = true
+    while (remainingPasses > 0 && progressed) {
+        progressed = false
         for (change in changes) {
             val file = change.file ?: continue
             if (file.id.isEmpty()) continue
@@ -188,7 +190,7 @@ internal fun buildPathCache(
                 progressed = true
             }
         }
-        if (!progressed) return@repeat
+        remainingPasses--
     }
     for (change in changes) {
         val file = change.file ?: continue

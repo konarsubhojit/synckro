@@ -172,8 +172,10 @@ internal fun buildPathCache(
             }
         }
 
-    repeat(items.size) {
-        var progressed = false
+    var remainingPasses = items.size
+    var progressed = true
+    while (remainingPasses > 0 && progressed) {
+        progressed = false
         for (item in items) {
             if (item.id.isEmpty()) continue
             val parentId = item.parentReference?.id
@@ -188,7 +190,7 @@ internal fun buildPathCache(
                 progressed = true
             }
         }
-        if (!progressed) return@repeat
+        remainingPasses--
     }
     for (item in items) {
         if (item.id.isNotEmpty() && item.id !in cache) {

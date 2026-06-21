@@ -119,13 +119,7 @@ object SyncDiffer {
         val localByPath = local.associateBy { it.relativePath }
         val remoteByPath = remote.associateBy { it.relativePath }
         val indexByPath = lastIndex.associateBy { it.relativePath }
-        val duplicateRemoteIds =
-            lastIndex
-                .mapNotNull { it.remoteId }
-                .groupingBy { it }
-                .eachCount()
-                .filterValues { it > 1 }
-                .keys
+        val duplicateRemoteIds = findDuplicateRemoteIds(lastIndex)
         val indexByRemoteId =
             lastIndex
                 .mapNotNull { entry ->
@@ -331,6 +325,14 @@ object SyncDiffer {
 
         return ops
     }
+
+    private fun findDuplicateRemoteIds(lastIndex: Collection<FileIndexEntry>): Set<String> =
+        lastIndex
+            .mapNotNull { it.remoteId }
+            .groupingBy { it }
+            .eachCount()
+            .filterValues { it > 1 }
+            .keys
 
     /**
      * Returns `true` when this direction permits upload operations (local → remote).
