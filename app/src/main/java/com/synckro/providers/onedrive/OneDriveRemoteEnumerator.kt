@@ -160,18 +160,58 @@ internal fun buildPathCache(
     rootFolderId: String,
 ): Map<String, String> {
     val cache = mutableMapOf<String, String>()
-    for (item in items) {
-        if (item.id.isEmpty()) continue
-        val parentId = item.parentReference?.id
-        val path =
+    val rootReferencePath =
+        items.firstNotNullOfOrNull { item ->
             when {
-                rootFolderId.isNotEmpty() && parentId == rootFolderId -> item.name
-                parentId != null && cache.containsKey(parentId) -> "${cache[parentId]}/${item.name}"
-                else -> item.name // parent not in this batch; fall back to leaf name
+                item.id == rootFolderId ->
+                    item.parentReference?.path?.let { parentPath ->
+                        if (item.name.isEmpty()) parentPath else "$parentPath/${item.name}"
+                    }
+                item.parentReference?.id == rootFolderId -> item.parentReference.path
+                else -> null
             }
-        cache[item.id] = path
+        }
+
+    val unresolved = ArrayDeque(items.filter { it.id.isNotEmpty() })
+    while (unresolved.isNotEmpty()) {
+        var resolvedThisPass = 0
+        repeat(unresolved.size) {
+            val item = unresolved.removeFirst()
+            val parentId = item.parentReference?.id
+            val path =
+                when {
+                    rootFolderId.isNotEmpty() && parentId == rootFolderId -> item.name
+                    parentId != null && cache.containsKey(parentId) -> "${cache[parentId]}/${item.name}"
+                    else -> pathFromParentReference(item, rootReferencePath)
+                }
+            if (path == null) {
+                unresolved.addLast(item)
+                return@repeat
+            }
+            if (cache[item.id] != path) {
+                cache[item.id] = path
+            }
+            resolvedThisPass++
+        }
+        if (resolvedThisPass == 0) break
+    }
+    for (item in items) {
+        if (item.id.isNotEmpty() && item.id !in cache) {
+            cache[item.id] = item.name
+        }
     }
     return cache
+}
+
+private fun pathFromParentReference(
+    item: GraphDriveItem,
+    rootReferencePath: String?,
+): String? {
+    val parentPath = item.parentReference?.path ?: return null
+    val rootPath = rootReferencePath ?: return null
+    if (!parentPath.startsWith(rootPath)) return null
+    val relativeParent = parentPath.removePrefix(rootPath).trimStart('/')
+    return if (relativeParent.isEmpty()) item.name else "$relativeParent/${item.name}"
 }
 
 /**

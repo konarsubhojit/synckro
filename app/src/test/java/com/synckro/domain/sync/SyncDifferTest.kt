@@ -13,7 +13,8 @@ class SyncDifferTest {
         size: Long = 10,
         mtime: Long = 1_000,
         hash: String? = null,
-    ) = FileSnapshot(path, size, mtime, hash)
+        stableId: String? = null,
+    ) = FileSnapshot(path, size, mtime, hash, stableId)
 
     private fun idx(
         path: String,
@@ -29,6 +30,7 @@ class SyncDifferTest {
         localSize = size,
         localLastModifiedMs = mtime,
         localHash = hash,
+        remoteETag = hash,
         remoteSize = remoteSize,
         remoteLastModifiedMs = remoteMtime,
         remoteId = remoteId,
@@ -537,6 +539,50 @@ class SyncDifferTest {
                 SyncOp.DownloadNew("new.txt"),
             ),
             ops.toSet(),
+        )
+    }
+
+    @Test
+    fun `remote rename with stable remote id emits move-local`() {
+        val ops =
+            SyncDiffer.diff(
+                local = listOf(snap("old.txt", size = 10, mtime = 1_000, hash = "same")),
+                remote = listOf(snap("renamed.txt", size = 10, mtime = 1_000, hash = "same", stableId = "remote-1")),
+                lastIndex = listOf(idx("old.txt", size = 10, mtime = 1_000, hash = "same", remoteId = "remote-1")),
+                direction = SyncDirection.BIDIRECTIONAL,
+                conflictPolicy = ConflictPolicy.NEWEST_WINS,
+            )
+
+        assertEquals(
+            listOf<SyncOp>(
+                SyncOp.MoveLocal(
+                    fromRelativePath = "old.txt",
+                    relativePath = "renamed.txt",
+                ),
+            ),
+            ops,
+        )
+    }
+
+    @Test
+    fun `remote move with stable remote id emits move-local`() {
+        val ops =
+            SyncDiffer.diff(
+                local = listOf(snap("docs/report.txt", size = 10, mtime = 1_000, hash = "same")),
+                remote = listOf(snap("archive/report.txt", size = 10, mtime = 1_000, hash = "same", stableId = "remote-2")),
+                lastIndex = listOf(idx("docs/report.txt", size = 10, mtime = 1_000, hash = "same", remoteId = "remote-2")),
+                direction = SyncDirection.BIDIRECTIONAL,
+                conflictPolicy = ConflictPolicy.NEWEST_WINS,
+            )
+
+        assertEquals(
+            listOf<SyncOp>(
+                SyncOp.MoveLocal(
+                    fromRelativePath = "docs/report.txt",
+                    relativePath = "archive/report.txt",
+                ),
+            ),
+            ops,
         )
     }
 

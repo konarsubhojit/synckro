@@ -197,6 +197,51 @@ class GoogleDriveRemoteEnumeratorTest {
         }
 
     @Test
+    fun `enumerate resolves nested path when parent folder appears later in changes batch`() =
+        runTest {
+            server.enqueue(
+                MockResponse()
+                    .setResponseCode(200)
+                    .setBody(
+                        """
+                        {
+                          "changes": [
+                            {
+                              "fileId": "file-report",
+                              "removed": false,
+                              "file": {
+                                "id": "file-report",
+                                "name": "report.txt",
+                                "parents": ["folder-docs"],
+                                "mimeType": "text/plain",
+                                "size": "256",
+                                "modifiedTime": "2024-05-01T10:00:00Z",
+                                "md5Checksum": "md5-report"
+                              }
+                            },
+                            {
+                              "fileId": "folder-docs",
+                              "removed": false,
+                              "file": {
+                                "id": "folder-docs",
+                                "name": "docs",
+                                "parents": ["sync-root-id"],
+                                "mimeType": "application/vnd.google-apps.folder"
+                              }
+                            }
+                          ],
+                          "newStartPageToken": "token-out-of-order"
+                        }
+                        """.trimIndent(),
+                    ),
+            )
+
+            val snapshot = enumerator.enumerateWithToken(token, deltaToken = "token-1", rootFolderId = "sync-root-id")
+
+            assertEquals("docs/report.txt", snapshot.changes[0].relativePath)
+        }
+
+    @Test
     fun `enumerate follows nextPageToken before returning newStartPageToken`() =
         runTest {
             // Page 1: has nextPageToken, no newStartPageToken yet.

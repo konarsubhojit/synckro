@@ -13,6 +13,7 @@ data class FileSnapshot(
     val size: Long,
     val lastModifiedMs: Long,
     val hash: String? = null,
+    val stableId: String? = null,
 )
 
 /**
@@ -43,6 +44,15 @@ sealed interface SyncOp {
     ) : SyncOp
 
     data class DeleteLocal(
+        override val relativePath: String,
+    ) : SyncOp
+
+    /**
+     * Move or rename the existing local file from [fromRelativePath] to
+     * [relativePath] without re-downloading its contents.
+     */
+    data class MoveLocal(
+        val fromRelativePath: String,
         override val relativePath: String,
     ) : SyncOp
 
@@ -109,6 +119,48 @@ object SyncDiffer {
         val localByPath = local.associateBy { it.relativePath }
         val remoteByPath = remote.associateBy { it.relativePath }
         val indexByPath = lastIndex.associateBy { it.relativePath }
+        val duplicateRemoteIds = findDuplicateRemoteIds(lastIndex)
+        val indexByRemoteId =
+            lastIndex
+                .mapNotNull { entry ->
+                    entry.remoteId
+                        ?.takeUnless { it in duplicateRemoteIds }
+                        ?.let { it to entry }
+                }
+                .toMap()
+        val remoteMovesBySourcePath =
+            buildMap<String, SyncOp.MoveLocal> {
+                if (!direction.allowsDownload()) return@buildMap
+                val usedDestinations = mutableSetOf<String>()
+                for (remoteSnap in remote) {
+                    val stableId = remoteSnap.stableId ?: continue
+                    val indexEntry = indexByRemoteId[stableId] ?: continue
+                    val sourcePath = indexEntry.relativePath
+                    val destinationPath = remoteSnap.relativePath
+                    if (sourcePath == destinationPath) continue
+                    if (
+                        sourcePath in localByPath &&
+                        destinationPath !in localByPath &&
+                        sourcePath !in remoteByPath
+                    ) {
+                        val localSource = localByPath[sourcePath] ?: continue
+                        if (
+                            !changed(localSource, indexEntry) &&
+                            !changedRemote(remoteSnap, indexEntry) &&
+                            usedDestinations.add(destinationPath)
+                        ) {
+                            put(
+                                sourcePath,
+                                SyncOp.MoveLocal(
+                                    fromRelativePath = sourcePath,
+                                    relativePath = destinationPath,
+                                ),
+                            )
+                        }
+                    }
+                }
+            }
+        val remoteMoveDestinations = remoteMovesBySourcePath.values.mapTo(mutableSetOf()) { it.relativePath }
 
         val allPaths =
             buildSet {
@@ -120,6 +172,13 @@ object SyncDiffer {
         val ops = mutableListOf<SyncOp>()
 
         for (path in allPaths) {
+            val remoteMove = remoteMovesBySourcePath[path]
+            if (remoteMove != null) {
+                ops += remoteMove
+                continue
+            }
+            if (path in remoteMoveDestinations) continue
+
             val l = localByPath[path]
             val r = remoteByPath[path]
             val idx = indexByPath[path]
@@ -267,6 +326,14 @@ object SyncDiffer {
         return ops
     }
 
+    private fun findDuplicateRemoteIds(lastIndex: Collection<FileIndexEntry>): Set<String> =
+        lastIndex
+            .mapNotNull { it.remoteId }
+            .groupingBy { it }
+            .eachCount()
+            .filterValues { it > 1 }
+            .keys
+
     /**
      * Returns `true` when this direction permits upload operations (local → remote).
      * The download-only modes suppress uploads; all other modes allow them.
@@ -327,6 +394,9 @@ object SyncDiffer {
         snap: FileSnapshot,
         idx: FileIndexEntry,
     ): Boolean {
+        // Prefer the provider fingerprint when available so metadata-only changes
+        // (such as renames that preserve content) do not force a transfer.
+        if (snap.hash != null && idx.remoteETag != null) return snap.hash != idx.remoteETag
         // For the remote side we compare against the remote columns of the index.
         val idxSize = idx.remoteSize ?: return true
         val idxMtime = idx.remoteLastModifiedMs ?: return true
