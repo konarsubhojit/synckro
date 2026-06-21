@@ -224,8 +224,8 @@
     <!-- Retention days configuration (shown for retention sync modes) -->
     <string name="pair_editor_retention_days">Delete after (days)</string>
     <string name="pair_editor_retention_days_hint">Leave blank to disable automatic deletion</string>
-    <string name="pair_editor_retention_days_info_upload">Uploaded files are permanently deleted from this device once their last-modified date is older than the retention period AND the upload has been confirmed. Enter 0 to delete immediately after upload.</string>
-    <string name="pair_editor_retention_days_info_download">Downloaded files are permanently deleted from the cloud once their last-modified date is older than the retention period AND the download has been confirmed. Enter 0 to delete immediately after download.</string>
+    <string name="pair_editor_retention_days_info_upload">Uploaded files are permanently deleted from this device once their last-modified date is older than the retention period and the upload has been confirmed. Enter 0 to delete immediately after upload.</string>
+    <string name="pair_editor_retention_days_info_download">Downloaded files are permanently deleted from the cloud once their last-modified date is older than the retention period and the download has been confirmed. Enter 0 to delete immediately after download.</string>
     <string name="pair_editor_retention_days_error">Enter a number of days between 0 and 36500</string>
 
     <!-- Pick local folder (SAF tree-URI picker) -->

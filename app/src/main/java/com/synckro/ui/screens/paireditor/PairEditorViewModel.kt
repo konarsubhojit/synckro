@@ -220,7 +220,7 @@ class PairEditorViewModel
                 }
 
             /** True when the custom interval text is non-empty but does not parse as a valid long ≥ 15.
-             *  Note: saving is NOT blocked — the persisted interval is automatically clamped to 15.
+             *  Note: saving is NOT blocked -- the persisted interval is automatically clamped to 15.
              *  The UI should present this as a warning rather than a blocking error. */
             val customIntervalError: Boolean
                 get() =
