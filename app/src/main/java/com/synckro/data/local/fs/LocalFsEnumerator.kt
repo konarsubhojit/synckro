@@ -323,6 +323,8 @@ class LocalFsEnumerator internal constructor(
     }
 
     companion object {
+        private val GLOB_META_CHARS = setOf('\\', '*', '?', '{', '}', '[', ']')
+
         /**
          * Computes the SHA-256 digest of [stream] and returns it as a lowercase hex string.
          * The caller is responsible for closing the stream; this function does not close it.
@@ -413,7 +415,7 @@ class LocalFsEnumerator internal constructor(
         internal fun escapeGlobLiteral(literal: String): String =
             buildString(literal.length) {
                 literal.forEach { ch ->
-                    if (ch in setOf('\\', '*', '?', '{', '}', '[', ']')) {
+                    if (ch in GLOB_META_CHARS) {
                         append('\\')
                     }
                     append(ch)

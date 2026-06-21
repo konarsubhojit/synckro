@@ -71,6 +71,11 @@ internal data class SelectiveSyncFileTypeOption(
     val key: String,
     val extensions: List<String>,
 ) {
+    /**
+     * Exclude-glob generated for this preset, matching the configured extensions
+     * anywhere in the tree, using either a single-extension glob or a brace
+     * group when multiple extensions belong to the same preset.
+     */
     val excludeGlob: String
         get() =
             buildString {

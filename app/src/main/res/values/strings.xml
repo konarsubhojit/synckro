@@ -174,7 +174,7 @@
     <string name="pair_editor_selective_sync_folders_title">Top-level folders</string>
     <string name="pair_editor_selective_sync_folders_pick_first">Pick a local folder first to choose specific subfolders.</string>
     <string name="pair_editor_selective_sync_folders_none_found">No subfolders were found at this folder root. Root-level files will still sync unless you add advanced patterns below.</string>
-    <string name="pair_editor_selective_sync_folders_body">Unchecked folders are excluded from sync. Files directly in the sync root are unaffected.</string>
+    <string name="pair_editor_selective_sync_folders_body">Unchecked folders are excluded from sync. Files directly in the sync root are unaffected. This list reflects the folder root when the screen loads or when you re-pick the local folder.</string>
     <string name="pair_editor_selective_sync_types_title">Common file types</string>
     <string name="pair_editor_selective_sync_types_body">Unchecked types are added to the exclude list. Other file types continue syncing unless advanced patterns say otherwise.</string>
     <string name="pair_editor_selective_sync_type_photos">Photos</string>
