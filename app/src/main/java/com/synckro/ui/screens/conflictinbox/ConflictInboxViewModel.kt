@@ -192,6 +192,29 @@ class ConflictInboxViewModel
         /** Bulk-resolves all selected conflicts with Keep both. */
         fun bulkKeepBoth() = applyBulkResolution(ConflictRecord.RESOLUTION_KEEP_BOTH)
 
+        /**
+         * Applies [resolution] to all currently visible unresolved conflicts, in list order.
+         */
+        fun applyResolutionToAll(resolution: String) {
+            val ids = state.value.conflicts.asSequence().filter { it.resolution == null }.map { it.id }.toList()
+            Timber.i("ConflictInboxViewModel.applyResolutionToAll(resolution=$resolution, ids=$ids)")
+            viewModelScope.launch {
+                for (id in ids) {
+                    runCatching { conflictRepository.resolve(id, resolution) }
+                        .onFailure { Timber.w(it, "ConflictInboxViewModel: failed to resolve-all conflict %d", id) }
+                }
+            }
+        }
+
+        /** Applies Keep local resolution to all unresolved conflicts. */
+        fun resolveAllKeepLocal() = applyResolutionToAll(ConflictRecord.RESOLUTION_KEEP_LOCAL)
+
+        /** Applies Keep remote resolution to all unresolved conflicts. */
+        fun resolveAllKeepRemote() = applyResolutionToAll(ConflictRecord.RESOLUTION_KEEP_REMOTE)
+
+        /** Applies Keep both resolution to all unresolved conflicts. */
+        fun resolveAllKeepBoth() = applyResolutionToAll(ConflictRecord.RESOLUTION_KEEP_BOTH)
+
         private fun resolve(
             id: Long,
             resolution: String,

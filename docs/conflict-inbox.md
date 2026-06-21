@@ -1,6 +1,6 @@
 # Conflict Inbox
 
-This document describes the conflict inbox screen, its data model, and the bulk-resolution selection mode introduced in Phase 6c.
+This document describes the conflict inbox screen, its data model, bulk-resolution actions, and conflict preview/details behaviour.
 
 ---
 
@@ -89,7 +89,7 @@ Long-press any conflict row → calls `viewModel.enterSelectionMode(id)`.
 - Cards for selected rows use `primaryContainer` background colour for visual distinction.
 - TalkBack announces each row's selection state via `Modifier.semantics { stateDescription = "selected" / "not selected" }`.
 
-### Applying a bulk resolution
+### Applying a bulk resolution (selection mode)
 
 Tapping one of the three icon buttons in the contextual bar calls the corresponding `bulkKeepLocal()` / `bulkKeepRemote()` / `bulkKeepBoth()` method, which:
 
@@ -98,6 +98,16 @@ Tapping one of the three icon buttons in the contextual bar calls the correspond
 3. Iterates the captured IDs **sequentially** in a coroutine, calling `ConflictRepository.resolve(id, resolution)` for each one.  Failures are logged but do not abort the remaining resolutions.
 
 > Resolutions are applied sequentially (not in parallel) to avoid concurrent writes to the same Room table rows, matching the single-conflict code path.
+
+### Resolve-all actions
+
+Outside selection mode, the top app bar includes a "Resolve all" overflow with:
+
+- Resolve all as Keep local
+- Resolve all as Keep remote
+- Resolve all as Keep both
+
+Each action applies the selected resolution across all unresolved rows in current list order.
 
 ### Exiting selection mode without resolving
 
@@ -114,6 +124,15 @@ Tapping one of the three icon buttons in the contextual bar calls the correspond
 | TalkBack long-press discoverability    | `combinedClickable(onLongClickLabel = "Enter selection mode")` — TalkBack exposes this as an action in its actions menu, so users who cannot perform a physical long-press can still enter selection mode |
 | Contextual bar actions are icon-only   | Each `IconButton` has a `contentDescription` (the action label string) |
 | Close button                           | `contentDescription = stringResource(R.string.conflict_inbox_cancel_selection)` |
+
+---
+
+## Conflict previews and details
+
+- On phones, tapping a conflict opens an in-place preview dialog with full metadata and resolution actions.
+- On tablets, tapping a conflict opens the detail pane.
+- Conflict metadata now includes **size delta** (which side is larger and by how much) when both sizes are known.
+- Remote thumbnails are loaded in **cached-only** mode, so previews appear only when a thumbnail is already cached.
 
 ---
 

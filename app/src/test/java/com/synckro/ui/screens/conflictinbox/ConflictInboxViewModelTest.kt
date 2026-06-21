@@ -498,6 +498,37 @@ class ConflictInboxViewModelTest {
         }
 
     @Test
+    fun `resolveAllKeepRemote applies KEEP_REMOTE to all unresolved conflicts in list order`() =
+        runTest {
+            every { conflictRepository.observeUnresolved() } returns
+                MutableStateFlow(
+                    listOf(
+                        makeConflict(id = 11L),
+                        makeConflict(id = 12L),
+                        makeConflict(id = 13L),
+                    ),
+                )
+            coEvery { fileIndexDao.getForPair(any()) } returns emptyList()
+            coEvery { syncPairRepository.getById(any()) } returns null
+            coEvery { accountRepository.getAll() } returns emptyList()
+
+            val vm = createVm()
+            val collectJob = launch { vm.state.collect {} }
+            advanceUntilIdle()
+
+            vm.resolveAllKeepRemote()
+            advanceUntilIdle()
+
+            coVerifyOrder {
+                conflictRepository.resolve(11L, ConflictRecord.RESOLUTION_KEEP_REMOTE)
+                conflictRepository.resolve(12L, ConflictRecord.RESOLUTION_KEEP_REMOTE)
+                conflictRepository.resolve(13L, ConflictRecord.RESOLUTION_KEEP_REMOTE)
+            }
+
+            collectJob.cancel()
+        }
+
+    @Test
     fun `error state is set when observeUnresolved emits an exception`() =
         runTest {
             every { conflictRepository.observeUnresolved() } returns

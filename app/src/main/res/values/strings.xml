@@ -352,6 +352,9 @@
     <string name="conflict_inbox_pending_resolution">Queued: %1$s (will apply on next sync)</string>
     <string name="conflict_inbox_file_type_value">Type: %1$s</string>
     <string name="conflict_inbox_file_size_value">Size: %1$s</string>
+    <string name="conflict_inbox_file_size_delta_value">Size delta: %1$s</string>
+    <string name="conflict_inbox_file_size_delta_local_larger">Local is %1$s larger</string>
+    <string name="conflict_inbox_file_size_delta_remote_larger">Cloud is %1$s larger</string>
     <string name="conflict_inbox_file_modified_value">Modified: %1$s</string>
     <string name="conflict_inbox_remote_account_value">Account: %1$s</string>
     <string name="conflict_inbox_unknown_value">Unknown</string>
@@ -532,6 +535,10 @@
     <string name="conflict_inbox_keep_local_hint">Overwrite the cloud copy with your local file</string>
     <string name="conflict_inbox_keep_remote_hint">Overwrite the local copy with the cloud file</string>
     <string name="conflict_inbox_keep_both_hint">Rename one copy and keep both versions</string>
+    <string name="conflict_inbox_resolve_all_actions">Resolve all actions</string>
+    <string name="conflict_inbox_resolve_all_keep_local">Resolve all as Keep local</string>
+    <string name="conflict_inbox_resolve_all_keep_remote">Resolve all as Keep remote</string>
+    <string name="conflict_inbox_resolve_all_keep_both">Resolve all as Keep both</string>
 
     <!-- Conflict inbox: bulk selection mode -->
     <string name="conflict_inbox_selection_count_format">%1$d selected</string>
