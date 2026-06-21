@@ -89,6 +89,8 @@ interface LocalFileAccess {
         fromRelativePath: String,
         toRelativePath: String,
     ): LocalFileStat? {
+        // Treat a no-op move as success so callers can reuse this helper without
+        // special-casing already-normalized paths.
         if (fromRelativePath == toRelativePath) return stat(fromRelativePath)
         val sourceStat = stat(fromRelativePath) ?: return null
         val source = openRead(fromRelativePath) ?: return null

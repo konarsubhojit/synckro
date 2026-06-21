@@ -172,25 +172,28 @@ internal fun buildPathCache(
             }
         }
 
-    var remainingPasses = items.size
-    var progressed = true
-    while (remainingPasses > 0 && progressed) {
-        progressed = false
-        for (item in items) {
-            if (item.id.isEmpty()) continue
+    val unresolved = ArrayDeque(items.filter { it.id.isNotEmpty() })
+    while (unresolved.isNotEmpty()) {
+        var resolvedThisPass = 0
+        repeat(unresolved.size) {
+            val item = unresolved.removeFirst()
             val parentId = item.parentReference?.id
             val path =
                 when {
                     rootFolderId.isNotEmpty() && parentId == rootFolderId -> item.name
                     parentId != null && cache.containsKey(parentId) -> "${cache[parentId]}/${item.name}"
                     else -> pathFromParentReference(item, rootReferencePath)
-                } ?: continue
+                }
+            if (path == null) {
+                unresolved.addLast(item)
+                return@repeat
+            }
             if (cache[item.id] != path) {
                 cache[item.id] = path
-                progressed = true
             }
+            resolvedThisPass++
         }
-        remainingPasses--
+        if (resolvedThisPass == 0) break
     }
     for (item in items) {
         if (item.id.isNotEmpty() && item.id !in cache) {
