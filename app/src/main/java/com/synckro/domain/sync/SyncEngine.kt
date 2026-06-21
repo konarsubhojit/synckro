@@ -27,6 +27,7 @@ import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.TimeUnit
 
 /**
  * Orchestrates a single sync run for a [SyncPair].
@@ -1120,7 +1121,7 @@ class SyncEngine(
         }
 
         internal const val DELTA_TOKEN_RESET_EVENT_PREFIX = "Incremental sync token expired (HTTP 410)"
-        internal const val PERIODIC_REMOTE_REENUMERATION_INTERVAL_MS = 7L * 24L * 60L * 60L * 1000L
+        internal val PERIODIC_REMOTE_REENUMERATION_INTERVAL_MS: Long = TimeUnit.DAYS.toMillis(7)
         private const val TAG = "SyncEngine"
     }
 }

@@ -43,6 +43,8 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 
 /**
@@ -426,8 +428,8 @@ class HomeViewModel
 
         private val _syncAllResults = MutableSharedFlow<SyncAllResult>(extraBufferCapacity = 1)
 
-        private var deltaResetCursorInitialized = false
-        private var latestSeenDeltaResetEventId: Long = 0L
+        private val deltaResetCursorInitialized = AtomicBoolean(false)
+        private val latestSeenDeltaResetEventId = AtomicLong(0L)
 
         /**
          * One-shot stream of [SyncAllResult]s, emitted whenever [syncAllNow]
@@ -594,15 +596,15 @@ class HomeViewModel
 
         private fun emitDeltaTokenResetNotices(events: List<SyncEvent>) {
             val newestId = events.maxOfOrNull { it.id } ?: 0L
-            if (!deltaResetCursorInitialized) {
-                latestSeenDeltaResetEventId = newestId
-                deltaResetCursorInitialized = true
+            if (deltaResetCursorInitialized.compareAndSet(false, true)) {
+                latestSeenDeltaResetEventId.set(newestId)
                 return
             }
+            val previousCursor = latestSeenDeltaResetEventId.get()
             events
                 .asSequence()
                 .filter { event ->
-                    event.id > latestSeenDeltaResetEventId &&
+                    event.id > previousCursor &&
                         event.tag == SyncEventTag.REMOTE_ENUM &&
                         event.message.startsWith(SyncEngine.DELTA_TOKEN_RESET_EVENT_PREFIX)
                 }.sortedBy { it.id }
@@ -618,8 +620,8 @@ class HomeViewModel
                         ),
                     )
                 }
-            if (newestId > latestSeenDeltaResetEventId) {
-                latestSeenDeltaResetEventId = newestId
+            if (newestId > previousCursor) {
+                latestSeenDeltaResetEventId.updateAndGet { maxOf(it, newestId) }
             }
         }
 
