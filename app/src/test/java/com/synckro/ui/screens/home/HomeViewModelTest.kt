@@ -18,7 +18,11 @@ import com.synckro.data.worker.SyncWorker
 import com.synckro.domain.model.CloudProviderType
 import com.synckro.domain.model.ConflictPolicy
 import com.synckro.domain.model.SyncDirection
+import com.synckro.domain.model.SyncEvent
+import com.synckro.domain.model.SyncEventLevel
+import com.synckro.domain.model.SyncEventTag
 import com.synckro.domain.model.SyncPair
+import com.synckro.domain.sync.SyncEngine
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
@@ -793,6 +797,38 @@ class HomeViewModelTest {
             assertEquals(3, summaries[1L]?.conflicts)
             assertEquals(PairSummary.Outcome.PARTIAL_FAILURE, summaries[2L]?.outcome)
             assertEquals(2, summaries[2L]?.errors)
+            collectJob.cancel()
+        }
+
+    @Test
+    fun `delta token reset notices are emitted for new remote-enumerator reset events`() =
+        runTest {
+            pairsFlow.value = listOf(pair(9L, name = "Camera backup"))
+            val vm = createVm()
+            val collectJob = launch { vm.state.collect {} }
+            advanceUntilIdle()
+
+            val notices = mutableListOf<HomeViewModel.DeltaTokenResetNotice>()
+            val noticesJob = launch { vm.deltaTokenResetNotices.collect { notices += it } }
+            advanceUntilIdle()
+
+            eventsFlow.value =
+                listOf(
+                    SyncEvent(
+                        id = 101L,
+                        pairId = 9L,
+                        timestampMs = 1_000L,
+                        level = SyncEventLevel.WARN,
+                        tag = SyncEventTag.REMOTE_ENUM,
+                        message = "${SyncEngine.DELTA_TOKEN_RESET_EVENT_PREFIX}; incremental state reset to fresh baseline token.",
+                    ),
+                )
+            advanceUntilIdle()
+
+            assertEquals(1, notices.size)
+            assertEquals(9L, notices[0].pairId)
+            assertEquals("Camera backup", notices[0].pairName)
+            noticesJob.cancel()
             collectJob.cancel()
         }
 

@@ -299,6 +299,7 @@ class OneDriveRemoteEnumeratorTest {
                 "https://graph.example.com/delta-link-fresh",
                 snapshot.newDeltaToken,
             )
+            assertTrue("Fallback snapshot should mark delta-token reset", snapshot.isDeltaTokenReset)
             assertEquals("Two requests should be made (expired + baseline)", 2, server.requestCount)
         }
 }

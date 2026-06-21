@@ -95,6 +95,7 @@ class OneDriveRemoteEnumerator
                             return RemoteSnapshot(
                                 changes = baseItems.mapNotNull { it.toRemoteChange(buildPathCache(baseItems, rootFolderId)) },
                                 newDeltaToken = baseDeltaLink,
+                                isDeltaTokenReset = true,
                             )
                         }
                         else -> throw e

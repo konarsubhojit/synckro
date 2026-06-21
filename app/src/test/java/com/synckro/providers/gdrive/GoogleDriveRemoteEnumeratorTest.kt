@@ -317,6 +317,7 @@ class GoogleDriveRemoteEnumeratorTest {
                 "fresh-token-1",
                 snapshot.newDeltaToken,
             )
+            assertTrue("Fallback snapshot should mark delta-token reset", snapshot.isDeltaTokenReset)
             assertEquals("Two requests should be made (stale + baseline)", 2, server.requestCount)
         }
 }

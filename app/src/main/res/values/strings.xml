@@ -32,6 +32,8 @@
     <string name="home_sync_now_blocked_needs_relink">Can\'t sync: folder access lost. Tap Edit to re-select the folder.</string>
     <string name="home_sync_now_blocked_needs_reauth">Can\'t sync: sign-in required. Tap Reconnect to re-authenticate.</string>
     <string name="home_sync_now_blocked_paused">Can\'t sync: auto-sync is paused for this pair. Turn it on to sync.</string>
+    <string name="home_delta_token_reset_notice_generic">Incremental sync state was reset after token expiry. A fresh baseline scan will be used.</string>
+    <string name="home_delta_token_reset_notice_pair_format">"%1$s" incremental sync state was reset after token expiry. A fresh baseline scan will be used.</string>
     <!-- Issue #262: post-sync result snackbar messages. -->
     <string name="home_sync_now_result_nothing_to_sync">Nothing to sync — already up to date</string>
     <string name="home_sync_now_result_failed">Sync failed</string>

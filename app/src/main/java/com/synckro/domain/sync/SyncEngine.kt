@@ -14,6 +14,7 @@ import com.synckro.domain.model.ConflictPolicy
 import com.synckro.domain.model.ConflictRecord
 import com.synckro.domain.model.FileIndexEntry
 import com.synckro.domain.model.SyncEventLevel
+import com.synckro.domain.model.SyncEventTag
 import com.synckro.domain.model.SyncPair
 import com.synckro.domain.provider.CloudProvider
 import com.synckro.domain.provider.CloudProviderFactory
@@ -256,6 +257,15 @@ class SyncEngine(
         }
     }
 
+    private fun shouldRunPeriodicRemoteReenumeration(
+        pair: SyncPair,
+        nowMs: Long,
+    ): Boolean {
+        if (pair.deltaToken == null) return false
+        val lastFullScanAtMs = pair.lastFullScanAtMs ?: return false
+        return nowMs - lastFullScanAtMs >= PERIODIC_REMOTE_REENUMERATION_INTERVAL_MS
+    }
+
     private suspend fun runRealImpl(
         pair: SyncPair,
         provider: CloudProvider,
@@ -345,12 +355,25 @@ class SyncEngine(
         // pairs the persisted delta token is used for incremental polling.
         // -----------------------------------------------------------------
         logStep(2, "enumerating remote changes")
+        val forcePeriodicFullEnumeration =
+            shouldRunPeriodicRemoteReenumeration(
+                pair = pair,
+                nowMs = System.currentTimeMillis(),
+            )
         val rawRemoteSnapshot =
-            if (pair.deltaToken == null) {
+            if (pair.deltaToken == null || forcePeriodicFullEnumeration) {
                 enumerateRemoteFull(remoteEnumerator, pair)
             } else {
                 enumerateRemoteIncremental(remoteEnumerator, pair)
             }
+        if (forcePeriodicFullEnumeration) {
+            evtRepo.log(
+                pair.id,
+                SyncEventLevel.INFO,
+                SyncEventTag.REMOTE_ENUM,
+                "Periodic remote full re-enumeration executed to validate incremental sync state.",
+            )
+        }
 
         // When excludeEmptyFolders is enabled, filter out folder entries from
         // the remote delta.  Folder entries (isFolder = true) represent empty
@@ -367,6 +390,14 @@ class SyncEngine(
             } else {
                 rawRemoteSnapshot
             }
+        if (remoteSnapshot.isDeltaTokenReset) {
+            evtRepo.log(
+                pair.id,
+                SyncEventLevel.WARN,
+                SyncEventTag.REMOTE_ENUM,
+                "$DELTA_TOKEN_RESET_EVENT_PREFIX; incremental state reset to fresh baseline token.",
+            )
+        }
 
         // -----------------------------------------------------------------
         // Step 3 – Build inputs for SyncDiffer.
@@ -1088,6 +1119,8 @@ class SyncEngine(
             return if (dir.isEmpty()) copyName else "$dir/$copyName"
         }
 
+        internal const val DELTA_TOKEN_RESET_EVENT_PREFIX = "Incremental sync token expired (HTTP 410)"
+        internal const val PERIODIC_REMOTE_REENUMERATION_INTERVAL_MS = 7L * 24L * 60L * 60L * 1000L
         private const val TAG = "SyncEngine"
     }
 }
