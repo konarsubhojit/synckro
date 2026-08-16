@@ -20,6 +20,10 @@ import com.synckro.domain.model.SyncEventTag
 import com.synckro.domain.model.SyncPair
 import com.synckro.domain.provider.CloudProviderFactory
 import com.synckro.domain.provider.StorageQuota
+import com.synckro.domain.telemetry.NoOpTelemetry
+import com.synckro.domain.telemetry.Telemetry
+import com.synckro.domain.telemetry.TelemetryEvents
+import com.synckro.domain.telemetry.toTelemetryLabel
 import com.synckro.util.error.UserMessage
 import com.synckro.util.error.UserMessageReporter
 import com.synckro.util.notification.ReauthNotificationHelper
@@ -61,6 +65,7 @@ class AccountsViewModel
         private val userMessages: UserMessageReporter,
         private val syncEventRepository: SyncEventRepository,
         private val providerFactories: Map<CloudProviderType, @JvmSuppressWildcards CloudProviderFactory> = emptyMap(),
+        private val telemetry: Telemetry = NoOpTelemetry(),
     ) : ViewModel() {
         /**
          * A single connected account, augmented with a flag that indicates
@@ -734,6 +739,10 @@ class AccountsViewModel
                             ),
                             UserMessage.Severity.INFO,
                         ),
+                    )
+                    telemetry.logEvent(
+                        TelemetryEvents.ACCOUNT_LINKED,
+                        mapOf("provider" to result.value.provider.toTelemetryLabel()),
                     )
                 }
                 AuthResult.Cancelled -> {

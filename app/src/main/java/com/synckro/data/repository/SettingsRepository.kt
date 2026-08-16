@@ -435,6 +435,35 @@ class SettingsRepository
             dataStore.edit { it[KEY_BATTERY_WARNING_DISMISSED] = dismissed }
         }
 
+        // -------------------------------------------------------------------------
+        // Telemetry (crash reporting / analytics) opt-out
+        // -------------------------------------------------------------------------
+
+        /**
+         * Emits `true` when the user allows Crashlytics to collect crashes and
+         * non-fatal exceptions (default). Honoured at runtime via
+         * `Telemetry.setCrashlyticsCollectionEnabled`; never overrides the
+         * debug-build default of "off" baked into the manifest.
+         */
+        val crashReportingEnabled: Flow<Boolean> =
+            dataStore.data.map { it[KEY_CRASH_REPORTING_ENABLED] ?: DEFAULT_CRASH_REPORTING_ENABLED }
+
+        suspend fun setCrashReportingEnabled(enabled: Boolean) {
+            dataStore.edit { it[KEY_CRASH_REPORTING_ENABLED] = enabled }
+        }
+
+        /**
+         * Emits `true` when the user allows Firebase Analytics to collect
+         * product-usage events (default). Honoured at runtime via
+         * `Telemetry.setAnalyticsCollectionEnabled`.
+         */
+        val analyticsEnabled: Flow<Boolean> =
+            dataStore.data.map { it[KEY_ANALYTICS_ENABLED] ?: DEFAULT_ANALYTICS_ENABLED }
+
+        suspend fun setAnalyticsEnabled(enabled: Boolean) {
+            dataStore.edit { it[KEY_ANALYTICS_ENABLED] = enabled }
+        }
+
         companion object {
             internal val KEY_GLOBAL_AUTO_SYNC = booleanPreferencesKey("global_auto_sync_enabled")
             internal val KEY_DEFAULT_WIFI_ONLY = booleanPreferencesKey("default_wifi_only")
@@ -481,6 +510,8 @@ class SettingsRepository
             internal val KEY_ONBOARDING_COMPLETED_AT_MS = longPreferencesKey("onboarding_completed_at_ms")
             internal val KEY_SEEN_TOOLTIPS = stringSetPreferencesKey("seen_tooltips")
             internal val KEY_BATTERY_WARNING_DISMISSED = booleanPreferencesKey("battery_warning_dismissed")
+            internal val KEY_CRASH_REPORTING_ENABLED = booleanPreferencesKey("crash_reporting_enabled")
+            internal val KEY_ANALYTICS_ENABLED = booleanPreferencesKey("analytics_enabled")
 
             internal const val DEFAULT_GLOBAL_AUTO_SYNC = true
             internal const val DEFAULT_WIFI_ONLY = true
@@ -525,6 +556,9 @@ class SettingsRepository
             internal const val DEFAULT_LOG_RETENTION_DAYS = 30
             internal const val MIN_PIN_TIMEOUT_MINUTES = 1
             internal const val MAX_PIN_TIMEOUT_MINUTES = 15
+
+            internal const val DEFAULT_CRASH_REPORTING_ENABLED = true
+            internal const val DEFAULT_ANALYTICS_ENABLED = true
         }
     }
 

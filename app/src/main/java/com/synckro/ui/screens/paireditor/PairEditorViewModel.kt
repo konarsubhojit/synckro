@@ -19,6 +19,11 @@ import com.synckro.domain.model.SyncEventLevel
 import com.synckro.domain.model.SyncEventTag
 import com.synckro.domain.model.SyncPair
 import com.synckro.domain.model.isDestructive
+import com.synckro.domain.telemetry.NoOpTelemetry
+import com.synckro.domain.telemetry.Telemetry
+import com.synckro.domain.telemetry.TelemetryEvents
+import com.synckro.domain.telemetry.TelemetryFailureCategory
+import com.synckro.domain.telemetry.toTelemetryLabel
 import com.synckro.util.StringProvider
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -206,6 +211,7 @@ class PairEditorViewModel
         private val accountRepository: AccountRepository,
         private val settingsRepository: SettingsRepository,
         private val localFolderAccessChecker: LocalFolderAccessChecker,
+        private val telemetry: Telemetry = NoOpTelemetry(),
     ) : ViewModel() {
         private val pairId: Long = savedStateHandle.get<Long>("pairId") ?: 0L
 
@@ -932,6 +938,12 @@ class PairEditorViewModel
                         tag = SyncEventTag.PAIR_EDITOR,
                         message = "Save succeeded: pairId=$savedId '${s.displayName.trim()}'",
                     )
+                    if (pairId == 0L) {
+                        telemetry.logEvent(
+                            TelemetryEvents.PAIR_CREATED,
+                            mapOf("provider" to s.provider.toTelemetryLabel()),
+                        )
+                    }
                     onSaved(savedId)
                 }.onFailure { t ->
                     Timber.e(t, "PairEditorViewModel.save: failed")
@@ -941,6 +953,7 @@ class PairEditorViewModel
                         tag = SyncEventTag.PAIR_EDITOR,
                         message = "Save failed: ${t.message}",
                     )
+                    telemetry.recordNonFatal(t, TelemetryFailureCategory.ROOM_DATABASE_ERROR)
                     _state.update {
                         it.copy(
                             isSaving = false,

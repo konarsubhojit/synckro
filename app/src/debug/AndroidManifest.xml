@@ -5,4 +5,16 @@
   the log-export feature works in both debug and release builds.
 -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application>
+        <!--
+          Crashlytics auto-collection is disabled by default in debug builds so
+          local development/testing traffic never pollutes production crash
+          data. Runtime code (see TelemetryModule / FirebaseTelemetry) also
+          applies the user's opt-out preference on top of this default.
+        -->
+        <meta-data
+            android:name="firebase_crashlytics_collection_enabled"
+            android:value="false" />
+    </application>
 </manifest>

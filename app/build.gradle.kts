@@ -18,6 +18,13 @@ data class MsalBuildConfig(
 val msalConfigByBuildType = mutableMapOf<String, MsalBuildConfig>()
 val feedbackEmail = secretOrEmpty("FEEDBACK_EMAIL")
 
+// Firebase (Crashlytics + Analytics) is opt-in at build time: the
+// google-services.json config file is never committed to source control
+// (see .gitignore), so both Gradle plugins below are only applied when the
+// file is actually present. This keeps local builds and forks green without
+// any Firebase project configured — see "Firebase setup" in README.md.
+val googleServicesJsonPresent = rootProject.file("app/google-services.json").exists()
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -26,6 +33,17 @@ plugins {
     alias(libs.plugins.ksp)
     alias(libs.plugins.hilt)
     alias(libs.plugins.ktlint)
+}
+
+if (googleServicesJsonPresent) {
+    apply(plugin = "com.google.gms.google-services")
+    apply(plugin = "com.google.firebase.crashlytics")
+} else {
+    println(
+        "WARNING: app/google-services.json not found. Building without Firebase " +
+            "Crashlytics/Analytics configured; Telemetry will use the no-op implementation. " +
+            "See README.md#firebase-setup to enable it.",
+    )
 }
 
 android {
@@ -45,6 +63,7 @@ android {
         buildConfigField("String", "MS_CLIENT_ID", "\"\"")
         buildConfigField("String", "MSAL_REDIRECT_URI", "\"\"")
         buildConfigField("String", "FEEDBACK_EMAIL", "\"$feedbackEmail\"")
+        buildConfigField("boolean", "FIREBASE_CONFIGURED", "$googleServicesJsonPresent")
         manifestPlaceholders["msalHost"] = ""
         manifestPlaceholders["msalPath"] = "/"
     }
@@ -475,6 +494,14 @@ dependencies {
 
     // Image loading
     implementation(libs.coil.compose)
+
+    // Telemetry: Firebase Crashlytics + Analytics. The Firebase SDKs are always on the
+    // classpath (so FirebaseTelemetry compiles), but they only initialize at runtime when
+    // google-services.json was present at build time and the google-services plugin ran
+    // (see the FIREBASE_CONFIGURED buildConfigField and TelemetryModule).
+    implementation(platform(libs.firebase.bom))
+    implementation(libs.firebase.crashlytics)
+    implementation(libs.firebase.analytics)
 
     // Macrobenchmark: baseline-profile precompilation support.
     implementation(libs.profileinstaller)

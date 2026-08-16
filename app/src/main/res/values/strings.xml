@@ -625,6 +625,13 @@
     <string name="settings_security_protect_settings_only_title">Only protect app settings</string>
     <string name="settings_security_protect_settings_only_body">Anyone can view sync status and run sync manually, but changing configuration still requires unlock.</string>
 
+    <!-- Settings: telemetry opt-out -->
+    <string name="settings_telemetry_header">Diagnostics</string>
+    <string name="settings_crash_reporting_title">Crash reporting</string>
+    <string name="settings_crash_reporting_body">Send anonymous crash and error reports to help fix bugs. Never includes file names, paths, or account details.</string>
+    <string name="settings_analytics_title">Usage analytics</string>
+    <string name="settings_analytics_body">Send anonymous usage events (e.g. sync completed) to help improve the app. Never includes file names, paths, or account details.</string>
+
     <!-- Settings: appearance -->
     <string name="settings_language_title">Language</string>
     <string name="settings_language_relaunch_hint">Change requires app relaunch</string>

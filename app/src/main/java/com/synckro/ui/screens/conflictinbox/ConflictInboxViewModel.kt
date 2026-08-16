@@ -8,6 +8,10 @@ import com.synckro.data.repository.ConflictRepository
 import com.synckro.data.repository.SettingsRepository
 import com.synckro.data.repository.SyncPairRepository
 import com.synckro.domain.model.ConflictRecord
+import com.synckro.domain.telemetry.NoOpTelemetry
+import com.synckro.domain.telemetry.Telemetry
+import com.synckro.domain.telemetry.TelemetryEvents
+import com.synckro.domain.telemetry.TelemetryFailureCategory
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -34,6 +38,7 @@ class ConflictInboxViewModel
         private val syncPairRepository: SyncPairRepository,
         private val accountRepository: AccountRepository,
         private val settingsRepository: SettingsRepository,
+        private val telemetry: Telemetry = NoOpTelemetry(),
     ) : ViewModel() {
         data class ConflictRow(
             val id: Long,
@@ -231,7 +236,13 @@ class ConflictInboxViewModel
             Timber.i("ConflictInboxViewModel.resolve(id=$id, resolution=$resolution)")
             viewModelScope.launch {
                 runCatching { conflictRepository.resolve(id, resolution) }
-                    .onFailure { Timber.w(it, "ConflictInboxViewModel: failed to resolve conflict %d", id) }
+                    .onSuccess {
+                        telemetry.logEvent(TelemetryEvents.CONFLICT_RESOLVED, mapOf("resolution" to resolution))
+                    }
+                    .onFailure {
+                        Timber.w(it, "ConflictInboxViewModel: failed to resolve conflict %d", id)
+                        telemetry.recordNonFatal(it, TelemetryFailureCategory.CONFLICT_RESOLUTION_FAILED)
+                    }
             }
         }
 

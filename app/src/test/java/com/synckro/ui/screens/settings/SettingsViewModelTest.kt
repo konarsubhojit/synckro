@@ -10,6 +10,7 @@ import com.synckro.data.repository.SettingsRepository
 import com.synckro.data.repository.SyncPairRepository
 import com.synckro.data.worker.SyncScheduler
 import com.synckro.domain.model.ConflictPolicy
+import com.synckro.domain.telemetry.NoOpTelemetry
 import com.synckro.util.logging.LogExportConfig
 import com.synckro.util.logging.LogExporter
 import com.synckro.util.logging.LogVisibilityConfig
@@ -97,6 +98,7 @@ class SettingsViewModelTest {
             syncPairRepository = syncPairRepository,
             syncScheduler = syncScheduler,
             logExporter = logExporter,
+            telemetry = NoOpTelemetry(),
         )
 
     @Test

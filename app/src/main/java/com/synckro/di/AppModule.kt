@@ -29,6 +29,7 @@ import com.synckro.domain.provider.CloudProviderFactory
 import com.synckro.domain.scan.LocalFolderScanner
 import com.synckro.domain.sync.RemoteEnumerator
 import com.synckro.domain.sync.SyncEngine
+import com.synckro.domain.telemetry.Telemetry
 import com.synckro.providers.fake.FakeCloudProvider
 import com.synckro.providers.gdrive.GoogleDriveAuthManager
 import com.synckro.providers.onedrive.OneDriveAuthManager
@@ -194,6 +195,7 @@ object AppModule {
         syncPairDao: SyncPairDao,
         localIndexDao: LocalIndexDao,
         eventRepository: SyncEventRepository,
+        telemetry: Telemetry,
     ): SyncEngine {
         val resolver: ContentResolver = ctx.contentResolver
         return SyncEngine(
@@ -205,6 +207,7 @@ object AppModule {
             localIndexDao = localIndexDao,
             eventRepository = eventRepository,
             localFileAccess = { treeUri -> SafLocalFileAccess(resolver, treeUri) },
+            telemetry = telemetry,
         )
     }
 

@@ -13,6 +13,8 @@ import com.synckro.data.repository.SettingsRepository
 import com.synckro.data.repository.SyncPairRepository
 import com.synckro.data.worker.SyncScheduler
 import com.synckro.domain.model.ConflictPolicy
+import com.synckro.domain.telemetry.Telemetry
+import com.synckro.domain.telemetry.TelemetryEvents
 import com.synckro.util.logging.LogExporter
 import com.synckro.util.logging.LogVisibilityConfig
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -46,6 +48,7 @@ class SettingsViewModel
         private val syncPairRepository: SyncPairRepository,
         private val syncScheduler: SyncScheduler,
         private val logExporter: LogExporter,
+        private val telemetry: Telemetry,
     ) : ViewModel() {
         data class UiState(
             // Sync defaults
@@ -83,6 +86,9 @@ class SettingsViewModel
             val pinTimeoutMinutes: Int = SettingsRepository.DEFAULT_PIN_TIMEOUT_MINUTES,
             val unlockWithBiometrics: Boolean = false,
             val protectSettingsOnly: Boolean = false,
+            // Telemetry (opt-out)
+            val crashReportingEnabled: Boolean = true,
+            val analyticsEnabled: Boolean = true,
             // Logs
             val logRetentionDays: Int = 30,
         )
@@ -212,6 +218,13 @@ class SettingsViewModel
                 )
             }.combine(settingsRepository.maxConcurrentTransfers) { uiState, maxConcurrent ->
                 uiState.copy(maxConcurrentTransfers = maxConcurrent)
+            }.combine(
+                combine(
+                    settingsRepository.crashReportingEnabled,
+                    settingsRepository.analyticsEnabled,
+                ) { crashReporting, analytics -> crashReporting to analytics },
+            ) { uiState, (crashReporting, analytics) ->
+                uiState.copy(crashReportingEnabled = crashReporting, analyticsEnabled = analytics)
             }.stateIn(
                 scope = viewModelScope,
                 started = SharingStarted.WhileSubscribed(5_000),
@@ -277,6 +290,10 @@ class SettingsViewModel
 
         fun setAutoSyncSchedule(schedule: AutoSyncSchedule) {
             viewModelScope.launch { settingsRepository.setAutoSyncSchedule(schedule) }
+            telemetry.logEvent(
+                TelemetryEvents.SCHEDULE_PRESET_CHOSEN,
+                mapOf("preset" to schedule.name.lowercase()),
+            )
         }
 
         fun setAutoSyncChargingOnly(enabled: Boolean) {
@@ -365,6 +382,22 @@ class SettingsViewModel
 
         fun setProtectSettingsOnly(enabled: Boolean) {
             viewModelScope.launch { settingsRepository.setProtectSettingsOnly(enabled) }
+        }
+
+        // ---------------------------------------------------------------------
+        // Telemetry (opt-out)
+        // ---------------------------------------------------------------------
+
+        /** Toggles Crashlytics crash & non-fatal-exception collection. */
+        fun setCrashReportingEnabled(enabled: Boolean) {
+            viewModelScope.launch { settingsRepository.setCrashReportingEnabled(enabled) }
+            telemetry.setCrashlyticsCollectionEnabled(enabled)
+        }
+
+        /** Toggles Firebase Analytics event collection. */
+        fun setAnalyticsEnabled(enabled: Boolean) {
+            viewModelScope.launch { settingsRepository.setAnalyticsEnabled(enabled) }
+            telemetry.setAnalyticsCollectionEnabled(enabled)
         }
 
         // ---------------------------------------------------------------------

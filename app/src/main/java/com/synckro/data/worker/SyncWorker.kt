@@ -20,6 +20,7 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import com.synckro.R
+import com.synckro.data.local.dao.LocalIndexDao
 import com.synckro.data.local.dao.SyncPairDao
 import com.synckro.data.local.entity.toDomain
 import com.synckro.data.repository.SettingsRepository
@@ -34,6 +35,15 @@ import com.synckro.domain.sync.CloudExceptionMapper
 import com.synckro.domain.sync.SyncEngine
 import com.synckro.domain.sync.TransferDirection
 import com.synckro.domain.sync.TransferProgress
+import com.synckro.domain.telemetry.NoOpTelemetry
+import com.synckro.domain.telemetry.Telemetry
+import com.synckro.domain.telemetry.TelemetryBuckets
+import com.synckro.domain.telemetry.TelemetryEvents
+import com.synckro.domain.telemetry.TelemetryFailureCategory
+import com.synckro.domain.telemetry.TelemetryKeys
+import com.synckro.domain.telemetry.TelemetryRunContext
+import com.synckro.domain.telemetry.TelemetrySanitizer
+import com.synckro.domain.telemetry.toTelemetryLabel
 import com.synckro.util.notification.ReauthNotificationHelper
 import com.synckro.util.notification.SyncStatusNotifier
 import dagger.assisted.Assisted
@@ -75,6 +85,8 @@ class SyncWorker
         private val syncEventRepository: SyncEventRepository,
         private val syncStatusNotifier: SyncStatusNotifier,
         private val settingsRepository: SettingsRepository,
+        private val localIndexDao: LocalIndexDao? = null,
+        private val telemetry: Telemetry = NoOpTelemetry(),
     ) : CoroutineWorker(appContext, params) {
         /**
          * Returns the [ForegroundInfo] used when WorkManager promotes this worker to a foreground
@@ -165,6 +177,9 @@ class SyncWorker
                 "Sync started for \"${pair.displayName}\" (attempt ${runAttemptCount + 1})",
             )
             Timber.i("SyncWorker.doWork: start pairId=%d attempt=%d", pairId, runAttemptCount + 1)
+            applySyncTelemetryContext(pair)
+            telemetry.log("sync_start pairId=$pairId attempt=${runAttemptCount + 1}")
+            val syncStartAtMs = System.currentTimeMillis()
 
             val notificationId = NOTIFICATION_ID_BASE + (pairId and 0xFFFFL).toInt()
             val notificationManager =
@@ -189,6 +204,7 @@ class SyncWorker
                         logMessage()
                         setForeground(buildForegroundInfo(pairId, pair.displayName, progress))
                         promotedToForeground.set(true)
+                        telemetry.setCustomKey(TelemetryKeys.RUN_CONTEXT, TelemetryRunContext.FOREGROUND_SERVICE.name)
                         true
                     } catch (c: CancellationException) {
                         throw c
@@ -277,6 +293,16 @@ class SyncWorker
                                     "Sync succeeded: ${r.applied} applied, ${r.conflicts} conflicts",
                                 )
                                 Timber.i("SyncWorker.doWork: success pairId=%d applied=%d conflicts=%d", pairId, r.applied, r.conflicts)
+                                telemetry.log("sync_apply_complete pairId=$pairId applied=${r.applied} conflicts=${r.conflicts}")
+                                telemetry.logEvent(
+                                    TelemetryEvents.SYNC_COMPLETED,
+                                    mapOf(
+                                        TelemetryKeys.PROVIDER to pair.provider.toTelemetryLabel(),
+                                        "duration_bucket" to
+                                            TelemetryBuckets.bucketDurationMs(System.currentTimeMillis() - syncStartAtMs),
+                                        "files_transferred_bucket" to TelemetryBuckets.bucketCount(r.applied),
+                                    ),
+                                )
                                 if (isPeriodicRun && r.applied > 0) {
                                     syncStatusNotifier.notifySuccessSummary(pair, r.applied, r.conflicts)
                                 }
@@ -334,6 +360,20 @@ class SyncWorker
                                         else -> RESULT_FAILURE
                                     }
                                 syncPairDao.updateLastSyncResult(pairId, System.currentTimeMillis(), outcome)
+                                val failureCategory =
+                                    when {
+                                        r.needsReauth -> TelemetryFailureCategory.TOKEN_REFRESH_OR_REAUTH
+                                        r.needsReLink -> TelemetryFailureCategory.SAF_PERMISSION_LOST
+                                        else -> TelemetryFailureCategory.OTHER
+                                    }
+                                telemetry.recordNonFatal(RuntimeException(TelemetrySanitizer.sanitize(r.reason)), failureCategory)
+                                telemetry.logEvent(
+                                    TelemetryEvents.SYNC_FAILED,
+                                    mapOf(
+                                        TelemetryKeys.PROVIDER to pair.provider.toTelemetryLabel(),
+                                        "failure_category" to failureCategory.name.lowercase(),
+                                    ),
+                                )
                                 when {
                                     r.needsReauth -> {
                                         // Tag `auth` so the user can filter/copy these from LogsScreen.
@@ -457,6 +497,42 @@ class SyncWorker
             }
         }
 
+        /**
+         * Attaches structural, non-identifying custom keys to future crash
+         * reports for the duration of this sync run: provider, direction,
+         * conflict policy, pair count (bucketed), file-index size (bucketed),
+         * run context, Android API level, and internal vs. removable storage.
+         * Never includes file names, paths, or account identifiers.
+         */
+        private suspend fun applySyncTelemetryContext(pair: SyncPair) {
+            telemetry.setCustomKey(TelemetryKeys.PROVIDER, pair.provider.toTelemetryLabel())
+            telemetry.setCustomKey(TelemetryKeys.SYNC_DIRECTION, pair.direction.toTelemetryLabel())
+            telemetry.setCustomKey(TelemetryKeys.CONFLICT_POLICY, pair.conflictPolicy.toTelemetryLabel())
+            telemetry.setCustomKey(TelemetryKeys.RUN_CONTEXT, TelemetryRunContext.BACKGROUND_WORK.name)
+            telemetry.setCustomKey(TelemetryKeys.ANDROID_API_LEVEL, Build.VERSION.SDK_INT.toLong())
+            telemetry.setCustomKey(TelemetryKeys.ON_SD_CARD, isLikelyOnRemovableStorage(pair.localTreeUri))
+            val pairCount = runCatching { syncPairDao.observeAll().first().size }.getOrDefault(0)
+            telemetry.setCustomKey(TelemetryKeys.PAIR_COUNT_BUCKET, TelemetryBuckets.bucketCount(pairCount))
+            val fileIndexSize = runCatching { localIndexDao?.getForPair(pair.id)?.size ?: 0 }.getOrDefault(0)
+            telemetry.setCustomKey(TelemetryKeys.FILE_INDEX_SIZE_BUCKET, TelemetryBuckets.bucketCount(fileIndexSize))
+        }
+
+        /**
+         * Best-effort check of whether [localTreeUri] (a SAF tree URI) points at
+         * removable storage (an SD card) rather than the device's primary
+         * internal storage volume. Only inspects the storage-volume identifier
+         * segment of the URI (e.g. `primary` vs. a volume UUID) — never the
+         * folder path itself.
+         */
+        private fun isLikelyOnRemovableStorage(localTreeUri: String): Boolean {
+            val volumeId =
+                runCatching { android.net.Uri.parse(localTreeUri).lastPathSegment }
+                    .getOrNull()
+                    ?.substringBefore(':')
+                    ?: return false
+            return volumeId.isNotEmpty() && !volumeId.equals("primary", ignoreCase = true)
+        }
+
         internal suspend fun handleRetriableExhaustion(
             pair: SyncPair,
             pairId: Long,
@@ -477,6 +553,17 @@ class SyncWorker
                 SyncEventLevel.ERROR,
                 tag,
                 "Sync failed after $MAX_RETRY_ATTEMPTS attempt(s), giving up: $reason",
+            )
+            telemetry.recordNonFatal(
+                cause ?: RuntimeException(TelemetrySanitizer.sanitize(reason)),
+                TelemetryFailureCategory.TRANSFER_RETRY_EXHAUSTED,
+            )
+            telemetry.logEvent(
+                TelemetryEvents.SYNC_FAILED,
+                mapOf(
+                    TelemetryKeys.PROVIDER to pair.provider.toTelemetryLabel(),
+                    "failure_category" to TelemetryFailureCategory.TRANSFER_RETRY_EXHAUSTED.name.lowercase(),
+                ),
             )
             syncStatusNotifier.notifyFailure(pair, reason)
             WorkManager.getInstance(applicationContext).cancelUniqueWork(uniqueName(pairId))
