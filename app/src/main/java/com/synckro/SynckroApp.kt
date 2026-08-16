@@ -11,6 +11,7 @@ import androidx.work.Configuration
 import com.synckro.data.repository.AppLanguagePreference
 import com.synckro.data.repository.SettingsRepository
 import com.synckro.data.worker.SyncWorker
+import com.synckro.domain.telemetry.Telemetry
 import com.synckro.providers.onedrive.OneDriveMultiAccountStartupProbe
 import com.synckro.util.logging.FileLoggingTree
 import com.synckro.util.notification.ReauthNotificationHelper
@@ -46,11 +47,14 @@ class SynckroApp :
 
     @Inject lateinit var settingsRepository: SettingsRepository
 
+    @Inject lateinit var telemetry: Telemetry
+
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override fun onCreate() {
         super.onCreate()
         applicationScope.launch { applyLanguagePreference() }
+        applicationScope.launch { applyTelemetryPreferences() }
         createNotificationChannels()
         applicationScope.launch {
             oneDriveMultiAccountStartupProbe.runIfNeeded()
@@ -169,5 +173,19 @@ class SynckroApp :
         withContext(Dispatchers.Main.immediate) {
             AppCompatDelegate.setApplicationLocales(locales)
         }
+    }
+
+    /**
+     * Applies the user's crash-reporting / analytics opt-out preference to the
+     * injected [Telemetry] at startup. In debug builds Crashlytics collection
+     * additionally defaults to disabled via manifest meta-data (see
+     * `app/src/debug/AndroidManifest.xml`) — this call only ever narrows
+     * collection further, it never re-enables it against that default.
+     */
+    private suspend fun applyTelemetryPreferences() {
+        val crashReportingEnabled = settingsRepository.crashReportingEnabled.first()
+        val analyticsEnabled = settingsRepository.analyticsEnabled.first()
+        telemetry.setCrashlyticsCollectionEnabled(crashReportingEnabled && !BuildConfig.DEBUG)
+        telemetry.setAnalyticsCollectionEnabled(analyticsEnabled)
     }
 }

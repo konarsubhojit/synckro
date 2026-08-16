@@ -961,6 +961,23 @@ private fun SecuritySettingsContent(
                 onCheckedChange = viewModel::setProtectSettingsOnly,
             )
         }
+        item { SettingsGroupHeader(stringResource(R.string.settings_telemetry_header)) }
+        item {
+            SwitchRow(
+                title = stringResource(R.string.settings_crash_reporting_title),
+                body = stringResource(R.string.settings_crash_reporting_body),
+                checked = state.crashReportingEnabled,
+                onCheckedChange = viewModel::setCrashReportingEnabled,
+            )
+        }
+        item {
+            SwitchRow(
+                title = stringResource(R.string.settings_analytics_title),
+                body = stringResource(R.string.settings_analytics_body),
+                checked = state.analyticsEnabled,
+                onCheckedChange = viewModel::setAnalyticsEnabled,
+            )
+        }
     }
 
     if (showPinTimeoutDialog) {

@@ -19,6 +19,8 @@ import com.synckro.domain.model.SyncPair
 import com.synckro.domain.provider.CloudProvider
 import com.synckro.domain.provider.CloudProviderFactory
 import com.synckro.domain.provider.RemoteFile
+import com.synckro.domain.telemetry.NoOpTelemetry
+import com.synckro.domain.telemetry.Telemetry
 import com.synckro.providers.fake.FakeCloudProvider
 import kotlinx.coroutines.CancellationException
 import timber.log.Timber
@@ -64,6 +66,7 @@ class SyncEngine(
     private val localIndexDao: LocalIndexDao? = null,
     private val eventRepository: SyncEventRepository? = null,
     private val localFileAccess: ((Uri) -> LocalFileAccess)? = null,
+    private val telemetry: Telemetry = NoOpTelemetry(),
 ) {
     private val scopeFilterCache = ConcurrentHashMap<ScopeFilterCacheKey, ScopeFilters>()
 
@@ -286,6 +289,9 @@ class SyncEngine(
                 TAG,
                 "Step $stepNumber/8: $message",
             )
+            // Breadcrumb for crash reports: only structural step info, never file
+            // names/paths — see Telemetry's privacy contract.
+            telemetry.log("sync step=$stepNumber/8 pairId=${pair.id}: $message")
         }
 
         // -----------------------------------------------------------------
