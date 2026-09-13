@@ -225,10 +225,10 @@ class SyncSchedulerTest {
 
     @Test
     fun `periodic and one-time requests share pair constraints`() {
-        val p = pair(id = 100L, wifiOnly = true, requiresCharging = true)
+        val syncPair = pair(id = 100L, wifiOnly = true, requiresCharging = true)
 
-        val periodic = SyncScheduler.periodicRequestFor(p, SyncScheduler.MIN_PERIODIC_INTERVAL_MINUTES)
-        val oneTime = SyncScheduler.oneTimeRequestFor(p)
+        val periodic = SyncScheduler.periodicRequestFor(syncPair, SyncScheduler.MIN_PERIODIC_INTERVAL_MINUTES)
+        val oneTime = SyncScheduler.oneTimeRequestFor(syncPair)
 
         assertEquals(NetworkType.UNMETERED, periodic.workSpec.constraints.requiredNetworkType)
         assertEquals(periodic.workSpec.constraints.requiredNetworkType, oneTime.workSpec.constraints.requiredNetworkType)
@@ -241,11 +241,28 @@ class SyncSchedulerTest {
     }
 
     @Test
-    fun `periodic and one-time requests share exponential backoff policy`() {
-        val p = pair(id = 101L)
+    fun `periodic and one-time requests share connected non-charging constraints`() {
+        val syncPair = pair(id = 103L, wifiOnly = false, requiresCharging = false)
 
-        val periodic = SyncScheduler.periodicRequestFor(p, SyncScheduler.MIN_PERIODIC_INTERVAL_MINUTES)
-        val oneTime = SyncScheduler.oneTimeRequestFor(p)
+        val periodic = SyncScheduler.periodicRequestFor(syncPair, SyncScheduler.MIN_PERIODIC_INTERVAL_MINUTES)
+        val oneTime = SyncScheduler.oneTimeRequestFor(syncPair)
+
+        assertEquals(NetworkType.CONNECTED, periodic.workSpec.constraints.requiredNetworkType)
+        assertEquals(periodic.workSpec.constraints.requiredNetworkType, oneTime.workSpec.constraints.requiredNetworkType)
+        assertFalse(periodic.workSpec.constraints.requiresCharging())
+        assertEquals(periodic.workSpec.constraints.requiresCharging(), oneTime.workSpec.constraints.requiresCharging())
+        assertTrue(periodic.workSpec.constraints.requiresBatteryNotLow())
+        assertEquals(periodic.workSpec.constraints.requiresBatteryNotLow(), oneTime.workSpec.constraints.requiresBatteryNotLow())
+        assertTrue(periodic.workSpec.constraints.requiresStorageNotLow())
+        assertEquals(periodic.workSpec.constraints.requiresStorageNotLow(), oneTime.workSpec.constraints.requiresStorageNotLow())
+    }
+
+    @Test
+    fun `periodic and one-time requests share exponential backoff policy`() {
+        val syncPair = pair(id = 101L)
+
+        val periodic = SyncScheduler.periodicRequestFor(syncPair, SyncScheduler.MIN_PERIODIC_INTERVAL_MINUTES)
+        val oneTime = SyncScheduler.oneTimeRequestFor(syncPair)
 
         assertEquals(BackoffPolicy.EXPONENTIAL, periodic.workSpec.backoffPolicy)
         assertEquals(periodic.workSpec.backoffPolicy, oneTime.workSpec.backoffPolicy)
@@ -255,11 +272,11 @@ class SyncSchedulerTest {
 
     @Test
     fun `one-time request carries manual sync input data`() {
-        val p = pair(id = 102L)
+        val syncPair = pair(id = 102L)
 
-        val oneTime = SyncScheduler.oneTimeRequestFor(p)
+        val oneTime = SyncScheduler.oneTimeRequestFor(syncPair)
 
-        assertEquals(p.id, oneTime.workSpec.input.getLong(SyncWorker.KEY_PAIR_ID, -1L))
+        assertEquals(syncPair.id, oneTime.workSpec.input.getLong(SyncWorker.KEY_PAIR_ID, -1L))
         assertFalse(oneTime.workSpec.input.getBoolean(SyncWorker.KEY_IS_PERIODIC, true))
     }
 

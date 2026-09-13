@@ -986,20 +986,20 @@ class SyncScheduler(
             val intervalMin = pair.scheduleIntervalMinutes.coerceAtLeast(MIN_PERIODIC_INTERVAL_MINUTES)
             return lastSync + intervalMin * 60_000L
         }
+
+        /**
+         * Exponential backoff (sub-issue #142): transient retriable failures (network
+         * blips, Retriable CloudProviderException) re-enter the queue with WorkManager's
+         * exponential schedule starting at 30s, capped at
+         * androidx.work.WorkRequest.MAX_BACKOFF_MILLIS (5h). True auth/SAF failures map to
+         * [SyncEngine.Result.Terminal] and bypass this backoff path entirely — they cancel
+         * the unique work and surface a "re-auth" / "re-link" CTA.
+         */
+        private fun <B : WorkRequest.Builder<B, *>> B.setSyncBackoffCriteria(): B =
+            setBackoffCriteria(
+                BackoffPolicy.EXPONENTIAL,
+                SyncWorker.BACKOFF_INITIAL_DELAY_SECONDS,
+                TimeUnit.SECONDS,
+            )
     }
 }
-
-/**
- * Exponential backoff (sub-issue #142): transient retriable failures (network
- * blips, Retriable CloudProviderException) re-enter the queue with WorkManager's
- * exponential schedule starting at 30s, capped at
- * androidx.work.WorkRequest.MAX_BACKOFF_MILLIS (5h). True auth/SAF failures map to
- * [SyncEngine.Result.Terminal] and bypass this backoff path entirely — they cancel
- * the unique work and surface a "re-auth" / "re-link" CTA.
- */
-private fun <B : WorkRequest.Builder<B, *>> B.setSyncBackoffCriteria(): B =
-    setBackoffCriteria(
-        BackoffPolicy.EXPONENTIAL,
-        SyncWorker.BACKOFF_INITIAL_DELAY_SECONDS,
-        TimeUnit.SECONDS,
-    )
