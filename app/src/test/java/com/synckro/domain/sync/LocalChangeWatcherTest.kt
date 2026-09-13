@@ -63,18 +63,22 @@ class LocalChangeWatcherTest {
     }
 
     @Test
-    fun `permission and volume failures are reported for their pair`() {
+    fun `failures are reported for their pair`() {
         val watcher = InMemoryLocalChangeWatcher()
         val events = mutableListOf<LocalChangeEvent>()
         watcher.register(pairId = 42, listener = events::add)
 
         watcher.emitFailure(pairId = 42, failure = LocalChangeWatchFailure.PermissionDenied)
         watcher.emitFailure(pairId = 42, failure = LocalChangeWatchFailure.VolumeUnavailable)
+        watcher.emitFailure(pairId = 42, failure = LocalChangeWatchFailure.Unknown())
+        watcher.emitFailure(pairId = 42, failure = LocalChangeWatchFailure.Unknown("I/O error"))
 
         assertEquals(
             listOf(
                 LocalChangeEvent.Failure(42, LocalChangeWatchFailure.PermissionDenied),
                 LocalChangeEvent.Failure(42, LocalChangeWatchFailure.VolumeUnavailable),
+                LocalChangeEvent.Failure(42, LocalChangeWatchFailure.Unknown()),
+                LocalChangeEvent.Failure(42, LocalChangeWatchFailure.Unknown("I/O error")),
             ),
             events,
         )
