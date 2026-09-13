@@ -213,16 +213,16 @@ data class PendingUploadEntity(
     val documentIdHint: String?,
     val observedSizeBytes: Long,
     val observedMtimeMs: Long,
-    val state: String = STATE_PENDING,
+    val state: PendingUploadState = PendingUploadState.PENDING,
     val attempts: Int = 0,
     val eligibleAtMs: Long,
     val claimToken: String? = null,
     val claimedAtMs: Long? = null,
     val createdAtMs: Long,
     val updatedAtMs: Long,
-) {
-    companion object {
-        const val STATE_PENDING = "PENDING"
-        const val STATE_CLAIMED = "CLAIMED"
-    }
+)
+
+enum class PendingUploadState {
+    PENDING,
+    CLAIMED,
 }

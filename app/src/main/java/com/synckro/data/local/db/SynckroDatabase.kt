@@ -18,6 +18,7 @@ import com.synckro.data.local.entity.ConflictRecordEntity
 import com.synckro.data.local.entity.FileIndexEntity
 import com.synckro.data.local.entity.LocalIndexEntity
 import com.synckro.data.local.entity.PendingUploadEntity
+import com.synckro.data.local.entity.PendingUploadState
 import com.synckro.data.local.entity.SyncEventEntity
 import com.synckro.data.local.entity.SyncPairEntity
 import com.synckro.domain.model.CloudProviderType
@@ -72,6 +73,10 @@ class EnumConverters {
      * @return The enum's name as stored in the database.
      */
     @TypeConverter fun providerToString(p: CloudProviderType): String = p.name
+
+    @TypeConverter fun pendingUploadStateFromString(s: String): PendingUploadState = PendingUploadState.valueOf(s)
+
+    @TypeConverter fun pendingUploadStateToString(s: PendingUploadState): String = s.name
 }
 
 @Database(

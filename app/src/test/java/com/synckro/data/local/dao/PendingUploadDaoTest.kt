@@ -60,6 +60,7 @@ class PendingUploadDaoTest {
                         }
                     }.awaitAll()
 
+            assertEquals(1, claims.count { it.isNotEmpty() })
             assertEquals(1, claims.flatten().size)
         }
 
@@ -102,7 +103,7 @@ class PendingUploadDaoTest {
 
             pendingUploadDao.upsert(upload(pairId, path = "second.txt"))
             pairDao.delete(pairId)
-            assertTrue(pendingUploadDao.claimEligible("worker-c", claimedAtMs = 1_000L, limit = 1).isEmpty())
+            assertTrue(pendingUploadDao.getForPair(pairId).isEmpty())
         }
 
     private suspend fun insertPair(): Long =

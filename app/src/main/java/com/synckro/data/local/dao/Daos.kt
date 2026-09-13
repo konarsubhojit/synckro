@@ -11,6 +11,7 @@ import com.synckro.data.local.entity.ConflictRecordEntity
 import com.synckro.data.local.entity.FileIndexEntity
 import com.synckro.data.local.entity.LocalIndexEntity
 import com.synckro.data.local.entity.PendingUploadEntity
+import com.synckro.data.local.entity.PendingUploadState
 import com.synckro.data.local.entity.SyncEventEntity
 import com.synckro.data.local.entity.SyncPairEntity
 import com.synckro.domain.model.CloudProviderType
@@ -686,9 +687,15 @@ interface LocalIndexDao {
 
 @Dao
 interface PendingUploadDao {
+    /** Inserts a new candidate or updates the queued candidate with the same pair and relative path. */
     @Upsert
     suspend fun upsert(upload: PendingUploadEntity)
 
+    /** Returns all rows for [pairId], primarily for queue inspection and tests. */
+    @Query("SELECT * FROM pending_upload WHERE pairId = :pairId ORDER BY relativePath ASC")
+    suspend fun getForPair(pairId: Long): List<PendingUploadEntity>
+
+    /** Atomically assigns at most [limit] currently eligible pending rows to [claimToken]. */
     @Query(
         "UPDATE pending_upload SET state = :claimedState, claimToken = :claimToken, " +
             "claimedAtMs = :claimedAtMs, updatedAtMs = :claimedAtMs " +
@@ -700,13 +707,21 @@ interface PendingUploadDao {
         claimToken: String,
         claimedAtMs: Long,
         limit: Int,
-        pendingState: String = PendingUploadEntity.STATE_PENDING,
-        claimedState: String = PendingUploadEntity.STATE_CLAIMED,
+        pendingState: PendingUploadState = PendingUploadState.PENDING,
+        claimedState: PendingUploadState = PendingUploadState.CLAIMED,
     ): Int
 
-    @Query("SELECT * FROM pending_upload WHERE claimToken = :claimToken ORDER BY eligibleAtMs ASC, createdAtMs ASC")
-    suspend fun getClaimedByToken(claimToken: String): List<PendingUploadEntity>
+    @Query(
+        "SELECT * FROM pending_upload WHERE state = :claimedState AND claimToken = :claimToken " +
+            "AND claimedAtMs = :claimedAtMs ORDER BY eligibleAtMs ASC, createdAtMs ASC",
+    )
+    suspend fun getClaimedByToken(
+        claimToken: String,
+        claimedAtMs: Long,
+        claimedState: PendingUploadState = PendingUploadState.CLAIMED,
+    ): List<PendingUploadEntity>
 
+    /** Claims and returns at most [limit] eligible rows, scoped to this claim timestamp and token. */
     @Transaction
     suspend fun claimEligible(
         claimToken: String,
@@ -714,7 +729,7 @@ interface PendingUploadDao {
         limit: Int,
     ): List<PendingUploadEntity> {
         claimEligibleRows(claimToken, claimedAtMs, limit)
-        return getClaimedByToken(claimToken)
+        return getClaimedByToken(claimToken, claimedAtMs)
     }
 
     @Query(
@@ -725,7 +740,7 @@ interface PendingUploadDao {
         pairId: Long,
         relativePath: String,
         claimToken: String,
-        claimedState: String = PendingUploadEntity.STATE_CLAIMED,
+        claimedState: PendingUploadState = PendingUploadState.CLAIMED,
     ): Int
 
     @Query(
@@ -740,8 +755,8 @@ interface PendingUploadDao {
         claimToken: String,
         eligibleAtMs: Long,
         updatedAtMs: Long,
-        pendingState: String = PendingUploadEntity.STATE_PENDING,
-        claimedState: String = PendingUploadEntity.STATE_CLAIMED,
+        pendingState: PendingUploadState = PendingUploadState.PENDING,
+        claimedState: PendingUploadState = PendingUploadState.CLAIMED,
     ): Int
 
     @Query(
@@ -752,7 +767,7 @@ interface PendingUploadDao {
     suspend fun recoverStaleClaims(
         staleBeforeMs: Long,
         recoveredAtMs: Long,
-        pendingState: String = PendingUploadEntity.STATE_PENDING,
-        claimedState: String = PendingUploadEntity.STATE_CLAIMED,
+        pendingState: PendingUploadState = PendingUploadState.PENDING,
+        claimedState: PendingUploadState = PendingUploadState.CLAIMED,
     ): Int
 }
