@@ -24,6 +24,18 @@ Because a syncing animation is already visible in the Home screen, low importanc
 
 **Lifecycle:** Automatically dismissed when the foreground service stops (WorkManager manages this).
 
+During the Instant Sync rollout, this low-importance channel is also used for
+the persistent foreground notification while eligible local folders are
+actively watched. The notification must state that watching is active, not that
+a transfer is guaranteed or imminent. It remains visible for the lifetime of
+the watcher service and is removed when the global kill switch is turned off,
+all eligible pairs are disabled, or the service stops.
+
+Android background-start and boot restrictions still apply. Where the platform
+does not permit immediate foreground-service startup, restoration is deferred
+through allowed lifecycle/work APIs; watcher continuity and sync latency are
+not guaranteed. Missed changes are recovered by periodic reconciliation.
+
 ---
 
 ### 2. `synckro_reauth` — Re-authentication required
@@ -99,3 +111,14 @@ Because a syncing animation is already visible in the Home screen, low importanc
 On Android 13+ (API 33, `TIRAMISU`) posting notifications requires the user to explicitly grant `POST_NOTIFICATIONS`.  All notification helpers must call `SyncWorker.canPostNotifications(context)` before calling `NotificationManager.notify()` and silently skip the post when the permission is not granted.
 
 The permission is declared in `AndroidManifest.xml` (`<uses-permission android:name="android.permission.POST_NOTIFICATIONS" />`).  The app does not currently show a rationale dialog before requesting it; if this changes, update `MainActivity` and document it here.
+
+Instant Sync must explain notification and battery implications before opt-in.
+On API 33+, denial can hide the foreground-service notification from the
+notification drawer even though Android may still expose the service in its
+active-apps/task-manager UI. Permission does not relax foreground-service
+startup rules, WorkManager constraints, Doze, or quota limits.
+
+Before expanding rollout, verify notification allowed/denied behavior,
+foreground-service startup/restoration, and kill-switch dismissal across the
+API 26–current matrix in
+[docs/scheduling.md](scheduling.md#8-rollout-gates-and-device-matrix).

@@ -27,6 +27,7 @@ its settings, and triggering syncs manually.
 8. [Deleting a pair](#8-deleting-a-pair)
 9. [Manual sync](#9-manual-sync)
 10. [Pair status and last-run details](#10-pair-status-and-last-run-details)
+11. [Instant Sync safety and fallback](#11-instant-sync-safety-and-fallback)
 
 ---
 
@@ -37,7 +38,8 @@ its settings, and triggering syncs manually.
 3. The **Pair Editor** screen opens.
 4. Fill in the required fields described in the next section.
 5. Tap **Save**. The pair is persisted in Room and, if auto-sync is enabled, its
-   first periodic WorkManager job is enqueued immediately.
+   first periodic WorkManager job is enqueued. WorkManager determines when it
+   can run.
 
 ---
 
@@ -97,6 +99,10 @@ In brief:
 
 - Toggle **Auto sync** to enable or disable background periodic sync for this
   pair independently of the global setting.
+- In rollout builds where it is available, toggle **Instant Sync** to opt this
+  pair into best-effort detection of completed local changes. It is off by
+  default and also requires the global Instant Sync and background-sync
+  controls.
 - Choose a **schedule preset** (15 min / 30 min / 1 h / 24 h / custom).
 - Enable **Wi-Fi only** to prevent syncing on metered mobile data (on by default).
 - Enable **Charging only** to run syncs only while the device is plugged in.
@@ -152,7 +158,7 @@ Deleting a pair:
 
 ## 9. Manual sync
 
-Trigger an immediate sync outside the normal schedule from two places:
+Request a sync outside the normal schedule from two places:
 
 - **Home screen / Pairs tab**: Tap the **Sync now** button on a pair card.
 - **Pair Detail screen**: Tap the **Sync now** button in the action bar.
@@ -182,3 +188,36 @@ The **Pair Detail** screen shows:
 
 For failure diagnosis and recovery steps, see
 **[docs/error-recovery.md](error-recovery.md)**.
+
+---
+
+## 11. Instant Sync safety and fallback
+
+In rollout builds that expose the controls, Instant Sync is available only to
+linked pairs with a usable account and an upload-capable direction. Pair filters
+and exclusions still apply. Download-only pairs are never registered for local
+upload watching.
+
+A watcher event does not upload bytes directly. It creates or updates a durable,
+de-duplicated candidate, and the targeted worker:
+
+1. waits for unchanged metadata across stability checks;
+2. rejects temporary, pending, out-of-scope, unreadable, or still-growing files;
+3. serializes with periodic and manual work for the same pair;
+4. uploads without advancing the remote delta token or full-scan timestamp; and
+5. removes the candidate and refreshes the local index only after provider
+   completion and post-upload verification.
+
+If the source changes during or immediately after upload, the attempt is not
+committed as a completed candidate: its index/checkpoints are not advanced and
+the candidate remains retryable. Instant Sync never applies a delete-after-upload
+retention action. These rules prevent a partial local snapshot from being
+accepted as the completed instant result; provider upload-session cleanup is
+still subject to the provider's API.
+
+Watcher support varies by DocumentsProvider and removable-storage device, and
+events can be delayed or absent. Periodic full sync is therefore always the
+reconciliation fallback and must remain configured for important data. Neither
+the Instant Sync label nor a foreground notification promises a completion
+deadline. See [docs/scheduling.md](scheduling.md#8-rollout-gates-and-device-matrix)
+for the rollout and API/provider/storage validation matrix.
