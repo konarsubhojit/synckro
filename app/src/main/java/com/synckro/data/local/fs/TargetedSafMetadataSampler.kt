@@ -14,6 +14,10 @@ internal data class SafDocumentMetadata(
 )
 
 internal fun interface SafDocumentMetadataQuery {
+    /**
+     * Returns metadata for an existing document, `null` when the document is absent,
+     * or throws [SafMetadataUnavailableException] when the provider supplies no cursor.
+     */
     fun query(
         resolver: ContentResolver,
         treeUri: Uri,
@@ -22,7 +26,7 @@ internal fun interface SafDocumentMetadataQuery {
 }
 
 /** Signals that a SAF provider returned no cursor for a direct metadata query. */
-private class SafMetadataUnavailableException : Exception("SAF provider returned no metadata cursor")
+internal class SafMetadataUnavailableException : Exception("SAF provider returned no metadata cursor")
 
 internal object DefaultSafDocumentMetadataQuery : SafDocumentMetadataQuery {
     private val projection =
@@ -121,8 +125,8 @@ internal class TargetedSafMetadataSampler(
         relativePath: String? = null,
         documentId: String? = null,
     ): TargetedSafMetadataSample {
-        require(relativePath != null || documentId != null) {
-            "A relative path or document ID is required"
+        require((relativePath != null) xor (documentId != null)) {
+            "Exactly one relative path or document ID is required"
         }
         val resolvedDocumentId =
             documentId ?: try {

@@ -268,6 +268,15 @@ class SafLocalFileAccessTest {
     }
 
     @Test
+    fun `sampler requires exactly one identifier`() {
+        try {
+            sampler().sample(relativePath = "file.txt", documentId = "id")
+            fail("Expected IllegalArgumentException")
+        } catch (_: IllegalArgumentException) {
+        }
+    }
+
+    @Test
     fun `sampler returns inconclusive when path resolution loses permission`() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val sampler =
