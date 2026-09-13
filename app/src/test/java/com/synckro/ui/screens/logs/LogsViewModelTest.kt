@@ -7,6 +7,7 @@ import com.synckro.data.repository.AccountRepository
 import com.synckro.data.repository.SyncEventRepository
 import com.synckro.domain.model.SyncEvent
 import com.synckro.domain.model.SyncEventLevel
+import com.synckro.domain.model.SyncEventTag
 import com.synckro.ui.screens.logs.TimeWindow
 import com.synckro.util.logging.LogExportConfig
 import com.synckro.util.logging.LogExporter
@@ -296,8 +297,8 @@ class LogsViewModelTest {
                     event(2, SyncEventLevel.INFO).copy(tag = "Account"),
                     event(3, SyncEventLevel.INFO).copy(tag = "PairEditor"),
                     event(4, SyncEventLevel.INFO).copy(tag = "Scheduler"),
-                    // SyncOpApplier INFO — per-file user-facing message.
-                    event(5, SyncEventLevel.INFO).copy(tag = "SyncOpApplier"),
+                    // InstantOutcome INFO — per-file user-facing message without paths.
+                    event(5, SyncEventLevel.INFO).copy(tag = SyncEventTag.INSTANT_OUTCOME),
                     // Any WARN or ERROR is always surfaced regardless of tag.
                     event(6, SyncEventLevel.WARN).copy(tag = "Scheduler"),
                     event(7, SyncEventLevel.ERROR).copy(tag = "PairEditor"),

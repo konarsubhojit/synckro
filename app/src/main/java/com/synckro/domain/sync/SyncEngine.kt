@@ -15,6 +15,7 @@ import com.synckro.domain.model.ConflictRecord
 import com.synckro.domain.model.FileIndexEntry
 import com.synckro.domain.model.SyncEventLevel
 import com.synckro.domain.model.SyncEventTag
+import com.synckro.domain.model.SyncEventTaxonomy
 import com.synckro.domain.model.SyncPair
 import com.synckro.domain.provider.CloudProvider
 import com.synckro.domain.provider.CloudProviderFactory
@@ -569,8 +570,8 @@ class SyncEngine(
                 evtRepo.log(
                     pair.id,
                     SyncEventLevel.INFO,
-                    TAG,
-                    "Reconciled existing remote file: ${entry.relativePath}",
+                    SyncEventTag.INSTANT_OUTCOME,
+                    SyncEventTaxonomy.outcomeApplied("cold_start_reconciled"),
                 )
             }
         }
@@ -601,6 +602,12 @@ class SyncEngine(
                 conflictPolicy = pair.conflictPolicy,
                 retentionDays = pair.retentionDays,
             )
+        evtRepo.log(
+            pair.id,
+            SyncEventLevel.INFO,
+            SyncEventTag.INSTANT_STABILITY,
+            SyncEventTaxonomy.stabilityAccepted(ops.size),
+        )
 
         // -----------------------------------------------------------------
         // Step 5 – Apply previously-resolved ConflictRecords (same pattern
@@ -684,11 +691,17 @@ class SyncEngine(
                 val message =
                     when (skipped.reason) {
                         StorageLimitPlanner.SkippedDownload.Reason.WOULD_EXCEED_LIMIT ->
-                            "Skipped download due to local storage limit: ${skipped.relativePath} would exceed the configured limit (${pair.localStorageLimitBytes} bytes)."
+                            SyncEventTaxonomy.dispatchQuotaFallback("local_storage_limit")
                         StorageLimitPlanner.SkippedDownload.Reason.UNKNOWN_SIZE ->
-                            "Skipped download due to local storage limit: ${skipped.relativePath} has unknown size."
+                            SyncEventTaxonomy.dispatchQuotaFallback("unknown_remote_size")
                     }
-                evtRepo.log(pair.id, SyncEventLevel.WARN, TAG, message)
+                evtRepo.logRateLimited(
+                    pairId = pair.id,
+                    level = SyncEventLevel.WARN,
+                    tag = SyncEventTag.INSTANT_DISPATCH,
+                    message = message,
+                    throttleKey = "quota-${skipped.reason}",
+                )
             }
             opsToApply = plan.allowedOps
         } else {
@@ -696,6 +709,12 @@ class SyncEngine(
         }
 
         logStep(6, "applying sync operations")
+        evtRepo.log(
+            pair.id,
+            SyncEventLevel.INFO,
+            SyncEventTag.INSTANT_QUEUE,
+            SyncEventTaxonomy.queueEnqueued("sync_engine"),
+        )
         val applyResult =
             applier.apply(
                 ops = opsToApply,
@@ -820,8 +839,8 @@ class SyncEngine(
                             evtRepo.log(
                                 pair.id,
                                 SyncEventLevel.WARN,
-                                TAG,
-                                "Retried keep-both download for conflict copy: $copyPath",
+                                SyncEventTag.INSTANT_DISPATCH,
+                                SyncEventTaxonomy.dispatchQuotaFallback("keep_both_download_retry"),
                             )
                         }
                         downloadOk = true
@@ -855,8 +874,8 @@ class SyncEngine(
                         evtRepo.log(
                             pair.id,
                             SyncEventLevel.INFO,
-                            TAG,
-                            "Conflict resolved (keep-both): ${conflict.relativePath} → copy at $copyPath",
+                            SyncEventTag.INSTANT_OUTCOME,
+                            SyncEventTaxonomy.outcomeApplied("conflict_keep_both"),
                         )
                     } else {
                         // Remote was deleted (modify-delete): re-upload the surviving local file.
@@ -871,8 +890,8 @@ class SyncEngine(
                         evtRepo.log(
                             pair.id,
                             SyncEventLevel.INFO,
-                            TAG,
-                            "Conflict resolved (keep-both, remote deleted): ${conflict.relativePath} re-uploaded",
+                            SyncEventTag.INSTANT_OUTCOME,
+                            SyncEventTaxonomy.outcomeApplied("conflict_keep_both_remote_deleted"),
                         )
                     }
                 } else {
@@ -887,8 +906,8 @@ class SyncEngine(
                     evtRepo.log(
                         pair.id,
                         SyncEventLevel.INFO,
-                        TAG,
-                        "Conflict resolved (keep-both, no remote): ${conflict.relativePath} uploaded",
+                        SyncEventTag.INSTANT_OUTCOME,
+                        SyncEventTaxonomy.outcomeApplied("conflict_keep_both_no_remote"),
                     )
                 }
             }

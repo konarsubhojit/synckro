@@ -9,6 +9,7 @@ import com.synckro.domain.model.ConflictPolicy
 import com.synckro.domain.model.ConflictRecord
 import com.synckro.domain.model.SyncDirection
 import com.synckro.domain.model.SyncEventLevel
+import com.synckro.domain.model.SyncEventTag
 import com.synckro.domain.model.SyncPair
 import com.synckro.domain.provider.CloudProviderException
 import com.synckro.domain.provider.RemoteFile
@@ -210,7 +211,7 @@ class SyncOpApplierTest {
                 localIndexByPath = emptyMap(),
             )
 
-            coVerify { eventRepo.log(1L, SyncEventLevel.INFO, "SyncOpApplier", any()) }
+            coVerify { eventRepo.log(1L, SyncEventLevel.INFO, SyncEventTag.INSTANT_OUTCOME, any()) }
         }
 
     @Test
@@ -738,7 +739,7 @@ class SyncOpApplierTest {
             )
 
             coVerify {
-                eventRepo.log(1L, SyncEventLevel.INFO, "SyncOpApplier", match { it.contains("local wins") })
+                eventRepo.log(1L, SyncEventLevel.INFO, SyncEventTag.INSTANT_OUTCOME, match { it.contains("conflict_local_wins") })
             }
         }
 
@@ -779,7 +780,7 @@ class SyncOpApplierTest {
             )
 
             coVerify {
-                eventRepo.log(1L, SyncEventLevel.INFO, "SyncOpApplier", match { it.contains("remote wins") })
+                eventRepo.log(1L, SyncEventLevel.INFO, SyncEventTag.INSTANT_OUTCOME, match { it.contains("conflict_remote_wins") })
             }
         }
 
@@ -932,7 +933,7 @@ class SyncOpApplierTest {
             )
 
             coVerify {
-                eventRepo.log(1L, SyncEventLevel.WARN, "SyncOpApplier", any())
+                eventRepo.log(1L, SyncEventLevel.WARN, SyncEventTag.INSTANT_DISPATCH, any())
             }
         }
 

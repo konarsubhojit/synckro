@@ -529,6 +529,34 @@ interface SyncEventDao {
     ): Flow<List<SyncEventEntity>>
 
     /**
+     * Returns events for the given pair and tag, newest first, up to [limit]
+     * rows. Used by diagnostics that need a specific Instant Sync taxonomy lane.
+     */
+    @Query(
+        "SELECT * FROM sync_event WHERE pairId = :pairId AND tag = :tag " +
+            "ORDER BY timestampMs DESC LIMIT :limit",
+    )
+    fun observeForPairAndTag(
+        pairId: Long,
+        tag: String,
+        limit: Int = MAX_EVENTS_PER_PAIR,
+    ): Flow<List<SyncEventEntity>>
+
+    /**
+     * Returns a one-shot snapshot of events for the given pair and tag, newest
+     * first, up to [limit] rows.
+     */
+    @Query(
+        "SELECT * FROM sync_event WHERE pairId = :pairId AND tag = :tag " +
+            "ORDER BY timestampMs DESC LIMIT :limit",
+    )
+    suspend fun getForPairAndTag(
+        pairId: Long,
+        tag: String,
+        limit: Int = MAX_EVENTS_PER_PAIR,
+    ): List<SyncEventEntity>
+
+    /**
      * Deletes the oldest global rows beyond [maxRows], keeping the most-recent ones.
      * Called after every insert to enforce the rolling global cap.
      *
