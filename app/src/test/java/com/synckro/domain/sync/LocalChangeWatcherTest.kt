@@ -32,12 +32,17 @@ class LocalChangeWatcherTest {
                 .registration
 
         registration.unregister()
+        watcher.emitChange(pairId = 42)
         registration.unregister()
         watcher.shutdown()
         watcher.shutdown()
         watcher.emitChange(pairId = 42)
 
         assertTrue(events.isEmpty())
+        assertEquals(
+            LocalChangeWatchRegistrationResult.Failed(LocalChangeWatchFailure.Shutdown),
+            watcher.register(pairId = 42) {},
+        )
     }
 
     @Test
@@ -87,7 +92,7 @@ class LocalChangeWatcherTest {
         ): LocalChangeWatchRegistrationResult {
             val unavailable = capability as? LocalChangeWatcherCapability.Unavailable
             if (unavailable != null) return LocalChangeWatchRegistrationResult.Unavailable(unavailable)
-            if (isShutdown) return LocalChangeWatchRegistrationResult.Failed(LocalChangeWatchFailure.VolumeUnavailable)
+            if (isShutdown) return LocalChangeWatchRegistrationResult.Failed(LocalChangeWatchFailure.Shutdown)
 
             listeners.getOrPut(pairId, ::mutableSetOf).add(listener)
             var isUnregistered = false

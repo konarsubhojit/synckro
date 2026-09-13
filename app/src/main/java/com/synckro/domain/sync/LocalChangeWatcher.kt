@@ -16,6 +16,8 @@ interface LocalChangeWatcher {
      *
      * [LocalChangeWatchRegistrationResult.Unavailable] means registration did not start. Once
      * registered, runtime failures are delivered to [listener] as [LocalChangeEvent.Failure].
+     * After [shutdown], returns [LocalChangeWatchRegistrationResult.Failed] with
+     * [LocalChangeWatchFailure.Shutdown].
      */
     fun register(
         pairId: Long,
@@ -71,14 +73,15 @@ fun interface LocalChangeWatchRegistration {
 
 /**
  * A coarse watcher notification for one sync pair.
- *
- * [locationHint] is only a best-effort URI or path hint. It can be absent, stale, non-canonical,
- * or refer to an item that has already moved or disappeared; callers must not treat it as a stable
- * identifier.
  */
 sealed interface LocalChangeEvent {
     val pairId: Long
 
+    /**
+     * [locationHint] is only a best-effort URI or path hint. It can be absent, stale,
+     * non-canonical, or refer to an item that has already moved or disappeared; callers must not
+     * treat it as a stable identifier.
+     */
     data class Changed(
         override val pairId: Long,
         val locationHint: String? = null,
@@ -92,6 +95,8 @@ sealed interface LocalChangeEvent {
 
 /** A failure preventing a local change watcher from observing a pair. */
 sealed interface LocalChangeWatchFailure {
+    data object Shutdown : LocalChangeWatchFailure
+
     data object PermissionDenied : LocalChangeWatchFailure
 
     data object VolumeUnavailable : LocalChangeWatchFailure
