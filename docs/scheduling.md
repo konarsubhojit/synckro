@@ -196,7 +196,7 @@ Treat any suspected data loss, committed partial file, checkpoint corruption, or
 queue that cannot be reconciled as a stop-ship condition. Use the global switch
 to roll back Instant Sync without disabling periodic sync. Metrics and sync-log
 events must contain only bucketed durations/counts and categorical API,
-provider, capability, and outcome values—never file names, paths, account IDs,
+provider, capability, and outcome values — never file names, paths, account IDs,
 or file content.
 
 Before each rollout expansion, validate every API level from 26 through the
