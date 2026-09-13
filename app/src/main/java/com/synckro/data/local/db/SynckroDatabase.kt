@@ -10,12 +10,14 @@ import com.synckro.data.local.dao.AccountDao
 import com.synckro.data.local.dao.ConflictRecordDao
 import com.synckro.data.local.dao.FileIndexDao
 import com.synckro.data.local.dao.LocalIndexDao
+import com.synckro.data.local.dao.PendingUploadDao
 import com.synckro.data.local.dao.SyncEventDao
 import com.synckro.data.local.dao.SyncPairDao
 import com.synckro.data.local.entity.AccountEntity
 import com.synckro.data.local.entity.ConflictRecordEntity
 import com.synckro.data.local.entity.FileIndexEntity
 import com.synckro.data.local.entity.LocalIndexEntity
+import com.synckro.data.local.entity.PendingUploadEntity
 import com.synckro.data.local.entity.SyncEventEntity
 import com.synckro.data.local.entity.SyncPairEntity
 import com.synckro.domain.model.CloudProviderType
@@ -73,8 +75,8 @@ class EnumConverters {
 }
 
 @Database(
-    entities = [AccountEntity::class, SyncPairEntity::class, FileIndexEntity::class, SyncEventEntity::class, ConflictRecordEntity::class, LocalIndexEntity::class],
-    version = 15,
+    entities = [AccountEntity::class, SyncPairEntity::class, FileIndexEntity::class, SyncEventEntity::class, ConflictRecordEntity::class, LocalIndexEntity::class, PendingUploadEntity::class],
+    version = 16,
     exportSchema = true,
 )
 @TypeConverters(EnumConverters::class)
@@ -120,6 +122,8 @@ abstract class SynckroDatabase : RoomDatabase() {
      * @return The [LocalIndexDao] for the `local_index` table.
      */
     abstract fun localIndexDao(): LocalIndexDao
+
+    abstract fun pendingUploadDao(): PendingUploadDao
 
     companion object {
         const val NAME = "synckro.db"
@@ -391,6 +395,38 @@ abstract class SynckroDatabase : RoomDatabase() {
             object : Migration(14, 15) {
                 override fun migrate(db: SupportSQLiteDatabase) {
                     db.execSQL("ALTER TABLE `sync_pair` ADD COLUMN `localStorageLimitBytes` INTEGER")
+                }
+            }
+
+        val MIGRATION_15_16 =
+            object : Migration(15, 16) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL(
+                        "CREATE TABLE IF NOT EXISTS `pending_upload` (" +
+                            "`pairId` INTEGER NOT NULL, " +
+                            "`relativePath` TEXT NOT NULL, " +
+                            "`documentIdHint` TEXT, " +
+                            "`observedSizeBytes` INTEGER NOT NULL, " +
+                            "`observedMtimeMs` INTEGER NOT NULL, " +
+                            "`state` TEXT NOT NULL, " +
+                            "`attempts` INTEGER NOT NULL, " +
+                            "`eligibleAtMs` INTEGER NOT NULL, " +
+                            "`claimToken` TEXT, " +
+                            "`claimedAtMs` INTEGER, " +
+                            "`createdAtMs` INTEGER NOT NULL, " +
+                            "`updatedAtMs` INTEGER NOT NULL, " +
+                            "PRIMARY KEY(`pairId`, `relativePath`), " +
+                            "FOREIGN KEY(`pairId`) REFERENCES `sync_pair`(`id`) " +
+                            "ON UPDATE NO ACTION ON DELETE CASCADE)",
+                    )
+                    db.execSQL(
+                        "CREATE INDEX IF NOT EXISTS `index_pending_upload_state_eligibleAtMs` " +
+                            "ON `pending_upload` (`state`, `eligibleAtMs`)",
+                    )
+                    db.execSQL(
+                        "CREATE INDEX IF NOT EXISTS `index_pending_upload_state_claimedAtMs` " +
+                            "ON `pending_upload` (`state`, `claimedAtMs`)",
+                    )
                 }
             }
     }
