@@ -3,6 +3,8 @@ package com.synckro.domain.sync
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 class LocalChangeWatcherTest {
     @Test
@@ -115,6 +117,35 @@ class LocalChangeWatcherTest {
         watcher.emitChange(pairId = 42)
 
         assertEquals(listOf(LocalChangeEvent.Changed(42)), events)
+    }
+
+    @Test
+    fun `concurrent lifecycle calls are safe`() {
+        val watcher = InMemoryLocalChangeWatcher()
+        val executor = Executors.newFixedThreadPool(3)
+        try {
+            val registrations =
+                executor.submit {
+                    repeat(100) {
+                        val result = watcher.register(pairId = 42) {}
+                        (result as? LocalChangeWatchRegistrationResult.Registered)
+                            ?.registration
+                            ?.unregister()
+                    }
+                }
+            val shutdowns = executor.submit { repeat(100) { watcher.shutdown() } }
+            val additionalRegistrations =
+                executor.submit {
+                    repeat(100) { watcher.register(pairId = 43) {} }
+                }
+
+            registrations.get(5, TimeUnit.SECONDS)
+            shutdowns.get(5, TimeUnit.SECONDS)
+            additionalRegistrations.get(5, TimeUnit.SECONDS)
+        } finally {
+            executor.shutdownNow()
+        }
+        assertTrue(executor.awaitTermination(5, TimeUnit.SECONDS))
     }
 
     private class InMemoryLocalChangeWatcher(

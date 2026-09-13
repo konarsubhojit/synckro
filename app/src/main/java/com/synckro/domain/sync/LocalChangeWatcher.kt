@@ -49,7 +49,10 @@ sealed interface LocalChangeWatcherCapability {
 
 /** Work callers must use when notifications cannot be provided. */
 enum class LocalChangeWatcherFallback {
+    /** Schedule routine scans using the pair's configured periodic sync cadence. */
     PERIODIC_SCAN,
+
+    /** Scan when the application returns to the foreground. */
     SCAN_ON_APP_RESUME,
 }
 
@@ -106,7 +109,11 @@ sealed interface LocalChangeEvent {
  * register a replacement when recovery is appropriate.
  */
 sealed interface LocalChangeWatchFailure {
-    /** The watcher has been shut down and cannot accept registrations. */
+    /**
+     * The watcher has been shut down and cannot accept registrations.
+     *
+     * This is only returned from [LocalChangeWatcher.register], never emitted as an event.
+     */
     data object Shutdown : LocalChangeWatchFailure
 
     /** The persisted local-tree permission is missing or has been revoked; the pair must be relinked. */
