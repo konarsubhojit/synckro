@@ -63,6 +63,21 @@ class LocalChangeWatcherTest {
     }
 
     @Test
+    fun `shutdown takes precedence over unavailable capability`() {
+        val watcher =
+            InMemoryLocalChangeWatcher(
+                LocalChangeWatcherCapability.Unavailable(LocalChangeWatcherFallback.PERIODIC_SCAN),
+            )
+
+        watcher.shutdown()
+
+        assertEquals(
+            LocalChangeWatchRegistrationResult.Failed(LocalChangeWatchFailure.Shutdown),
+            watcher.register(pairId = 42) {},
+        )
+    }
+
+    @Test
     fun `failures are reported for their pair`() {
         val watcher = InMemoryLocalChangeWatcher()
         val events = mutableListOf<LocalChangeEvent>()
@@ -105,34 +120,46 @@ class LocalChangeWatcherTest {
     private class InMemoryLocalChangeWatcher(
         override val capability: LocalChangeWatcherCapability = LocalChangeWatcherCapability.Available,
     ) : LocalChangeWatcher {
+        private val lock = Any()
         private val listeners = mutableMapOf<Long, MutableList<RegisteredListener>>()
         private var isShutdown = false
 
         override fun register(
             pairId: Long,
             listener: (LocalChangeEvent) -> Unit,
-        ): LocalChangeWatchRegistrationResult {
-            val unavailable = capability as? LocalChangeWatcherCapability.Unavailable
-            if (unavailable != null) return LocalChangeWatchRegistrationResult.Unavailable(unavailable)
-            if (isShutdown) return LocalChangeWatchRegistrationResult.Failed(LocalChangeWatchFailure.Shutdown)
+        ): LocalChangeWatchRegistrationResult =
+            synchronized(lock) {
+                if (isShutdown) {
+                    return@synchronized LocalChangeWatchRegistrationResult.Failed(
+                        LocalChangeWatchFailure.Shutdown,
+                    )
+                }
+                val unavailable = capability as? LocalChangeWatcherCapability.Unavailable
+                if (unavailable != null) {
+                    return@synchronized LocalChangeWatchRegistrationResult.Unavailable(unavailable)
+                }
 
-            val registration = Any()
-            listeners.getOrPut(pairId) { mutableListOf() }.add(RegisteredListener(registration, listener))
-            var isUnregistered = false
-            return LocalChangeWatchRegistrationResult.Registered(
-                LocalChangeWatchRegistration {
-                    if (!isUnregistered) {
-                        listeners[pairId]?.removeAll { it.token === registration }
-                        isUnregistered = true
-                    }
-                },
-            )
-        }
+                val registration = Any()
+                listeners.getOrPut(pairId) { mutableListOf() }.add(RegisteredListener(registration, listener))
+                var isUnregistered = false
+                LocalChangeWatchRegistrationResult.Registered(
+                    LocalChangeWatchRegistration {
+                        synchronized(lock) {
+                            if (!isUnregistered) {
+                                listeners[pairId]?.removeAll { it.token === registration }
+                                isUnregistered = true
+                            }
+                        }
+                    },
+                )
+            }
 
         override fun shutdown() {
-            if (!isShutdown) {
-                listeners.clear()
-                isShutdown = true
+            synchronized(lock) {
+                if (!isShutdown) {
+                    listeners.clear()
+                    isShutdown = true
+                }
             }
         }
 
@@ -146,9 +173,10 @@ class LocalChangeWatcherTest {
             failure: LocalChangeWatchFailure,
         ) = emit(LocalChangeEvent.Failure(pairId, failure))
 
-        private fun emit(event: LocalChangeEvent) {
-            listeners[event.pairId]?.toList()?.forEach { it.listener(event) }
-        }
+        private fun emit(event: LocalChangeEvent) =
+            synchronized(lock) {
+                listeners[event.pairId]?.forEach { it.listener(event) }
+            }
 
         private data class RegisteredListener(
             val token: Any,
