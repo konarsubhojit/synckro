@@ -16,6 +16,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import java.io.ByteArrayInputStream
 
 /**
  * Unit tests for [SafLocalFileAccess].
@@ -211,5 +212,121 @@ class SafLocalFileAccessTest {
         } catch (e: LocalStorageException) {
             assertTrue("cause must be the original SecurityException", e.cause is SecurityException)
         }
+    }
+
+    // -------------------------------------------------------------------------
+    // TargetedSafMetadataSampler
+    // -------------------------------------------------------------------------
+
+    private fun sampler(
+        tree: Map<String, List<RawDocChild>> = emptyMap(),
+        metadata: Map<String, SafDocumentMetadata> = emptyMap(),
+        readProbe: SafReadProbe = SafReadProbe { _, _, _ -> ByteArrayInputStream(byteArrayOf(1)) },
+        pendingQuery: MediaStorePendingStateQuery? = null,
+    ): TargetedSafMetadataSampler {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        return TargetedSafMetadataSampler(
+            resolver = context.contentResolver,
+            treeUri = treeUri,
+            childrenQuery = DocumentChildrenQuery { _, _, parentDocId -> tree[parentDocId] ?: emptyList() },
+            metadataQuery = SafDocumentMetadataQuery { _, _, documentId -> metadata[documentId] },
+            readProbe = readProbe,
+            mediaStorePendingStateQuery = pendingQuery,
+        )
+    }
+
+    @Test
+    fun `sampler resolves nested relative path without a tree walk`() {
+        val sample =
+            sampler(
+                tree =
+                    mapOf(
+                        "root" to listOf(dir("subdir")),
+                        "subdir" to listOf(file("nested.txt", docId = "nested-id")),
+                    ),
+                metadata = mapOf("nested-id" to SafDocumentMetadata(77L, 2_000L, "text/plain")),
+            ).sample(relativePath = "subdir/nested.txt")
+
+        assertEquals(
+            TargetedSafMetadataSample.Available("nested-id", 77L, 2_000L, "text/plain", true, null),
+            sample,
+        )
+    }
+
+    @Test
+    fun `sampler reports a deleted document ID as missing`() {
+        assertEquals(TargetedSafMetadataSample.Missing, sampler().sample(documentId = "deleted-id"))
+    }
+
+    @Test
+    fun `sampler returns inconclusive when path resolution loses permission`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val sampler =
+            TargetedSafMetadataSampler(
+                context.contentResolver,
+                treeUri,
+                childrenQuery = DocumentChildrenQuery { _, _, _ -> throw SecurityException("Permission denied") },
+            )
+
+        assertEquals(
+            TargetedSafMetadataSample.Inconclusive(TargetedSafMetadataSample.Inconclusive.Reason.PROVIDER_FAILURE),
+            sampler.sample(relativePath = "nested/file.txt"),
+        )
+    }
+
+    @Test
+    fun `sampler returns inconclusive when metadata is unknown`() {
+        val sample =
+            sampler(metadata = mapOf("id" to SafDocumentMetadata(sizeBytes = null, mtimeMs = 2_000L, mimeType = "text/plain")))
+                .sample(documentId = "id")
+
+        assertEquals(
+            TargetedSafMetadataSample.Inconclusive(TargetedSafMetadataSample.Inconclusive.Reason.METADATA_UNAVAILABLE),
+            sample,
+        )
+    }
+
+    @Test
+    fun `sampler returns inconclusive when metadata provider throws`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val sampler =
+            TargetedSafMetadataSampler(
+                context.contentResolver,
+                treeUri,
+                metadataQuery = SafDocumentMetadataQuery { _, _, _ -> throw SecurityException("Permission denied") },
+            )
+
+        assertEquals(
+            TargetedSafMetadataSample.Inconclusive(TargetedSafMetadataSample.Inconclusive.Reason.PROVIDER_FAILURE),
+            sampler.sample(documentId = "id"),
+        )
+    }
+
+    @Test
+    fun `sampler represents an unopenable document safely`() {
+        val sample =
+            sampler(
+                metadata = mapOf("id" to SafDocumentMetadata(77L, 2_000L, "text/plain")),
+                readProbe = SafReadProbe { _, _, _ -> null },
+            ).sample(documentId = "id")
+
+        assertEquals(
+            TargetedSafMetadataSample.Available("id", 77L, 2_000L, "text/plain", false, null),
+            sample,
+        )
+    }
+
+    @Test
+    fun `sampler returns optional MediaStore pending state`() {
+        val sample =
+            sampler(
+                metadata = mapOf("id" to SafDocumentMetadata(77L, 2_000L, "text/plain")),
+                pendingQuery = MediaStorePendingStateQuery { _, _, _ -> true },
+            ).sample(documentId = "id")
+
+        assertEquals(
+            TargetedSafMetadataSample.Available("id", 77L, 2_000L, "text/plain", true, true),
+            sample,
+        )
     }
 }
