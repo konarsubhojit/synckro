@@ -16,9 +16,11 @@ default behaviour that applies to all pairs.
 2. [Schedule presets](#2-schedule-presets)
 3. [Network and power constraints](#3-network-and-power-constraints)
 4. [Global auto-sync setting](#4-global-auto-sync-setting)
-5. [Manual sync](#5-manual-sync)
-6. [Exponential backoff on failure](#6-exponential-backoff-on-failure)
-7. [Checking scheduled jobs](#7-checking-scheduled-jobs)
+5. [Instant Sync: best-effort dispatch](#5-instant-sync-best-effort-dispatch)
+6. [Manual sync](#6-manual-sync)
+7. [Exponential backoff on failure](#7-exponential-backoff-on-failure)
+8. [Rollout gates and device matrix](#8-rollout-gates-and-device-matrix)
+9. [Checking scheduled jobs](#9-checking-scheduled-jobs)
 
 ---
 
@@ -33,9 +35,9 @@ Each sync pair carries its own schedule configuration:
 | **Wi-Fi only** | `true` | Sync only when the device is connected to an unmetered (non-cellular) network. |
 | **Requires charging** | `false` | Sync only when the device is charging. |
 
-Schedule settings are applied immediately when you tap **Save** in the Pair
-Editor: the existing WorkManager periodic job is cancelled and a replacement
-job with the new interval and constraints is enqueued.
+When you tap **Save** in the Pair Editor, the existing WorkManager periodic job
+is cancelled and a replacement job with the new interval and constraints is
+enqueued. Its start time remains under WorkManager and platform control.
 
 ---
 
@@ -70,8 +72,9 @@ Constraints.Builder()
     .build()
 ```
 
-When the constraint is not satisfied at the scheduled time, WorkManager holds
-the job until the constraint is met, then runs it.
+When a constraint is not satisfied at the nominal run time, WorkManager keeps
+the job eligible and may run it after the constraint is met. Doze, App Standby,
+OEM battery controls, and system load may add further delay.
 
 **Recommended defaults:**
 
@@ -101,16 +104,52 @@ Additional global sync settings:
 
 ---
 
-## 5. Manual sync
+## 5. Instant Sync: best-effort dispatch
 
-Trigger an immediate, on-demand sync independently of the schedule:
+Where enabled for a rollout cohort, Instant Sync is an **opt-in**, upload-only
+acceleration path for completed local changes. Both **Settings → Sync → Instant
+Sync** and the pair's own **Instant Sync** control must be enabled; both default
+to off. If these controls are absent, the feature is not available in that
+build. The global background-sync master must also permit background work. A
+pair must be linked, have a usable account, use an upload-capable direction, and
+pass its filters.
+
+Enabling Instant Sync may keep a low-importance foreground notification visible
+while local folders are being watched. This has a battery cost. See
+[docs/notifications.md](notifications.md) for notification and permission
+behavior.
+
+Instant Sync is not a real-time or guaranteed-latency service:
+
+- SAF `ContentObserver`, optional `FileObserver`, and `MediaStore` notifications
+  are best-effort hints. A DocumentsProvider may coalesce, delay, or omit them,
+  especially for removable storage or after a process/device restart.
+- A hint only queues a candidate. Stability checks must establish that the file
+  is complete before any upload starts.
+- Dispatch uses constrained WorkManager work. Expedited quota exhaustion falls
+  back to ordinary non-expedited work; Doze, standby buckets, constraints, and
+  OEM policy can defer either form.
+- The regular periodic full sync remains the reconciliation and correctness
+  fallback for provider silence, missed events, and interrupted instant work.
+
+Use the global Instant Sync switch as the kill switch. Turning it off unregisters
+watchers and cancels only instant WorkManager requests; periodic schedules and
+manual sync remain available. Durable queued candidates are retained so that
+re-enabling Instant Sync can retry them and periodic reconciliation can discover
+the same changes. Deleting a pair removes its queue as part of pair cleanup.
+
+---
+
+## 6. Manual sync
+
+Request an on-demand sync independently of the periodic schedule:
 
 - **Home screen / Pairs tab**: tap **Sync now** on a pair card.
 - **Pair Detail screen**: tap **Sync now** in the action bar.
 
 The manual request uses a `OneTimeWorkRequest` with the same constraints as
-the periodic job **plus** exponential backoff (initial delay 30 s) so a
-transient failure retries automatically. The periodic schedule is unaffected.
+the periodic job **plus** exponential backoff (initial delay 30 s), allowing a
+transient failure to be retried. The periodic schedule is unaffected.
 
 The **Sync now** button is disabled while a sync for that pair is already
 running. If the button is blocked for another reason (account needs sign-in,
@@ -118,11 +157,12 @@ SAF permission lost), the Home screen shows a descriptive snackbar.
 
 ---
 
-## 6. Exponential backoff on failure
+## 7. Exponential backoff on failure
 
 When a sync run encounters a retriable error (network timeout, transient
-server error, temporary authentication failure), WorkManager automatically
-schedules a retry using exponential backoff:
+server error, temporary authentication failure), it requests a retry using
+exponential backoff. The eventual run time remains under WorkManager and
+platform control:
 
 - **Policy**: `BackoffPolicy.EXPONENTIAL`
 - **Initial delay**: 30 seconds
@@ -137,7 +177,47 @@ for the full recovery workflow.
 
 ---
 
-## 7. Checking scheduled jobs
+## 8. Rollout gates and device matrix
+
+Instant Sync must remain default-off while it moves through internal testing,
+opt-in beta, and broader opt-in availability. Expand a stage only when:
+
+- all stability, duplicate-event, stale-claim/process-death, exactly-once queue
+  completion, and unchanged periodic-checkpoint tests pass;
+- the device matrix below has no known data-loss, partial-write, foreground
+  service, boot/restart, or permission regressions;
+- crash/ANR and battery impact remain within the release's agreed baseline; and
+- queued-candidate age/depth, retry exhaustion, foreground-service start
+  failures, expedited-quota fallback, provider-silence fallback, and targeted
+  outcomes show no candidate remains after two successful periodic
+  reconciliation cycles unless it has a recorded terminal cause.
+
+Treat any suspected data loss, committed partial file, checkpoint corruption, or
+queue that cannot be reconciled as a stop-ship condition. Use the global switch
+to roll back Instant Sync without disabling periodic sync. Metrics and sync-log
+events must contain only bucketed durations/counts and categorical API,
+provider, capability, and outcome values—never file names, paths, account IDs,
+or file content.
+
+Before each rollout expansion, validate every API level from 26 through the
+current supported Android release (individual devices or representative bands
+may be used):
+
+| API coverage | Local provider/storage | Remote provider | Required scenarios |
+|:-------------|:-----------------------|:----------------|:-------------------|
+| 26–28 | AOSP DocumentsUI, internal storage | Fake provider, then Google Drive and OneDrive | Watch registration, completed-file upload, duplicate/coarse event, process restart |
+| 29–30 | DocumentsUI/Files, internal and removable SD | Google Drive and OneDrive | `MediaStore`/SAF fallback, card removal/reinsert, permission revoke/re-link, reboot restore |
+| 31–32 | Google Files and Samsung My Files (or another representative OEM DocumentsProvider) | Google Drive and OneDrive | Background foreground-service restrictions, Doze/App Standby, expedited quota fallback |
+| 33–34 | Internal and removable storage | Google Drive and OneDrive | Notification allowed/denied, foreground notification visibility, battery restrictions |
+| 35–current | Google and representative OEM devices/providers | Google Drive and OneDrive | Current foreground-service/boot policy, kill switch, long-running transfer, periodic reconciliation after provider silence |
+
+For every row, also exercise growing/temp files, an open/read failure, mutation
+during upload, offline recovery, quota exhaustion, pair edit/delete, and both
+global and per-pair disable paths.
+
+---
+
+## 9. Checking scheduled jobs
 
 To inspect WorkManager jobs during development, use the
 [WorkManager Inspector](https://developer.android.com/studio/inspect/task)

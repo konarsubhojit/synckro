@@ -13,6 +13,7 @@ recover from each one.
 4. [Local folder permission lost (SAF)](#4-local-folder-permission-lost-saf)
 5. [Terminal sync failure](#5-terminal-sync-failure)
 6. [Diagnosing failures with the sync log](#6-diagnosing-failures-with-the-sync-log)
+7. [Instant Sync interruption and reconciliation](#7-instant-sync-interruption-and-reconciliation)
 
 ---
 
@@ -46,8 +47,8 @@ provider tracks consecutive failures. After reaching the failure threshold
 3. Complete the interactive sign-in flow (Google Credential Manager sheet or
    Microsoft browser sign-in).
 4. Once sign-in succeeds, the notification is automatically dismissed.
-5. Return to the **Pairs** tab and tap **Sync now** to resume syncing
-   immediately, or wait for the next scheduled run.
+5. Return to the **Pairs** tab and tap **Sync now** to request a run, or wait for
+   the next scheduled run.
 
 Alternatively, from the **Pairs** tab, tap the pair card's warning badge
 (if shown) to jump directly to the Accounts screen for the affected account.
@@ -76,9 +77,9 @@ as retriable errors. WorkManager retries the sync with exponential backoff:
 - **Policy**: `EXPONENTIAL` (doubles after each failure, up to WorkManager's
   internal ceiling of approximately 5 hours).
 
-No user action is required for transient failures — the job will retry
-automatically. If you want to force an immediate retry, tap **Sync now** on
-the affected pair.
+WorkManager may run the retry when constraints and platform policy allow; there
+is no retry-latency guarantee. If you want to request another run, tap **Sync
+now** on the affected pair. That request is still subject to its constraints.
 
 The per-pair sync log (accessible from **Pair Detail → Logs**) records each
 attempt and its outcome, including the error message for failed runs.
@@ -135,7 +136,7 @@ folder when you create the pair. This permission can be lost when:
    local folder (or a replacement folder).
 4. Tap **Save**.
 
-The orange badge disappears and the next sync run will proceed normally.
+The orange badge disappears and the pair becomes eligible for its next run.
 
 ---
 
@@ -182,3 +183,44 @@ relevant entries quickly.
 Log retention is configurable under **Settings → Sync → Log retention period**
 (default: 30 days). Entries older than the retention period are pruned
 automatically.
+
+---
+
+## 7. Instant Sync interruption and reconciliation
+
+Local DocumentsProviders are allowed to coalesce, delay, or omit change
+notifications. Doze, standby buckets, OEM battery policy, foreground-service
+startup restrictions, unsatisfied pair constraints, and exhausted expedited
+quota can also delay processing. Expedited quota exhaustion falls back to
+ordinary constrained work rather than bypassing platform policy.
+
+Instant candidates are durable and de-duplicated. A process death or worker
+interruption releases or eventually recovers a stale claim; a retriable,
+unreadable, still-growing, or post-upload-mutated file remains queued. The
+targeted path does not advance the pair's remote delta token or full-scan
+timestamp. It updates the local index and removes a queue row only after the
+provider reports completion and the source/result is verified, so an interrupted
+or partial attempt is not recorded as a completed upload.
+
+Recovery paths:
+
+| Condition | Recovery |
+|:----------|:---------|
+| Provider emits no local change signal | The next periodic full sync enumerates and reconciles the file. |
+| Expedited quota unavailable | WorkManager runs the request as ordinary non-expedited work when constraints permit. |
+| Network/provider quota or transient provider error | Candidate remains retryable with backoff; periodic sync provides an independent reconciliation pass. |
+| Process death or reboot | Durable candidates survive; stale claims are recovered and watcher intent is restored when platform policy permits. |
+| Permission loss or removable volume absent | No upload is attempted. Re-link or remount, then use manual or periodic sync. |
+| Instant Sync kill switch disabled | Watchers and instant work stop; queued candidates are retained, and periodic/manual sync remain available. |
+| Pair deleted | All pair work and queued candidates are removed; existing local and remote files are untouched. |
+
+If queue age/depth continues to grow, targeted retries exhaust, or watcher
+fallback events repeat, disable Instant Sync and rely on manual/periodic sync
+until the provider or permission issue is resolved. Never infer successful
+delivery from a watcher event or notification alone; confirm the completed
+event and provider result in the sync log.
+
+Rollout must stop for any suspected data loss, completed partial file, corrupted
+checkpoint, or unrecoverable queue. The privacy-safe metrics, rollout gates, and
+API 26–current provider/removable-storage matrix are defined in
+[docs/scheduling.md](scheduling.md#8-rollout-gates-and-device-matrix).
