@@ -266,7 +266,10 @@ class SyncSchedulerTest {
 
         assertEquals(BackoffPolicy.EXPONENTIAL, periodic.workSpec.backoffPolicy)
         assertEquals(periodic.workSpec.backoffPolicy, oneTime.workSpec.backoffPolicy)
-        assertEquals(TimeUnit.SECONDS.toMillis(30L), periodic.workSpec.backoffDelayDuration)
+        assertEquals(
+            TimeUnit.SECONDS.toMillis(SyncWorker.BACKOFF_INITIAL_DELAY_SECONDS),
+            periodic.workSpec.backoffDelayDuration,
+        )
         assertEquals(periodic.workSpec.backoffDelayDuration, oneTime.workSpec.backoffDelayDuration)
     }
 
