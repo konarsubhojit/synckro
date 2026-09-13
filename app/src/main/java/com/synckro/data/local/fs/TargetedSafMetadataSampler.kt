@@ -15,8 +15,9 @@ internal data class SafDocumentMetadata(
 
 internal fun interface SafDocumentMetadataQuery {
     /**
-     * Returns metadata for an existing document, `null` when the document is absent,
-     * or throws [SafMetadataUnavailableException] when the provider supplies no cursor.
+     * Returns metadata for an existing document, `null` when the provider returns no
+     * row, or throws [SafMetadataUnavailableException] when it supplies no cursor.
+     * Null metadata fields are returned as null and become an inconclusive sample.
      */
     fun query(
         resolver: ContentResolver,
@@ -121,6 +122,14 @@ internal class TargetedSafMetadataSampler(
     private val readProbe: SafReadProbe = DefaultSafReadProbe,
     private val mediaStorePendingStateQuery: MediaStorePendingStateQuery? = null,
 ) {
+    /**
+     * Samples exactly one queued target. Supply either its [relativePath] or [documentId],
+     * but not both; otherwise an [IllegalArgumentException] is thrown.
+     *
+     * [TargetedSafMetadataSample.Missing] means the target is absent. [TargetedSafMetadataSample.Inconclusive]
+     * means the provider could not supply sufficient reliable metadata. [TargetedSafMetadataSample.Available]
+     * contains complete metadata and the result of a read-open probe.
+     */
     fun sample(
         relativePath: String? = null,
         documentId: String? = null,
@@ -156,21 +165,15 @@ internal class TargetedSafMetadataSampler(
                 TargetedSafMetadataSample.Inconclusive.Reason.METADATA_UNAVAILABLE,
             )
         }
-        val stream =
-            try {
-                readProbe.open(resolver, treeUri, resolvedDocumentId)
-            } catch (_: Exception) {
-                return TargetedSafMetadataSample.Inconclusive(
-                    TargetedSafMetadataSample.Inconclusive.Reason.PROVIDER_FAILURE,
-                )
-            }
         val openable =
             try {
-                if (stream == null) {
-                    false
-                } else {
-                    stream.close()
-                    true
+                readProbe.open(resolver, treeUri, resolvedDocumentId).let { stream ->
+                    if (stream == null) {
+                        false
+                    } else {
+                        stream.use {}
+                        true
+                    }
                 }
             } catch (_: Exception) {
                 return TargetedSafMetadataSample.Inconclusive(

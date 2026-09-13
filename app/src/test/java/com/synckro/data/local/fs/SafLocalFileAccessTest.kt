@@ -259,6 +259,16 @@ class SafLocalFileAccessTest {
     }
 
     @Test
+    fun `sampler reports a missing relative path as missing`() {
+        assertEquals(TargetedSafMetadataSample.Missing, sampler().sample(relativePath = "missing/file.txt"))
+    }
+
+    @Test
+    fun `sampler reports a blank relative path as missing`() {
+        assertEquals(TargetedSafMetadataSample.Missing, sampler().sample(relativePath = ""))
+    }
+
+    @Test
     fun `sampler requires a path or document ID`() {
         try {
             sampler().sample()
