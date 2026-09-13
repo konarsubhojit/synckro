@@ -2,6 +2,7 @@ package com.synckro.data.worker
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
+import androidx.work.BackoffPolicy
 import androidx.work.Configuration
 import androidx.work.NetworkType
 import androidx.work.WorkInfo
@@ -23,6 +24,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import java.util.concurrent.TimeUnit
 
 /**
  * Unit tests for [SyncScheduler] verifying that the correct WorkManager constraints
@@ -219,6 +221,46 @@ class SyncSchedulerTest {
                 .getWorkInfosForUniqueWork(SyncWorker.uniqueName(p.id))
                 .get()
         assertFalse("Expected periodic work to be enqueued with backoff policy", infos.isEmpty())
+    }
+
+    @Test
+    fun `periodic and one-time requests share pair constraints`() {
+        val p = pair(id = 100L, wifiOnly = true, requiresCharging = true)
+
+        val periodic = SyncScheduler.periodicRequestFor(p, SyncScheduler.MIN_PERIODIC_INTERVAL_MINUTES)
+        val oneTime = SyncScheduler.oneTimeRequestFor(p)
+
+        assertEquals(NetworkType.UNMETERED, periodic.workSpec.constraints.requiredNetworkType)
+        assertEquals(periodic.workSpec.constraints.requiredNetworkType, oneTime.workSpec.constraints.requiredNetworkType)
+        assertTrue(periodic.workSpec.constraints.requiresCharging())
+        assertEquals(periodic.workSpec.constraints.requiresCharging(), oneTime.workSpec.constraints.requiresCharging())
+        assertTrue(periodic.workSpec.constraints.requiresBatteryNotLow())
+        assertEquals(periodic.workSpec.constraints.requiresBatteryNotLow(), oneTime.workSpec.constraints.requiresBatteryNotLow())
+        assertTrue(periodic.workSpec.constraints.requiresStorageNotLow())
+        assertEquals(periodic.workSpec.constraints.requiresStorageNotLow(), oneTime.workSpec.constraints.requiresStorageNotLow())
+    }
+
+    @Test
+    fun `periodic and one-time requests share exponential backoff policy`() {
+        val p = pair(id = 101L)
+
+        val periodic = SyncScheduler.periodicRequestFor(p, SyncScheduler.MIN_PERIODIC_INTERVAL_MINUTES)
+        val oneTime = SyncScheduler.oneTimeRequestFor(p)
+
+        assertEquals(BackoffPolicy.EXPONENTIAL, periodic.workSpec.backoffPolicy)
+        assertEquals(periodic.workSpec.backoffPolicy, oneTime.workSpec.backoffPolicy)
+        assertEquals(TimeUnit.SECONDS.toMillis(30L), periodic.workSpec.backoffDelayDuration)
+        assertEquals(periodic.workSpec.backoffDelayDuration, oneTime.workSpec.backoffDelayDuration)
+    }
+
+    @Test
+    fun `one-time request carries manual sync input data`() {
+        val p = pair(id = 102L)
+
+        val oneTime = SyncScheduler.oneTimeRequestFor(p)
+
+        assertEquals(p.id, oneTime.workSpec.input.getLong(SyncWorker.KEY_PAIR_ID, -1L))
+        assertFalse(oneTime.workSpec.input.getBoolean(SyncWorker.KEY_IS_PERIODIC, true))
     }
 
     // -------------------------------------------------------------------------

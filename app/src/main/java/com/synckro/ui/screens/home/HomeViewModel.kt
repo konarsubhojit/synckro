@@ -3,13 +3,8 @@ package com.synckro.ui.screens.home
 import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import androidx.work.BackoffPolicy
-import androidx.work.Constraints
 import androidx.work.ExistingWorkPolicy
-import androidx.work.NetworkType
-import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
-import androidx.work.workDataOf
 import com.synckro.data.repository.AccountRepository
 import com.synckro.data.repository.ConflictRepository
 import com.synckro.data.repository.SettingsRepository
@@ -42,7 +37,6 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import timber.log.Timber
-import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
@@ -489,32 +483,7 @@ class HomeViewModel
                 return
             }
             Timber.i("HomeViewModel.syncNow(id=${pair.id})")
-            val constraints =
-                Constraints
-                    .Builder()
-                    .setRequiredNetworkType(if (pair.wifiOnly) NetworkType.UNMETERED else NetworkType.CONNECTED)
-                    .setRequiresCharging(pair.requiresCharging)
-                    .setRequiresBatteryNotLow(true)
-                    .setRequiresStorageNotLow(true)
-                    .build()
-            val req =
-                OneTimeWorkRequestBuilder<SyncWorker>()
-                    .setConstraints(constraints)
-                    .setInputData(
-                        workDataOf(
-                            SyncWorker.KEY_PAIR_ID to pair.id,
-                            SyncWorker.KEY_IS_PERIODIC to false,
-                        ),
-                    )
-                    // Same exponential-backoff policy as the periodic schedule so a
-                    // manual "Sync now" that hits a transient network/auth blip retries
-                    // on a sane curve instead of WorkManager's default 10s linear.
-                    .setBackoffCriteria(
-                        BackoffPolicy.EXPONENTIAL,
-                        SyncWorker.BACKOFF_INITIAL_DELAY_SECONDS,
-                        TimeUnit.SECONDS,
-                    )
-                    .build()
+            val req = SyncScheduler.oneTimeRequestFor(pair)
             // Optimistically mark the pair as syncing so the home row shows a spinner
             // immediately; the watcher coroutine below clears it once the worker is
             // in a finished state.

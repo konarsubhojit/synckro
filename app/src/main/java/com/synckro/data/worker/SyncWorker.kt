@@ -15,8 +15,11 @@ import androidx.work.CoroutineWorker
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.ForegroundInfo
 import androidx.work.NetworkType
+import androidx.work.OneTimeWorkRequest
+import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
+import androidx.work.WorkRequest
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import com.synckro.R
@@ -843,36 +846,7 @@ class SyncScheduler(
             )
         }
 
-        val constraints =
-            Constraints
-                .Builder()
-                .setRequiredNetworkType(if (pair.wifiOnly) NetworkType.UNMETERED else NetworkType.CONNECTED)
-                .setRequiresCharging(pair.requiresCharging)
-                .setRequiresBatteryNotLow(true)
-                .setRequiresStorageNotLow(true)
-                .build()
-
-        val req =
-            PeriodicWorkRequestBuilder<SyncWorker>(interval, TimeUnit.MINUTES)
-                .setConstraints(constraints)
-                .setInputData(
-                    workDataOf(
-                        SyncWorker.KEY_PAIR_ID to pair.id,
-                        SyncWorker.KEY_IS_PERIODIC to true,
-                    ),
-                )
-                // Exponential backoff (sub-issue #142): transient retriable failures
-                // (network blips, Retriable CloudProviderException) re-enter the queue
-                // with WorkManager's exponential schedule starting at 30s, capped at
-                // androidx.work.WorkRequest.MAX_BACKOFF_MILLIS (5h). True auth/SAF failures map to
-                // [SyncEngine.Result.Terminal] and bypass this backoff path entirely —
-                // they cancel the unique work and surface a "re-auth" / "re-link" CTA.
-                .setBackoffCriteria(
-                    BackoffPolicy.EXPONENTIAL,
-                    SyncWorker.BACKOFF_INITIAL_DELAY_SECONDS,
-                    TimeUnit.SECONDS,
-                )
-                .build()
+        val req = periodicRequestFor(pair, interval)
 
         workManager.enqueueUniquePeriodicWork(
             SyncWorker.uniqueName(pair.id),
@@ -934,6 +908,54 @@ class SyncScheduler(
         const val MIN_PERIODIC_INTERVAL_MINUTES: Long = 15
 
         /**
+         * Shared constraints for periodic and one-shot sync work. Keep both paths
+         * pointed at this helper so manual "Sync now" cannot drift from the
+         * scheduled sync policy.
+         */
+        internal fun constraintsFor(pair: SyncPair): Constraints =
+            Constraints
+                .Builder()
+                .setRequiredNetworkType(if (pair.wifiOnly) NetworkType.UNMETERED else NetworkType.CONNECTED)
+                .setRequiresCharging(pair.requiresCharging)
+                .setRequiresBatteryNotLow(true)
+                .setRequiresStorageNotLow(true)
+                .build()
+
+        /** Builds the one-shot "Sync now" request with the shared sync policy. */
+        internal fun oneTimeRequestFor(pair: SyncPair): OneTimeWorkRequest =
+            OneTimeWorkRequestBuilder<SyncWorker>()
+                .setConstraints(constraintsFor(pair))
+                .setInputData(
+                    workDataOf(
+                        SyncWorker.KEY_PAIR_ID to pair.id,
+                        SyncWorker.KEY_IS_PERIODIC to false,
+                    ),
+                )
+                .setSyncBackoffCriteria()
+                .build()
+
+        /** Builds the periodic request with the shared sync policy. */
+        internal fun periodicRequestFor(
+            pair: SyncPair,
+            intervalMinutes: Long,
+        ) = PeriodicWorkRequestBuilder<SyncWorker>(intervalMinutes, TimeUnit.MINUTES)
+            .setConstraints(constraintsFor(pair))
+            .setInputData(
+                workDataOf(
+                    SyncWorker.KEY_PAIR_ID to pair.id,
+                    SyncWorker.KEY_IS_PERIODIC to true,
+                ),
+            )
+            // Exponential backoff (sub-issue #142): transient retriable failures
+            // (network blips, Retriable CloudProviderException) re-enter the queue
+            // with WorkManager's exponential schedule starting at 30s, capped at
+            // androidx.work.WorkRequest.MAX_BACKOFF_MILLIS (5h). True auth/SAF failures map to
+            // [SyncEngine.Result.Terminal] and bypass this backoff path entirely —
+            // they cancel the unique work and surface a "re-auth" / "re-link" CTA.
+            .setSyncBackoffCriteria()
+            .build()
+
+        /**
          * Pure-Kotlin helper that estimates the wall-clock time of the next periodic
          * sync run for [pair], given the current time [nowMs].
          *
@@ -970,3 +992,10 @@ class SyncScheduler(
         }
     }
 }
+
+private fun <B : WorkRequest.Builder<B, *>> B.setSyncBackoffCriteria(): B =
+    setBackoffCriteria(
+        BackoffPolicy.EXPONENTIAL,
+        SyncWorker.BACKOFF_INITIAL_DELAY_SECONDS,
+        TimeUnit.SECONDS,
+    )
