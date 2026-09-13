@@ -6,6 +6,9 @@ package com.synckro.domain.sync
  * A notification is a prompt to scan the pair again, not an authoritative file operation. In
  * particular, notifications can be duplicated, coalesced, delayed, or omitted while the watcher
  * is not registered.
+ *
+ * Implementations must support concurrent lifecycle calls. Listeners may be invoked on any thread,
+ * so callers must dispatch UI work themselves.
  */
 interface LocalChangeWatcher {
     /** Reports whether this watcher can provide notifications and the required fallback if not. */
@@ -96,14 +99,23 @@ sealed interface LocalChangeEvent {
     ) : LocalChangeEvent
 }
 
-/** A failure preventing a local change watcher from observing a pair. */
+/**
+ * A terminal failure preventing a local change watcher from observing a pair.
+ *
+ * Implementations must not invoke the failed registration again. Callers may use a fallback and
+ * register a replacement when recovery is appropriate.
+ */
 sealed interface LocalChangeWatchFailure {
+    /** The watcher has been shut down and cannot accept registrations. */
     data object Shutdown : LocalChangeWatchFailure
 
+    /** The persisted local-tree permission is missing or has been revoked; the pair must be relinked. */
     data object PermissionDenied : LocalChangeWatchFailure
 
+    /** The backing storage volume is absent; callers may register again after it becomes available. */
     data object VolumeUnavailable : LocalChangeWatchFailure
 
+    /** An implementation-specific failure that callers should surface or retry according to policy. */
     data class Unknown(
         val message: String? = null,
     ) : LocalChangeWatchFailure
