@@ -86,8 +86,11 @@ class LocalChangeWatcherTest {
         watcher.register(pairId = 42, listener = events::add)
 
         watcher.emitFailure(pairId = 42, failure = LocalChangeWatchFailure.PermissionDenied)
+        watcher.register(pairId = 42, listener = events::add)
         watcher.emitFailure(pairId = 42, failure = LocalChangeWatchFailure.VolumeUnavailable)
+        watcher.register(pairId = 42, listener = events::add)
         watcher.emitFailure(pairId = 42, failure = LocalChangeWatchFailure.Unknown())
+        watcher.register(pairId = 42, listener = events::add)
         watcher.emitFailure(pairId = 42, failure = LocalChangeWatchFailure.Unknown("I/O error"))
 
         assertEquals(
@@ -146,6 +149,10 @@ class LocalChangeWatcherTest {
             executor.shutdownNow()
         }
         assertTrue(executor.awaitTermination(5, TimeUnit.SECONDS))
+        assertEquals(
+            LocalChangeWatchRegistrationResult.Failed(LocalChangeWatchFailure.Shutdown),
+            watcher.register(pairId = 42) {},
+        )
     }
 
     private class InMemoryLocalChangeWatcher(
@@ -204,10 +211,15 @@ class LocalChangeWatcherTest {
             failure: LocalChangeWatchFailure,
         ) = emit(LocalChangeEvent.Failure(pairId, failure))
 
-        private fun emit(event: LocalChangeEvent) =
-            synchronized(lock) {
-                listeners[event.pairId]?.forEach { it.listener(event) }
-            }
+        private fun emit(event: LocalChangeEvent) {
+            val registrations =
+                synchronized(lock) {
+                    listeners[event.pairId]?.toList().orEmpty().also {
+                        if (event is LocalChangeEvent.Failure) listeners.remove(event.pairId)
+                    }
+                }
+            registrations.forEach { it.listener(event) }
+        }
 
         private data class RegisteredListener(
             val token: Any,

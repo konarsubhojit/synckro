@@ -103,10 +103,11 @@ sealed interface LocalChangeEvent {
 }
 
 /**
- * A terminal failure preventing a local change watcher from observing a pair.
+ * A failure preventing a local change watcher from observing a pair.
  *
- * Implementations must not invoke the failed registration again. Callers may use a fallback and
- * register a replacement when recovery is appropriate.
+ * A failure event is terminal for its specific registration, but callers may register a replacement
+ * when recovery is appropriate. [Shutdown] is a registration-time failure and is never emitted as
+ * an event.
  */
 sealed interface LocalChangeWatchFailure {
     /**
