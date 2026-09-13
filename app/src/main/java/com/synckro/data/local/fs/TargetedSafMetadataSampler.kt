@@ -21,7 +21,8 @@ internal fun interface SafDocumentMetadataQuery {
     ): SafDocumentMetadata?
 }
 
-internal class SafMetadataUnavailableException : Exception()
+/** Signals that a SAF provider returned no cursor for a direct metadata query. */
+private class SafMetadataUnavailableException : Exception("SAF provider returned no metadata cursor")
 
 internal object DefaultSafDocumentMetadataQuery : SafDocumentMetadataQuery {
     private val projection =
@@ -120,6 +121,9 @@ internal class TargetedSafMetadataSampler(
         relativePath: String? = null,
         documentId: String? = null,
     ): TargetedSafMetadataSample {
+        require(relativePath != null || documentId != null) {
+            "A relative path or document ID is required"
+        }
         val resolvedDocumentId =
             documentId ?: try {
                 relativePath?.let(::findDocumentId)
@@ -148,9 +152,22 @@ internal class TargetedSafMetadataSampler(
                 TargetedSafMetadataSample.Inconclusive.Reason.METADATA_UNAVAILABLE,
             )
         }
+        val stream =
+            try {
+                readProbe.open(resolver, treeUri, resolvedDocumentId)
+            } catch (_: Exception) {
+                return TargetedSafMetadataSample.Inconclusive(
+                    TargetedSafMetadataSample.Inconclusive.Reason.PROVIDER_FAILURE,
+                )
+            }
         val openable =
             try {
-                readProbe.open(resolver, treeUri, resolvedDocumentId)?.use { } != null
+                if (stream == null) {
+                    false
+                } else {
+                    stream.close()
+                    true
+                }
             } catch (_: Exception) {
                 return TargetedSafMetadataSample.Inconclusive(
                     TargetedSafMetadataSample.Inconclusive.Reason.PROVIDER_FAILURE,
