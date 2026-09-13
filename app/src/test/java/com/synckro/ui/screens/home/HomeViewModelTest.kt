@@ -89,7 +89,7 @@ class HomeViewModelTest {
                 every { batteryWarningDismissed } returns flowOf(false)
             }
         mockSyncEventRepository =
-            mockk {
+            mockk(relaxed = true) {
                 every { observeAll(any()) } returns eventsFlow
                 every { observeForPair(any(), any()) } returns flowOf(emptyList())
             }

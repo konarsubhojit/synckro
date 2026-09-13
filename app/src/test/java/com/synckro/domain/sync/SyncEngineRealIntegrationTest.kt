@@ -682,8 +682,12 @@ class SyncEngineRealIntegrationTest {
 
             val events = eventRepository.getAll()
             assertTrue(
-                "Cold-start reconciliation should emit an INFO log entry",
-                events.any { it.message == "Reconciled existing remote file: same.txt" },
+                "Cold-start reconciliation should emit a privacy-safe targeted outcome",
+                events.any {
+                    it.tag == SyncEventTag.INSTANT_OUTCOME &&
+                        it.message.contains("cold_start_reconciled") &&
+                        !it.message.contains("same.txt")
+                },
             )
         }
 
