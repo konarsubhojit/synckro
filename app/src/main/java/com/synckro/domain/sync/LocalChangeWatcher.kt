@@ -18,6 +18,9 @@ interface LocalChangeWatcher {
      * registered, runtime failures are delivered to [listener] as [LocalChangeEvent.Failure].
      * After [shutdown], returns [LocalChangeWatchRegistrationResult.Failed] with
      * [LocalChangeWatchFailure.Shutdown].
+     *
+     * Each call creates an independent registration, including calls that repeat [listener] for
+     * the same [pairId]. A listener may be registered again after it is unregistered.
      */
     fun register(
         pairId: Long,
@@ -100,4 +103,8 @@ sealed interface LocalChangeWatchFailure {
     data object PermissionDenied : LocalChangeWatchFailure
 
     data object VolumeUnavailable : LocalChangeWatchFailure
+
+    data class Unknown(
+        val message: String? = null,
+    ) : LocalChangeWatchFailure
 }

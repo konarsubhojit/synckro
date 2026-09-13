@@ -80,10 +80,28 @@ class LocalChangeWatcherTest {
         )
     }
 
+    @Test
+    fun `each repeated listener registration has an independent lifecycle`() {
+        val watcher = InMemoryLocalChangeWatcher()
+        val events = mutableListOf<LocalChangeEvent>()
+        val first =
+            (
+                watcher.register(pairId = 42, listener = events::add)
+                    as LocalChangeWatchRegistrationResult.Registered
+            )
+                .registration
+        watcher.register(pairId = 42, listener = events::add)
+
+        first.unregister()
+        watcher.emitChange(pairId = 42)
+
+        assertEquals(listOf(LocalChangeEvent.Changed(42)), events)
+    }
+
     private class InMemoryLocalChangeWatcher(
         override val capability: LocalChangeWatcherCapability = LocalChangeWatcherCapability.Available,
     ) : LocalChangeWatcher {
-        private val listeners = mutableMapOf<Long, MutableSet<(LocalChangeEvent) -> Unit>>()
+        private val listeners = mutableMapOf<Long, MutableList<RegisteredListener>>()
         private var isShutdown = false
 
         override fun register(
@@ -94,12 +112,13 @@ class LocalChangeWatcherTest {
             if (unavailable != null) return LocalChangeWatchRegistrationResult.Unavailable(unavailable)
             if (isShutdown) return LocalChangeWatchRegistrationResult.Failed(LocalChangeWatchFailure.Shutdown)
 
-            listeners.getOrPut(pairId, ::mutableSetOf).add(listener)
+            val registration = Any()
+            listeners.getOrPut(pairId) { mutableListOf() }.add(RegisteredListener(registration, listener))
             var isUnregistered = false
             return LocalChangeWatchRegistrationResult.Registered(
                 LocalChangeWatchRegistration {
                     if (!isUnregistered) {
-                        listeners[pairId]?.remove(listener)
+                        listeners[pairId]?.removeAll { it.token === registration }
                         isUnregistered = true
                     }
                 },
@@ -124,7 +143,12 @@ class LocalChangeWatcherTest {
         ) = emit(LocalChangeEvent.Failure(pairId, failure))
 
         private fun emit(event: LocalChangeEvent) {
-            listeners[event.pairId]?.toList()?.forEach { it(event) }
+            listeners[event.pairId]?.toList()?.forEach { it.listener(event) }
         }
+
+        private data class RegisteredListener(
+            val token: Any,
+            val listener: (LocalChangeEvent) -> Unit,
+        )
     }
 }
