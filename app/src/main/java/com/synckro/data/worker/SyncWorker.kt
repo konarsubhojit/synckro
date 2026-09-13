@@ -17,6 +17,7 @@ import androidx.work.ForegroundInfo
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequest
 import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.PeriodicWorkRequest
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkRequest
@@ -938,22 +939,17 @@ class SyncScheduler(
         internal fun periodicRequestFor(
             pair: SyncPair,
             intervalMinutes: Long,
-        ) = PeriodicWorkRequestBuilder<SyncWorker>(intervalMinutes, TimeUnit.MINUTES)
-            .setConstraints(constraintsFor(pair))
-            .setInputData(
-                workDataOf(
-                    SyncWorker.KEY_PAIR_ID to pair.id,
-                    SyncWorker.KEY_IS_PERIODIC to true,
-                ),
-            )
-            // Exponential backoff (sub-issue #142): transient retriable failures
-            // (network blips, Retriable CloudProviderException) re-enter the queue
-            // with WorkManager's exponential schedule starting at 30s, capped at
-            // androidx.work.WorkRequest.MAX_BACKOFF_MILLIS (5h). True auth/SAF failures map to
-            // [SyncEngine.Result.Terminal] and bypass this backoff path entirely —
-            // they cancel the unique work and surface a "re-auth" / "re-link" CTA.
-            .setSyncBackoffCriteria()
-            .build()
+        ): PeriodicWorkRequest =
+            PeriodicWorkRequestBuilder<SyncWorker>(intervalMinutes, TimeUnit.MINUTES)
+                .setConstraints(constraintsFor(pair))
+                .setInputData(
+                    workDataOf(
+                        SyncWorker.KEY_PAIR_ID to pair.id,
+                        SyncWorker.KEY_IS_PERIODIC to true,
+                    ),
+                )
+                .setSyncBackoffCriteria()
+                .build()
 
         /**
          * Pure-Kotlin helper that estimates the wall-clock time of the next periodic
@@ -993,6 +989,14 @@ class SyncScheduler(
     }
 }
 
+/**
+ * Exponential backoff (sub-issue #142): transient retriable failures (network
+ * blips, Retriable CloudProviderException) re-enter the queue with WorkManager's
+ * exponential schedule starting at 30s, capped at
+ * androidx.work.WorkRequest.MAX_BACKOFF_MILLIS (5h). True auth/SAF failures map to
+ * [SyncEngine.Result.Terminal] and bypass this backoff path entirely — they cancel
+ * the unique work and surface a "re-auth" / "re-link" CTA.
+ */
 private fun <B : WorkRequest.Builder<B, *>> B.setSyncBackoffCriteria(): B =
     setBackoffCriteria(
         BackoffPolicy.EXPONENTIAL,
