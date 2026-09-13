@@ -146,7 +146,7 @@ class LocalChangeWatcherTest {
             shutdowns.get(5, TimeUnit.SECONDS)
             additionalRegistrations.get(5, TimeUnit.SECONDS)
         } finally {
-            executor.shutdownNow()
+            executor.shutdown()
         }
         assertTrue(executor.awaitTermination(5, TimeUnit.SECONDS))
         assertEquals(

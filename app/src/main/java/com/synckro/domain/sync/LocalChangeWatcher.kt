@@ -19,6 +19,8 @@ interface LocalChangeWatcher {
      *
      * [LocalChangeWatchRegistrationResult.Unavailable] means registration did not start. Once
      * registered, runtime failures are delivered to [listener] as [LocalChangeEvent.Failure].
+     * A successful call returns [LocalChangeWatchRegistrationResult.Registered]. If the watcher is
+     * shut down, [LocalChangeWatchRegistrationResult.Failed] takes precedence over its capability.
      * After [shutdown], returns [LocalChangeWatchRegistrationResult.Failed] with
      * [LocalChangeWatchFailure.Shutdown].
      *
@@ -105,9 +107,9 @@ sealed interface LocalChangeEvent {
 /**
  * A failure preventing a local change watcher from observing a pair.
  *
- * A failure event is terminal for its specific registration, but callers may register a replacement
- * when recovery is appropriate. [Shutdown] is a registration-time failure and is never emitted as
- * an event.
+ * Emitting a failure implicitly ends its specific registration, so it receives no further events.
+ * Callers may register a replacement when recovery is appropriate. [Shutdown] is a
+ * registration-time failure and is never emitted as an event.
  */
 sealed interface LocalChangeWatchFailure {
     /**
