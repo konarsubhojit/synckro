@@ -4,7 +4,10 @@ import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import androidx.work.BackoffPolicy
 import androidx.work.Configuration
+import androidx.work.ExistingWorkPolicy
 import androidx.work.NetworkType
+import androidx.work.OneTimeWorkRequest
+import androidx.work.OutOfQuotaPolicy
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.work.testing.WorkManagerTestInitHelper
@@ -284,6 +287,63 @@ class SyncSchedulerTest {
     }
 
     // -------------------------------------------------------------------------
+    // enqueueInstant / instant request
+    // -------------------------------------------------------------------------
+
+    @Test
+    fun `enqueueInstant uses instant unique name and KEEP policy`() {
+        val mockWm = mockk<WorkManager>(relaxed = true)
+        val testScheduler = SyncScheduler(mockWm)
+        val syncPair = pair(id = 104L)
+
+        testScheduler.enqueueInstant(syncPair)
+
+        verify {
+            mockWm.enqueueUniqueWork(
+                SyncWorker.instantName(syncPair.id),
+                ExistingWorkPolicy.KEEP,
+                any<OneTimeWorkRequest>(),
+            )
+        }
+    }
+
+    @Test
+    fun `enqueueInstant repeated calls keep one pending request`() {
+        val syncPair = pair(id = 105L)
+
+        scheduler.enqueueInstant(syncPair)
+        scheduler.enqueueInstant(syncPair)
+
+        val infos = workManager.getWorkInfosForUniqueWork(SyncWorker.instantName(syncPair.id)).get()
+        assertEquals(1, infos.count { it.state == WorkInfo.State.ENQUEUED })
+    }
+
+    @Test
+    fun `instant request is expedited with quota fallback and shared policy`() {
+        val syncPair = pair(id = 106L, wifiOnly = true, requiresCharging = true)
+
+        val periodic = SyncScheduler.periodicRequestFor(syncPair, SyncScheduler.MIN_PERIODIC_INTERVAL_MINUTES)
+        val expeditedConstraints = SyncScheduler.expeditedConstraintsFor(syncPair)
+        val instant = SyncScheduler.instantRequestFor(syncPair)
+
+        assertEquals(syncPair.id, instant.workSpec.input.getLong(SyncWorker.KEY_PAIR_ID, -1L))
+        assertFalse(instant.workSpec.input.getBoolean(SyncWorker.KEY_IS_PERIODIC, true))
+        assertTrue(instant.workSpec.input.getBoolean(SyncWorker.KEY_INSTANT, false))
+        assertTrue(instant.workSpec.expedited)
+        assertEquals(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST, instant.workSpec.outOfQuotaPolicy)
+        assertEquals(expeditedConstraints.requiredNetworkType, instant.workSpec.constraints.requiredNetworkType)
+        assertEquals(expeditedConstraints.requiresCharging(), instant.workSpec.constraints.requiresCharging())
+        assertEquals(expeditedConstraints.requiresBatteryNotLow(), instant.workSpec.constraints.requiresBatteryNotLow())
+        assertEquals(expeditedConstraints.requiresStorageNotLow(), instant.workSpec.constraints.requiresStorageNotLow())
+        assertTrue(periodic.workSpec.constraints.requiresCharging())
+        assertFalse(instant.workSpec.constraints.requiresCharging())
+        assertTrue(periodic.workSpec.constraints.requiresBatteryNotLow())
+        assertFalse(instant.workSpec.constraints.requiresBatteryNotLow())
+        assertEquals(periodic.workSpec.backoffPolicy, instant.workSpec.backoffPolicy)
+        assertEquals(periodic.workSpec.backoffDelayDuration, instant.workSpec.backoffDelayDuration)
+    }
+
+    // -------------------------------------------------------------------------
     // cancel
     // -------------------------------------------------------------------------
 
@@ -304,9 +364,9 @@ class SyncSchedulerTest {
     }
 
     @Test
-    fun `cancel calls cancelUniqueWork for both periodic and syncnow unique names`() {
+    fun `cancel calls cancelUniqueWork for periodic syncnow and instant unique names`() {
         // Use a mock WorkManager to directly verify that cancel() invokes cancelUniqueWork
-        // for both the periodic work name and the one-shot "sync now" work name.
+        // for periodic, one-shot "sync now", and one-shot instant unique names.
         val mockWm = mockk<WorkManager>(relaxed = true)
         val testScheduler = SyncScheduler(mockWm)
 
@@ -314,6 +374,7 @@ class SyncSchedulerTest {
 
         verify { mockWm.cancelUniqueWork(SyncWorker.uniqueName(42L)) }
         verify { mockWm.cancelUniqueWork(SyncWorker.syncNowUniqueName(42L)) }
+        verify { mockWm.cancelUniqueWork(SyncWorker.instantName(42L)) }
     }
 
     // -------------------------------------------------------------------------
