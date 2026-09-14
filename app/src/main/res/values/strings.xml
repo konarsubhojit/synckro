@@ -409,6 +409,12 @@
     <string name="sync_success_notification_child_text">%1$d files transferred</string>
     <string name="sync_success_notification_inbox_line">%1$s — %2$d files transferred</string>
 
+    <!-- Instant Sync watcher notification (shown while the watcher foreground service runs) -->
+    <string name="watcher_channel_name">Instant Sync watching</string>
+    <string name="watcher_channel_description">Shows an ongoing notification while Synckro watches your folders for new files.</string>
+    <string name="watcher_notification_title">Instant Sync is on</string>
+    <string name="watcher_notification_content">Watching your synced folders for new files.</string>
+
     <!-- Re-authentication notification (shown when a cloud account needs to be reconnected) -->
     <string name="reauth_channel_name">Account sign-in required</string>
     <string name="reauth_channel_description">Alerts when a cloud account needs to be re-authenticated to continue syncing.</string>

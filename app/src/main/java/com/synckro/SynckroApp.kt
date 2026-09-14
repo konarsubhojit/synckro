@@ -1,17 +1,23 @@
 package com.synckro
 
+import android.app.Activity
 import android.app.Application
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.os.Build
+import android.os.Bundle
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.os.LocaleListCompat
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
 import com.synckro.data.repository.AppLanguagePreference
 import com.synckro.data.repository.SettingsRepository
+import com.synckro.data.watcher.InstantSyncWatcherService
+import com.synckro.data.watcher.WatchablePairs
+import com.synckro.data.watcher.WatcherServiceController
 import com.synckro.data.worker.PendingDispatchResumer
 import com.synckro.data.worker.SyncWorker
+import com.synckro.domain.sync.WatcherLifecycleTrigger
 import com.synckro.domain.telemetry.Telemetry
 import com.synckro.providers.onedrive.OneDriveMultiAccountStartupProbe
 import com.synckro.util.logging.FileLoggingTree
@@ -21,6 +27,7 @@ import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -52,7 +59,14 @@ class SynckroApp :
 
     @Inject lateinit var telemetry: Telemetry
 
+    @Inject lateinit var watcherServiceController: WatcherServiceController
+
+    @Inject lateinit var watchablePairs: WatchablePairs
+
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    @Volatile
+    private var isAppVisible: Boolean = false
 
     override fun onCreate() {
         super.onCreate()
@@ -62,6 +76,7 @@ class SynckroApp :
         applicationScope.launch {
             oneDriveMultiAccountStartupProbe.runIfNeeded()
         }
+        observeWatcherHostLifecycle()
         applicationScope.launch {
             runCatching { pendingDispatchResumer.resume() }
                 .onFailure { Timber.w(it, "Failed to resume pending instant dispatch") }
@@ -81,6 +96,73 @@ class SynckroApp :
     }
 
     /**
+     * Keeps the Instant Sync watcher host in step with app visibility and pair configuration.
+     *
+     * The foreground transition is the only moment at which a `dataSync` foreground service may
+     * always be started, so it is also the recovery point after process death, after a reboot on
+     * Android 15+, and whenever a background start was refused. Enabling or disabling Instant Sync
+     * (globally or per pair) also re-evaluates the host, which starts it immediately while the app
+     * is visible and stops it as soon as no pair is watchable.
+     */
+    private fun observeWatcherHostLifecycle() {
+        registerActivityLifecycleCallbacks(
+            object : ActivityLifecycleCallbacks {
+                // Only mutated from the main thread; visibility for the collector below is carried
+                // by the @Volatile isAppVisible field.
+                private var startedActivities = 0
+
+                override fun onActivityStarted(activity: Activity) {
+                    startedActivities++
+                    if (startedActivities > 1) return
+                    isAppVisible = true
+                    evaluateWatcherHost(WatcherLifecycleTrigger.APP_FOREGROUND)
+                }
+
+                override fun onActivityStopped(activity: Activity) {
+                    if (startedActivities > 0) startedActivities--
+                    if (startedActivities == 0) isAppVisible = false
+                }
+
+                override fun onActivityCreated(
+                    activity: Activity,
+                    savedInstanceState: Bundle?,
+                ) = Unit
+
+                override fun onActivityResumed(activity: Activity) = Unit
+
+                override fun onActivityPaused(activity: Activity) = Unit
+
+                override fun onActivitySaveInstanceState(
+                    activity: Activity,
+                    outState: Bundle,
+                ) = Unit
+
+                override fun onActivityDestroyed(activity: Activity) = Unit
+            },
+        )
+        applicationScope.launch {
+            // The initial emission is handled by the foreground trigger; reacting to it here would
+            // attempt a background start on every cold start.
+            watchablePairs.observe().drop(1).collect {
+                evaluateWatcherHost(
+                    if (isAppVisible) {
+                        WatcherLifecycleTrigger.APP_FOREGROUND
+                    } else {
+                        WatcherLifecycleTrigger.CONFIGURATION_CHANGED
+                    },
+                )
+            }
+        }
+    }
+
+    private fun evaluateWatcherHost(trigger: WatcherLifecycleTrigger) {
+        applicationScope.launch {
+            runCatching { watcherServiceController.evaluate(trigger) }
+                .onFailure { Timber.w(it, "Failed to evaluate the watcher host for %s", trigger) }
+        }
+    }
+
+    /**
      * Creates all notification channels required by the app. Safe to call on every launch —
      * creating an already-existing channel is a no-op on API 26+.
      *
@@ -91,6 +173,7 @@ class SynckroApp :
      * | [SyncWorker.SYNC_CHANNEL_ID]      | LOW        | Foreground-service progress bar while syncing.    |
      * | [SyncStatusNotifier.SYNC_STATUS_CHANNEL_ID] | DEFAULT | Reserved for sync result notifications.           |
      * | [ReauthNotificationHelper.REAUTH_CHANNEL_ID] | HIGH | Persistent alert when a cloud account needs re-authentication. |
+     * | [InstantSyncWatcherService.WATCHER_CHANNEL_ID] | LOW | Ongoing notification while Instant Sync watchers run. |
      *
      * All channels are created here at app startup.  Channels cannot be deleted at runtime
      * (the user controls their settings in System Settings), so this is the canonical place to
@@ -136,7 +219,21 @@ class SynckroApp :
                     setShowBadge(true)
                 }
 
-            nm.createNotificationChannels(listOf(syncChannel, syncStatusChannel, reauthChannel))
+            // Instant Sync watcher channel — low importance: a silent ongoing notification that is
+            // mandatory while the dataSync foreground service hosts local-change watchers.
+            val watcherChannel =
+                NotificationChannel(
+                    InstantSyncWatcherService.WATCHER_CHANNEL_ID,
+                    getString(R.string.watcher_channel_name),
+                    NotificationManager.IMPORTANCE_LOW,
+                ).apply {
+                    description = getString(R.string.watcher_channel_description)
+                    setShowBadge(false)
+                }
+
+            nm.createNotificationChannels(
+                listOf(syncChannel, syncStatusChannel, reauthChannel, watcherChannel),
+            )
         }
     }
 
