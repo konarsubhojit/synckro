@@ -68,6 +68,52 @@ class PendingUploadDaoTest {
         }
 
     @Test
+    fun `pair scoped claim does not consume another pair queue`() =
+        runTest {
+            val firstPairId = insertPair("First Pair")
+            val secondPairId = insertPair("Second Pair")
+            pendingUploadDao.upsert(upload(firstPairId, path = "first.txt"))
+            pendingUploadDao.upsert(upload(secondPairId, path = "second.txt"))
+
+            assertEquals(
+                listOf("second.txt"),
+                pendingUploadDao
+                    .claimEligibleForPair(secondPairId, "worker", claimedAtMs = 1_000L, limit = 10)
+                    .map { it.relativePath },
+            )
+            assertEquals(
+                listOf("first.txt"),
+                pendingUploadDao
+                    .claimEligibleForPair(firstPairId, "other-worker", claimedAtMs = 1_000L, limit = 10)
+                    .map { it.relativePath },
+            )
+        }
+
+    @Test
+    fun `same work token recovers its interrupted pair claim`() =
+        runTest {
+            val pairId = insertPair()
+            pendingUploadDao.upsert(upload(pairId))
+            pendingUploadDao.claimEligibleForPair(pairId, "worker", claimedAtMs = 1_000L, limit = 1)
+
+            assertEquals(
+                1,
+                pendingUploadDao.recoverClaimsForPair(
+                    pairId = pairId,
+                    claimToken = "worker",
+                    staleBeforeMs = 0L,
+                    recoveredAtMs = 1_500L,
+                ),
+            )
+            assertEquals(
+                listOf("file.txt"),
+                pendingUploadDao
+                    .claimEligibleForPair(pairId, "worker", claimedAtMs = 1_500L, limit = 1)
+                    .map { it.relativePath },
+            )
+        }
+
+    @Test
     fun `release and stale recovery make claims eligible again`() =
         runTest {
             val pairId = insertPair()

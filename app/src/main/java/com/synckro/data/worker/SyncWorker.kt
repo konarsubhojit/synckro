@@ -6,6 +6,7 @@ import android.app.NotificationManager
 import android.content.Context
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
+import android.net.Uri
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.hilt.work.HiltWorker
@@ -27,8 +28,13 @@ import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import com.synckro.R
 import com.synckro.data.local.dao.LocalIndexDao
+import com.synckro.data.local.dao.PendingUploadDao
 import com.synckro.data.local.dao.SyncPairDao
+import com.synckro.data.local.entity.PendingUploadEntity
 import com.synckro.data.local.entity.toDomain
+import com.synckro.data.local.fs.LocalFsEnumerator
+import com.synckro.data.local.fs.TargetedLocalFileResolution
+import com.synckro.data.local.fs.TargetedLocalFileResolver
 import com.synckro.data.repository.SettingsRepository
 import com.synckro.data.repository.SyncEventRepository
 import com.synckro.domain.model.CloudProviderType
@@ -36,6 +42,7 @@ import com.synckro.domain.model.SyncEventLevel
 import com.synckro.domain.model.SyncEventTag
 import com.synckro.domain.model.SyncEventTaxonomy
 import com.synckro.domain.model.SyncPair
+import com.synckro.domain.model.allowsUpload
 import com.synckro.domain.provider.CloudProviderException
 import com.synckro.domain.provider.CloudProviderFactory
 import com.synckro.domain.sync.ActiveTransfer
@@ -56,6 +63,7 @@ import com.synckro.util.notification.ReauthNotificationHelper
 import com.synckro.util.notification.SyncStatusNotifier
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
@@ -66,6 +74,7 @@ import java.net.URLDecoder
 import java.net.URLEncoder
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import javax.inject.Inject
 import kotlin.jvm.JvmSuppressWildcards
 
 /**
@@ -93,6 +102,8 @@ class SyncWorker
         private val syncEventRepository: SyncEventRepository,
         private val syncStatusNotifier: SyncStatusNotifier,
         private val settingsRepository: SettingsRepository,
+        private val pendingUploadDao: PendingUploadDao,
+        private val instantCandidateResolver: InstantCandidateResolver,
         private val localIndexDao: LocalIndexDao? = null,
         private val telemetry: Telemetry = NoOpTelemetry(),
     ) : CoroutineWorker(appContext, params) {
@@ -138,6 +149,7 @@ class SyncWorker
         override suspend fun doWork(): Result {
             val pairId = inputData.getLong(KEY_PAIR_ID, -1L)
             val isPeriodicRun = inputData.getBoolean(KEY_IS_PERIODIC, true)
+            val isInstantRun = inputData.getBoolean(KEY_INSTANT, false)
             if (pairId < 0) {
                 Timber.w("SyncWorker enqueued without a valid %s; failing permanently.", KEY_PAIR_ID)
                 return Result.failure()
@@ -178,6 +190,13 @@ class SyncWorker
                 )
             }
 
+            val instantBatch =
+                if (isInstantRun) {
+                    prepareInstantBatch(pair) ?: return Result.success()
+                } else {
+                    null
+                }
+
             syncEventRepository.log(
                 pairId,
                 SyncEventLevel.INFO,
@@ -188,7 +207,13 @@ class SyncWorker
                 pairId,
                 SyncEventLevel.INFO,
                 SyncEventTag.INSTANT_DISPATCH,
-                SyncEventTaxonomy.dispatchEnqueued(if (isPeriodicRun) "periodic" else "manual"),
+                SyncEventTaxonomy.dispatchEnqueued(
+                    when {
+                        isInstantRun -> "instant"
+                        isPeriodicRun -> "periodic"
+                        else -> "manual"
+                    },
+                ),
             )
             Timber.i("SyncWorker.doWork: start pairId=%d attempt=%d", pairId, runAttemptCount + 1)
             applySyncTelemetryContext(pair)
@@ -297,7 +322,42 @@ class SyncWorker
 
                 val workerResult =
                     try {
-                        when (val r = engine.runOnce(pair, onSyncProgress, maxConcurrent)) {
+                        val targetedResult =
+                            instantBatch?.let {
+                                if (it.uploads.isEmpty()) {
+                                    SyncEngine.TargetedUploadResult(
+                                        result = SyncEngine.Result.Retriable("Instant candidates are temporarily unavailable"),
+                                    )
+                                } else {
+                                    engine.runTargetedUploads(
+                                        pair = pair,
+                                        relativePaths = it.uploads.map(PendingUploadEntity::relativePath),
+                                        onProgress = onSyncProgress,
+                                        maxConcurrent = maxConcurrent,
+                                    )
+                                }
+                            }
+                        if (targetedResult != null) {
+                            reconcileInstantBatch(instantBatch, targetedResult)
+                            if (instantBatch.claimedCount == INSTANT_BATCH_SIZE &&
+                                targetedResult.result is SyncEngine.Result.Success &&
+                                !instantBatch.hasDeferred
+                            ) {
+                                SyncScheduler(WorkManager.getInstance(applicationContext))
+                                    .enqueueInstantFollowUp(pair)
+                            }
+                        }
+                        val engineResult =
+                            targetedResult?.result
+                                ?.let { result ->
+                                    if (instantBatch?.hasDeferred == true && result is SyncEngine.Result.Success) {
+                                        SyncEngine.Result.Retriable("Some instant candidates are temporarily unavailable")
+                                    } else {
+                                        result
+                                    }
+                                }
+                                ?: engine.runOnce(pair, onSyncProgress, maxConcurrent)
+                        when (val r = engineResult) {
                             is SyncEngine.Result.Success -> {
                                 syncPairDao.updateLastSyncResult(pairId, System.currentTimeMillis(), RESULT_SUCCESS)
                                 syncEventRepository.log(
@@ -334,7 +394,21 @@ class SyncWorker
                                     LOG_TAG,
                                     "Sync partial failure: ${r.applied} applied, ${r.errors.size} errors — $errorSummary",
                                 )
-                                Result.success()
+                                if (isInstantRun) {
+                                    if (runAttemptCount + 1 >= MAX_RETRY_ATTEMPTS) {
+                                        handleRetriableExhaustion(
+                                            pair = pair,
+                                            pairId = pairId,
+                                            tag = LOG_TAG,
+                                            reason = errorSummary,
+                                            cancelPeriodic = false,
+                                        )
+                                    } else {
+                                        Result.retry()
+                                    }
+                                } else {
+                                    Result.success()
+                                }
                             }
                             is SyncEngine.Result.Retriable -> {
                                 if (runAttemptCount + 1 >= MAX_RETRY_ATTEMPTS) {
@@ -343,6 +417,7 @@ class SyncWorker
                                         pairId = pairId,
                                         tag = LOG_TAG,
                                         reason = r.reason,
+                                        cancelPeriodic = !isInstantRun,
                                     )
                                 } else {
                                     Timber.i(
@@ -426,6 +501,7 @@ class SyncWorker
                         foregroundJob.cancel()
                         throw c
                     } catch (e: CloudProviderException) {
+                        instantBatch?.let { releaseInstantBatch(it) }
                         // A provider escaped the engine without being mapped to a Result —
                         // run it through CloudExceptionMapper so we don't slip into an
                         // infinite Result.retry() storm on AuthenticationRequired / NotConfigured.
@@ -453,6 +529,7 @@ class SyncWorker
                                         tag = tag,
                                         reason = mapped.reason,
                                         cause = e,
+                                        cancelPeriodic = !isInstantRun,
                                     )
                                 } else {
                                     Timber.i(
@@ -489,13 +566,16 @@ class SyncWorker
                                         LOG_TAG,
                                         "Sync failed after $MAX_RETRY_ATTEMPTS attempt(s), giving up: ${e.message}",
                                     )
-                                    WorkManager.getInstance(applicationContext).cancelUniqueWork(uniqueName(pairId))
+                                    if (!isInstantRun) {
+                                        WorkManager.getInstance(applicationContext).cancelUniqueWork(uniqueName(pairId))
+                                    }
                                     Result.failure()
                                 } else {
                                     Result.retry()
                                 }
                         }
                     } catch (t: Throwable) {
+                        instantBatch?.let { releaseInstantBatch(it) }
                         if (runAttemptCount + 1 >= MAX_RETRY_ATTEMPTS) {
                             Timber.w(t, "Sync for pair %d exhausted %d attempt(s)", pairId, MAX_RETRY_ATTEMPTS)
                             syncPairDao.updateLastSyncResult(pairId, System.currentTimeMillis(), RESULT_FAILURE)
@@ -505,7 +585,9 @@ class SyncWorker
                                 LOG_TAG,
                                 "Sync failed after $MAX_RETRY_ATTEMPTS attempt(s), giving up: ${t.message}",
                             )
-                            WorkManager.getInstance(applicationContext).cancelUniqueWork(uniqueName(pairId))
+                            if (!isInstantRun) {
+                                WorkManager.getInstance(applicationContext).cancelUniqueWork(uniqueName(pairId))
+                            }
                             Result.failure()
                         } else {
                             Timber.w(t, "Sync failed for pair %d", pairId)
@@ -524,6 +606,114 @@ class SyncWorker
                 workerResult
             }
         }
+
+        private suspend fun prepareInstantBatch(pair: SyncPair): InstantBatch? {
+            if (!settingsRepository.globalAutoSyncEnabled.first() ||
+                !settingsRepository.globalInstantSyncEnabled.first() ||
+                !pair.instantSyncEnabled ||
+                pair.lastSyncResult == RESULT_NEEDS_REAUTH ||
+                pair.lastSyncResult == RESULT_NEEDS_RELINK
+            ) {
+                return null
+            }
+            val queue = pendingUploadDao
+            val candidateResolver = instantCandidateResolver
+            val claimedAtMs = System.currentTimeMillis()
+            val claimToken = id.toString()
+            queue.recoverClaimsForPair(
+                pairId = pair.id,
+                claimToken = claimToken,
+                staleBeforeMs = claimedAtMs - INSTANT_CLAIM_TIMEOUT_MS,
+                recoveredAtMs = claimedAtMs,
+            )
+            val claimed =
+                queue.claimEligibleForPair(
+                    pairId = pair.id,
+                    claimToken = claimToken,
+                    claimedAtMs = claimedAtMs,
+                    limit = INSTANT_BATCH_SIZE,
+                )
+            if (claimed.isEmpty()) return null
+
+            if (!pair.direction.allowsUpload) {
+                claimed.forEach { queue.complete(it.pairId, it.relativePath, claimToken) }
+                scheduleInstantFollowUpIfNeeded(pair, claimed.size)
+                return null
+            }
+
+            val ready = mutableListOf<PendingUploadEntity>()
+            var hasDeferred = false
+            claimed.forEach { upload ->
+                when (candidateResolver.resolve(pair, upload)) {
+                    is TargetedLocalFileResolution.Resolved -> ready += upload
+                    TargetedLocalFileResolution.Missing,
+                    TargetedLocalFileResolution.OutOfScope,
+                    -> queue.complete(upload.pairId, upload.relativePath, claimToken)
+                    is TargetedLocalFileResolution.Unavailable -> {
+                        releaseInstantUpload(queue, upload, claimToken)
+                        hasDeferred = true
+                    }
+                }
+            }
+            if (ready.isEmpty() && !hasDeferred) {
+                scheduleInstantFollowUpIfNeeded(pair, claimed.size)
+                return null
+            }
+            return InstantBatch(
+                claimToken = claimToken,
+                uploads = ready,
+                claimedCount = claimed.size,
+                hasDeferred = hasDeferred,
+            )
+        }
+
+        private suspend fun reconcileInstantBatch(
+            batch: InstantBatch,
+            result: SyncEngine.TargetedUploadResult,
+        ) {
+            val queue = pendingUploadDao
+            val completedPaths = (result.uploadedPaths + result.skippedPaths).toSet()
+            batch.uploads.forEach { upload ->
+                if (upload.relativePath in completedPaths) {
+                    queue.complete(upload.pairId, upload.relativePath, batch.claimToken)
+                } else {
+                    releaseInstantUpload(queue, upload, batch.claimToken)
+                }
+            }
+        }
+
+        private suspend fun releaseInstantBatch(batch: InstantBatch) {
+            val queue = pendingUploadDao
+            batch.uploads.forEach { releaseInstantUpload(queue, it, batch.claimToken) }
+        }
+
+        private suspend fun releaseInstantUpload(
+            queue: PendingUploadDao,
+            upload: PendingUploadEntity,
+            claimToken: String,
+        ) {
+            val nowMs = System.currentTimeMillis()
+            queue.release(
+                pairId = upload.pairId,
+                relativePath = upload.relativePath,
+                claimToken = claimToken,
+                eligibleAtMs = nowMs,
+                updatedAtMs = nowMs,
+            )
+        }
+
+        private fun scheduleInstantFollowUpIfNeeded(pair: SyncPair, claimedCount: Int) {
+            if (claimedCount == INSTANT_BATCH_SIZE) {
+                SyncScheduler(WorkManager.getInstance(applicationContext)).enqueueInstantFollowUp(pair)
+            }
+        }
+
+        private data class InstantBatch(
+            val claimToken: String,
+            val uploads: List<PendingUploadEntity>,
+            val claimedCount: Int,
+            val hasDeferred: Boolean,
+        )
 
         /**
          * Attaches structural, non-identifying custom keys to future crash
@@ -567,6 +757,7 @@ class SyncWorker
             tag: String,
             reason: String,
             cause: Throwable? = null,
+            cancelPeriodic: Boolean = true,
         ): Result {
             Timber.w(
                 cause,
@@ -594,7 +785,9 @@ class SyncWorker
                 ),
             )
             syncStatusNotifier.notifyFailure(pair, reason)
-            WorkManager.getInstance(applicationContext).cancelUniqueWork(uniqueName(pairId))
+            if (cancelPeriodic) {
+                WorkManager.getInstance(applicationContext).cancelUniqueWork(uniqueName(pairId))
+            }
             return Result.failure()
         }
 
@@ -733,6 +926,9 @@ class SyncWorker
              */
             const val MAX_RETRY_ATTEMPTS = 5
 
+            internal const val INSTANT_BATCH_SIZE = 25
+            internal const val INSTANT_CLAIM_TIMEOUT_MS = 15 * 60 * 1_000L
+
             /**
              * Initial delay for WorkManager exponential backoff (sub-issue #142).
              *
@@ -844,6 +1040,31 @@ class SyncWorker
         }
     }
 
+class InstantCandidateResolver
+    @Inject
+    constructor(
+        @ApplicationContext private val context: Context,
+        private val localIndexDao: LocalIndexDao,
+    ) {
+        internal suspend fun resolve(
+            pair: SyncPair,
+            upload: PendingUploadEntity,
+        ): TargetedLocalFileResolution =
+            TargetedLocalFileResolver(
+                resolver = context.contentResolver,
+                treeUri = Uri.parse(pair.localTreeUri),
+                localIndexDao = localIndexDao,
+            ).resolve(
+                upload = upload,
+                pathScope =
+                    LocalFsEnumerator.compilePathScope(
+                        includeGlobs = pair.includeGlobs,
+                        ignoreGlobs = pair.excludeGlobs,
+                        excludeSubfolders = pair.excludeSubfolders,
+                    ),
+            )
+    }
+
 /** Schedules [SyncWorker] as periodic work per-pair with the pair's constraints. */
 class SyncScheduler(
     private val workManager: WorkManager,
@@ -926,6 +1147,14 @@ class SyncScheduler(
         workManager.enqueueUniqueWork(
             SyncWorker.instantName(pair.id),
             ExistingWorkPolicy.KEEP,
+            instantRequestFor(pair),
+        )
+    }
+
+    internal fun enqueueInstantFollowUp(pair: SyncPair) {
+        workManager.enqueueUniqueWork(
+            SyncWorker.instantName(pair.id),
+            ExistingWorkPolicy.APPEND_OR_REPLACE,
             instantRequestFor(pair),
         )
     }

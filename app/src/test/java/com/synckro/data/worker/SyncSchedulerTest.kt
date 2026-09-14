@@ -319,6 +319,23 @@ class SyncSchedulerTest {
     }
 
     @Test
+    fun `instant follow-up appends to the current unique chain`() {
+        val mockWm = mockk<WorkManager>(relaxed = true)
+        val testScheduler = SyncScheduler(mockWm)
+        val syncPair = pair(id = 107L)
+
+        testScheduler.enqueueInstantFollowUp(syncPair)
+
+        verify {
+            mockWm.enqueueUniqueWork(
+                SyncWorker.instantName(syncPair.id),
+                ExistingWorkPolicy.APPEND_OR_REPLACE,
+                any<OneTimeWorkRequest>(),
+            )
+        }
+    }
+
+    @Test
     fun `instant request is expedited with quota fallback and shared policy`() {
         val syncPair = pair(id = 106L, wifiOnly = true, requiresCharging = true)
 

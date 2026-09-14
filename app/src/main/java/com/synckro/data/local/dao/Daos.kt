@@ -815,6 +815,34 @@ interface PendingUploadDao {
     }
 
     @Query(
+        "UPDATE pending_upload SET state = :claimedState, claimToken = :claimToken, " +
+            "claimedAtMs = :claimedAtMs, updatedAtMs = :claimedAtMs " +
+            "WHERE rowid IN (SELECT rowid FROM pending_upload " +
+            "WHERE pairId = :pairId AND state = :pendingState AND eligibleAtMs <= :claimedAtMs " +
+            "ORDER BY eligibleAtMs ASC, createdAtMs ASC LIMIT :limit)",
+    )
+    suspend fun claimEligibleRowsForPair(
+        pairId: Long,
+        claimToken: String,
+        claimedAtMs: Long,
+        limit: Int,
+        pendingState: PendingUploadState = PendingUploadState.PENDING,
+        claimedState: PendingUploadState = PendingUploadState.CLAIMED,
+    ): Int
+
+    /** Claims and returns at most [limit] eligible rows for [pairId]. */
+    @Transaction
+    suspend fun claimEligibleForPair(
+        pairId: Long,
+        claimToken: String,
+        claimedAtMs: Long,
+        limit: Int,
+    ): List<PendingUploadEntity> {
+        claimEligibleRowsForPair(pairId, claimToken, claimedAtMs, limit)
+        return getClaimedByToken(claimToken, claimedAtMs)
+    }
+
+    @Query(
         "DELETE FROM pending_upload WHERE pairId = :pairId AND relativePath = :relativePath " +
             "AND state = :claimedState AND claimToken = :claimToken",
     )
@@ -847,6 +875,21 @@ interface PendingUploadDao {
             "WHERE state = :claimedState AND claimedAtMs <= :staleBeforeMs",
     )
     suspend fun recoverStaleClaims(
+        staleBeforeMs: Long,
+        recoveredAtMs: Long,
+        pendingState: PendingUploadState = PendingUploadState.PENDING,
+        claimedState: PendingUploadState = PendingUploadState.CLAIMED,
+    ): Int
+
+    @Query(
+        "UPDATE pending_upload SET state = :pendingState, claimToken = NULL, claimedAtMs = NULL, " +
+            "eligibleAtMs = :recoveredAtMs, updatedAtMs = :recoveredAtMs " +
+            "WHERE pairId = :pairId AND state = :claimedState AND " +
+            "(claimToken = :claimToken OR claimedAtMs <= :staleBeforeMs)",
+    )
+    suspend fun recoverClaimsForPair(
+        pairId: Long,
+        claimToken: String,
         staleBeforeMs: Long,
         recoveredAtMs: Long,
         pendingState: PendingUploadState = PendingUploadState.PENDING,
