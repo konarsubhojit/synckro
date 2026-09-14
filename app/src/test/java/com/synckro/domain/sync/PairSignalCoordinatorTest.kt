@@ -17,20 +17,20 @@ class PairSignalCoordinatorTest {
     fun `burst emits once after the trailing quiet period`() =
         runTest(dispatcher) {
             val coordinator = PairSignalCoordinator(this)
-            val dispatched = mutableListOf<Long>()
+            val callbacks = mutableListOf<String>()
 
-            coordinator.signal(1L, dispatched::add)
+            coordinator.signal(1L) { callbacks += "first" }
             advanceTimeBy(PairSignalCoordinator.DEFAULT_DEBOUNCE_MS - 1_000L)
-            coordinator.signal(1L, dispatched::add)
+            coordinator.signal(1L) { callbacks += "latest" }
             runCurrent()
 
             advanceTimeBy(PairSignalCoordinator.DEFAULT_DEBOUNCE_MS - 1L)
             runCurrent()
-            assertTrue(dispatched.isEmpty())
+            assertTrue(callbacks.isEmpty())
 
             advanceTimeBy(1L)
             runCurrent()
-            assertEquals(listOf(1L), dispatched)
+            assertEquals(listOf("latest"), callbacks)
         }
 
     @Test
@@ -58,9 +58,13 @@ class PairSignalCoordinatorTest {
             val durableRows = mutableSetOf(1L, 2L)
             val firstCoordinator = PairSignalCoordinator(this)
             val dispatchedPairs = mutableListOf<Long>()
+            val dispatch: suspend (Long) -> Unit = {
+                durableRows.remove(it)
+                dispatchedPairs += it
+            }
 
-            firstCoordinator.signal(1L, dispatchedPairs::add)
-            firstCoordinator.signal(2L, dispatchedPairs::add)
+            firstCoordinator.signal(1L, dispatch)
+            firstCoordinator.signal(2L, dispatch)
             advanceTimeBy(1_000L)
             firstCoordinator.cancelPendingSignals()
             advanceTimeBy(PairSignalCoordinator.DEFAULT_DEBOUNCE_MS)
@@ -70,12 +74,12 @@ class PairSignalCoordinatorTest {
             assertEquals(setOf(1L, 2L), durableRows)
 
             val restartedCoordinator = PairSignalCoordinator(this)
-            restartedCoordinator.signal(1L, dispatchedPairs::add)
-            restartedCoordinator.signal(2L, dispatchedPairs::add)
+            restartedCoordinator.signal(1L, dispatch)
+            restartedCoordinator.signal(2L, dispatch)
             advanceTimeBy(PairSignalCoordinator.DEFAULT_DEBOUNCE_MS)
             runCurrent()
 
             assertEquals(listOf(1L, 2L), dispatchedPairs)
-            assertEquals(setOf(1L, 2L), durableRows)
+            assertTrue(durableRows.isEmpty())
         }
 }
