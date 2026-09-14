@@ -10,8 +10,9 @@ import com.synckro.domain.sync.InstantSyncEligibilityPolicy
 import com.synckro.domain.sync.PairSignalCoordinator
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import timber.log.Timber
-import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -46,7 +47,8 @@ class PendingDispatchResumer
         private val pairSignalCoordinator: PairSignalCoordinator,
         private val syncScheduler: SyncScheduler,
     ) {
-        private val resumed = AtomicBoolean(false)
+        private val resumeMutex = Mutex()
+        private var resumed = false
 
         /**
          * Re-arms dispatch for every pair that still has eligible pending rows.
@@ -54,17 +56,15 @@ class PendingDispatchResumer
          * @param nowMs Clock reading used for claim recovery and eligibility, injectable for tests.
          */
         suspend fun resume(nowMs: Long = System.currentTimeMillis()) {
-            if (!resumed.compareAndSet(false, true)) {
-                Timber.d("PendingDispatchResumer.resume() already ran for this process; skipping")
-                return
-            }
-            try {
-                resumeQueue(nowMs)
-            } catch (t: Throwable) {
-                // Allow a later startup callback to retry so a transient failure cannot
+            resumeMutex.withLock {
+                if (resumed) {
+                    Timber.d("PendingDispatchResumer.resume() already ran for this process; skipping")
+                    return
+                }
+                // The flag is only set after a successful pass so a transient failure cannot
                 // strand the durable queue for the rest of the process lifetime.
-                resumed.set(false)
-                throw t
+                resumeQueue(nowMs)
+                resumed = true
             }
         }
 

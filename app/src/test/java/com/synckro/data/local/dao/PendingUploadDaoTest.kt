@@ -153,7 +153,7 @@ class PendingUploadDaoTest {
 
             assertEquals(listOf(readyPairId), pendingUploadDao.pairIdsWithEligibleRows(nowMs = 1_000L))
 
-            pendingUploadDao.recoverStaleClaims(staleBeforeMs = 200L, recoveredAtMs = 300L)
+            pendingUploadDao.recoverStaleClaims(staleBeforeMs = 250L, recoveredAtMs = 300L)
 
             assertEquals(
                 listOf(claimedPairId, readyPairId),

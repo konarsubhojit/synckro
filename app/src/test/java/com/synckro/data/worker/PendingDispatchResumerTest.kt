@@ -18,12 +18,11 @@ import io.mockk.verify
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.flowOf
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
-import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -136,9 +135,9 @@ class PendingDispatchResumerTest {
             } throws IllegalStateException("database unavailable") andThen 0
             val resumer = resumer(CoroutineScope(this.coroutineContext))
 
-            assertThrows(IllegalStateException::class.java) {
-                runBlocking { resumer.resume(nowMs = NOW_MS) }
-            }
+            val failure =
+                runCatching { resumer.resume(nowMs = NOW_MS) }.exceptionOrNull()
+            assertTrue(failure is IllegalStateException)
             resumer.resume(nowMs = NOW_MS)
             advanceTimeBy(PairSignalCoordinator.DEFAULT_DEBOUNCE_MS)
             runCurrent()
