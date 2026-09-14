@@ -38,10 +38,12 @@ class SyncOpApplierUploadMutationTest {
      * In-memory [LocalFileAccess] that reports a different size/mtime after the file has
      * been read once, simulating a writer that mutates the file mid-upload.
      */
+    private enum class PostRead { UNCHANGED, MUTATED, REMOVED }
+
     private class MutatingLocalFileAccess(
         private val path: String,
         private val bytes: ByteArray,
-        private val mutateOnRead: Boolean,
+        private val postRead: PostRead,
     ) : LocalFileAccess {
         private var read = false
 
@@ -61,10 +63,11 @@ class SyncOpApplierUploadMutationTest {
 
         override fun stat(relativePath: String): LocalFileStat? {
             if (relativePath != path) return null
-            return if (read && mutateOnRead) {
-                LocalFileStat(sizeBytes = bytes.size + 7L, mtimeMs = 9_000L)
-            } else {
-                LocalFileStat(sizeBytes = bytes.size.toLong(), mtimeMs = 5_000L)
+            if (!read) return LocalFileStat(sizeBytes = bytes.size.toLong(), mtimeMs = 5_000L)
+            return when (postRead) {
+                PostRead.UNCHANGED -> LocalFileStat(sizeBytes = bytes.size.toLong(), mtimeMs = 5_000L)
+                PostRead.MUTATED -> LocalFileStat(sizeBytes = bytes.size + 7L, mtimeMs = 9_000L)
+                PostRead.REMOVED -> null
             }
         }
     }
@@ -108,7 +111,7 @@ class SyncOpApplierUploadMutationTest {
     @Test
     fun `UploadNew whose source mutates is not applied and the orphan remote is deleted`() =
         runTest {
-            val fs = MutatingLocalFileAccess("file.txt", "hello".toByteArray(), mutateOnRead = true)
+            val fs = MutatingLocalFileAccess("file.txt", "hello".toByteArray(), postRead = PostRead.MUTATED)
 
             val result =
                 applier(fs).apply(
@@ -132,7 +135,7 @@ class SyncOpApplierUploadMutationTest {
     @Test
     fun `UploadNew cleanup failure is logged and keeps the remote linkage recoverable`() =
         runTest {
-            val fs = MutatingLocalFileAccess("file.txt", "hello".toByteArray(), mutateOnRead = true)
+            val fs = MutatingLocalFileAccess("file.txt", "hello".toByteArray(), postRead = PostRead.MUTATED)
             val failingProvider = spyk(provider)
             coEvery { failingProvider.delete(any()) } throws IOException("delete failed")
 
@@ -148,8 +151,10 @@ class SyncOpApplierUploadMutationTest {
             assertEquals(listOf("file.txt"), result.failedPaths)
             val entry = slot<LocalIndexEntity>()
             coVerify(exactly = 1) { localIndexDao.upsert(capture(entry)) }
-            // The orphan stays linked so the retry updates it instead of uploading a duplicate.
+            // The orphan stays linked so the retry updates it instead of uploading a duplicate,
+            // while the impossible local mtime keeps the row from ever looking synced.
             assertEquals(provider.list("root").single().id, entry.captured.remoteId)
+            assertEquals(-1L, entry.captured.mtimeMs)
             assertEquals(null, entry.captured.contentHash)
             coVerify(exactly = 0) { localIndexDao.upsertSyncedRemoteState(any()) }
             coVerify {
@@ -181,7 +186,7 @@ class SyncOpApplierUploadMutationTest {
                     remoteMtimeMs = remote.lastModifiedMs,
                     remoteEtag = remote.eTag,
                 )
-            val fs = MutatingLocalFileAccess("file.txt", bytes, mutateOnRead = true)
+            val fs = MutatingLocalFileAccess("file.txt", bytes, postRead = PostRead.MUTATED)
 
             val result =
                 applier(fs).apply(
@@ -206,9 +211,28 @@ class SyncOpApplierUploadMutationTest {
         }
 
     @Test
+    fun `UploadNew whose source is removed mid-flight is cleaned up and reported as removed`() =
+        runTest {
+            val fs = MutatingLocalFileAccess("file.txt", "hello".toByteArray(), postRead = PostRead.REMOVED)
+
+            val result =
+                applier(fs).apply(
+                    ops = listOf(SyncOp.UploadNew("file.txt")),
+                    pair = pair(),
+                    remoteFilesByPath = emptyMap(),
+                    localIndexByPath = emptyMap(),
+                )
+
+            assertEquals(0, result.applied)
+            assertTrue(result.errors.single().contains("removed_during_upload"))
+            assertTrue(provider.list("root").isEmpty())
+            coVerify(exactly = 0) { localIndexDao.upsertSyncedRemoteState(any()) }
+        }
+
+    @Test
     fun `unchanged upload completes once`() =
         runTest {
-            val fs = MutatingLocalFileAccess("file.txt", "hello".toByteArray(), mutateOnRead = false)
+            val fs = MutatingLocalFileAccess("file.txt", "hello".toByteArray(), postRead = PostRead.UNCHANGED)
 
             val result =
                 applier(fs).apply(

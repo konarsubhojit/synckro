@@ -1152,9 +1152,13 @@ class SyncOpApplier(
         ) {
             cleanUpMutatedUpload(pair, cleanupMutation)
             throw LocalFileChangedDuringUploadException(
-                "Local file changed during upload: $relativePath " +
-                    "expectedSize=${uploadedStat.sizeBytes} actualSize=${currentStat?.sizeBytes} " +
-                    "expectedMtime=${uploadedStat.mtimeMs} actualMtime=${currentStat?.mtimeMs}",
+                if (currentStat == null) {
+                    "Local file removed during upload: $relativePath"
+                } else {
+                    "Local file changed during upload: $relativePath " +
+                        "expectedSize=${uploadedStat.sizeBytes} actualSize=${currentStat.sizeBytes} " +
+                        "expectedMtime=${uploadedStat.mtimeMs} actualMtime=${currentStat.mtimeMs}"
+                },
             )
         }
         localIndexDao.upsertSyncedRemoteState(entry)
@@ -1199,10 +1203,10 @@ class SyncOpApplier(
     /**
      * Deletes a freshly created remote object whose local source mutated during the upload.
      *
-     * If the delete fails the orphan cannot simply be forgotten: [fallbackEntry] records the
-     * remote linkage (without marking the mutated local file as synced) so the retry updates
-     * that same remote object instead of uploading a duplicate, and the failure is rethrown so
-     * the caller can log it.
+     * If the delete fails the orphan cannot simply be forgotten: the remote linkage from
+     * [fallbackEntry] is recorded with an impossible local mtime, so the row can never be
+     * mistaken for a synced state and the retry updates that same remote object instead of
+     * uploading a duplicate. The failure is rethrown so the caller can log it.
      */
     private suspend fun discardUploadedRemote(
         remoteId: String,
@@ -1213,7 +1217,7 @@ class SyncOpApplier(
         } catch (c: CancellationException) {
             throw c
         } catch (t: Throwable) {
-            localIndexDao.upsert(fallbackEntry)
+            localIndexDao.upsert(fallbackEntry.copy(mtimeMs = UNSYNCED_MTIME_MS, contentHash = null))
             throw t
         }
     }
@@ -1418,6 +1422,13 @@ class SyncOpApplier(
 
     private companion object {
         const val TAG = "SyncOpApplier"
+
+        /**
+         * Local mtime written when an upload could neither be acknowledged nor cleaned up.
+         * No real file reports a negative timestamp, so the row always compares as dirty
+         * and the next run re-uploads it against the recorded remote ID.
+         */
+        const val UNSYNCED_MTIME_MS = -1L
 
         /** Emit in-flight byte updates at most once per 64 KiB read to cap callback churn. */
         const val REPORT_INTERVAL_BYTES = 64L * 1024L
