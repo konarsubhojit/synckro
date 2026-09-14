@@ -223,9 +223,14 @@ class SyncWorker
                         launch {
                             while (true) {
                                 delay(LEASE_HEARTBEAT_INTERVAL_MS)
+                                // A failed heartbeat write is treated as still-owned: a transient
+                                // database error must not abort an otherwise healthy sync pass.
+                                // Ownership then simply relies on the next heartbeat, or expires.
                                 val renewed =
                                     runCatching {
                                         pairRunLeaseDao.renew(pairId, leaseToken, System.currentTimeMillis())
+                                    }.onFailure {
+                                        Timber.w(it, "SyncWorker: run-lease heartbeat failed for pair %d.", pairId)
                                     }.getOrDefault(1)
                                 if (renewed == 0) {
                                     // Another run took the lease over (this one looked stale);
@@ -267,13 +272,12 @@ class SyncWorker
         ): Result {
             val holderKind = runCatching { pairRunLeaseDao.get(pairId)?.ownerKind }.getOrNull() ?: "unknown"
             val givingUp = runAttemptCount + 1 >= MAX_RETRY_ATTEMPTS
-            Timber.i(
-                "SyncWorker: pair %d is already owned by a %s run; %s %s run.",
-                pairId,
-                holderKind,
-                if (givingUp) "dropping" else "deferring",
-                runKind,
-            )
+            val busyMessage = "SyncWorker: pair %d is already owned by a %s run; %s %s run."
+            if (givingUp) {
+                Timber.w(busyMessage, pairId, holderKind, "dropping", runKind)
+            } else {
+                Timber.i(busyMessage, pairId, holderKind, "deferring", runKind)
+            }
             syncEventRepository.logRateLimited(
                 pairId,
                 if (givingUp) SyncEventLevel.WARN else SyncEventLevel.INFO,
