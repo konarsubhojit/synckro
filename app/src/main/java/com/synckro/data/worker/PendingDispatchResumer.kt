@@ -31,7 +31,8 @@ import javax.inject.Singleton
  * unlinked account, re-auth or re-link required) keep their rows queued and undispatched;
  * they are picked up once the blocking condition is resolved and the pair is signalled again.
  *
- * [resume] performs its work at most once per process, so repeated startup callbacks are safe.
+ * [resume] completes its work at most once successfully per process, so repeated startup
+ * callbacks are safe; a failed attempt rethrows and can be retried by a later callback.
  */
 @Singleton
 class PendingDispatchResumer
