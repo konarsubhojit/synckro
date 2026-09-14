@@ -12,7 +12,7 @@ import com.synckro.domain.model.CloudProviderType
 import com.synckro.domain.model.ConflictPolicy
 import com.synckro.domain.model.SyncDirection
 import com.synckro.domain.model.SyncPair
-import com.synckro.domain.sync.LocalChangeWatcher
+import com.synckro.domain.sync.LocalChangeWatcherRefresher
 import com.synckro.util.StringProvider
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -46,7 +46,7 @@ class PairEditorViewModelTest {
     private lateinit var mockAccountRepository: AccountRepository
     private lateinit var mockSettingsRepository: SettingsRepository
     private lateinit var mockAccessChecker: LocalFolderAccessChecker
-    private lateinit var mockLocalChangeWatcher: LocalChangeWatcher
+    private lateinit var mockLocalChangeWatcherRefresher: LocalChangeWatcherRefresher
 
     @Before
     fun setUp() {
@@ -91,7 +91,7 @@ class PairEditorViewModelTest {
             mockk {
                 every { hasReadWriteAccess(any()) } returns true
             }
-        mockLocalChangeWatcher = mockk(relaxed = true)
+        mockLocalChangeWatcherRefresher = mockk(relaxed = true)
     }
 
     @After
@@ -109,7 +109,7 @@ class PairEditorViewModelTest {
             accountRepository = mockAccountRepository,
             settingsRepository = mockSettingsRepository,
             localFolderAccessChecker = mockAccessChecker,
-            localChangeWatcher = mockLocalChangeWatcher,
+            localChangeWatcherRefresher = mockLocalChangeWatcherRefresher,
         )
 
     /**
@@ -137,7 +137,7 @@ class PairEditorViewModelTest {
             accountRepository = mockAccountRepository,
             settingsRepository = mockSettingsRepository,
             localFolderAccessChecker = mockAccessChecker,
-            localChangeWatcher = mockLocalChangeWatcher,
+            localChangeWatcherRefresher = mockLocalChangeWatcherRefresher,
         )
 
     // -------------------------------------------------------------------------
@@ -537,7 +537,7 @@ class PairEditorViewModelTest {
                     match { it.instantSyncEnabled },
                 )
             }
-            io.mockk.verify { mockLocalChangeWatcher.refresh(42L) }
+            coVerify { mockLocalChangeWatcherRefresher.refresh(42L) }
             io.mockk.verify(exactly = 0) { mockSyncScheduler.cancelInstant(any()) }
         }
 
@@ -660,7 +660,7 @@ class PairEditorViewModelTest {
                     accountRepository = mockAccountRepository,
                     settingsRepository = mockSettingsRepository,
                     localFolderAccessChecker = mockAccessChecker,
-                    localChangeWatcher = mockLocalChangeWatcher,
+                    localChangeWatcherRefresher = mockLocalChangeWatcherRefresher,
                 )
             advanceUntilIdle()
 
@@ -698,7 +698,7 @@ class PairEditorViewModelTest {
                     accountRepository = mockAccountRepository,
                     settingsRepository = mockSettingsRepository,
                     localFolderAccessChecker = mockAccessChecker,
-                    localChangeWatcher = mockLocalChangeWatcher,
+                    localChangeWatcherRefresher = mockLocalChangeWatcherRefresher,
                 )
             advanceUntilIdle()
 

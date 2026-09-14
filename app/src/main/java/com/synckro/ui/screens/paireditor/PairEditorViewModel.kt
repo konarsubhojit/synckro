@@ -20,7 +20,7 @@ import com.synckro.domain.model.SyncEventTag
 import com.synckro.domain.model.SyncPair
 import com.synckro.domain.model.allowsUpload
 import com.synckro.domain.model.isDestructive
-import com.synckro.domain.sync.LocalChangeWatcher
+import com.synckro.domain.sync.LocalChangeWatcherRefresher
 import com.synckro.domain.telemetry.NoOpTelemetry
 import com.synckro.domain.telemetry.Telemetry
 import com.synckro.domain.telemetry.TelemetryEvents
@@ -213,7 +213,7 @@ class PairEditorViewModel
         private val accountRepository: AccountRepository,
         private val settingsRepository: SettingsRepository,
         private val localFolderAccessChecker: LocalFolderAccessChecker,
-        private val localChangeWatcher: LocalChangeWatcher,
+        private val localChangeWatcherRefresher: LocalChangeWatcherRefresher,
         private val telemetry: Telemetry = NoOpTelemetry(),
     ) : ViewModel() {
         private val pairId: Long = savedStateHandle.get<Long>("pairId") ?: 0L
@@ -938,7 +938,7 @@ class PairEditorViewModel
                             localStorageLimitBytes = s.resolvedStorageLimitBytes,
                         )
                     val savedId = syncPairRepository.upsert(pair)
-                    runCatching { localChangeWatcher.refresh(savedId) }
+                    runCatching { localChangeWatcherRefresher.refresh(savedId) }
                         .onFailure { Timber.w(it, "PairEditorViewModel.save: watcher refresh failed for pair id=$savedId") }
                     // Schedule or cancel depending on both the global setting and
                     // the pair's own autoSyncEnabled flag.

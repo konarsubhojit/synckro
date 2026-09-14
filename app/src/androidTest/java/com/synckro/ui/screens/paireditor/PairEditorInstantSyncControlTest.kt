@@ -17,6 +17,8 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
+import com.synckro.R
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -28,6 +30,7 @@ class PairEditorInstantSyncControlTest {
 
     @Test
     fun enabledControl_exposesSwitchSemanticsAndToggles() {
+        val title = targetString(R.string.pair_editor_instant_sync)
         var checked by mutableStateOf(false)
         composeRule.setContent {
             MaterialTheme {
@@ -40,7 +43,7 @@ class PairEditorInstantSyncControlTest {
             }
         }
 
-        val control = composeRule.onNodeWithText("Instant Sync")
+        val control = composeRule.onNodeWithText(title)
         control
             .assertIsEnabled()
             .assertHasClickAction()
@@ -52,6 +55,8 @@ class PairEditorInstantSyncControlTest {
 
     @Test
     fun ineligibleControl_isDisabledAndExplainsWhy() {
+        val title = targetString(R.string.pair_editor_instant_sync)
+        val reason = targetString(R.string.pair_editor_instant_sync_requires_upload)
         composeRule.setContent {
             MaterialTheme {
                 InstantSyncControl(
@@ -64,9 +69,15 @@ class PairEditorInstantSyncControlTest {
         }
 
         composeRule
-            .onNodeWithText("Instant Sync")
+            .onNodeWithText(title)
             .assertIsNotEnabled()
             .assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Switch))
-        composeRule.onNodeWithText("Choose a sync direction that uploads to the cloud to use Instant Sync.").assertExists()
+        composeRule.onNodeWithText(reason).assertExists()
     }
+
+    private fun targetString(id: Int): String =
+        InstrumentationRegistry
+            .getInstrumentation()
+            .targetContext
+            .getString(id)
 }

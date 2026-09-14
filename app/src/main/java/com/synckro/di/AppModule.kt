@@ -31,6 +31,7 @@ import com.synckro.domain.model.CloudProviderType
 import com.synckro.domain.provider.CloudProviderFactory
 import com.synckro.domain.scan.LocalFolderScanner
 import com.synckro.domain.sync.LocalChangeWatcher
+import com.synckro.domain.sync.LocalChangeWatcherRefresher
 import com.synckro.domain.sync.RemoteEnumerator
 import com.synckro.domain.sync.SyncEngine
 import com.synckro.domain.telemetry.Telemetry
@@ -241,16 +242,22 @@ object AppModule {
     ): LocalFolderAccessChecker = impl
 
     @Provides @Singleton
-    fun provideLocalChangeWatcher(
+    fun provideSafContentObserverWatcher(
         @ApplicationContext context: Context,
         syncPairDao: SyncPairDao,
         localFolderAccessChecker: LocalFolderAccessChecker,
-    ): LocalChangeWatcher =
+    ): SafContentObserverWatcher =
         SafContentObserverWatcher(
             syncPairDao = syncPairDao,
             localFolderAccessChecker = localFolderAccessChecker,
             observerRegistry = ContentResolverContentObserverRegistry(context.contentResolver),
         )
+
+    @Provides
+    fun provideLocalChangeWatcher(impl: SafContentObserverWatcher): LocalChangeWatcher = impl
+
+    @Provides
+    fun provideLocalChangeWatcherRefresher(impl: SafContentObserverWatcher): LocalChangeWatcherRefresher = impl
 
     /**
      * Provides the shared [OkHttpClient] used by all network components (OneDrive Graph API, …).

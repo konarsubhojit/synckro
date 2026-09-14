@@ -15,6 +15,7 @@ import com.synckro.domain.sync.LocalChangeWatchRegistrationResult
 import com.synckro.domain.sync.LocalChangeWatcher
 import com.synckro.domain.sync.LocalChangeWatcherCapability
 import com.synckro.domain.sync.LocalChangeWatcherFallback
+import com.synckro.domain.sync.LocalChangeWatcherRefresher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 
@@ -26,7 +27,8 @@ class SafContentObserverWatcher(
     private val localFolderAccessChecker: LocalFolderAccessChecker,
     private val observerRegistry: ContentObserverRegistry,
     private val observerHandler: Handler = Handler(Looper.getMainLooper()),
-) : LocalChangeWatcher {
+) : LocalChangeWatcher,
+    LocalChangeWatcherRefresher {
     override val capability: LocalChangeWatcherCapability = LocalChangeWatcherCapability.Available
 
     private val lock = Any()
@@ -97,11 +99,8 @@ class SafContentObserverWatcher(
         )
     }
 
-    override fun refresh(pairId: Long) {
-        val pair =
-            runBlocking(Dispatchers.IO) {
-                syncPairDao.getById(pairId)
-            }
+    override suspend fun refresh(pairId: Long) {
+        val pair = syncPairDao.getById(pairId)
         synchronized(lock) {
             val registration = registrationsByPairId[pairId] ?: return
             if (pair == null ||
