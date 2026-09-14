@@ -76,6 +76,7 @@ sealed interface FileStabilityResult {
 
 enum class FileStabilityDeferralReason {
     UNKNOWN_METADATA,
+    INCOMPLETE_METADATA,
     METADATA_READ_FAILED,
     CHANGED_DURING_QUIET_PERIOD,
     OPENABILITY_PROBE_FAILED,
@@ -88,16 +89,22 @@ class QuietPeriodFileStabilityDetector<T>(
 ) : FileStabilityDetector<T> {
     override suspend fun awaitStable(target: T): FileStabilityResult {
         val initial =
-            readComparableMetadata(target).getOrElse {
-                return metadataReadFailed()
-            } ?: return unknownMetadata()
+            when (val metadata = readComparableMetadata(target)) {
+                is MetadataReadOutcome.Available -> metadata.value
+                MetadataReadOutcome.Incomplete -> return incompleteMetadata()
+                MetadataReadOutcome.ReadFailed -> return metadataReadFailed()
+                MetadataReadOutcome.Unavailable -> return unknownMetadata()
+            }
         var previous = initial
         repeat(config.quietIntervals) {
             delay(config.pollIntervalMs)
             val current =
-                readComparableMetadata(target).getOrElse {
-                    return metadataReadFailed()
-                } ?: return unknownMetadata()
+                when (val metadata = readComparableMetadata(target)) {
+                    is MetadataReadOutcome.Available -> metadata.value
+                    MetadataReadOutcome.Incomplete -> return incompleteMetadata()
+                    MetadataReadOutcome.ReadFailed -> return metadataReadFailed()
+                    MetadataReadOutcome.Unavailable -> return unknownMetadata()
+                }
             if (current != previous) {
                 return FileStabilityResult.Deferred(
                     FileStabilityDeferralReason.CHANGED_DURING_QUIET_PERIOD,
@@ -112,13 +119,15 @@ class QuietPeriodFileStabilityDetector<T>(
         }
     }
 
-    private suspend fun readComparableMetadata(target: T): Result<ComparableFileMetadata?> =
+    private suspend fun readComparableMetadata(target: T): MetadataReadOutcome =
         try {
-            Result.success(metadataReader.readMetadata(target)?.toComparable())
+            val metadata = metadataReader.readMetadata(target) ?: return MetadataReadOutcome.Unavailable
+            val comparable = metadata.toComparable() ?: return MetadataReadOutcome.Incomplete
+            MetadataReadOutcome.Available(comparable)
         } catch (exception: CancellationException) {
             throw exception
-        } catch (exception: Exception) {
-            Result.failure(exception)
+        } catch (_: Exception) {
+            MetadataReadOutcome.ReadFailed
         }
 
     private suspend fun probeOpenable(target: T): Boolean =
@@ -139,8 +148,23 @@ class QuietPeriodFileStabilityDetector<T>(
     private fun unknownMetadata(): FileStabilityResult =
         FileStabilityResult.Deferred(FileStabilityDeferralReason.UNKNOWN_METADATA)
 
+    private fun incompleteMetadata(): FileStabilityResult =
+        FileStabilityResult.Deferred(FileStabilityDeferralReason.INCOMPLETE_METADATA)
+
     private fun metadataReadFailed(): FileStabilityResult =
         FileStabilityResult.Deferred(FileStabilityDeferralReason.METADATA_READ_FAILED)
+
+    private sealed interface MetadataReadOutcome {
+        data class Available(
+            val value: ComparableFileMetadata,
+        ) : MetadataReadOutcome
+
+        data object Unavailable : MetadataReadOutcome
+
+        data object Incomplete : MetadataReadOutcome
+
+        data object ReadFailed : MetadataReadOutcome
+    }
 
     private data class ComparableFileMetadata(
         val sizeBytes: Long,

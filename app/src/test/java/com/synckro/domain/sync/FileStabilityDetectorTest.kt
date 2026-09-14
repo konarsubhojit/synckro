@@ -64,12 +64,12 @@ class FileStabilityDetectorTest {
                 QuietPeriodFileStabilityDetector(
                     metadataReader = metadataReader,
                     openabilityProbe = RecordingOpenabilityProbe(canOpen = true),
-                    config = FileStabilityConfig(quietIntervals = 3, pollIntervalMs = 25),
+                    config = CUSTOM_CONFIG,
                 )
 
             val result = async { detector.awaitStable(FILE_ID) }
             runCurrent()
-            advanceTimeBy(74)
+            advanceTimeBy(CUSTOM_CONFIG.pollIntervalMs * CUSTOM_CONFIG.quietIntervals - 1)
             runCurrent()
             assertFalse(result.isCompleted)
 
@@ -161,7 +161,24 @@ class FileStabilityDetectorTest {
         }
 
     @Test
-    fun `unknown metadata defers without openability probe`() =
+    fun `unavailable metadata defers without openability probe`() =
+        runTest {
+            val openabilityProbe = RecordingOpenabilityProbe(canOpen = true)
+            val detector =
+                QuietPeriodFileStabilityDetector(
+                    metadataReader = SequenceMetadataReader(null),
+                    openabilityProbe = openabilityProbe,
+                )
+
+            assertEquals(
+                FileStabilityResult.Deferred(FileStabilityDeferralReason.UNKNOWN_METADATA),
+                detector.awaitStable(FILE_ID),
+            )
+            assertEquals(0, openabilityProbe.calls)
+        }
+
+    @Test
+    fun `incomplete metadata defers without openability probe`() =
         runTest {
             val openabilityProbe = RecordingOpenabilityProbe(canOpen = true)
             val detector =
@@ -171,7 +188,7 @@ class FileStabilityDetectorTest {
                 )
 
             assertEquals(
-                FileStabilityResult.Deferred(FileStabilityDeferralReason.UNKNOWN_METADATA),
+                FileStabilityResult.Deferred(FileStabilityDeferralReason.INCOMPLETE_METADATA),
                 detector.awaitStable(FILE_ID),
             )
             assertEquals(0, openabilityProbe.calls)
@@ -290,5 +307,6 @@ class FileStabilityDetectorTest {
 
     private companion object {
         const val FILE_ID = "local-file"
+        val CUSTOM_CONFIG = FileStabilityConfig(quietIntervals = 3, pollIntervalMs = 25)
     }
 }
