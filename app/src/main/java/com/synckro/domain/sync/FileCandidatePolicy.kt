@@ -39,12 +39,13 @@ object FileCandidatePolicy {
         }
     }
 
+    // Keep .pending-* explicit so it receives the temporary-name reason before the hidden fallback.
     private fun String.hasTemporaryName(): Boolean =
         endsWith(".part", ignoreCase = true) ||
             endsWith(".crdownload", ignoreCase = true) ||
             endsWith(".tmp", ignoreCase = true) ||
             startsWith(".pending-", ignoreCase = true) ||
-            startsWith("~$", ignoreCase = true)
+            startsWith("~$")
 }
 
 enum class MediaStorePendingState {
