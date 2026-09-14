@@ -13,11 +13,11 @@ import com.synckro.domain.model.CloudProviderType
 import com.synckro.domain.model.ConflictPolicy
 import com.synckro.domain.model.ConflictRecord
 import com.synckro.domain.model.FileIndexEntry
-import com.synckro.domain.model.SyncDirection
 import com.synckro.domain.model.SyncEventLevel
 import com.synckro.domain.model.SyncEventTag
 import com.synckro.domain.model.SyncEventTaxonomy
 import com.synckro.domain.model.SyncPair
+import com.synckro.domain.model.allowsUpload
 import com.synckro.domain.provider.CloudProvider
 import com.synckro.domain.provider.CloudProviderFactory
 import com.synckro.domain.provider.RemoteFile
@@ -237,10 +237,11 @@ class SyncEngine(
         maxConcurrent: Int = 1,
     ): TargetedUploadResult {
         val requestedPaths = relativePaths.distinct()
-        if (!pair.direction.allowsUpload()) {
+        if (!pair.direction.allowsUpload) {
             // A download-only pair is a legitimate configuration, not a broken pair: the
             // candidates are permanently ineligible (so the caller must drop them) but the
             // pair's periodic sync must keep running, which a Terminal result would stop.
+            // No event is emitted because nothing was dispatched for this pair.
             return TargetedUploadResult(
                 result = Result.Success(applied = 0, conflicts = 0),
                 skippedPaths = requestedPaths,
@@ -322,10 +323,9 @@ class SyncEngine(
                     maxConcurrent = maxConcurrent,
                     onProgress = onProgress,
                 )
-            val failedPaths = applyResult.failedPaths.toSet()
-            // The batch contains upload ops exclusively, and SyncOpApplier either applies
-            // such an op or records it in failedPaths — there is no silent-skip branch for
-            // uploads — so the complement of the failures is exactly the uploaded set.
+            val uploadedPaths = applyResult.appliedPaths.toSet()
+            // Any eligible path the applier neither uploaded nor reported as failed (it
+            // never reached the op) stays retriable rather than being reported as done.
             TargetedUploadResult(
                 result =
                     if (applyResult.errors.isEmpty()) {
@@ -337,8 +337,8 @@ class SyncEngine(
                             errors = applyResult.errors,
                         )
                     },
-                uploadedPaths = eligiblePaths.filterNot { it in failedPaths },
-                failedPaths = eligiblePaths.filter { it in failedPaths },
+                uploadedPaths = eligiblePaths.filter { it in uploadedPaths },
+                failedPaths = eligiblePaths.filterNot { it in uploadedPaths },
                 skippedPaths = skippedPaths,
             )
         } catch (c: CancellationException) {
@@ -1208,15 +1208,6 @@ class SyncEngine(
                 val result: Result.Terminal,
             ) : ProviderResolution
         }
-
-        /**
-         * Returns `true` when this direction permits upload operations (local → remote).
-         * The download-only modes suppress uploads; all other modes allow them.
-         * Mirrors the equivalent rule applied by [SyncDiffer].
-         */
-        private fun SyncDirection.allowsUpload(): Boolean =
-            this != SyncDirection.REMOTE_TO_LOCAL &&
-                this != SyncDirection.DOWNLOAD_AND_DELETE_REMOTE_AFTER_N_DAYS
 
         internal data class ScopeFilterCacheKey(
             val includeGlobs: List<String>,
