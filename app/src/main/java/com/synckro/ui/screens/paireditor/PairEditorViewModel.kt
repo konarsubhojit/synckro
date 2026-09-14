@@ -940,7 +940,10 @@ class PairEditorViewModel
                         )
                     val savedId = syncPairRepository.upsert(pair)
                     runCatching { localChangeWatcherRefresher.refresh(savedId) }
-                        .onFailure { Timber.w(it, "PairEditorViewModel.save: watcher refresh failed for pair id=$savedId") }
+                        .onFailure {
+                            if (it is CancellationException) throw it
+                            Timber.w(it, "PairEditorViewModel.save: watcher refresh failed for pair id=$savedId")
+                        }
                     // Schedule or cancel depending on both the global setting and
                     // the pair's own autoSyncEnabled flag.
                     val globalEnabled = settingsRepository.globalAutoSyncEnabled.first()

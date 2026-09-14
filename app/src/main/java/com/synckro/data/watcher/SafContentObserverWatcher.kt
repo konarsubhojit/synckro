@@ -6,6 +6,7 @@ import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import com.synckro.data.local.dao.SyncPairDao
+import com.synckro.data.local.entity.SyncPairEntity
 import com.synckro.data.local.fs.LocalFolderAccessChecker
 import com.synckro.domain.model.allowsUpload
 import com.synckro.domain.sync.LocalChangeEvent
@@ -48,7 +49,7 @@ class SafContentObserverWatcher(
                 LocalChangeWatchFailure.Unknown("pair_not_found"),
             )
 
-        if (!pair.direction.allowsUpload || pair.localTreeUri.isBlank() || !pair.autoSyncEnabled) {
+        if (!pair.hasWatchableSource()) {
             return unavailableResult()
         }
 
@@ -109,9 +110,7 @@ class SafContentObserverWatcher(
             val registration = registrationsByPairId[pairId] ?: return
             if (pair == null ||
                 !pair.instantSyncEnabled ||
-                !pair.direction.allowsUpload ||
-                pair.localTreeUri.isBlank() ||
-                !pair.autoSyncEnabled ||
+                !pair.hasWatchableSource() ||
                 !localFolderAccessChecker.hasReadWriteAccess(pair.localTreeUri)
             ) {
                 registrationsByPairId.remove(pairId)
@@ -193,6 +192,9 @@ class SafContentObserverWatcher(
         LocalChangeWatchRegistrationResult.Unavailable(
             LocalChangeWatcherCapability.Unavailable(LocalChangeWatcherFallback.PERIODIC_SCAN),
         )
+
+    private fun SyncPairEntity.hasWatchableSource(): Boolean =
+        direction.allowsUpload && localTreeUri.isNotBlank() && autoSyncEnabled
 
     private data class PairRegistration(
         val treeUriString: String,

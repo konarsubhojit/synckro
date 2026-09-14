@@ -8,6 +8,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -72,7 +73,7 @@ class PairEditorInstantSyncControlTest {
             .onNodeWithText(title)
             .assertIsNotEnabled()
             .assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Switch))
-            .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, reason))
+            .assertContentDescriptionEquals("$title. $reason")
         composeRule.onNodeWithText(reason).assertExists()
     }
 
