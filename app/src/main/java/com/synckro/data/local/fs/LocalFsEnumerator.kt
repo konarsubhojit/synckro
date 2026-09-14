@@ -9,6 +9,7 @@ import com.synckro.data.local.entity.LocalIndexEntity
 import com.synckro.data.scanner.DefaultDocumentChildrenQuery
 import com.synckro.data.scanner.DocumentChildrenQuery
 import com.synckro.data.scanner.RawDocChild
+import com.synckro.domain.sync.SyncPathScope
 import dagger.hilt.android.qualifiers.ApplicationContext
 import timber.log.Timber
 import java.io.InputStream
@@ -323,8 +324,6 @@ class LocalFsEnumerator internal constructor(
     }
 
     companion object {
-        private val GLOB_META_CHARS = setOf('\\', '*', '?', '{', '}', '[', ']')
-
         /**
          * Computes the SHA-256 digest of [stream] and returns it as a lowercase hex string.
          * The caller is responsible for closing the stream; this function does not close it.
@@ -353,74 +352,13 @@ class LocalFsEnumerator internal constructor(
          *
          * The match is case-sensitive on all platforms.
          */
-        internal fun globToRegex(glob: String): Regex {
-            val sb = StringBuilder("^")
-            var i = 0
-            while (i < glob.length) {
-                when (val c = glob[i]) {
-                    '\\' -> {
-                        if (i + 1 < glob.length) {
-                            sb.append(Regex.escape(glob[i + 1].toString()))
-                            i += 2
-                            continue
-                        } else {
-                            sb.append(Regex.escape(c.toString()))
-                        }
-                    }
-                    '*' -> {
-                        if (i + 1 < glob.length && glob[i + 1] == '*') {
-                            sb.append(".*")
-                            i++ // consume second '*'
-                        } else {
-                            sb.append("[^/]*")
-                        }
-                    }
-                    '?' -> sb.append("[^/]")
-                    '.' -> sb.append("\\.")
-                    '{' -> {
-                        val end = glob.indexOf('}', i + 1)
-                        if (end == -1) {
-                            sb.append(Regex.escape(c.toString()))
-                        } else {
-                            val alternatives = glob.substring(i + 1, end).split(',')
-                            sb.append("(?:")
-                            alternatives.joinTo(sb, "|") { Regex.escape(it) }
-                            sb.append(')')
-                            i = end // will be incremented below
-                        }
-                    }
-                    '[' -> {
-                        val end = glob.indexOf(']', i + 1)
-                        if (end == -1) {
-                            sb.append(Regex.escape(c.toString()))
-                        } else {
-                            sb.append('[')
-                            sb.append(glob.substring(i + 1, end))
-                            sb.append(']')
-                            i = end // will be incremented below
-                        }
-                    }
-                    else -> sb.append(Regex.escape(c.toString()))
-                }
-                i++
-            }
-            sb.append('$')
-            return Regex(sb.toString())
-        }
+        internal fun globToRegex(glob: String): Regex = SyncPathScope.globToRegex(glob)
 
         /**
          * Escapes a literal path segment so it can be embedded safely in a generated
          * glob pattern without being interpreted as glob syntax.
          */
-        internal fun escapeGlobLiteral(literal: String): String =
-            buildString(literal.length) {
-                literal.forEach { ch ->
-                    if (ch in GLOB_META_CHARS) {
-                        append('\\')
-                    }
-                    append(ch)
-                }
-            }
+        internal fun escapeGlobLiteral(literal: String): String = SyncPathScope.escapeGlobLiteral(literal)
 
         /**
          * Single-shot scope check for one relative file path. For batches, call
@@ -432,47 +370,24 @@ class LocalFsEnumerator internal constructor(
             ignoreGlobs: List<String>,
             excludeSubfolders: Boolean,
         ): Boolean =
-            compilePathScope(
+            SyncPathScope.isInScope(
+                relativePath = relativePath,
                 includeGlobs = includeGlobs,
                 ignoreGlobs = ignoreGlobs,
                 excludeSubfolders = excludeSubfolders,
-            ).contains(relativePath)
+            )
 
         internal fun compilePathScope(
             includeGlobs: List<String>,
             ignoreGlobs: List<String>,
             excludeSubfolders: Boolean,
         ): LocalPathScope =
-            LocalPathScope(
-                includeGlobs = includeGlobs.mapNotNull { runCatching { globToRegex(it) }.getOrNull() },
-                ignoreGlobs = ignoreGlobs.mapNotNull { runCatching { globToRegex(it) }.getOrNull() },
-                includeFilterActive = includeGlobs.isNotEmpty(),
+            SyncPathScope.compile(
+                includeGlobs = includeGlobs,
+                ignoreGlobs = ignoreGlobs,
                 excludeSubfolders = excludeSubfolders,
             )
     }
 }
 
-/**
- * Precompiled local path scope rules shared by full enumeration and targeted
- * candidate resolution.
- *
- * Hidden leaf files and empty file names are always rejected. Ignore globs take
- * precedence over include globs; when the include filter is inactive all
- * non-ignored files are accepted.
- */
-internal data class LocalPathScope(
-    val includeGlobs: List<Regex>,
-    val ignoreGlobs: List<Regex>,
-    val includeFilterActive: Boolean,
-    val excludeSubfolders: Boolean,
-) {
-    fun contains(relativePath: String): Boolean {
-        val fileName = relativePath.substringAfterLast('/')
-        if (fileName.isEmpty() || fileName.startsWith('.')) return false
-        if (excludeSubfolders && relativePath.contains('/')) return false
-
-        if (ignoreGlobs.any { it.matches(relativePath) }) return false
-
-        return !includeFilterActive || includeGlobs.any { it.matches(relativePath) }
-    }
-}
+internal typealias LocalPathScope = SyncPathScope
