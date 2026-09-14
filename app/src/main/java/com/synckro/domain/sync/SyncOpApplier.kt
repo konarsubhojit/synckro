@@ -13,6 +13,7 @@ import com.synckro.domain.model.SyncPair
 import com.synckro.domain.provider.CloudProvider
 import com.synckro.domain.provider.CloudProviderException
 import com.synckro.domain.provider.RemoteFile
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -770,22 +771,25 @@ class SyncOpApplier(
                 SyncEventTaxonomy.dispatchQuotaFallback("upload_retry"),
             )
         }
+        val uploadedEntry =
+            LocalIndexEntity(
+                pairId = pair.id,
+                relativePath = op.relativePath,
+                sizeBytes = stat.sizeBytes,
+                mtimeMs = stat.mtimeMs,
+                contentHash = null,
+                remoteId = remote.id,
+                remoteSizeBytes = remote.size,
+                remoteMtimeMs = remote.lastModifiedMs,
+                remoteEtag = remote.eTag,
+            )
         persistUploadedRemoteState(
+            pair = pair,
             relativePath = op.relativePath,
             uploadedStat = stat,
             remote = remote,
-            entry =
-                LocalIndexEntity(
-                    pairId = pair.id,
-                    relativePath = op.relativePath,
-                    sizeBytes = stat.sizeBytes,
-                    mtimeMs = stat.mtimeMs,
-                    contentHash = null,
-                    remoteId = remote.id,
-                    remoteSizeBytes = remote.size,
-                    remoteMtimeMs = remote.lastModifiedMs,
-                    remoteEtag = remote.eTag,
-                ),
+            entry = uploadedEntry,
+            cleanupMutation = { discardUploadedRemote(remote.id, uploadedEntry) },
         )
     }
 
@@ -862,6 +866,7 @@ class SyncOpApplier(
             )
         }
         persistUploadedRemoteState(
+            pair = pair,
             relativePath = op.relativePath,
             uploadedStat = stat,
             remote = remote,
@@ -875,6 +880,7 @@ class SyncOpApplier(
                     remoteMtimeMs = remote.lastModifiedMs,
                     remoteEtag = remote.eTag,
                 ),
+            cleanupMutation = { invalidateOverwrittenRemote(index, remote) },
         )
     }
 
@@ -1018,6 +1024,7 @@ class SyncOpApplier(
                         )
                     }
                     persistUploadedRemoteState(
+                        pair = pair,
                         relativePath = op.relativePath,
                         uploadedStat = stat,
                         remote = updatedRemote,
@@ -1031,6 +1038,7 @@ class SyncOpApplier(
                                 remoteMtimeMs = updatedRemote.lastModifiedMs,
                                 remoteEtag = updatedRemote.eTag,
                             ),
+                        cleanupMutation = { invalidateOverwrittenRemote(index, updatedRemote) },
                     )
                 } else if (remote == null) {
                     // Remote was deleted; upload as new
@@ -1113,26 +1121,119 @@ class SyncOpApplier(
     // Helpers
     // -------------------------------------------------------------------------
 
+    /**
+     * Re-reads the local metadata captured immediately before an upload and only then
+     * persists the synced remote state.
+     *
+     * When the file was modified (or deleted) while its bytes were streaming, the remote
+     * result may hold a torn mix of the old and the new content and must not be
+     * acknowledged as a successful sync. In that case [cleanupMutation] removes or
+     * invalidates the uploaded remote result and a [LocalFileChangedDuringUploadException]
+     * is thrown, so the op is reported as a retriable failure and its queue row is
+     * requeued instead of completed. The local index is left untouched on this path, so
+     * the lazily computed content hash of the previous synced state is never poisoned
+     * with metadata of content that was never fully uploaded.
+     */
     private suspend fun persistUploadedRemoteState(
+        pair: SyncPair,
         relativePath: String,
         uploadedStat: LocalFileStat,
         remote: RemoteFile,
         entry: LocalIndexEntity,
+        cleanupMutation: suspend () -> Unit,
     ) {
         check(entry.remoteId == remote.id) {
             "Uploaded remote ID mismatch for $relativePath"
         }
-        val currentStat =
-            localFileAccess.stat(relativePath)
-                ?: error("Local file not found after upload: $relativePath")
-        if (currentStat.sizeBytes != uploadedStat.sizeBytes || currentStat.mtimeMs != uploadedStat.mtimeMs) {
+        val currentStat = localFileAccess.stat(relativePath)
+        if (currentStat == null ||
+            currentStat.sizeBytes != uploadedStat.sizeBytes ||
+            currentStat.mtimeMs != uploadedStat.mtimeMs
+        ) {
+            cleanUpMutatedUpload(pair, cleanupMutation)
             throw LocalFileChangedDuringUploadException(
                 "Local file changed during upload: $relativePath " +
-                    "expectedSize=${uploadedStat.sizeBytes} actualSize=${currentStat.sizeBytes} " +
-                    "expectedMtime=${uploadedStat.mtimeMs} actualMtime=${currentStat.mtimeMs}",
+                    "expectedSize=${uploadedStat.sizeBytes} actualSize=${currentStat?.sizeBytes} " +
+                    "expectedMtime=${uploadedStat.mtimeMs} actualMtime=${currentStat?.mtimeMs}",
             )
         }
         localIndexDao.upsertSyncedRemoteState(entry)
+    }
+
+    /**
+     * Runs the provider/index cleanup for an upload whose local source mutated mid-flight.
+     *
+     * Cleanup is best-effort: a failure is surfaced as an ERROR event so it stays
+     * observable in the logs, but it never replaces the mutation failure itself, which
+     * is what keeps the queue row retriable.
+     */
+    private suspend fun cleanUpMutatedUpload(
+        pair: SyncPair,
+        cleanupMutation: suspend () -> Unit,
+    ) {
+        eventRepository.log(
+            pair.id,
+            SyncEventLevel.WARN,
+            SyncEventTag.OP_APPLIER,
+            SyncEventTaxonomy.outcomeFailed("upload", "local_mutated"),
+        )
+        try {
+            cleanupMutation()
+        } catch (c: CancellationException) {
+            throw c
+        } catch (t: Throwable) {
+            eventRepository.log(
+                pair.id,
+                SyncEventLevel.ERROR,
+                SyncEventTag.OP_APPLIER,
+                SyncEventTaxonomy.outcomeFailed("upload_cleanup", "cleanup_failed"),
+            )
+        }
+    }
+
+    /**
+     * Deletes a freshly created remote object whose local source mutated during the upload.
+     *
+     * If the delete fails the orphan cannot simply be forgotten: [fallbackEntry] records the
+     * remote linkage (without marking the mutated local file as synced) so the retry updates
+     * that same remote object instead of uploading a duplicate, and the failure is rethrown so
+     * the caller can log it.
+     */
+    private suspend fun discardUploadedRemote(
+        remoteId: String,
+        fallbackEntry: LocalIndexEntity,
+    ) {
+        try {
+            provider.delete(remoteId)
+        } catch (c: CancellationException) {
+            throw c
+        } catch (t: Throwable) {
+            localIndexDao.upsert(fallbackEntry)
+            throw t
+        }
+    }
+
+    /**
+     * Invalidates the cached remote state of an existing index row after an overwrite whose
+     * local source mutated mid-flight.
+     *
+     * The remote metadata is refreshed from the upload response so the delta baseline keeps
+     * matching what the provider actually holds, while the local size/mtime (and the content
+     * hash that belongs to them) stay at their last synced values, leaving the mutated file
+     * dirty so the next run re-uploads it.
+     */
+    private suspend fun invalidateOverwrittenRemote(
+        index: LocalIndexEntity,
+        remote: RemoteFile,
+    ) {
+        localIndexDao.upsert(
+            index.copy(
+                remoteId = remote.id,
+                remoteSizeBytes = remote.size,
+                remoteMtimeMs = remote.lastModifiedMs,
+                remoteEtag = remote.eTag,
+            ),
+        )
     }
 
     private class LocalFileChangedDuringUploadException(
