@@ -60,6 +60,19 @@ class SyncPairRepository
         }
 
         /**
+         * Returns the sync pair with [id], computing [SyncPair.needsReLink] against
+         * [contentResolver]'s persisted SAF grants.
+         */
+        suspend fun getById(
+            id: Long,
+            contentResolver: ContentResolver,
+        ): SyncPair? {
+            val entity = syncPairDao.getById(id) ?: return null
+            val granted = persistedUriStrings(contentResolver)
+            return entity.toDomain(needsReLink = entity.localTreeUri !in granted)
+        }
+
+        /**
          * Inserts a new sync pair or updates an existing one.
          * [SyncPair.needsReLink] is derived at read time from URI permission state,
          * so that flag is not persisted.
