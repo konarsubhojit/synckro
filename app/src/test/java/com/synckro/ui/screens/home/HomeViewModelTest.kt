@@ -980,6 +980,39 @@ class HomeViewModelTest {
         }
 
     @Test
+    fun `setPairInstantSync disabled persists flag and cancels only instant work`() =
+        runTest {
+            val original = pair(7L).copy(instantSyncEnabled = true)
+            val vm = createVm()
+
+            vm.setPairInstantSync(original, false)
+            advanceUntilIdle()
+
+            val saved = slot<SyncPair>()
+            coVerify { mockRepo.upsert(capture(saved)) }
+            assertEquals(7L, saved.captured.id)
+            assertFalse(saved.captured.instantSyncEnabled)
+            verify { mockScheduler.cancelInstant(7L) }
+            verify(exactly = 0) { mockScheduler.scheduleOrCancel(any(), any()) }
+            verify(exactly = 0) { mockScheduler.cancel(7L) }
+        }
+
+    @Test
+    fun `setPairInstantSync enabled persists flag without cancelling work`() =
+        runTest {
+            val original = pair(7L).copy(instantSyncEnabled = false)
+            val vm = createVm()
+
+            vm.setPairInstantSync(original, true)
+            advanceUntilIdle()
+
+            val saved = slot<SyncPair>()
+            coVerify { mockRepo.upsert(capture(saved)) }
+            assertTrue(saved.captured.instantSyncEnabled)
+            verify(exactly = 0) { mockScheduler.cancelInstant(any()) }
+        }
+
+    @Test
     fun `setPairAutoSync is a no-op when the flag is unchanged`() =
         runTest {
             val original = pair(7L).copy(autoSyncEnabled = true)
@@ -990,5 +1023,18 @@ class HomeViewModelTest {
 
             coVerify(exactly = 0) { mockRepo.upsert(any()) }
             verify(exactly = 0) { mockScheduler.scheduleOrCancel(any(), any()) }
+        }
+
+    @Test
+    fun `setPairInstantSync is a no-op when the flag is unchanged`() =
+        runTest {
+            val original = pair(7L).copy(instantSyncEnabled = true)
+            val vm = createVm()
+
+            vm.setPairInstantSync(original, true)
+            advanceUntilIdle()
+
+            coVerify(exactly = 0) { mockRepo.upsert(any()) }
+            verify(exactly = 0) { mockScheduler.cancelInstant(any()) }
         }
 }

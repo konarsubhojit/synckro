@@ -377,6 +377,39 @@ class SyncSchedulerTest {
         verify { mockWm.cancelUniqueWork(SyncWorker.instantName(42L)) }
     }
 
+    @Test
+    fun `cancelInstant cancels only instant work`() {
+        val mockWm = mockk<WorkManager>(relaxed = true)
+        val testScheduler = SyncScheduler(mockWm)
+
+        testScheduler.cancelInstant(42L)
+
+        verify(exactly = 0) { mockWm.cancelUniqueWork(SyncWorker.uniqueName(42L)) }
+        verify(exactly = 0) { mockWm.cancelUniqueWork(SyncWorker.syncNowUniqueName(42L)) }
+        verify { mockWm.cancelUniqueWork(SyncWorker.instantName(42L)) }
+    }
+
+    @Test
+    fun `cancelInstant retains periodic and manual queues`() {
+        val p = pair(id = 43L)
+        scheduler.schedulePeriodic(p)
+        workManager.enqueueUniqueWork(
+            SyncWorker.syncNowUniqueName(p.id),
+            ExistingWorkPolicy.KEEP,
+            SyncScheduler.oneTimeRequestFor(p),
+        )
+        scheduler.enqueueInstant(p)
+
+        scheduler.cancelInstant(p.id)
+
+        val periodicInfos = workManager.getWorkInfosForUniqueWork(SyncWorker.uniqueName(p.id)).get()
+        val manualInfos = workManager.getWorkInfosForUniqueWork(SyncWorker.syncNowUniqueName(p.id)).get()
+        val instantInfos = workManager.getWorkInfosForUniqueWork(SyncWorker.instantName(p.id)).get()
+        assertTrue(periodicInfos.any { it.state == WorkInfo.State.ENQUEUED })
+        assertTrue(manualInfos.any { it.state == WorkInfo.State.ENQUEUED })
+        assertTrue(instantInfos.isEmpty() || instantInfos.all { it.state == WorkInfo.State.CANCELLED })
+    }
+
     // -------------------------------------------------------------------------
     // scheduleOrCancel
     // -------------------------------------------------------------------------
@@ -410,6 +443,27 @@ class SyncSchedulerTest {
             "Work should be CANCELLED or absent when autoSyncEnabled=false",
             infos.isEmpty() || infos.all { it.state == WorkInfo.State.CANCELLED },
         )
+    }
+
+    @Test
+    fun `scheduleOrCancel with autoSyncEnabled false preserves manual and instant queues`() {
+        val p = pair(id = 14L, autoSyncEnabled = true)
+        scheduler.scheduleOrCancel(p)
+        workManager.enqueueUniqueWork(
+            SyncWorker.syncNowUniqueName(p.id),
+            ExistingWorkPolicy.KEEP,
+            SyncScheduler.oneTimeRequestFor(p),
+        )
+        scheduler.enqueueInstant(p)
+
+        scheduler.scheduleOrCancel(p.copy(autoSyncEnabled = false))
+
+        val periodicInfos = workManager.getWorkInfosForUniqueWork(SyncWorker.uniqueName(p.id)).get()
+        val manualInfos = workManager.getWorkInfosForUniqueWork(SyncWorker.syncNowUniqueName(p.id)).get()
+        val instantInfos = workManager.getWorkInfosForUniqueWork(SyncWorker.instantName(p.id)).get()
+        assertTrue(periodicInfos.isEmpty() || periodicInfos.all { it.state == WorkInfo.State.CANCELLED })
+        assertTrue(manualInfos.any { it.state == WorkInfo.State.ENQUEUED })
+        assertTrue(instantInfos.any { it.state == WorkInfo.State.ENQUEUED })
     }
 
     @Test
@@ -486,6 +540,27 @@ class SyncSchedulerTest {
             "p2 should be CANCELLED or absent when global is off",
             infos2.isEmpty() || infos2.all { it.state == WorkInfo.State.CANCELLED },
         )
+    }
+
+    @Test
+    fun `scheduleOrCancelAll with globalEnabled false preserves instant queues`() {
+        val p1 = pair(id = 26L, autoSyncEnabled = true)
+        val p2 = pair(id = 27L, autoSyncEnabled = true)
+        scheduler.schedulePeriodic(p1)
+        scheduler.schedulePeriodic(p2)
+        scheduler.enqueueInstant(p1)
+        scheduler.enqueueInstant(p2)
+
+        scheduler.scheduleOrCancelAll(listOf(p1, p2), globalAutoSyncEnabled = false)
+
+        val periodicInfos1 = workManager.getWorkInfosForUniqueWork(SyncWorker.uniqueName(p1.id)).get()
+        val periodicInfos2 = workManager.getWorkInfosForUniqueWork(SyncWorker.uniqueName(p2.id)).get()
+        val instantInfos1 = workManager.getWorkInfosForUniqueWork(SyncWorker.instantName(p1.id)).get()
+        val instantInfos2 = workManager.getWorkInfosForUniqueWork(SyncWorker.instantName(p2.id)).get()
+        assertTrue(periodicInfos1.isEmpty() || periodicInfos1.all { it.state == WorkInfo.State.CANCELLED })
+        assertTrue(periodicInfos2.isEmpty() || periodicInfos2.all { it.state == WorkInfo.State.CANCELLED })
+        assertTrue(instantInfos1.any { it.state == WorkInfo.State.ENQUEUED })
+        assertTrue(instantInfos2.any { it.state == WorkInfo.State.ENQUEUED })
     }
 
     @Test

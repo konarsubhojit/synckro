@@ -889,18 +889,31 @@ class SyncScheduler(
         )
     }
 
+    /** Cancels periodic auto-sync work for the SyncPair with the given id. */
+    fun cancelPeriodic(pairId: Long) {
+        workManager.cancelUniqueWork(SyncWorker.uniqueName(pairId))
+    }
+
+    /** Cancels queued/running manual "Sync now" work for the SyncPair with the given id. */
+    fun cancelManual(pairId: Long) {
+        workManager.cancelUniqueWork(SyncWorker.syncNowUniqueName(pairId))
+    }
+
+    /** Cancels queued/running instant dispatch work for the SyncPair with the given id. */
+    fun cancelInstant(pairId: Long) {
+        workManager.cancelUniqueWork(SyncWorker.instantName(pairId))
+    }
+
     /**
-     * Cancels any scheduled sync work for the SyncPair with the given id.
+     * Cancels all WorkManager sync work for the SyncPair with the given id.
      *
-     * This cancels periodic sync, one-shot "sync now", and one-shot instant dispatch jobs,
-     * ensuring no background work for the pair can start after this call returns.
-     *
-     * @param pairId The id of the SyncPair whose WorkManager jobs will be canceled.
+     * This is intended for pair deletion/account removal. Periodic preference toggles
+     * should use [cancelPeriodic] so they do not erase already queued manual or instant work.
      */
     fun cancel(pairId: Long) {
-        workManager.cancelUniqueWork(SyncWorker.uniqueName(pairId))
-        workManager.cancelUniqueWork(SyncWorker.syncNowUniqueName(pairId))
-        workManager.cancelUniqueWork(SyncWorker.instantName(pairId))
+        cancelPeriodic(pairId)
+        cancelManual(pairId)
+        cancelInstant(pairId)
     }
 
     /**
@@ -923,7 +936,7 @@ class SyncScheduler(
      *
      * A pair is scheduled only when **both** [globalAutoSyncEnabled] and
      * [SyncPair.autoSyncEnabled] are `true`.  When either is `false` any existing
-     * periodic job is cancelled; manual "Sync now" is unaffected.
+     * periodic job is cancelled; manual "Sync now" and instant dispatch queues are unaffected.
      *
      * @param pair The SyncPair whose periodic work should be scheduled or cancelled.
      * @param globalAutoSyncEnabled Whether the global auto-sync setting is enabled.
@@ -934,7 +947,7 @@ class SyncScheduler(
         if (globalAutoSyncEnabled && pair.autoSyncEnabled) {
             schedulePeriodic(pair, pair.scheduleIntervalMinutes)
         } else {
-            cancel(pair.id)
+            cancelPeriodic(pair.id)
         }
     }
 
@@ -944,7 +957,7 @@ class SyncScheduler(
      * When [globalAutoSyncEnabled] is `true` each pair is individually scheduled or
      * cancelled according to its own [SyncPair.autoSyncEnabled] flag (preserving
      * per-pair pausing).  When [globalAutoSyncEnabled] is `false` all periodic sync
-     * jobs are cancelled immediately; manual "Sync now" is unaffected.
+     * jobs are cancelled immediately; manual "Sync now" and instant dispatch queues are unaffected.
      *
      * @param pairs The full list of SyncPairs to process.
      * @param globalAutoSyncEnabled The current value of the global auto-sync setting.

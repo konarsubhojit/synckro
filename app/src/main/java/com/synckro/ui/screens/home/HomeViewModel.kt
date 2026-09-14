@@ -324,8 +324,8 @@ class HomeViewModel
         /**
          * Phase 3 (Synced Folders redesign): toggles the per-pair auto-sync flag
          * from the Pairs screen. Persists [SyncPair.autoSyncEnabled] on the pair
-         * and then reschedules or cancels the WorkManager periodic job for it,
-         * matching the pattern used by the pair editor's save path.
+         * and then reschedules or cancels only the WorkManager periodic job for
+         * it, matching the pattern used by the pair editor's save path.
          */
         fun setPairAutoSync(pair: SyncPair, enabled: Boolean) {
             if (pair.autoSyncEnabled == enabled) return
@@ -335,6 +335,23 @@ class HomeViewModel
                 syncPairRepository.upsert(updated)
                 val globalEnabled = settingsRepository.globalAutoSyncEnabled.first()
                 syncScheduler.scheduleOrCancel(updated, globalEnabled)
+            }
+        }
+
+        /**
+         * Toggles instant sync for a pair. Disabling instant sync cancels only the
+         * instant WorkManager queue so periodic schedules and manual sync requests
+         * retain their existing lifecycle.
+         */
+        fun setPairInstantSync(pair: SyncPair, enabled: Boolean) {
+            if (pair.instantSyncEnabled == enabled) return
+            Timber.i("HomeViewModel.setPairInstantSync(id=${pair.id}, enabled=$enabled)")
+            viewModelScope.launch {
+                val updated = pair.copy(instantSyncEnabled = enabled)
+                syncPairRepository.upsert(updated)
+                if (!enabled) {
+                    syncScheduler.cancelInstant(pair.id)
+                }
             }
         }
 

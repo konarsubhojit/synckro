@@ -244,6 +244,8 @@ class PairEditorViewModel
             val requiresCharging: Boolean = false,
             /** Whether periodic auto-sync is enabled for this pair. */
             val autoSyncEnabled: Boolean = true,
+            /** Whether local changes should enqueue instant sync dispatch work. */
+            val instantSyncEnabled: Boolean = false,
             /** Currently selected schedule preset. */
             val schedulePreset: SyncSchedulePreset = SyncSchedulePreset.HOURLY,
             /** Raw text for the custom interval field; only used when [schedulePreset] is [SyncSchedulePreset.CUSTOM]. */
@@ -602,6 +604,7 @@ class PairEditorViewModel
                             wifiOnly = entity.wifiOnly,
                             requiresCharging = entity.requiresCharging,
                             autoSyncEnabled = entity.autoSyncEnabled,
+                            instantSyncEnabled = entity.instantSyncEnabled,
                             schedulePreset = preset,
                             customIntervalText = entity.scheduleIntervalMinutes.toString(),
                             includeGlobsText = entity.includeGlobs.joinToString("\n"),
@@ -792,6 +795,8 @@ class PairEditorViewModel
 
         fun onAutoSyncEnabledChange(value: Boolean) = _state.update { it.copy(autoSyncEnabled = value) }
 
+        fun onInstantSyncEnabledChange(value: Boolean) = _state.update { it.copy(instantSyncEnabled = value) }
+
         fun onSchedulePresetChange(value: SyncSchedulePreset) = _state.update { it.copy(schedulePreset = value) }
 
         fun onCustomIntervalChange(value: String) = _state.update { it.copy(customIntervalText = value) }
@@ -899,6 +904,7 @@ class PairEditorViewModel
                             wifiOnly = s.wifiOnly,
                             requiresCharging = s.requiresCharging,
                             autoSyncEnabled = s.autoSyncEnabled,
+                            instantSyncEnabled = s.instantSyncEnabled,
                             // Enforce WorkManager's 15-minute floor here so the persisted value
                             // always matches what the scheduler will actually use.
                             scheduleIntervalMinutes = s.scheduleIntervalMinutes,
@@ -922,6 +928,9 @@ class PairEditorViewModel
                     // the pair's own autoSyncEnabled flag.
                     val globalEnabled = settingsRepository.globalAutoSyncEnabled.first()
                     syncScheduler.scheduleOrCancel(pair.copy(id = savedId), globalEnabled)
+                    if (!s.instantSyncEnabled) {
+                        syncScheduler.cancelInstant(savedId)
+                    }
                     syncEventRepository.log(
                         pairId = savedId,
                         level = SyncEventLevel.INFO,
@@ -1030,6 +1039,7 @@ class PairEditorViewModel
             val wifiOnly: Boolean,
             val requiresCharging: Boolean,
             val autoSyncEnabled: Boolean,
+            val instantSyncEnabled: Boolean,
             val schedulePreset: SyncSchedulePreset,
             val customIntervalText: String,
             val includeGlobsText: String,
@@ -1054,6 +1064,7 @@ class PairEditorViewModel
                         wifiOnly = s.wifiOnly,
                         requiresCharging = s.requiresCharging,
                         autoSyncEnabled = s.autoSyncEnabled,
+                        instantSyncEnabled = s.instantSyncEnabled,
                         schedulePreset = s.schedulePreset,
                         customIntervalText = s.customIntervalText,
                         includeGlobsText = s.includeGlobsText,

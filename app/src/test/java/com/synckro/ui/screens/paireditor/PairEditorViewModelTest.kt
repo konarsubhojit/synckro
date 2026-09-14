@@ -489,6 +489,48 @@ class PairEditorViewModelTest {
         }
 
     @Test
+    fun `save persists instantSyncEnabled true`() =
+        runTest {
+            coEvery { mockRepo.upsert(any()) } returns 42L
+
+            val vm = createVmWithFolder()
+            vm.onDisplayNameChange("Test Pair")
+            vm.onRemoteFolderPicked("remote-id", "Remote")
+            vm.onInstantSyncEnabledChange(true)
+            advanceUntilIdle()
+            vm.onAccountChange("test-account")
+
+            vm.save {}
+            advanceUntilIdle()
+
+            coVerify {
+                mockRepo.upsert(
+                    match { it.instantSyncEnabled },
+                )
+            }
+            io.mockk.verify(exactly = 0) { mockSyncScheduler.cancelInstant(any()) }
+        }
+
+    @Test
+    fun `save with instantSyncEnabled false cancels only instant work`() =
+        runTest {
+            coEvery { mockRepo.upsert(any()) } returns 42L
+
+            val vm = createVmWithFolder()
+            vm.onDisplayNameChange("Test Pair")
+            vm.onRemoteFolderPicked("remote-id", "Remote")
+            vm.onInstantSyncEnabledChange(false)
+            advanceUntilIdle()
+            vm.onAccountChange("test-account")
+
+            vm.save {}
+            advanceUntilIdle()
+
+            io.mockk.verify { mockSyncScheduler.cancelInstant(42L) }
+            io.mockk.verify(exactly = 0) { mockSyncScheduler.cancel(42L) }
+        }
+
+    @Test
     fun `save sets error state when scheduleOrCancel throws`() =
         runTest {
             coEvery { mockRepo.upsert(any()) } returns 42L
@@ -620,6 +662,7 @@ class PairEditorViewModelTest {
                     provider = CloudProviderType.FAKE,
                     remoteFolderId = "remote",
                     conflictPolicy = ConflictPolicy.KEEP_BOTH,
+                    instantSyncEnabled = true,
                 )
             coEvery { mockRepo.getById(7L) } returns existingPair
 
@@ -631,6 +674,7 @@ class PairEditorViewModelTest {
             assertEquals("content://test", state.localTreeUri)
             assertEquals("remote", state.remoteFolderId)
             assertEquals(ConflictPolicy.KEEP_BOTH, state.conflictPolicy)
+            assertTrue(state.instantSyncEnabled)
             assertFalse(state.isLoading)
         }
 
