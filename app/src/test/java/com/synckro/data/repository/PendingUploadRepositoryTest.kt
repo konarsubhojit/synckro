@@ -87,8 +87,24 @@ class PendingUploadRepositoryTest {
             val firstPairId = insertPair("First Pair")
             val secondPairId = insertPair("Second Pair")
 
-            repository.upsertCandidate(firstPairId, "shared.txt", "first", 100L, 1_000L, 2_000L, 1_500L)
-            repository.upsertCandidate(secondPairId, "shared.txt", "second", 200L, 1_100L, 2_100L, 1_600L)
+            repository.upsertCandidate(
+                pairId = firstPairId,
+                relativePath = "shared.txt",
+                documentIdHint = "first",
+                observedSizeBytes = 100L,
+                observedMtimeMs = 1_000L,
+                eligibleAtMs = 2_000L,
+                observedAtMs = 1_500L,
+            )
+            repository.upsertCandidate(
+                pairId = secondPairId,
+                relativePath = "shared.txt",
+                documentIdHint = "second",
+                observedSizeBytes = 200L,
+                observedMtimeMs = 1_100L,
+                eligibleAtMs = 2_100L,
+                observedAtMs = 1_600L,
+            )
 
             assertEquals("first", pendingUploadDao.getForPair(firstPairId).single().documentIdHint)
             assertEquals("second", pendingUploadDao.getForPair(secondPairId).single().documentIdHint)

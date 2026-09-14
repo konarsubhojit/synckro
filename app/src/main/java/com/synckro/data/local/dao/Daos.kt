@@ -755,6 +755,10 @@ interface PendingUploadDao {
         updatedAtMs: Long,
     ): Int
 
+    /**
+     * Refreshes an existing candidate with [upload]'s observation metadata and pending state.
+     * If the row was claimed, the incoming pending state and null claim fields invalidate that claim.
+     */
     suspend fun refreshCandidate(upload: PendingUploadEntity): Int =
         refreshCandidate(
             pairId = upload.pairId,
