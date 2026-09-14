@@ -193,7 +193,7 @@ class SyncOpApplierTest {
             )
 
             val slot = slot<LocalIndexEntity>()
-            coVerify { localIndexDao.upsert(capture(slot)) }
+            coVerify { localIndexDao.upsertSyncedRemoteState(capture(slot)) }
             assertNotNull(slot.captured.remoteId)
             assertEquals("file.txt", slot.captured.relativePath)
             assertEquals(1L, slot.captured.pairId)
@@ -497,7 +497,7 @@ class SyncOpApplierTest {
             )
 
             val slot = slot<LocalIndexEntity>()
-            coVerify { localIndexDao.upsert(capture(slot)) }
+            coVerify { localIndexDao.upsertSyncedRemoteState(capture(slot)) }
             assertEquals(1L, slot.captured.pairId)
             assertEquals("f.txt", slot.captured.relativePath)
             assertEquals(remote.id, slot.captured.remoteId)
@@ -853,7 +853,8 @@ class SyncOpApplierTest {
             assertEquals(2, result.applied)
             assertEquals(1, result.errors.size)
             // Index was upserted for the two successful ops
-            coVerify(exactly = 2) { localIndexDao.upsert(any()) }
+            coVerify(exactly = 1) { localIndexDao.upsertSyncedRemoteState(any()) }
+            coVerify(exactly = 1) { localIndexDao.upsert(any()) }
         }
 
     @Test
