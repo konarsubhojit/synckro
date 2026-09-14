@@ -3,8 +3,9 @@ package com.synckro.domain.sync
 /**
  * Fail-safe eligibility policy for local file candidates.
  *
- * Temporary-name checks are case-insensitive and are evaluated from the current leaf name on every
- * call. A later event for a renamed final file is therefore evaluated independently.
+ * Temporary-name checks are case-insensitive, take precedence over the general hidden-name rule,
+ * and are evaluated from the current leaf name on every call. A later event for a renamed final
+ * file is therefore evaluated independently.
  */
 object FileCandidatePolicy {
     fun evaluate(
@@ -40,7 +41,7 @@ object FileCandidatePolicy {
             endsWith(".crdownload", ignoreCase = true) ||
             endsWith(".tmp", ignoreCase = true) ||
             startsWith(".pending-", ignoreCase = true) ||
-            startsWith("~$")
+            startsWith("~$", ignoreCase = true)
 }
 
 enum class MediaStorePendingState {

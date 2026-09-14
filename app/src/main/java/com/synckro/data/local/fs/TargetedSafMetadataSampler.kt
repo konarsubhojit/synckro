@@ -82,7 +82,10 @@ internal object DefaultSafReadProbe : SafReadProbe {
 }
 
 internal fun interface MediaStorePendingStateQuery {
-    /** Returns `null` when MediaStore cannot determine the pending state. */
+    /**
+     * Returns `null` when MediaStore cannot determine the pending state, which makes the sample
+     * [TargetedSafMetadataSample.Inconclusive] with `PENDING_STATE_UNAVAILABLE`.
+     */
     fun isPending(
         resolver: ContentResolver,
         treeUri: Uri,
@@ -192,15 +195,20 @@ internal class TargetedSafMetadataSampler(
             if (pendingStateQuery == null) {
                 null
             } else {
-                try {
-                    pendingStateQuery.isPending(resolver, treeUri, resolvedDocumentId)
-                } catch (_: Exception) {
+                val queriedPendingState =
+                    try {
+                        pendingStateQuery.isPending(resolver, treeUri, resolvedDocumentId)
+                    } catch (_: Exception) {
+                        return TargetedSafMetadataSample.Inconclusive(
+                            TargetedSafMetadataSample.Inconclusive.Reason.PROVIDER_FAILURE,
+                        )
+                    }
+                if (queriedPendingState == null) {
                     return TargetedSafMetadataSample.Inconclusive(
-                        TargetedSafMetadataSample.Inconclusive.Reason.PROVIDER_FAILURE,
+                        TargetedSafMetadataSample.Inconclusive.Reason.PENDING_STATE_UNAVAILABLE,
                     )
-                } ?: return TargetedSafMetadataSample.Inconclusive(
-                    TargetedSafMetadataSample.Inconclusive.Reason.PENDING_STATE_UNAVAILABLE,
-                )
+                }
+                queriedPendingState
             }
         return TargetedSafMetadataSample.Available(
             documentId = resolvedDocumentId,
