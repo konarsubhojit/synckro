@@ -197,6 +197,8 @@ internal class TargetedLocalFileResolver(
         when (this) {
             TargetedSafMetadataSample.Inconclusive.Reason.METADATA_UNAVAILABLE ->
                 TargetedLocalFileResolution.Unavailable.Reason.METADATA_UNAVAILABLE
+            TargetedSafMetadataSample.Inconclusive.Reason.PENDING_STATE_UNAVAILABLE ->
+                TargetedLocalFileResolution.Unavailable.Reason.METADATA_UNAVAILABLE
             TargetedSafMetadataSample.Inconclusive.Reason.PROVIDER_FAILURE ->
                 TargetedLocalFileResolution.Unavailable.Reason.PERMISSION_LOST
         }

@@ -202,7 +202,7 @@ class LocalFsEnumerator internal constructor(
                 }
 
                 // Fail closed for hidden, temporary, or otherwise inconclusive names.
-                if (FileCandidatePolicy.evaluate(relativePath) != FileCandidateDecision.Eligible) {
+                if (FileCandidatePolicy.evaluate(relativePath) !is FileCandidateDecision.Eligible) {
                     Timber.d("LocalFsEnumerator: skipping excluded file '%s'", relativePath)
                     continue
                 }

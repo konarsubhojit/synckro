@@ -108,6 +108,7 @@ internal sealed interface TargetedSafMetadataSample {
     ) : TargetedSafMetadataSample {
         enum class Reason {
             METADATA_UNAVAILABLE,
+            PENDING_STATE_UNAVAILABLE,
             PROVIDER_FAILURE,
         }
     }
@@ -186,17 +187,19 @@ internal class TargetedSafMetadataSampler(
                     TargetedSafMetadataSample.Inconclusive.Reason.PROVIDER_FAILURE,
                 )
             }
+        val pendingStateQuery = mediaStorePendingStateQuery
         val mediaStorePending =
-            try {
-                mediaStorePendingStateQuery?.let { query ->
-                    query.isPending(resolver, treeUri, resolvedDocumentId)
-                        ?: return TargetedSafMetadataSample.Inconclusive(
-                            TargetedSafMetadataSample.Inconclusive.Reason.METADATA_UNAVAILABLE,
-                        )
-                }
-            } catch (_: Exception) {
-                return TargetedSafMetadataSample.Inconclusive(
-                    TargetedSafMetadataSample.Inconclusive.Reason.PROVIDER_FAILURE,
+            if (pendingStateQuery == null) {
+                null
+            } else {
+                try {
+                    pendingStateQuery.isPending(resolver, treeUri, resolvedDocumentId)
+                } catch (_: Exception) {
+                    return TargetedSafMetadataSample.Inconclusive(
+                        TargetedSafMetadataSample.Inconclusive.Reason.PROVIDER_FAILURE,
+                    )
+                } ?: return TargetedSafMetadataSample.Inconclusive(
+                    TargetedSafMetadataSample.Inconclusive.Reason.PENDING_STATE_UNAVAILABLE,
                 )
             }
         return TargetedSafMetadataSample.Available(

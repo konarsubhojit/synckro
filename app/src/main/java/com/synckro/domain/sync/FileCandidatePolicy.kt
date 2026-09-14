@@ -8,18 +8,18 @@ package com.synckro.domain.sync
  */
 object FileCandidatePolicy {
     fun evaluate(
-        relativePath: String?,
+        pathOrName: String?,
         mediaStorePendingState: MediaStorePendingState = MediaStorePendingState.NOT_APPLICABLE,
     ): FileCandidateDecision {
-        val fileName = relativePath?.substringAfterLast('/')
+        val fileName = pathOrName?.substringAfterLast('/')
         if (fileName.isNullOrEmpty()) {
             return FileCandidateDecision.Inconclusive(FileCandidateInconclusiveReason.NAME_UNAVAILABLE)
         }
-        if (fileName.startsWith('.')) {
-            return FileCandidateDecision.Excluded(FileCandidateExclusionReason.HIDDEN_NAME)
-        }
         if (fileName.hasTemporaryName()) {
             return FileCandidateDecision.Excluded(FileCandidateExclusionReason.TEMPORARY_NAME)
+        }
+        if (fileName.startsWith('.')) {
+            return FileCandidateDecision.Excluded(FileCandidateExclusionReason.HIDDEN_NAME)
         }
 
         return when (mediaStorePendingState) {

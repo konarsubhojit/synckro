@@ -24,7 +24,9 @@ sealed interface MediaItemLookup {
     /**
      * Metadata was read. [relativePath] follows the `MediaStore.MediaColumns.RELATIVE_PATH`
      * convention and is `null` when the provider did not report one; [pendingState] mirrors
-     * `MediaStore.MediaColumns.IS_PENDING` where the column applies.
+     * `MediaStore.MediaColumns.IS_PENDING` where the column applies. It is
+     * [MediaStorePendingState.NOT_APPLICABLE] on older platforms and
+     * [MediaStorePendingState.UNAVAILABLE] when a supported provider omits the value.
      * [displayName] is the item's file name when the provider reported one.
      */
     data class Found(
@@ -162,9 +164,9 @@ class MediaStoreLocalChangeWatcher(
                     if (!isInPairScope(lookup.relativePath)) return
                     if (
                         FileCandidatePolicy.evaluate(
-                            relativePath = lookup.displayName,
+                            pathOrName = lookup.displayName,
                             mediaStorePendingState = lookup.pendingState,
-                        ) != FileCandidateDecision.Eligible
+                        ) !is FileCandidateDecision.Eligible
                     ) {
                         return
                     }

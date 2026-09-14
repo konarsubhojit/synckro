@@ -16,7 +16,7 @@ class SyncPathScope internal constructor(
     val excludeSubfolders: Boolean,
 ) {
     fun contains(relativePath: String): Boolean {
-        if (FileCandidatePolicy.evaluate(relativePath) != FileCandidateDecision.Eligible) return false
+        if (FileCandidatePolicy.evaluate(relativePath) !is FileCandidateDecision.Eligible) return false
         if (excludeSubfolders && relativePath.contains('/')) return false
 
         if (ignoreGlobs.any { it.matches(relativePath) }) return false

@@ -368,7 +368,7 @@ class SafLocalFileAccessTest {
 
         assertEquals(
             TargetedSafMetadataSample.Inconclusive(
-                TargetedSafMetadataSample.Inconclusive.Reason.METADATA_UNAVAILABLE,
+                TargetedSafMetadataSample.Inconclusive.Reason.PENDING_STATE_UNAVAILABLE,
             ),
             sample,
         )
