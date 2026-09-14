@@ -13,6 +13,7 @@ import androidx.work.Configuration
 import com.synckro.data.repository.AppLanguagePreference
 import com.synckro.data.repository.SettingsRepository
 import com.synckro.data.watcher.InstantSyncWatcherService
+import com.synckro.data.watcher.WatchablePairs
 import com.synckro.data.watcher.WatcherServiceController
 import com.synckro.data.worker.SyncWorker
 import com.synckro.domain.sync.WatcherLifecycleTrigger
@@ -56,7 +57,12 @@ class SynckroApp :
 
     @Inject lateinit var watcherServiceController: WatcherServiceController
 
+    @Inject lateinit var watchablePairs: WatchablePairs
+
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    @Volatile
+    private var isAppVisible: Boolean = false
 
     override fun onCreate() {
         super.onCreate()
@@ -66,7 +72,7 @@ class SynckroApp :
         applicationScope.launch {
             oneDriveMultiAccountStartupProbe.runIfNeeded()
         }
-        observeForegroundForWatcherHost()
+        observeWatcherHostLifecycle()
         if (BuildConfig.DEBUG) {
             Timber.plant(Timber.DebugTree())
             val fileTree = FileLoggingTree(this)
@@ -82,29 +88,29 @@ class SynckroApp :
     }
 
     /**
-     * Starts (or stops) the Instant Sync watcher host whenever the app becomes visible.
+     * Keeps the Instant Sync watcher host in step with app visibility and pair configuration.
      *
      * The foreground transition is the only moment at which a `dataSync` foreground service may
      * always be started, so it is also the recovery point after process death, after a reboot on
-     * Android 15+, and whenever a background start was refused. Pair and settings changes are
-     * reconciled by the service itself while it runs.
+     * Android 15+, and whenever a background start was refused. Enabling or disabling Instant Sync
+     * (globally or per pair) also re-evaluates the host, which starts it immediately while the app
+     * is visible and stops it as soon as no pair is watchable.
      */
-    private fun observeForegroundForWatcherHost() {
+    private fun observeWatcherHostLifecycle() {
         registerActivityLifecycleCallbacks(
             object : ActivityLifecycleCallbacks {
                 private var startedActivities = 0
 
                 override fun onActivityStarted(activity: Activity) {
-                    if (startedActivities++ > 0) return
-                    applicationScope.launch {
-                        runCatching {
-                            watcherServiceController.evaluate(WatcherLifecycleTrigger.APP_FOREGROUND)
-                        }.onFailure { Timber.w(it, "Failed to evaluate watcher host on foreground") }
-                    }
+                    startedActivities++
+                    if (startedActivities > 1) return
+                    isAppVisible = true
+                    evaluateWatcherHost(WatcherLifecycleTrigger.APP_FOREGROUND)
                 }
 
                 override fun onActivityStopped(activity: Activity) {
                     if (startedActivities > 0) startedActivities--
+                    if (startedActivities == 0) isAppVisible = false
                 }
 
                 override fun onActivityCreated(
@@ -124,6 +130,24 @@ class SynckroApp :
                 override fun onActivityDestroyed(activity: Activity) = Unit
             },
         )
+        applicationScope.launch {
+            watchablePairs.observe().collect {
+                evaluateWatcherHost(
+                    if (isAppVisible) {
+                        WatcherLifecycleTrigger.APP_FOREGROUND
+                    } else {
+                        WatcherLifecycleTrigger.CONFIGURATION_CHANGED
+                    },
+                )
+            }
+        }
+    }
+
+    private fun evaluateWatcherHost(trigger: WatcherLifecycleTrigger) {
+        applicationScope.launch {
+            runCatching { watcherServiceController.evaluate(trigger) }
+                .onFailure { Timber.w(it, "Failed to evaluate the watcher host for %s", trigger) }
+        }
     }
 
     /**

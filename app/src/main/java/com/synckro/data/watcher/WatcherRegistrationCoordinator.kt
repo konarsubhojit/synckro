@@ -25,6 +25,12 @@ class WatcherRegistrationCoordinator(
     private val lock = Any()
     private val registrations = mutableMapOf<Long, LocalChangeWatchRegistration>()
 
+    /**
+     * Bumped by [unregisterAll] so a registration that completes concurrently with a teardown is
+     * released instead of leaking an observer.
+     */
+    private var generation = 0L
+
     /** Pair ids with a live registration, for diagnostics and tests. */
     val watchedPairIds: Set<Long>
         get() = synchronized(lock) { registrations.keys.toSet() }
@@ -35,6 +41,7 @@ class WatcherRegistrationCoordinator(
      * @return the pair ids that are watched after reconciliation
      */
     fun reconcile(desiredPairIds: Set<Long>): Set<Long> {
+        val startGeneration = synchronized(lock) { generation }
         val toUnregister =
             synchronized(lock) {
                 val stale = registrations.keys.filterNot { it in desiredPairIds }
@@ -47,7 +54,7 @@ class WatcherRegistrationCoordinator(
             if (alreadyWatched) return@forEach
             when (val result = watcher.register(pairId) { event -> onEvent(pairId, event) }) {
                 is LocalChangeWatchRegistrationResult.Registered ->
-                    registerOrUndo(pairId, result.registration)
+                    registerOrUndo(pairId, result.registration, startGeneration)
                 is LocalChangeWatchRegistrationResult.Unavailable ->
                     Timber.i(
                         "Watcher unavailable for pair %d; falling back to %s",
@@ -65,6 +72,7 @@ class WatcherRegistrationCoordinator(
     fun unregisterAll() {
         val pending =
             synchronized(lock) {
+                generation++
                 registrations.values.toList().also { registrations.clear() }
             }
         pending.forEach { it.unregister() }
@@ -73,9 +81,14 @@ class WatcherRegistrationCoordinator(
     private fun registerOrUndo(
         pairId: Long,
         registration: LocalChangeWatchRegistration,
+        startGeneration: Long,
     ) {
         val replaced =
             synchronized(lock) {
+                if (generation != startGeneration) {
+                    registration.unregister()
+                    return
+                }
                 registrations.put(pairId, registration)
             }
         replaced?.unregister()
