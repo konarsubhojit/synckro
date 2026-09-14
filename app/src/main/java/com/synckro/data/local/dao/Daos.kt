@@ -742,7 +742,7 @@ interface PendingUploadDao {
             "claimToken = :claimToken, claimedAtMs = :claimedAtMs, updatedAtMs = :updatedAtMs " +
             "WHERE pairId = :pairId AND relativePath = :relativePath",
     )
-    suspend fun refreshCandidate(
+    suspend fun refreshCandidateFields(
         pairId: Long,
         relativePath: String,
         documentIdHint: String?,
@@ -760,7 +760,7 @@ interface PendingUploadDao {
      * If the row was claimed, the incoming pending state and null claim fields invalidate that claim.
      */
     suspend fun refreshCandidate(upload: PendingUploadEntity): Int =
-        refreshCandidate(
+        refreshCandidateFields(
             pairId = upload.pairId,
             relativePath = upload.relativePath,
             documentIdHint = upload.documentIdHint,
