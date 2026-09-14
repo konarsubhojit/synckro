@@ -3,6 +3,8 @@ package com.synckro.domain.sync
 import com.synckro.domain.model.ConflictPolicy
 import com.synckro.domain.model.FileIndexEntry
 import com.synckro.domain.model.SyncDirection
+import com.synckro.domain.model.allowsDownload
+import com.synckro.domain.model.allowsUpload
 
 /**
  * Minimal metadata describing a file on one side, used as input to [SyncDiffer].
@@ -130,7 +132,7 @@ object SyncDiffer {
                 .toMap()
         val remoteMovesBySourcePath =
             buildMap<String, SyncOp.MoveLocal> {
-                if (!direction.allowsDownload()) return@buildMap
+                if (!direction.allowsDownload) return@buildMap
                 val usedDestinations = mutableSetOf<String>()
                 for (remoteSnap in remote) {
                     val stableId = remoteSnap.stableId ?: continue
@@ -201,11 +203,11 @@ object SyncDiffer {
 
             // New on one side only
             if (l != null && r == null && idx == null) {
-                if (direction.allowsUpload()) ops += SyncOp.UploadNew(path)
+                if (direction.allowsUpload) ops += SyncOp.UploadNew(path)
                 continue
             }
             if (r != null && l == null && idx == null) {
-                if (direction.allowsDownload()) ops += SyncOp.DownloadNew(path)
+                if (direction.allowsDownload) ops += SyncOp.DownloadNew(path)
                 continue
             }
 
@@ -238,11 +240,11 @@ object SyncDiffer {
 
             // Modification on one side
             if (localChanged && !remoteChanged && r != null) {
-                if (direction.allowsUpload()) ops += SyncOp.UpdateRemote(path)
+                if (direction.allowsUpload) ops += SyncOp.UpdateRemote(path)
                 continue
             }
             if (remoteChanged && !localChanged && l != null) {
-                if (direction.allowsDownload()) ops += SyncOp.UpdateLocal(path)
+                if (direction.allowsDownload) ops += SyncOp.UpdateLocal(path)
                 continue
             }
 
@@ -335,22 +337,6 @@ object SyncDiffer {
             .keys
 
     /**
-     * Returns `true` when this direction permits upload operations (local → remote).
-     * The download-only modes suppress uploads; all other modes allow them.
-     */
-    private fun SyncDirection.allowsUpload(): Boolean =
-        this != SyncDirection.REMOTE_TO_LOCAL &&
-            this != SyncDirection.DOWNLOAD_AND_DELETE_REMOTE_AFTER_N_DAYS
-
-    /**
-     * Returns `true` when this direction permits download operations (remote → local).
-     * The upload-only modes suppress downloads; all other modes allow them.
-     */
-    private fun SyncDirection.allowsDownload(): Boolean =
-        this != SyncDirection.LOCAL_TO_REMOTE &&
-            this != SyncDirection.UPLOAD_AND_DELETE_LOCAL_AFTER_N_DAYS
-
-    /**
      * Determines whether the local snapshot differs from the last-known local columns in the index.
      *
      * Compares `hash` values when both `snap.hash` and `idx.localHash` are non-null; otherwise compares `size` and `lastModifiedMs`.
@@ -422,16 +408,16 @@ object SyncDiffer {
     ): SyncOp? =
         when (policy) {
             ConflictPolicy.PREFER_LOCAL ->
-                if (direction.allowsUpload()) SyncOp.UpdateRemote(path) else null
+                if (direction.allowsUpload) SyncOp.UpdateRemote(path) else null
             ConflictPolicy.PREFER_REMOTE ->
-                if (direction.allowsDownload()) SyncOp.UpdateLocal(path) else null
+                if (direction.allowsDownload) SyncOp.UpdateLocal(path) else null
             ConflictPolicy.NEWEST_WINS ->
                 // On exact-tie timestamps we deterministically prefer local, since a
                 // local edit is generally what the user most recently interacted with.
                 if ((local?.lastModifiedMs ?: 0L) >= (remote?.lastModifiedMs ?: 0L)) {
-                    if (direction.allowsUpload()) SyncOp.UpdateRemote(path) else null
+                    if (direction.allowsUpload) SyncOp.UpdateRemote(path) else null
                 } else {
-                    if (direction.allowsDownload()) SyncOp.UpdateLocal(path) else null
+                    if (direction.allowsDownload) SyncOp.UpdateLocal(path) else null
                 }
             ConflictPolicy.KEEP_BOTH ->
                 SyncOp.Conflict(path, localNewerThanRemote = (local?.lastModifiedMs ?: 0L) >= (remote?.lastModifiedMs ?: 0L))
@@ -450,21 +436,21 @@ object SyncDiffer {
                 SyncOp.Conflict(path, localNewerThanRemote = changedSide == ChangedSide.LOCAL)
             ConflictPolicy.PREFER_LOCAL ->
                 if (changedSide == ChangedSide.LOCAL) {
-                    if (direction.allowsUpload()) SyncOp.UploadNew(path) else null
+                    if (direction.allowsUpload) SyncOp.UploadNew(path) else null
                 } else {
-                    if (direction.allowsUpload()) SyncOp.DeleteRemote(path) else null
+                    if (direction.allowsUpload) SyncOp.DeleteRemote(path) else null
                 }
             ConflictPolicy.PREFER_REMOTE ->
                 if (changedSide == ChangedSide.LOCAL) {
-                    if (direction.allowsDownload()) SyncOp.DeleteLocal(path) else null
+                    if (direction.allowsDownload) SyncOp.DeleteLocal(path) else null
                 } else {
-                    if (direction.allowsDownload()) SyncOp.DownloadNew(path) else null
+                    if (direction.allowsDownload) SyncOp.DownloadNew(path) else null
                 }
             ConflictPolicy.NEWEST_WINS ->
                 if (changedSide == ChangedSide.LOCAL) {
-                    if (direction.allowsUpload()) SyncOp.UploadNew(path) else null
+                    if (direction.allowsUpload) SyncOp.UploadNew(path) else null
                 } else {
-                    if (direction.allowsDownload()) SyncOp.DownloadNew(path) else null
+                    if (direction.allowsDownload) SyncOp.DownloadNew(path) else null
                 }
         }
 }

@@ -165,11 +165,20 @@ class SyncOpApplier(
      * @param applied   Number of ops successfully applied.
      * @param conflicts Number of [SyncOp.Conflict] ops processed (written to inbox or auto-resolved).
      * @param errors    Human-readable error messages for failed ops.
+     * @param appliedPaths Relative paths of the ops counted in [applied]; ops that a
+     *   fail-safe skipped are not listed here. For [SyncOp.MoveLocal] the destination path
+     *   is used, matching the progress/active-transfer bookkeeping.
+     * @param failedPaths Relative paths of the ops that raised an error (one entry per
+     *   message in [errors]). Callers that dispatch a named set of paths — e.g. the
+     *   targeted upload entry point in [SyncEngine] — use these two lists to tell which of
+     *   the requested paths are done and which still need to be retried.
      */
     data class ApplyResult(
         val applied: Int,
         val conflicts: Int,
         val errors: List<String>,
+        val appliedPaths: List<String> = emptyList(),
+        val failedPaths: List<String> = emptyList(),
     )
 
     /**
@@ -219,6 +228,13 @@ class SyncOpApplier(
             var applied = 0
             var conflicts = 0
             val errors = mutableListOf<String>()
+            val appliedPaths = mutableListOf<String>()
+            val failedPaths = mutableListOf<String>()
+
+            fun markApplied(op: SyncOp) {
+                applied++
+                appliedPaths += op.relativePath
+            }
 
             val totalFiles = ops.size
             // Pre-compute per-op transfer bytes once so we don't repeat map lookups
@@ -276,7 +292,7 @@ class SyncOpApplier(
                         when (op) {
                             is SyncOp.UploadNew -> {
                                 applyUploadNew(op, pair, onTransferBytes)
-                                applied++
+                                markApplied(op)
                                 eventRepository.log(
                                     pair.id,
                                     SyncEventLevel.INFO,
@@ -290,7 +306,7 @@ class SyncOpApplier(
                                     remoteFilesByPath[op.relativePath]
                                         ?: error("Remote file not in snapshot for DownloadNew: ${op.relativePath}")
                                 applyDownloadNew(op, pair, remote, onTransferBytes)
-                                applied++
+                                markApplied(op)
                                 eventRepository.log(
                                     pair.id,
                                     SyncEventLevel.INFO,
@@ -304,7 +320,7 @@ class SyncOpApplier(
                                     localIndexByPath[op.relativePath]
                                         ?: error("No index entry for UpdateRemote: ${op.relativePath}")
                                 applyUpdateRemote(op, pair, index, onTransferBytes)
-                                applied++
+                                markApplied(op)
                                 eventRepository.log(
                                     pair.id,
                                     SyncEventLevel.INFO,
@@ -318,7 +334,7 @@ class SyncOpApplier(
                                     remoteFilesByPath[op.relativePath]
                                         ?: error("Remote file not in snapshot for UpdateLocal: ${op.relativePath}")
                                 applyUpdateLocal(op, pair, remote, onTransferBytes)
-                                applied++
+                                markApplied(op)
                                 eventRepository.log(
                                     pair.id,
                                     SyncEventLevel.INFO,
@@ -332,7 +348,7 @@ class SyncOpApplier(
                                     localIndexByPath[op.relativePath]
                                         ?: error("No index entry for DeleteRemote: ${op.relativePath}")
                                 applyDeleteRemote(op, pair, index)
-                                applied++
+                                markApplied(op)
                                 eventRepository.log(
                                     pair.id,
                                     SyncEventLevel.INFO,
@@ -343,7 +359,7 @@ class SyncOpApplier(
 
                             is SyncOp.DeleteLocal -> {
                                 applyDeleteLocal(op, pair)
-                                applied++
+                                markApplied(op)
                                 eventRepository.log(
                                     pair.id,
                                     SyncEventLevel.INFO,
@@ -357,7 +373,7 @@ class SyncOpApplier(
                                     localIndexByPath[op.fromRelativePath]
                                         ?: error("No index entry for MoveLocal source: ${op.fromRelativePath}")
                                 applyMoveLocal(op, pair, index)
-                                applied++
+                                markApplied(op)
                                 eventRepository.log(
                                     pair.id,
                                     SyncEventLevel.INFO,
@@ -378,7 +394,7 @@ class SyncOpApplier(
                                     )
                                 } else {
                                     applyDeleteLocal(SyncOp.DeleteLocal(op.relativePath), pair)
-                                    applied++
+                                    markApplied(op)
                                     eventRepository.log(
                                         pair.id,
                                         SyncEventLevel.INFO,
@@ -410,7 +426,7 @@ class SyncOpApplier(
                                         )
                                     } else {
                                         applyDeleteRemote(SyncOp.DeleteRemote(op.relativePath), pair, index)
-                                        applied++
+                                        markApplied(op)
                                         eventRepository.log(
                                             pair.id,
                                             SyncEventLevel.INFO,
@@ -436,6 +452,7 @@ class SyncOpApplier(
                     } catch (e: Throwable) {
                         val msg = SyncEventTaxonomy.outcomeFailed(opKind(op), e.message ?: "unknown")
                         errors += msg
+                        failedPaths += op.relativePath
                         eventRepository.log(pair.id, SyncEventLevel.ERROR, SyncEventTag.INSTANT_OUTCOME, msg)
                     }
 
@@ -460,6 +477,13 @@ class SyncOpApplier(
                 val atomicApplied = AtomicInteger(0)
                 val atomicConflicts = AtomicInteger(0)
                 val concurrentErrors = CopyOnWriteArrayList<String>()
+                val concurrentAppliedPaths = CopyOnWriteArrayList<String>()
+                val concurrentFailedPaths = CopyOnWriteArrayList<String>()
+
+                fun markApplied(op: SyncOp) {
+                    atomicApplied.incrementAndGet()
+                    concurrentAppliedPaths += op.relativePath
+                }
                 val authFailure = AtomicReference<Throwable?>(null)
 
                 coroutineScope {
@@ -508,7 +532,7 @@ class SyncOpApplier(
                                     when (op) {
                                         is SyncOp.UploadNew -> {
                                             applyUploadNew(op, pair, onTransferBytes)
-                                            atomicApplied.incrementAndGet()
+                                            markApplied(op)
                                             eventRepository.log(
                                                 pair.id,
                                                 SyncEventLevel.INFO,
@@ -522,7 +546,7 @@ class SyncOpApplier(
                                                 remoteFilesByPath[op.relativePath]
                                                     ?: error("Remote file not in snapshot for DownloadNew: ${op.relativePath}")
                                             applyDownloadNew(op, pair, remote, onTransferBytes)
-                                            atomicApplied.incrementAndGet()
+                                            markApplied(op)
                                             eventRepository.log(
                                                 pair.id,
                                                 SyncEventLevel.INFO,
@@ -536,7 +560,7 @@ class SyncOpApplier(
                                                 localIndexByPath[op.relativePath]
                                                     ?: error("No index entry for UpdateRemote: ${op.relativePath}")
                                             applyUpdateRemote(op, pair, index, onTransferBytes)
-                                            atomicApplied.incrementAndGet()
+                                            markApplied(op)
                                             eventRepository.log(
                                                 pair.id,
                                                 SyncEventLevel.INFO,
@@ -550,7 +574,7 @@ class SyncOpApplier(
                                                 remoteFilesByPath[op.relativePath]
                                                     ?: error("Remote file not in snapshot for UpdateLocal: ${op.relativePath}")
                                             applyUpdateLocal(op, pair, remote, onTransferBytes)
-                                            atomicApplied.incrementAndGet()
+                                            markApplied(op)
                                             eventRepository.log(
                                                 pair.id,
                                                 SyncEventLevel.INFO,
@@ -564,7 +588,7 @@ class SyncOpApplier(
                                                 localIndexByPath[op.relativePath]
                                                     ?: error("No index entry for DeleteRemote: ${op.relativePath}")
                                             applyDeleteRemote(op, pair, index)
-                                            atomicApplied.incrementAndGet()
+                                            markApplied(op)
                                             eventRepository.log(
                                                 pair.id,
                                                 SyncEventLevel.INFO,
@@ -575,7 +599,7 @@ class SyncOpApplier(
 
                                         is SyncOp.DeleteLocal -> {
                                             applyDeleteLocal(op, pair)
-                                            atomicApplied.incrementAndGet()
+                                            markApplied(op)
                                             eventRepository.log(
                                                 pair.id,
                                                 SyncEventLevel.INFO,
@@ -589,7 +613,7 @@ class SyncOpApplier(
                                                 localIndexByPath[op.fromRelativePath]
                                                     ?: error("No index entry for MoveLocal source: ${op.fromRelativePath}")
                                             applyMoveLocal(op, pair, index)
-                                            atomicApplied.incrementAndGet()
+                                            markApplied(op)
                                             eventRepository.log(
                                                 pair.id,
                                                 SyncEventLevel.INFO,
@@ -609,7 +633,7 @@ class SyncOpApplier(
                                                 )
                                             } else {
                                                 applyDeleteLocal(SyncOp.DeleteLocal(op.relativePath), pair)
-                                                atomicApplied.incrementAndGet()
+                                                markApplied(op)
                                                 eventRepository.log(
                                                     pair.id,
                                                     SyncEventLevel.INFO,
@@ -639,7 +663,7 @@ class SyncOpApplier(
                                                     )
                                                 } else {
                                                     applyDeleteRemote(SyncOp.DeleteRemote(op.relativePath), pair, index)
-                                                    atomicApplied.incrementAndGet()
+                                                    markApplied(op)
                                                     eventRepository.log(
                                                         pair.id,
                                                         SyncEventLevel.INFO,
@@ -665,6 +689,7 @@ class SyncOpApplier(
                                 } catch (e: Throwable) {
                                     val msg = SyncEventTaxonomy.outcomeFailed(opKind(op), e.message ?: "unknown")
                                     concurrentErrors += msg
+                                    concurrentFailedPaths += op.relativePath
                                     eventRepository.log(pair.id, SyncEventLevel.ERROR, SyncEventTag.INSTANT_OUTCOME, msg)
                                 }
 
@@ -687,10 +712,18 @@ class SyncOpApplier(
                     applied = atomicApplied.get(),
                     conflicts = atomicConflicts.get(),
                     errors = concurrentErrors,
+                    appliedPaths = concurrentAppliedPaths,
+                    failedPaths = concurrentFailedPaths,
                 )
             }
 
-            ApplyResult(applied = applied, conflicts = conflicts, errors = errors)
+            ApplyResult(
+                applied = applied,
+                conflicts = conflicts,
+                errors = errors,
+                appliedPaths = appliedPaths,
+                failedPaths = failedPaths,
+            )
         }
 
     // -------------------------------------------------------------------------

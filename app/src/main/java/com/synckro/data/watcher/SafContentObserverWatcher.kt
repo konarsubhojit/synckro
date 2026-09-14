@@ -7,7 +7,7 @@ import android.os.Handler
 import android.os.Looper
 import com.synckro.data.local.dao.SyncPairDao
 import com.synckro.data.local.fs.LocalFolderAccessChecker
-import com.synckro.domain.model.SyncDirection
+import com.synckro.domain.model.allowsUpload
 import com.synckro.domain.sync.LocalChangeEvent
 import com.synckro.domain.sync.LocalChangeWatchFailure
 import com.synckro.domain.sync.LocalChangeWatchRegistration
@@ -46,7 +46,7 @@ class SafContentObserverWatcher(
                 LocalChangeWatchFailure.Unknown("pair_not_found"),
             )
 
-        if (!pair.direction.allowsUpload() || pair.localTreeUri.isBlank() || !pair.autoSyncEnabled) {
+        if (!pair.direction.allowsUpload || pair.localTreeUri.isBlank() || !pair.autoSyncEnabled) {
             return unavailableResult()
         }
 
@@ -205,6 +205,3 @@ class ContentResolverContentObserverRegistry(
         contentResolver.unregisterContentObserver(observer)
     }
 }
-
-private fun SyncDirection.allowsUpload(): Boolean =
-    this != SyncDirection.REMOTE_TO_LOCAL && this != SyncDirection.DOWNLOAD_AND_DELETE_REMOTE_AFTER_N_DAYS

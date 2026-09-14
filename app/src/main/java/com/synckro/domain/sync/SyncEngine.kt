@@ -17,6 +17,7 @@ import com.synckro.domain.model.SyncEventLevel
 import com.synckro.domain.model.SyncEventTag
 import com.synckro.domain.model.SyncEventTaxonomy
 import com.synckro.domain.model.SyncPair
+import com.synckro.domain.model.allowsUpload
 import com.synckro.domain.provider.CloudProvider
 import com.synckro.domain.provider.CloudProviderFactory
 import com.synckro.domain.provider.RemoteFile
@@ -148,25 +149,208 @@ class SyncEngine(
         onProgress: suspend (TransferProgress) -> Unit = {},
         maxConcurrent: Int = 1,
     ): Result {
-        val providerFactory =
-            providers[pair.provider]
-                ?: return Result.Terminal("Unsupported provider: ${pair.provider}")
         val provider =
-            if (pair.provider == CloudProviderType.FAKE) {
-                providerFactory.providerFor(pair.accountId ?: FAKE_ACCOUNT_KEY)
-            } else {
-                val accountId =
-                    pair.accountId
-                        ?: return Result.Terminal(
-                            reason = "Sync pair ${pair.id} is not linked to an account.",
-                            needsReLink = true,
-                        )
-                providerFactory.providerFor(accountId)
+            when (val resolution = resolveProvider(pair)) {
+                is ProviderResolution.Failed -> return resolution.result
+                is ProviderResolution.Resolved -> resolution.provider
             }
         if (pair.provider == CloudProviderType.FAKE) {
             return runFake(pair, provider as FakeCloudProvider)
         }
         return runReal(pair, provider, onProgress, maxConcurrent)
+    }
+
+    /**
+     * Resolves the [CloudProvider] instance for [pair], or the [Result.Terminal] that
+     * explains why the pair cannot be synced at all.
+     */
+    private fun resolveProvider(pair: SyncPair): ProviderResolution {
+        val providerFactory =
+            providers[pair.provider]
+                ?: return ProviderResolution.Failed(Result.Terminal("Unsupported provider: ${pair.provider}"))
+        if (pair.provider == CloudProviderType.FAKE) {
+            return ProviderResolution.Resolved(providerFactory.providerFor(pair.accountId ?: FAKE_ACCOUNT_KEY))
+        }
+        val accountId =
+            pair.accountId
+                ?: return ProviderResolution.Failed(
+                    Result.Terminal(
+                        reason = "Sync pair ${pair.id} is not linked to an account.",
+                        needsReLink = true,
+                    ),
+                )
+        return ProviderResolution.Resolved(providerFactory.providerFor(accountId))
+    }
+
+    // -------------------------------------------------------------------------
+    // runTargetedUploads — upload-only pass for an explicitly named set of paths
+    // -------------------------------------------------------------------------
+
+    /**
+     * Outcome of a [runTargetedUploads] pass.
+     *
+     * @param result        The engine-level [Result], mapped exactly like a full sync run.
+     * @param uploadedPaths Requested paths whose upload completed successfully.
+     * @param failedPaths   Requested paths whose upload failed and remains retriable.
+     * @param skippedPaths  Requested paths that are permanently ineligible for this pair
+     *   (out of the configured include/exclude scope, or a pair whose direction does not
+     *   allow uploads) and must not be retried.
+     */
+    data class TargetedUploadResult(
+        val result: Result,
+        val uploadedPaths: List<String> = emptyList(),
+        val failedPaths: List<String> = emptyList(),
+        val skippedPaths: List<String> = emptyList(),
+    )
+
+    /**
+     * Uploads exactly the named [relativePaths] for [pair] and nothing else.
+     *
+     * This is the Instant-Sync entry point for candidates that a caller has already
+     * claimed from the durable upload queue and confirmed to be stable. Compared to
+     * [runOnce] it deliberately skips:
+     *
+     * - the local SAF tree walk (paths are supplied by the caller),
+     * - remote delta/full enumeration,
+     * - conflict, download, and delete processing (upload ops only),
+     * - delta-token and `lastFullScanAtMs` checkpoint advancement, so a targeted run
+     *   never disturbs the incremental state owned by periodic/manual runs.
+     *
+     * Pairs whose direction does not allow uploads are a no-op: every requested path is
+     * reported in [TargetedUploadResult.skippedPaths] so the caller drops it, while the
+     * pair itself stays healthy for its periodic download runs.
+     *
+     * Each in-scope path becomes a [SyncOp.UpdateRemote] when the local index already
+     * carries a remote ID for it, and a [SyncOp.UploadNew] otherwise; the ops are applied
+     * with the same [SyncOpApplier] used by the full pipeline, so index updates, retries,
+     * and event logging behave identically. Provider and local-storage failures are mapped
+     * through [CloudExceptionMapper], matching the full sync.
+     *
+     * @param relativePaths Paths to upload; duplicates are collapsed and order is preserved.
+     * @param onProgress    Called with a [TransferProgress] snapshot around each op.
+     * @param maxConcurrent Maximum number of uploads that may run concurrently.
+     */
+    suspend fun runTargetedUploads(
+        pair: SyncPair,
+        relativePaths: Collection<String>,
+        onProgress: suspend (TransferProgress) -> Unit = {},
+        maxConcurrent: Int = 1,
+    ): TargetedUploadResult {
+        val requestedPaths = relativePaths.distinct()
+        if (!pair.direction.allowsUpload) {
+            // A download-only pair is a legitimate configuration, not a broken pair: the
+            // candidates are permanently ineligible (so the caller must drop them) but the
+            // pair's periodic sync must keep running, which a Terminal result would stop.
+            // No event is emitted because nothing was dispatched for this pair.
+            return TargetedUploadResult(
+                result = Result.Success(applied = 0, conflicts = 0),
+                skippedPaths = requestedPaths,
+            )
+        }
+        val indexDao =
+            localIndexDao
+                ?: return TargetedUploadResult(Result.Terminal("SyncEngine: LocalIndexDao not configured"))
+        val evtRepo =
+            eventRepository
+                ?: return TargetedUploadResult(Result.Terminal("SyncEngine: SyncEventRepository not configured"))
+        val fileAccessFactory =
+            localFileAccess
+                ?: return TargetedUploadResult(Result.Terminal("SyncEngine: LocalFileAccess not configured"))
+        val provider =
+            when (val resolution = resolveProvider(pair)) {
+                is ProviderResolution.Failed -> return TargetedUploadResult(resolution.result)
+                is ProviderResolution.Resolved -> resolution.provider
+            }
+
+        val scopeFilters = scopeFiltersFor(pair)
+        val (eligiblePaths, skippedPaths) = requestedPaths.partition { isInScope(pair, it, scopeFilters) }
+        if (skippedPaths.isNotEmpty()) {
+            // One aggregated event with a count: sync events must not carry file paths
+            // (see SyncEventTaxonomy's privacy contract), so per-path rows would only
+            // repeat the same message N times.
+            evtRepo.log(
+                pair.id,
+                SyncEventLevel.INFO,
+                SyncEventTag.INSTANT_OUTCOME,
+                SyncEventTaxonomy.format(
+                    SyncEventTaxonomy.OUTCOME_SKIPPED,
+                    "op" to "targeted_upload",
+                    "reason" to "out_of_scope",
+                    "count" to skippedPaths.size.toString(),
+                ),
+            )
+        }
+        if (eligiblePaths.isEmpty()) {
+            return TargetedUploadResult(
+                result = Result.Success(applied = 0, conflicts = 0),
+                skippedPaths = skippedPaths,
+            )
+        }
+
+        return try {
+            val localIndexByPath =
+                eligiblePaths
+                    .mapNotNull { path -> indexDao.get(pair.id, path)?.let { path to it } }
+                    .toMap()
+            val ops =
+                eligiblePaths.map { path ->
+                    if (localIndexByPath[path]?.remoteId != null) {
+                        SyncOp.UpdateRemote(path)
+                    } else {
+                        SyncOp.UploadNew(path)
+                    }
+                }
+            evtRepo.log(
+                pair.id,
+                SyncEventLevel.INFO,
+                SyncEventTag.INSTANT_DISPATCH,
+                SyncEventTaxonomy.dispatchEnqueued("targeted_upload"),
+            )
+            val applier =
+                SyncOpApplier(
+                    provider = provider,
+                    localIndexDao = indexDao,
+                    conflictRepository = conflictRepository,
+                    eventRepository = evtRepo,
+                    localFileAccess = fileAccessFactory(Uri.parse(pair.localTreeUri)),
+                )
+            val applyResult =
+                applier.apply(
+                    ops = ops,
+                    pair = pair,
+                    remoteFilesByPath = emptyMap(),
+                    localIndexByPath = localIndexByPath,
+                    maxConcurrent = maxConcurrent,
+                    onProgress = onProgress,
+                )
+            val uploadedPaths = applyResult.appliedPaths.toSet()
+            // Any eligible path the applier neither uploaded nor reported as failed (it
+            // never reached the op) stays retriable rather than being reported as done.
+            TargetedUploadResult(
+                result =
+                    if (applyResult.errors.isEmpty()) {
+                        Result.Success(applied = applyResult.applied, conflicts = 0)
+                    } else {
+                        Result.PartialFailure(
+                            applied = applyResult.applied,
+                            conflicts = 0,
+                            errors = applyResult.errors,
+                        )
+                    },
+                uploadedPaths = eligiblePaths.filter { it in uploadedPaths },
+                failedPaths = eligiblePaths.filterNot { it in uploadedPaths },
+                skippedPaths = skippedPaths,
+            )
+        } catch (c: CancellationException) {
+            // Cooperative cancellation: do NOT write partial state; just rethrow.
+            throw c
+        } catch (t: Throwable) {
+            TargetedUploadResult(
+                result = CloudExceptionMapper.toResult(t),
+                failedPaths = eligiblePaths,
+                skippedPaths = skippedPaths,
+            )
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -237,6 +421,25 @@ class SyncEngine(
                 includeFilterActive = key.includeGlobs.isNotEmpty(),
             )
         }
+
+    /**
+     * Returns `true` when [path] passes the include/exclude globs and the
+     * `excludeSubfolders` setting configured on [pair].
+     *
+     * When `excludeSubfolders` is enabled, only root-level paths (no '/' separator)
+     * are in scope. This mirrors the [LocalFsEnumerator] BFS behaviour where
+     * sub-directories are not traversed.
+     */
+    private fun isInScope(
+        pair: SyncPair,
+        path: String,
+        filters: ScopeFilters,
+    ): Boolean {
+        if (filters.excludeGlobs.any { it.matches(path) }) return false
+        if (filters.includeFilterActive && filters.includeGlobs.none { it.matches(path) }) return false
+        if (pair.excludeSubfolders && path.contains('/')) return false
+        return true
+    }
 
     private suspend fun enumerateRemoteIncremental(
         remoteEnumerator: RemoteEnumerator,
@@ -435,15 +638,7 @@ class SyncEngine(
         logStep(3, "building diff inputs")
         val scopeFilters = scopeFiltersFor(pair)
 
-        fun isInScope(path: String): Boolean {
-            if (scopeFilters.excludeGlobs.any { it.matches(path) }) return false
-            if (scopeFilters.includeFilterActive && scopeFilters.includeGlobs.none { it.matches(path) }) return false
-            // When excludeSubfolders is enabled, only root-level paths (no '/' separator)
-            // are in scope.  This mirrors the LocalFsEnumerator's BFS behaviour where
-            // sub-directories are not traversed.
-            if (pair.excludeSubfolders && path.contains('/')) return false
-            return true
-        }
+        fun isInScope(path: String): Boolean = isInScope(pair, path, scopeFilters)
 
         val localSnapshots =
             localEnum.snapshot.map { entry ->
@@ -1003,6 +1198,16 @@ class SyncEngine(
 
     companion object {
         private const val FAKE_ACCOUNT_KEY = "__fake__"
+
+        private sealed interface ProviderResolution {
+            data class Resolved(
+                val provider: CloudProvider,
+            ) : ProviderResolution
+
+            data class Failed(
+                val result: Result.Terminal,
+            ) : ProviderResolution
+        }
 
         internal data class ScopeFilterCacheKey(
             val includeGlobs: List<String>,

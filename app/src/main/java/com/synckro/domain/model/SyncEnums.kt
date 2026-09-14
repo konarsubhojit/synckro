@@ -40,6 +40,42 @@ val SyncDirection.isDestructive: Boolean
         this == SyncDirection.UPLOAD_AND_DELETE_LOCAL_AFTER_N_DAYS ||
             this == SyncDirection.DOWNLOAD_AND_DELETE_REMOTE_AFTER_N_DAYS
 
+/**
+ * Returns `true` when this direction permits upload operations (local → remote).
+ *
+ * The download-only modes suppress uploads; all other modes allow them. This is the
+ * single source of truth shared by the differ, the engine's targeted upload entry
+ * point, and the instant-sync watcher.
+ */
+val SyncDirection.allowsUpload: Boolean
+    get() =
+        when (this) {
+            SyncDirection.LOCAL_TO_REMOTE,
+            SyncDirection.BIDIRECTIONAL,
+            SyncDirection.UPLOAD_AND_DELETE_LOCAL_AFTER_N_DAYS,
+            -> true
+            SyncDirection.REMOTE_TO_LOCAL,
+            SyncDirection.DOWNLOAD_AND_DELETE_REMOTE_AFTER_N_DAYS,
+            -> false
+        }
+
+/**
+ * Returns `true` when this direction permits download operations (remote → local).
+ *
+ * The upload-only modes suppress downloads; all other modes allow them.
+ */
+val SyncDirection.allowsDownload: Boolean
+    get() =
+        when (this) {
+            SyncDirection.REMOTE_TO_LOCAL,
+            SyncDirection.BIDIRECTIONAL,
+            SyncDirection.DOWNLOAD_AND_DELETE_REMOTE_AFTER_N_DAYS,
+            -> true
+            SyncDirection.LOCAL_TO_REMOTE,
+            SyncDirection.UPLOAD_AND_DELETE_LOCAL_AFTER_N_DAYS,
+            -> false
+        }
+
 /** How to resolve a file that was modified on both sides since the last sync. */
 enum class ConflictPolicy {
     NEWEST_WINS,
