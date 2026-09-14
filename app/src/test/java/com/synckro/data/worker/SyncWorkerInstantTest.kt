@@ -9,6 +9,7 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import com.synckro.data.local.dao.LocalIndexDao
+import com.synckro.data.local.dao.PairRunLeaseDao
 import com.synckro.data.local.dao.PendingUploadDao
 import com.synckro.data.local.dao.SyncPairDao
 import com.synckro.data.local.entity.PendingUploadEntity
@@ -43,6 +44,7 @@ class SyncWorkerInstantTest {
     private val context: Context = ApplicationProvider.getApplicationContext()
     private val syncPairDao = mockk<SyncPairDao>(relaxed = true)
     private val pendingUploadDao = mockk<PendingUploadDao>(relaxed = true)
+    private val pairRunLeaseDao = mockk<PairRunLeaseDao>(relaxed = true)
     private val localIndexDao = mockk<LocalIndexDao>(relaxed = true)
     private val instantCandidateResolver = mockk<InstantCandidateResolver>()
     private val engine = mockk<SyncEngine>(relaxed = true)
@@ -60,6 +62,7 @@ class SyncWorkerInstantTest {
         every { settingsRepository.globalAutoSyncEnabled } returns flowOf(true)
         every { settingsRepository.globalInstantSyncEnabled } returns flowOf(true)
         every { settingsRepository.maxConcurrentTransfers } returns flowOf(2)
+        coEvery { pairRunLeaseDao.acquire(any(), any(), any(), any(), any()) } returns true
     }
 
     @Test
@@ -228,6 +231,7 @@ class SyncWorkerInstantTest {
             localIndexDao = localIndexDao,
             pendingUploadDao = pendingUploadDao,
             instantCandidateResolver = instantCandidateResolver,
+            pairRunLeaseDao = pairRunLeaseDao,
         )
     }
 

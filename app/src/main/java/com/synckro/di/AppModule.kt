@@ -12,6 +12,7 @@ import com.synckro.data.local.dao.AccountDao
 import com.synckro.data.local.dao.ConflictRecordDao
 import com.synckro.data.local.dao.FileIndexDao
 import com.synckro.data.local.dao.LocalIndexDao
+import com.synckro.data.local.dao.PairRunLeaseDao
 import com.synckro.data.local.dao.PendingUploadDao
 import com.synckro.data.local.dao.SyncEventDao
 import com.synckro.data.local.dao.SyncPairDao
@@ -88,6 +89,7 @@ object AppModule {
                     SynckroDatabase.MIGRATION_13_14,
                     SynckroDatabase.MIGRATION_14_15,
                     SynckroDatabase.MIGRATION_15_16,
+                    SynckroDatabase.MIGRATION_16_17,
                 )
         // Destructive fallback is only acceptable while the schema is still
         // pre-1.0. In release builds we refuse to drop user sync state and
@@ -136,6 +138,9 @@ object AppModule {
 
     @Provides
     fun providePendingUploadDao(db: SynckroDatabase): PendingUploadDao = db.pendingUploadDao()
+
+    @Provides
+    fun providePairRunLeaseDao(db: SynckroDatabase): PairRunLeaseDao = db.pairRunLeaseDao()
 
     @Provides @Singleton
     fun provideFakeCloudProvider(): FakeCloudProvider = FakeCloudProvider()

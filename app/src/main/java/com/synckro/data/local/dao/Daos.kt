@@ -10,6 +10,7 @@ import com.synckro.data.local.entity.AccountEntity
 import com.synckro.data.local.entity.ConflictRecordEntity
 import com.synckro.data.local.entity.FileIndexEntity
 import com.synckro.data.local.entity.LocalIndexEntity
+import com.synckro.data.local.entity.PairRunLeaseEntity
 import com.synckro.data.local.entity.PendingUploadEntity
 import com.synckro.data.local.entity.PendingUploadState
 import com.synckro.data.local.entity.SyncEventEntity
@@ -918,4 +919,92 @@ interface PendingUploadDao {
         pendingState: PendingUploadState = PendingUploadState.PENDING,
         claimedState: PendingUploadState = PendingUploadState.CLAIMED,
     ): Int
+}
+
+/**
+ * Durable per-pair execution ownership.
+ *
+ * A sync run must own the pair's lease before touching it, so instant, manual,
+ * and periodic WorkManager unique names can never run the same pair
+ * concurrently. Leases are refreshed with [renew] while a run is in flight and
+ * removed with [release] when it ends; a lease whose heartbeat has gone stale is
+ * taken over by the next run so ownership recovers after process death.
+ */
+@Dao
+interface PairRunLeaseDao {
+    /**
+     * Attempts to take ownership of [pairId] for [ownerToken].
+     *
+     * Ownership is granted when the pair is unowned, already owned by
+     * [ownerToken] (re-entrant retry of the same run), or owned by a lease whose
+     * last heartbeat is older than [staleAfterMs].
+     *
+     * @return `true` when the caller owns the pair after this call.
+     */
+    @Transaction
+    suspend fun acquire(
+        pairId: Long,
+        ownerToken: String,
+        ownerKind: String,
+        nowMs: Long,
+        staleAfterMs: Long,
+    ): Boolean {
+        val inserted =
+            insertIfAbsent(
+                PairRunLeaseEntity(
+                    pairId = pairId,
+                    ownerToken = ownerToken,
+                    ownerKind = ownerKind,
+                    acquiredAtMs = nowMs,
+                    heartbeatAtMs = nowMs,
+                ),
+            )
+        if (inserted != -1L) return true
+        return takeOver(
+            pairId = pairId,
+            ownerToken = ownerToken,
+            ownerKind = ownerKind,
+            nowMs = nowMs,
+            staleBeforeMs = nowMs - staleAfterMs,
+        ) > 0
+    }
+
+    /** Internal insert step for [acquire]; returns -1 when the pair is already owned. */
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertIfAbsent(lease: PairRunLeaseEntity): Long
+
+    /** Internal takeover step for [acquire]; only succeeds for the same owner or a stale lease. */
+    @Query(
+        "UPDATE pair_run_lease SET ownerToken = :ownerToken, ownerKind = :ownerKind, " +
+            "acquiredAtMs = :nowMs, heartbeatAtMs = :nowMs " +
+            "WHERE pairId = :pairId AND (ownerToken = :ownerToken OR heartbeatAtMs <= :staleBeforeMs)",
+    )
+    suspend fun takeOver(
+        pairId: Long,
+        ownerToken: String,
+        ownerKind: String,
+        nowMs: Long,
+        staleBeforeMs: Long,
+    ): Int
+
+    /** Refreshes the heartbeat of a lease still owned by [ownerToken]; returns 0 once ownership is lost. */
+    @Query(
+        "UPDATE pair_run_lease SET heartbeatAtMs = :nowMs WHERE pairId = :pairId AND ownerToken = :ownerToken",
+    )
+    suspend fun renew(
+        pairId: Long,
+        ownerToken: String,
+        nowMs: Long,
+    ): Int
+
+    /** Releases the lease if (and only if) it is still owned by [ownerToken]. */
+    @Query("DELETE FROM pair_run_lease WHERE pairId = :pairId AND ownerToken = :ownerToken")
+    suspend fun release(
+        pairId: Long,
+        ownerToken: String,
+    ): Int
+
+    /** Returns the current lease for [pairId], or `null` when the pair is not owned. */
+    @Query("SELECT * FROM pair_run_lease WHERE pairId = :pairId")
+    suspend fun get(pairId: Long): PairRunLeaseEntity?
 }

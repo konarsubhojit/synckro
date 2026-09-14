@@ -10,6 +10,7 @@ import com.synckro.data.local.dao.AccountDao
 import com.synckro.data.local.dao.ConflictRecordDao
 import com.synckro.data.local.dao.FileIndexDao
 import com.synckro.data.local.dao.LocalIndexDao
+import com.synckro.data.local.dao.PairRunLeaseDao
 import com.synckro.data.local.dao.PendingUploadDao
 import com.synckro.data.local.dao.SyncEventDao
 import com.synckro.data.local.dao.SyncPairDao
@@ -17,6 +18,7 @@ import com.synckro.data.local.entity.AccountEntity
 import com.synckro.data.local.entity.ConflictRecordEntity
 import com.synckro.data.local.entity.FileIndexEntity
 import com.synckro.data.local.entity.LocalIndexEntity
+import com.synckro.data.local.entity.PairRunLeaseEntity
 import com.synckro.data.local.entity.PendingUploadEntity
 import com.synckro.data.local.entity.PendingUploadState
 import com.synckro.data.local.entity.SyncEventEntity
@@ -80,8 +82,8 @@ class EnumConverters {
 }
 
 @Database(
-    entities = [AccountEntity::class, SyncPairEntity::class, FileIndexEntity::class, SyncEventEntity::class, ConflictRecordEntity::class, LocalIndexEntity::class, PendingUploadEntity::class],
-    version = 16,
+    entities = [AccountEntity::class, SyncPairEntity::class, FileIndexEntity::class, SyncEventEntity::class, ConflictRecordEntity::class, LocalIndexEntity::class, PendingUploadEntity::class, PairRunLeaseEntity::class],
+    version = 17,
     exportSchema = true,
 )
 @TypeConverters(EnumConverters::class)
@@ -129,6 +131,13 @@ abstract class SynckroDatabase : RoomDatabase() {
     abstract fun localIndexDao(): LocalIndexDao
 
     abstract fun pendingUploadDao(): PendingUploadDao
+
+    /**
+     * Returns the DAO used for durable per-pair execution ownership.
+     *
+     * @return The [PairRunLeaseDao] for the `pair_run_lease` table.
+     */
+    abstract fun pairRunLeaseDao(): PairRunLeaseDao
 
     companion object {
         const val NAME = "synckro.db"
@@ -434,6 +443,33 @@ abstract class SynckroDatabase : RoomDatabase() {
                     db.execSQL(
                         "CREATE INDEX IF NOT EXISTS `index_pending_upload_state_claimedAtMs` " +
                             "ON `pending_upload` (`state`, `claimedAtMs`)",
+                    )
+                }
+            }
+
+        /**
+         * Creates the `pair_run_lease` table holding durable per-pair execution
+         * ownership. Instant, manual, and periodic runs must own a pair's lease
+         * before executing, so different WorkManager unique names can never run
+         * the same pair concurrently. Rows cascade with their sync pair.
+         */
+        val MIGRATION_16_17 =
+            object : Migration(16, 17) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL(
+                        "CREATE TABLE IF NOT EXISTS `pair_run_lease` (" +
+                            "`pairId` INTEGER NOT NULL, " +
+                            "`ownerToken` TEXT NOT NULL, " +
+                            "`ownerKind` TEXT NOT NULL, " +
+                            "`acquiredAtMs` INTEGER NOT NULL, " +
+                            "`heartbeatAtMs` INTEGER NOT NULL, " +
+                            "PRIMARY KEY(`pairId`), " +
+                            "FOREIGN KEY(`pairId`) REFERENCES `sync_pair`(`id`) " +
+                            "ON UPDATE NO ACTION ON DELETE CASCADE)",
+                    )
+                    db.execSQL(
+                        "CREATE INDEX IF NOT EXISTS `index_pair_run_lease_heartbeatAtMs` " +
+                            "ON `pair_run_lease` (`heartbeatAtMs`)",
                     )
                 }
             }
