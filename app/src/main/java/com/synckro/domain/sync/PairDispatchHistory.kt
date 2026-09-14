@@ -26,14 +26,14 @@ interface PairDispatchHistory {
  */
 class InMemoryPairDispatchHistory : PairDispatchHistory {
     private val lock = Any()
-    private val lastDispatchAtMs = mutableMapOf<Long, Long>()
+    private val dispatchTimesMs = mutableMapOf<Long, Long>()
 
-    override suspend fun lastDispatchAtMs(pairId: Long): Long? = synchronized(lock) { lastDispatchAtMs[pairId] }
+    override suspend fun lastDispatchAtMs(pairId: Long): Long? = synchronized(lock) { dispatchTimesMs[pairId] }
 
     override suspend fun recordDispatch(
         pairId: Long,
         atMs: Long,
     ) {
-        synchronized(lock) { lastDispatchAtMs[pairId] = atMs }
+        synchronized(lock) { dispatchTimesMs[pairId] = atMs }
     }
 }
