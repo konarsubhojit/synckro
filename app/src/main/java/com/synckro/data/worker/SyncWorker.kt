@@ -13,10 +13,12 @@ import androidx.work.BackoffPolicy
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.ExistingWorkPolicy
 import androidx.work.ForegroundInfo
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequest
 import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.OutOfQuotaPolicy
 import androidx.work.PeriodicWorkRequest
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
@@ -663,6 +665,7 @@ class SyncWorker
         companion object {
             const val KEY_PAIR_ID = "pair_id"
             const val KEY_IS_PERIODIC = "is_periodic"
+            const val KEY_INSTANT = "instant"
             const val PROGRESS_FILES_COMPLETED = "p_files_done"
             const val PROGRESS_TOTAL_FILES = "p_files_total"
             const val PROGRESS_BYTES_XFERRED = "p_bytes_done"
@@ -762,6 +765,14 @@ class SyncWorker
              * @return The unique work name for the one-shot job (format: "syncnow-<pairId>").
              */
             fun syncNowUniqueName(pairId: Long): String = "syncnow-$pairId"
+
+            /**
+             * Produces the unique WorkManager name for an instant one-shot sync dispatch.
+             *
+             * @param pairId The SyncPair's id.
+             * @return The unique work name for instant dispatch (format: "instant-<pairId>").
+             */
+            fun instantName(pairId: Long): String = "instant-$pairId"
 
             /**
              * Returns a [TransferProgress] from a [androidx.work.WorkInfo.progress] Data object,
@@ -881,7 +892,7 @@ class SyncScheduler(
     /**
      * Cancels any scheduled sync work for the SyncPair with the given id.
      *
-     * This cancels both the periodic sync job and any pending one-shot "sync now" job,
+     * This cancels periodic sync, one-shot "sync now", and one-shot instant dispatch jobs,
      * ensuring no background work for the pair can start after this call returns.
      *
      * @param pairId The id of the SyncPair whose WorkManager jobs will be canceled.
@@ -889,6 +900,21 @@ class SyncScheduler(
     fun cancel(pairId: Long) {
         workManager.cancelUniqueWork(SyncWorker.uniqueName(pairId))
         workManager.cancelUniqueWork(SyncWorker.syncNowUniqueName(pairId))
+        workManager.cancelUniqueWork(SyncWorker.instantName(pairId))
+    }
+
+    /**
+     * Enqueues an expedited one-shot instant sync dispatch for [pair].
+     *
+     * Uses [ExistingWorkPolicy.KEEP] so repeated triggers coalesce into a single pending request.
+     * If expedited quota is unavailable, WorkManager falls back to non-expedited execution.
+     */
+    fun enqueueInstant(pair: SyncPair) {
+        workManager.enqueueUniqueWork(
+            SyncWorker.instantName(pair.id),
+            ExistingWorkPolicy.KEEP,
+            instantRequestFor(pair),
+        )
     }
 
     /**
@@ -936,13 +962,25 @@ class SyncScheduler(
          * scheduled sync policy.
          */
         internal fun constraintsFor(pair: SyncPair): Constraints =
+            baseConstraintsBuilderFor(pair)
+                .setRequiresCharging(pair.requiresCharging)
+                .setRequiresBatteryNotLow(true)
+                .build()
+
+        /**
+         * Constraints supported by WorkManager expedited jobs.
+         *
+         * Expedited work cannot set charging or battery-not-low constraints; keep this path
+         * aligned with [constraintsFor] for supported fields (network + storage-not-low).
+         */
+        internal fun expeditedConstraintsFor(pair: SyncPair): Constraints =
+            baseConstraintsBuilderFor(pair).build()
+
+        private fun baseConstraintsBuilderFor(pair: SyncPair): Constraints.Builder =
             Constraints
                 .Builder()
                 .setRequiredNetworkType(if (pair.wifiOnly) NetworkType.UNMETERED else NetworkType.CONNECTED)
-                .setRequiresCharging(pair.requiresCharging)
-                .setRequiresBatteryNotLow(true)
                 .setRequiresStorageNotLow(true)
-                .build()
 
         /** Builds the one-shot "Sync now" request with the shared sync policy. */
         internal fun oneTimeRequestFor(pair: SyncPair): OneTimeWorkRequest =
@@ -970,6 +1008,21 @@ class SyncScheduler(
                         SyncWorker.KEY_IS_PERIODIC to true,
                     ),
                 )
+                .setSyncBackoffCriteria()
+                .build()
+
+        /** Builds an expedited one-shot instant request with quota fallback. */
+        internal fun instantRequestFor(pair: SyncPair): OneTimeWorkRequest =
+            OneTimeWorkRequestBuilder<SyncWorker>()
+                .setConstraints(expeditedConstraintsFor(pair))
+                .setInputData(
+                    workDataOf(
+                        SyncWorker.KEY_PAIR_ID to pair.id,
+                        SyncWorker.KEY_IS_PERIODIC to false,
+                        SyncWorker.KEY_INSTANT to true,
+                    ),
+                )
+                .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
                 .setSyncBackoffCriteria()
                 .build()
 
