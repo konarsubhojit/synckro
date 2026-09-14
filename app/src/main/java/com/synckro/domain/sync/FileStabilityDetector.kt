@@ -91,19 +91,21 @@ class QuietPeriodFileStabilityDetector<T>(
             readComparableMetadata(target).getOrElse {
                 return metadataReadFailed()
             } ?: return unknownMetadata()
+        var previous = initial
         repeat(config.quietIntervals) {
             delay(config.pollIntervalMs)
             val current =
                 readComparableMetadata(target).getOrElse {
                     return metadataReadFailed()
                 } ?: return unknownMetadata()
-            if (current != initial) {
+            if (current != previous) {
                 return FileStabilityResult.Deferred(
                     FileStabilityDeferralReason.CHANGED_DURING_QUIET_PERIOD,
                 )
             }
+            previous = current
         }
-        return if (canOpen(target)) {
+        return if (probeOpenable(target)) {
             FileStabilityResult.Stable
         } else {
             FileStabilityResult.Deferred(FileStabilityDeferralReason.OPENABILITY_PROBE_FAILED)
@@ -119,7 +121,7 @@ class QuietPeriodFileStabilityDetector<T>(
             Result.failure(exception)
         }
 
-    private suspend fun canOpen(target: T): Boolean =
+    private suspend fun probeOpenable(target: T): Boolean =
         try {
             openabilityProbe.canOpen(target)
         } catch (exception: CancellationException) {

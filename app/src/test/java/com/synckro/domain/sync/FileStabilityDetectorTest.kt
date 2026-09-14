@@ -8,6 +8,7 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertThrows
 import org.junit.Assert.fail
 import org.junit.Test
 
@@ -48,6 +49,46 @@ class FileStabilityDetectorTest {
             assertEquals(3, metadataReader.calls)
             assertEquals(1, openabilityProbe.calls)
         }
+
+    @Test
+    fun `custom polling config controls required quiet intervals and interval length`() =
+        runTest {
+            val metadataReader =
+                SequenceMetadataReader(
+                    metadata(sizeBytes = 10, mtimeMs = 100),
+                    metadata(sizeBytes = 10, mtimeMs = 100),
+                    metadata(sizeBytes = 10, mtimeMs = 100),
+                    metadata(sizeBytes = 10, mtimeMs = 100),
+                )
+            val detector =
+                QuietPeriodFileStabilityDetector(
+                    metadataReader = metadataReader,
+                    openabilityProbe = RecordingOpenabilityProbe(canOpen = true),
+                    config = FileStabilityConfig(quietIntervals = 3, pollIntervalMs = 25),
+                )
+
+            val result = async { detector.awaitStable(FILE_ID) }
+            runCurrent()
+            advanceTimeBy(74)
+            runCurrent()
+            assertFalse(result.isCompleted)
+
+            advanceTimeBy(1)
+            runCurrent()
+
+            assertEquals(FileStabilityResult.Stable, result.await())
+            assertEquals(4, metadataReader.calls)
+        }
+
+    @Test
+    fun `polling config rejects invalid values`() {
+        assertThrows(IllegalArgumentException::class.java) {
+            FileStabilityConfig(quietIntervals = 0)
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            FileStabilityConfig(quietIntervals = 1, pollIntervalMs = -1)
+        }
+    }
 
     @Test
     fun `growing file defers without openability probe`() =
