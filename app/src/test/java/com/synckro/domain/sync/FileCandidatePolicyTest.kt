@@ -1,6 +1,7 @@
 package com.synckro.domain.sync
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class FileCandidatePolicyTest {
@@ -84,8 +85,9 @@ class FileCandidatePolicyTest {
 
     private fun assertExcluded(relativePath: String) {
         val decision = FileCandidatePolicy.evaluate(relativePath)
-        check(decision is FileCandidateDecision.Excluded) {
-            "Expected '$relativePath' to be excluded, but was $decision"
-        }
+        assertTrue(
+            "Expected '$relativePath' to be excluded, but was $decision",
+            decision is FileCandidateDecision.Excluded,
+        )
     }
 }

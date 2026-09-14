@@ -28,6 +28,7 @@ internal sealed interface TargetedLocalFileResolution {
     ) : TargetedLocalFileResolution {
         enum class Reason {
             METADATA_UNAVAILABLE,
+            PENDING_STATE_UNAVAILABLE,
             PERMISSION_LOST,
             NO_READ_ACCESS,
         }
@@ -198,7 +199,7 @@ internal class TargetedLocalFileResolver(
             TargetedSafMetadataSample.Inconclusive.Reason.METADATA_UNAVAILABLE ->
                 TargetedLocalFileResolution.Unavailable.Reason.METADATA_UNAVAILABLE
             TargetedSafMetadataSample.Inconclusive.Reason.PENDING_STATE_UNAVAILABLE ->
-                TargetedLocalFileResolution.Unavailable.Reason.METADATA_UNAVAILABLE
+                TargetedLocalFileResolution.Unavailable.Reason.PENDING_STATE_UNAVAILABLE
             TargetedSafMetadataSample.Inconclusive.Reason.PROVIDER_FAILURE ->
                 TargetedLocalFileResolution.Unavailable.Reason.PERMISSION_LOST
         }
