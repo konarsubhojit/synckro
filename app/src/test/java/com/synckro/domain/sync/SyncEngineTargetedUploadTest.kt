@@ -224,28 +224,32 @@ class SyncEngineTargetedUploadTest {
         }
 
     @Test
-    fun `returns Terminal for download-only directions without uploading`() =
+    fun `skips every path for download-only directions without uploading`() =
         runTest {
             val pair = insertPair(direction = SyncDirection.REMOTE_TO_LOCAL)
             localFileAccess.put("notes.txt", "hello".toByteArray())
 
             val outcome = buildEngine().runTargetedUploads(pair, listOf("notes.txt"))
 
-            assertTrue("Expected Terminal, got: ${outcome.result}", outcome.result is SyncEngine.Result.Terminal)
+            // A download-only pair is a valid configuration, so the run must not mark the
+            // pair as broken; the candidates are simply reported as permanently skipped.
+            assertTrue("Expected Success, got: ${outcome.result}", outcome.result is SyncEngine.Result.Success)
+            assertEquals(0, outcome.result.applied)
             assertEquals(listOf("notes.txt"), outcome.skippedPaths)
             assertEquals(emptyList<String>(), outcome.uploadedPaths)
             assertTrue(fakeProvider.list("remote-root").isEmpty())
         }
 
     @Test
-    fun `returns Terminal for the download-and-delete-remote direction`() =
+    fun `skips every path for the download-and-delete-remote direction`() =
         runTest {
             val pair = insertPair(direction = SyncDirection.DOWNLOAD_AND_DELETE_REMOTE_AFTER_N_DAYS)
             localFileAccess.put("notes.txt", "hello".toByteArray())
 
             val outcome = buildEngine().runTargetedUploads(pair, listOf("notes.txt"))
 
-            assertTrue(outcome.result is SyncEngine.Result.Terminal)
+            assertTrue(outcome.result is SyncEngine.Result.Success)
+            assertEquals(listOf("notes.txt"), outcome.skippedPaths)
             assertTrue(fakeProvider.list("remote-root").isEmpty())
         }
 

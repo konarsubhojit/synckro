@@ -193,7 +193,8 @@ class SyncEngine(
      * @param uploadedPaths Requested paths whose upload completed successfully.
      * @param failedPaths   Requested paths whose upload failed and remains retriable.
      * @param skippedPaths  Requested paths that are permanently ineligible for this pair
-     *   (out of the configured include/exclude scope) and must not be retried.
+     *   (out of the configured include/exclude scope, or a pair whose direction does not
+     *   allow uploads) and must not be retried.
      */
     data class TargetedUploadResult(
         val result: Result,
@@ -215,6 +216,10 @@ class SyncEngine(
      * - delta-token and `lastFullScanAtMs` checkpoint advancement, so a targeted run
      *   never disturbs the incremental state owned by periodic/manual runs.
      *
+     * Pairs whose direction does not allow uploads are a no-op: every requested path is
+     * reported in [TargetedUploadResult.skippedPaths] so the caller drops it, while the
+     * pair itself stays healthy for its periodic download runs.
+     *
      * Each in-scope path becomes a [SyncOp.UpdateRemote] when the local index already
      * carries a remote ID for it, and a [SyncOp.UploadNew] otherwise; the ops are applied
      * with the same [SyncOpApplier] used by the full pipeline, so index updates, retries,
@@ -233,8 +238,11 @@ class SyncEngine(
     ): TargetedUploadResult {
         val requestedPaths = relativePaths.distinct()
         if (!pair.direction.allowsUpload()) {
+            // A download-only pair is a legitimate configuration, not a broken pair: the
+            // candidates are permanently ineligible (so the caller must drop them) but the
+            // pair's periodic sync must keep running, which a Terminal result would stop.
             return TargetedUploadResult(
-                result = Result.Terminal("SyncEngine: targeted upload not allowed for direction ${pair.direction}"),
+                result = Result.Success(applied = 0, conflicts = 0),
                 skippedPaths = requestedPaths,
             )
         }
@@ -255,12 +263,20 @@ class SyncEngine(
 
         val scopeFilters = scopeFiltersFor(pair)
         val (eligiblePaths, skippedPaths) = requestedPaths.partition { isInScope(pair, it, scopeFilters) }
-        repeat(skippedPaths.size) {
+        if (skippedPaths.isNotEmpty()) {
+            // One aggregated event with a count: sync events must not carry file paths
+            // (see SyncEventTaxonomy's privacy contract), so per-path rows would only
+            // repeat the same message N times.
             evtRepo.log(
                 pair.id,
                 SyncEventLevel.INFO,
                 SyncEventTag.INSTANT_OUTCOME,
-                SyncEventTaxonomy.outcomeSkipped("targeted_upload", "out_of_scope"),
+                SyncEventTaxonomy.format(
+                    SyncEventTaxonomy.OUTCOME_SKIPPED,
+                    "op" to "targeted_upload",
+                    "reason" to "out_of_scope",
+                    "count" to skippedPaths.size.toString(),
+                ),
             )
         }
         if (eligiblePaths.isEmpty()) {
@@ -307,6 +323,9 @@ class SyncEngine(
                     onProgress = onProgress,
                 )
             val failedPaths = applyResult.failedPaths.toSet()
+            // The batch contains upload ops exclusively, and SyncOpApplier either applies
+            // such an op or records it in failedPaths — there is no silent-skip branch for
+            // uploads — so the complement of the failures is exactly the uploaded set.
             TargetedUploadResult(
                 result =
                     if (applyResult.errors.isEmpty()) {
