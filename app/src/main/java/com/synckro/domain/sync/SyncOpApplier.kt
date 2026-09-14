@@ -1126,7 +1126,7 @@ class SyncOpApplier(
             localFileAccess.stat(relativePath)
                 ?: error("Local file not found after upload: $relativePath")
         if (currentStat.sizeBytes != uploadedStat.sizeBytes || currentStat.mtimeMs != uploadedStat.mtimeMs) {
-            error(
+            throw LocalFileChangedDuringUploadException(
                 "Local file changed during upload: $relativePath " +
                     "expectedSize=${uploadedStat.sizeBytes} actualSize=${currentStat.sizeBytes} " +
                     "expectedMtime=${uploadedStat.mtimeMs} actualMtime=${currentStat.mtimeMs}",
@@ -1134,6 +1134,10 @@ class SyncOpApplier(
         }
         localIndexDao.upsertSyncedRemoteState(entry)
     }
+
+    private class LocalFileChangedDuringUploadException(
+        message: String,
+    ) : Exception(message)
 
     /**
      * Per-run cache of resolved remote folder IDs, keyed by `(parentId, folderName)`.

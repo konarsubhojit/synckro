@@ -52,7 +52,7 @@ class SyncEngineTargetedUploadTest {
     ) : LocalFileAccess {
         private val files = mutableMapOf<String, ByteArray>()
         private val mtimes = mutableMapOf<String, Long>()
-        private val mutateAfterNextRead = mutableMapOf<String, Pair<ByteArray, Long>>()
+        private val pendingMutations = mutableMapOf<String, Pair<ByteArray, Long>>()
 
         fun put(
             path: String,
@@ -68,13 +68,13 @@ class SyncEngineTargetedUploadTest {
             bytes: ByteArray,
             mtimeMs: Long,
         ) {
-            mutateAfterNextRead[path] = bytes to mtimeMs
+            pendingMutations[path] = bytes to mtimeMs
         }
 
         override fun openRead(path: String): InputStream? =
             files[path]?.let { bytes ->
                 ByteArrayInputStream(bytes).also {
-                    mutateAfterNextRead.remove(path)?.let { (newBytes, newMtimeMs) ->
+                    pendingMutations.remove(path)?.let { (newBytes, newMtimeMs) ->
                         files[path] = newBytes
                         mtimes[path] = newMtimeMs
                     }

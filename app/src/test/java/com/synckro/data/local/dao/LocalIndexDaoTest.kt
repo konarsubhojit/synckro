@@ -153,6 +153,30 @@ class LocalIndexDaoTest {
         }
 
     @Test
+    fun `upsertSyncedRemoteState preserves content hash when local metadata matches`() =
+        runTest {
+            val pairId = insertPair()
+            localIndexDao.upsert(buildEntry(pairId, sizeBytes = 10L, mtimeMs = 1_000L, contentHash = "current-hash"))
+
+            localIndexDao.upsertSyncedRemoteState(
+                buildEntry(
+                    pairId = pairId,
+                    sizeBytes = 10L,
+                    mtimeMs = 1_000L,
+                    remoteId = "remote-1",
+                ).copy(
+                    remoteSizeBytes = 10L,
+                    remoteMtimeMs = 3_000L,
+                    remoteEtag = "etag-1",
+                ),
+            )
+
+            val stored = localIndexDao.get(pairId, "docs/file.txt")
+            assertEquals("current-hash", stored?.contentHash)
+            assertEquals("remote-1", stored?.remoteId)
+        }
+
+    @Test
     fun `upsertAll inserts multiple entries`() =
         runTest {
             val pairId = insertPair()
