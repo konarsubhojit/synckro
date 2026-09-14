@@ -55,25 +55,27 @@ class PairSignalCoordinatorTest {
     @Test
     fun `cancellation and restart do not consume durable rows`() =
         runTest(dispatcher) {
-            val durableRows = mutableSetOf(1L)
+            val durableRows = mutableSetOf(1L, 2L)
             val firstCoordinator = PairSignalCoordinator(this)
-            val dispatchedRows = mutableListOf<Set<Long>>()
+            val dispatchedPairs = mutableListOf<Long>()
 
-            firstCoordinator.signal(1L) { dispatchedRows += durableRows.toSet() }
+            firstCoordinator.signal(1L, dispatchedPairs::add)
+            firstCoordinator.signal(2L, dispatchedPairs::add)
             advanceTimeBy(1_000L)
             firstCoordinator.cancelPendingSignals()
             advanceTimeBy(PairSignalCoordinator.DEFAULT_DEBOUNCE_MS)
             runCurrent()
 
-            assertTrue(dispatchedRows.isEmpty())
-            assertEquals(setOf(1L), durableRows)
+            assertTrue(dispatchedPairs.isEmpty())
+            assertEquals(setOf(1L, 2L), durableRows)
 
             val restartedCoordinator = PairSignalCoordinator(this)
-            restartedCoordinator.signal(1L) { dispatchedRows += durableRows.toSet() }
+            restartedCoordinator.signal(1L, dispatchedPairs::add)
+            restartedCoordinator.signal(2L, dispatchedPairs::add)
             advanceTimeBy(PairSignalCoordinator.DEFAULT_DEBOUNCE_MS)
             runCurrent()
 
-            assertEquals(listOf(setOf(1L)), dispatchedRows)
-            assertEquals(setOf(1L), durableRows)
+            assertEquals(listOf(1L, 2L), dispatchedPairs)
+            assertEquals(setOf(1L, 2L), durableRows)
         }
 }

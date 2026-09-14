@@ -26,6 +26,9 @@ class PairSignalCoordinator(
         require(debounceMs >= 0) { "debounceMs must be >= 0" }
     }
 
+    /**
+     * Resets [pairId]'s debounce window, replacing any pending signal and its callback.
+     */
     suspend fun signal(
         pairId: Long,
         onDebounced: suspend (Long) -> Unit,
