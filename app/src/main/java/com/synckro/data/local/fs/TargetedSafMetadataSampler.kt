@@ -82,6 +82,10 @@ internal object DefaultSafReadProbe : SafReadProbe {
 }
 
 internal fun interface MediaStorePendingStateQuery {
+    /**
+     * Returns `null` when MediaStore cannot determine the pending state, which makes the sample
+     * [TargetedSafMetadataSample.Inconclusive] with `PENDING_STATE_UNAVAILABLE`.
+     */
     fun isPending(
         resolver: ContentResolver,
         treeUri: Uri,
@@ -107,6 +111,7 @@ internal sealed interface TargetedSafMetadataSample {
     ) : TargetedSafMetadataSample {
         enum class Reason {
             METADATA_UNAVAILABLE,
+            PENDING_STATE_UNAVAILABLE,
             PROVIDER_FAILURE,
         }
     }
@@ -185,13 +190,25 @@ internal class TargetedSafMetadataSampler(
                     TargetedSafMetadataSample.Inconclusive.Reason.PROVIDER_FAILURE,
                 )
             }
+        val pendingStateQuery = mediaStorePendingStateQuery
         val mediaStorePending =
-            try {
-                mediaStorePendingStateQuery?.isPending(resolver, treeUri, resolvedDocumentId)
-            } catch (_: Exception) {
-                return TargetedSafMetadataSample.Inconclusive(
-                    TargetedSafMetadataSample.Inconclusive.Reason.PROVIDER_FAILURE,
-                )
+            if (pendingStateQuery == null) {
+                null
+            } else {
+                val queriedPendingState =
+                    try {
+                        pendingStateQuery.isPending(resolver, treeUri, resolvedDocumentId)
+                    } catch (_: Exception) {
+                        return TargetedSafMetadataSample.Inconclusive(
+                            TargetedSafMetadataSample.Inconclusive.Reason.PROVIDER_FAILURE,
+                        )
+                    }
+                if (queriedPendingState == null) {
+                    return TargetedSafMetadataSample.Inconclusive(
+                        TargetedSafMetadataSample.Inconclusive.Reason.PENDING_STATE_UNAVAILABLE,
+                    )
+                }
+                queriedPendingState
             }
         return TargetedSafMetadataSample.Available(
             documentId = resolvedDocumentId,

@@ -429,6 +429,28 @@ class LocalFsEnumeratorTest {
             assertEquals("subdir/main.kt", result.snapshot.single().relativePath)
         }
 
+    @Test
+    fun `temporary names are skipped regardless of case`() =
+        runTest {
+            val pairId = insertPair()
+            val fakeTree =
+                mapOf(
+                    "root" to
+                        listOf(
+                            file("one.part"),
+                            file("two.CRDOWNLOAD"),
+                            file("three.Tmp"),
+                            file(".pending-four.jpg"),
+                            file("~\$five.xlsx"),
+                            file("final.jpg"),
+                        ),
+                )
+
+            val result = enumeratorWith(fakeTree).enumerate(pairId, treeUri)
+
+            assertEquals(listOf("final.jpg"), result.snapshot.map { it.relativePath })
+        }
+
     // -------------------------------------------------------------------------
     // Ignore globs
     // -------------------------------------------------------------------------
