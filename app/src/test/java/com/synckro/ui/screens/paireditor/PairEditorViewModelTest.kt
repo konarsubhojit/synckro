@@ -512,7 +512,7 @@ class PairEditorViewModelTest {
         }
 
     @Test
-    fun `save with instantSyncEnabled false cancels only instant work`() =
+    fun `save with instantSyncEnabled unchanged false does not cancel instant work`() =
         runTest {
             coEvery { mockRepo.upsert(any()) } returns 42L
 
@@ -526,8 +526,36 @@ class PairEditorViewModelTest {
             vm.save {}
             advanceUntilIdle()
 
-            io.mockk.verify { mockSyncScheduler.cancelInstant(42L) }
+            io.mockk.verify(exactly = 0) { mockSyncScheduler.cancelInstant(any()) }
             io.mockk.verify(exactly = 0) { mockSyncScheduler.cancel(42L) }
+        }
+
+    @Test
+    fun `save with instantSyncEnabled disabled cancels only instant work`() =
+        runTest {
+            val existingPair =
+                SyncPair(
+                    id = 7L,
+                    displayName = "Existing Pair",
+                    localTreeUri = "content://test",
+                    provider = CloudProviderType.GOOGLE_DRIVE,
+                    accountId = "test-account",
+                    remoteFolderId = "remote",
+                    conflictPolicy = ConflictPolicy.KEEP_BOTH,
+                    instantSyncEnabled = true,
+                )
+            coEvery { mockRepo.getById(7L) } returns existingPair
+            coEvery { mockRepo.upsert(any()) } returns 7L
+
+            val vm = createVm(pairId = 7L)
+            advanceUntilIdle()
+            vm.onInstantSyncEnabledChange(false)
+
+            vm.save {}
+            advanceUntilIdle()
+
+            io.mockk.verify { mockSyncScheduler.cancelInstant(7L) }
+            io.mockk.verify(exactly = 0) { mockSyncScheduler.cancel(7L) }
         }
 
     @Test

@@ -928,7 +928,8 @@ class PairEditorViewModel
                     // the pair's own autoSyncEnabled flag.
                     val globalEnabled = settingsRepository.globalAutoSyncEnabled.first()
                     syncScheduler.scheduleOrCancel(pair.copy(id = savedId), globalEnabled)
-                    if (!s.instantSyncEnabled) {
+                    val previousInstantSyncEnabled = initialFingerprint?.instantSyncEnabled ?: false
+                    if (previousInstantSyncEnabled && !s.instantSyncEnabled) {
                         syncScheduler.cancelInstant(savedId)
                     }
                     // Enabling instant sync only updates pair state; local-change
