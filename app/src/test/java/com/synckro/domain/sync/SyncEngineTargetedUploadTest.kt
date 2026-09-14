@@ -51,15 +51,35 @@ class SyncEngineTargetedUploadTest {
         private val nowMs: Long = 5_000L,
     ) : LocalFileAccess {
         private val files = mutableMapOf<String, ByteArray>()
+        private val mtimes = mutableMapOf<String, Long>()
+        private val mutateAfterNextRead = mutableMapOf<String, Pair<ByteArray, Long>>()
 
         fun put(
             path: String,
             bytes: ByteArray,
+            mtimeMs: Long = nowMs,
         ) {
             files[path] = bytes
+            mtimes[path] = mtimeMs
         }
 
-        override fun openRead(path: String): InputStream? = files[path]?.let { ByteArrayInputStream(it) }
+        fun mutateAfterNextRead(
+            path: String,
+            bytes: ByteArray,
+            mtimeMs: Long,
+        ) {
+            mutateAfterNextRead[path] = bytes to mtimeMs
+        }
+
+        override fun openRead(path: String): InputStream? =
+            files[path]?.let { bytes ->
+                ByteArrayInputStream(bytes).also {
+                    mutateAfterNextRead.remove(path)?.let { (newBytes, newMtimeMs) ->
+                        files[path] = newBytes
+                        mtimes[path] = newMtimeMs
+                    }
+                }
+            }
 
         override fun write(
             path: String,
@@ -68,12 +88,17 @@ class SyncEngineTargetedUploadTest {
         ): LocalFileStat {
             val bytes = content.use { it.readBytes() }
             files[path] = bytes
+            mtimes[path] = nowMs
             return LocalFileStat(sizeBytes = bytes.size.toLong(), mtimeMs = nowMs, mimeType = mimeType)
         }
 
-        override fun delete(path: String): Boolean = files.remove(path) != null
+        override fun delete(path: String): Boolean {
+            mtimes.remove(path)
+            return files.remove(path) != null
+        }
 
-        override fun stat(path: String): LocalFileStat? = files[path]?.let { LocalFileStat(sizeBytes = it.size.toLong(), mtimeMs = nowMs) }
+        override fun stat(path: String): LocalFileStat? =
+            files[path]?.let { LocalFileStat(sizeBytes = it.size.toLong(), mtimeMs = mtimes[path] ?: nowMs) }
     }
 
     private val treeUri = Uri.parse("content://com.example.test/tree/root")
@@ -310,6 +335,25 @@ class SyncEngineTargetedUploadTest {
             assertEquals(1, outcome.result.applied)
             assertEquals(listOf("ok.txt"), outcome.uploadedPaths)
             assertEquals(listOf("missing.txt"), outcome.failedPaths)
+        }
+
+    @Test
+    fun `does not persist remote baseline when file mutates during targeted upload`() =
+        runTest {
+            val pair = insertPair()
+            localFileAccess.put("notes.txt", "hello".toByteArray(), mtimeMs = 5_000L)
+            localFileAccess.mutateAfterNextRead("notes.txt", "hello changed".toByteArray(), mtimeMs = 6_000L)
+
+            val outcome = buildEngine().runTargetedUploads(pair, listOf("notes.txt"))
+
+            assertTrue(
+                "Expected PartialFailure for mutated upload, got: ${outcome.result}",
+                outcome.result is SyncEngine.Result.PartialFailure,
+            )
+            assertEquals(emptyList<String>(), outcome.uploadedPaths)
+            assertEquals(listOf("notes.txt"), outcome.failedPaths)
+            assertNull(localIndexDao.get(pair.id, "notes.txt")?.remoteId)
+            assertEquals(1, fakeProvider.list("remote-root").size)
         }
 
     @Test

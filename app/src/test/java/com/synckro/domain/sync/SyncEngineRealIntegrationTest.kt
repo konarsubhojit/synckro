@@ -455,6 +455,42 @@ class SyncEngineRealIntegrationTest {
         }
 
     @Test
+    fun `runReal treats instant upload delta echo as no-op`() =
+        runTest {
+            val fileContent = "instant".toByteArray()
+            localFileAccess.put("instant.txt", fileContent)
+            inMemoryChildren.set(
+                "root",
+                listOf(
+                    RawDocChild(
+                        docId = "doc-instant",
+                        name = "instant.txt",
+                        mimeType = "text/plain",
+                        size = fileContent.size.toLong(),
+                        lastModifiedMs = 5_000L,
+                    ),
+                ),
+            )
+
+            val pair = insertPair().copy(deltaToken = "0", lastFullScanAtMs = System.currentTimeMillis())
+            val engine = buildEngine()
+
+            val instantResult = engine.runTargetedUploads(pair, listOf("instant.txt"))
+            assertTrue("Instant upload should succeed", instantResult.result is SyncEngine.Result.Success)
+            assertEquals(1, fakeProvider.list("remote-root").size)
+
+            val periodicResult = engine.runOnce(pair)
+
+            assertTrue("Periodic run should succeed", periodicResult is SyncEngine.Result.Success)
+            assertEquals(
+                "The provider's echo of the instant upload must not trigger another upload",
+                0,
+                (periodicResult as SyncEngine.Result.Success).applied,
+            )
+            assertEquals(1, fakeProvider.list("remote-root").size)
+        }
+
+    @Test
     fun `runReal returns Terminal when RemoteEnumerator is not registered`() =
         runTest {
             val pair = insertPair(providerType = CloudProviderType.GOOGLE_DRIVE)
