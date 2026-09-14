@@ -106,24 +106,48 @@ class SafContentObserverWatcher(
      */
     override suspend fun refresh(pairId: Long) {
         val pair = syncPairDao.getById(pairId)
-        synchronized(lock) {
-            val registration = registrationsByPairId[pairId] ?: return
-            if (pair == null ||
-                !pair.instantSyncEnabled ||
-                !pair.hasWatchableSource() ||
-                !localFolderAccessChecker.hasReadWriteAccess(pair.localTreeUri)
-            ) {
-                registrationsByPairId.remove(pairId)
-                observerRegistry.unregisterContentObserver(registration.observer)
+        val canWatch =
+            pair?.let {
+                it.instantSyncEnabled &&
+                    it.hasWatchableSource() &&
+                    localFolderAccessChecker.hasReadWriteAccess(it.localTreeUri)
+            } == true
+        val current = synchronized(lock) { registrationsByPairId[pairId] } ?: return
+        if (!canWatch) {
+            val removed =
+                synchronized(lock) {
+                    if (registrationsByPairId[pairId] === current) {
+                        registrationsByPairId.remove(pairId)
+                        true
+                    } else {
+                        false
+                    }
+                }
+            if (removed) observerRegistry.unregisterContentObserver(current.observer)
+            return
+        }
+        checkNotNull(pair)
+        if (current.treeUriString == pair.localTreeUri) return
+
+        val replacement =
+            try {
+                createRegistration(pairId, pair.localTreeUri)
+            } catch (_: SecurityException) {
                 return
             }
-            if (registration.treeUriString != pair.localTreeUri) {
-                observerRegistry.unregisterContentObserver(registration.observer)
-                val updated = createRegistration(pairId, pair.localTreeUri)
-                updated.listeners.addAll(registration.listeners)
-                registrationsByPairId[pairId] = updated
+        val replaced =
+            synchronized(lock) {
+                if (isShutdown || registrationsByPairId[pairId] !== current) {
+                    false
+                } else {
+                    replacement.listeners.addAll(current.listeners)
+                    registrationsByPairId[pairId] = replacement
+                    true
+                }
             }
-        }
+        observerRegistry.unregisterContentObserver(
+            if (replaced) current.observer else replacement.observer,
+        )
     }
 
     override fun shutdown() {

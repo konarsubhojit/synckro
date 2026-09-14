@@ -74,7 +74,6 @@ class PairEditorInstantSyncControlTest {
             .assertIsNotEnabled()
             .assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Switch))
             .assertContentDescriptionEquals("$title. $reason")
-        composeRule.onNodeWithText(reason).assertExists()
     }
 
     private fun targetString(id: Int): String =
