@@ -42,5 +42,12 @@ class DefaultWatchablePairs
                 WatcherPairSelection.selectWatchablePairIds(pairs, autoSync, instantSync)
             }.distinctUntilChanged()
 
-        override suspend fun current(): Set<Long> = observe().first()
+        // Single-shot reads instead of collecting observe(), which would subscribe a Room query
+        // and two DataStore flows on every lifecycle evaluation.
+        override suspend fun current(): Set<Long> =
+            WatcherPairSelection.selectWatchablePairIds(
+                pairs = syncPairRepository.getAll(contentResolver),
+                globalAutoSyncEnabled = settingsRepository.globalAutoSyncEnabled.first(),
+                globalInstantSyncEnabled = settingsRepository.globalInstantSyncEnabled.first(),
+            )
     }

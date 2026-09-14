@@ -57,10 +57,15 @@ class InstantSyncWatcherService : Service() {
         flags: Int,
         startId: Int,
     ): Int {
-        // A null intent means the system re-created a sticky service after process death.
         if (intent?.action == ACTION_STOP) {
             stopSelf()
             return START_NOT_STICKY
+        }
+        if (intent == null) {
+            // The system re-created the sticky service after process death. This restart is
+            // system-initiated, so entering the foreground is permitted; promoteToForeground()
+            // still stops the service if the platform refuses.
+            Timber.i("Watcher host restarted by the system after process death")
         }
         if (!promoteToForeground()) {
             stopSelf()

@@ -268,6 +268,10 @@ object AppModule {
     @Provides @Singleton
     fun provideWatchablePairs(impl: DefaultWatchablePairs): WatchablePairs = impl
 
+    /**
+     * Provides the application [ContentResolver]. A general platform binding, used here so
+     * components such as [DefaultWatchablePairs] stay unit-testable without an Android context.
+     */
     @Provides @Singleton
     fun provideContentResolver(
         @ApplicationContext context: Context,

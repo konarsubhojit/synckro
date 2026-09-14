@@ -7,6 +7,8 @@ import com.synckro.domain.sync.WatcherLifecycleAction
 import com.synckro.domain.sync.WatcherLifecyclePolicy
 import com.synckro.domain.sync.WatcherLifecycleTrigger
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import timber.log.Timber
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -70,8 +72,14 @@ class WatcherServiceController
         @Volatile
         private var isHostRunning: Boolean = false
 
+        /** Serializes evaluations so concurrent triggers cannot start or stop the host twice. */
+        private val evaluationMutex = Mutex()
+
         /** Applies the lifecycle policy for [trigger] and returns the action that was taken. */
-        suspend fun evaluate(trigger: WatcherLifecycleTrigger): WatcherLifecycleAction {
+        suspend fun evaluate(trigger: WatcherLifecycleTrigger): WatcherLifecycleAction =
+            evaluationMutex.withLock { evaluateLocked(trigger) }
+
+        private suspend fun evaluateLocked(trigger: WatcherLifecycleTrigger): WatcherLifecycleAction {
             val watchablePairIds = watchablePairs.current()
             val action =
                 policy.decide(

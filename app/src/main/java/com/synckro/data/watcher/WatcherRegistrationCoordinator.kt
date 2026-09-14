@@ -23,6 +23,9 @@ class WatcherRegistrationCoordinator(
     private val onChange: (LocalChangeEvent.Changed) -> Unit = {},
 ) {
     private val lock = Any()
+
+    /** Serializes [reconcile] so overlapping passes cannot register the same pair twice. */
+    private val reconcileLock = Any()
     private val registrations = mutableMapOf<Long, LocalChangeWatchRegistration>()
 
     /**
@@ -40,7 +43,10 @@ class WatcherRegistrationCoordinator(
      *
      * @return the pair ids that are watched after reconciliation
      */
-    fun reconcile(desiredPairIds: Set<Long>): Set<Long> {
+    fun reconcile(desiredPairIds: Set<Long>): Set<Long> =
+        synchronized(reconcileLock) { reconcileSerially(desiredPairIds) }
+
+    private fun reconcileSerially(desiredPairIds: Set<Long>): Set<Long> {
         val startGeneration = synchronized(lock) { generation }
         val toUnregister =
             synchronized(lock) {

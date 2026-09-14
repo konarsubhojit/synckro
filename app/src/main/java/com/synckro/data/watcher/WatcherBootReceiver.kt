@@ -35,7 +35,7 @@ class WatcherBootReceiver : BroadcastReceiver() {
                 else -> return
             }
         val pendingResult = goAsync()
-        CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+        receiverScope.launch {
             try {
                 val action = controller.evaluate(trigger)
                 Timber.i("Watcher restart after %s resolved to %s", trigger, action)
@@ -46,5 +46,13 @@ class WatcherBootReceiver : BroadcastReceiver() {
                 pendingResult.finish()
             }
         }
+    }
+
+    private companion object {
+        /**
+         * Shared across broadcasts so each delivery does not leak a scope. Boot and package-replaced
+         * broadcasts are rare and the work is short-lived, so the scope is never cancelled.
+         */
+        val receiverScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     }
 }
