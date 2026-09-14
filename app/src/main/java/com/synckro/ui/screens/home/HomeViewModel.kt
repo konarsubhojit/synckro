@@ -352,6 +352,8 @@ class HomeViewModel
                 if (!enabled) {
                     syncScheduler.cancelInstant(pair.id)
                 }
+                // Enabling instant sync does not enqueue work by itself; local-change
+                // watchers enqueue instant dispatches when they observe a change.
             }
         }
 

@@ -931,6 +931,8 @@ class PairEditorViewModel
                     if (!s.instantSyncEnabled) {
                         syncScheduler.cancelInstant(savedId)
                     }
+                    // Enabling instant sync only updates pair state; local-change
+                    // watchers enqueue instant dispatches after observing changes.
                     syncEventRepository.log(
                         pairId = savedId,
                         level = SyncEventLevel.INFO,
