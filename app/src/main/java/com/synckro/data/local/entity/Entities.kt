@@ -190,3 +190,39 @@ data class LocalIndexEntity(
     /** Provider content fingerprint (ETag / md5Checksum) from the last successful sync. */
     val remoteEtag: String? = null,
 )
+
+@Entity(
+    tableName = "pending_upload",
+    primaryKeys = ["pairId", "relativePath"],
+    foreignKeys = [
+        ForeignKey(
+            entity = SyncPairEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["pairId"],
+            onDelete = ForeignKey.CASCADE,
+        ),
+    ],
+    indices = [
+        Index(value = ["state", "eligibleAtMs"]),
+        Index(value = ["state", "claimedAtMs"]),
+    ],
+)
+data class PendingUploadEntity(
+    val pairId: Long,
+    val relativePath: String,
+    val documentIdHint: String?,
+    val observedSizeBytes: Long,
+    val observedMtimeMs: Long,
+    val state: PendingUploadState = PendingUploadState.PENDING,
+    val attempts: Int = 0,
+    val eligibleAtMs: Long,
+    val claimToken: String? = null,
+    val claimedAtMs: Long? = null,
+    val createdAtMs: Long,
+    val updatedAtMs: Long,
+)
+
+enum class PendingUploadState {
+    PENDING,
+    CLAIMED,
+}

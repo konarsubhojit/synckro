@@ -47,6 +47,55 @@ class MigrationTest {
     }
 
     // -------------------------------------------------------------------------
+    // MIGRATION_15_16 – pending_upload table
+    // -------------------------------------------------------------------------
+
+    @Test
+    fun `MIGRATION_15_16 preserves v15 data and creates indexed cascade queue`() {
+        insertSyncPair(db)
+        migrateV6To15(db)
+        val pairId = firstPairId(db)
+
+        SynckroDatabase.MIGRATION_15_16.migrate(db)
+
+        assertEquals("Migration Test", stringAt(db, "SELECT displayName FROM sync_pair WHERE id = $pairId"))
+        assertTrue("pending_upload" in tableNames(db))
+        assertTrue(
+            setOf(
+                "pairId",
+                "relativePath",
+                "documentIdHint",
+                "observedSizeBytes",
+                "observedMtimeMs",
+                "state",
+                "attempts",
+                "eligibleAtMs",
+                "claimToken",
+                "claimedAtMs",
+                "createdAtMs",
+                "updatedAtMs",
+            ).all { it in columnNames(db, "pending_upload") },
+        )
+        assertTrue(
+            indexNames(db, "pending_upload").containsAll(
+                listOf(
+                    "index_pending_upload_state_eligibleAtMs",
+                    "index_pending_upload_state_claimedAtMs",
+                ),
+            ),
+        )
+
+        db.execSQL(
+            "INSERT INTO pending_upload (pairId, relativePath, observedSizeBytes, observedMtimeMs, " +
+                "state, attempts, eligibleAtMs, createdAtMs, updatedAtMs) " +
+                "VALUES ($pairId, 'file.txt', 1, 2, 'PENDING', 0, 3, 4, 5)",
+        )
+        db.execSQL("PRAGMA foreign_keys = ON")
+        db.execSQL("DELETE FROM sync_pair WHERE id = $pairId")
+        assertEquals(0L, longAt(db, "SELECT COUNT(*) FROM pending_upload"))
+    }
+
+    // -------------------------------------------------------------------------
     // MIGRATION_6_7 – sync_pair changes
     // -------------------------------------------------------------------------
 
@@ -784,6 +833,53 @@ class MigrationTest {
             it.moveToFirst()
             it.getLong(0)
         }
+    }
+
+    private fun indexNames(
+        db: SupportSQLiteDatabase,
+        table: String,
+    ): Set<String> {
+        val cursor: Cursor = db.query("PRAGMA index_list(`$table`)", emptyArray<Any?>())
+        return cursor.use {
+            buildSet {
+                val nameIdx = it.getColumnIndexOrThrow("name")
+                while (it.moveToNext()) add(it.getString(nameIdx))
+            }
+        }
+    }
+
+    private fun longAt(
+        db: SupportSQLiteDatabase,
+        query: String,
+    ): Long {
+        val cursor: Cursor = db.query(query, emptyArray<Any?>())
+        return cursor.use {
+            it.moveToFirst()
+            it.getLong(0)
+        }
+    }
+
+    private fun stringAt(
+        db: SupportSQLiteDatabase,
+        query: String,
+    ): String {
+        val cursor: Cursor = db.query(query, emptyArray<Any?>())
+        return cursor.use {
+            it.moveToFirst()
+            it.getString(0)
+        }
+    }
+
+    private fun migrateV6To15(db: SupportSQLiteDatabase) {
+        SynckroDatabase.MIGRATION_6_7.migrate(db)
+        SynckroDatabase.MIGRATION_7_8.migrate(db)
+        SynckroDatabase.MIGRATION_8_9.migrate(db)
+        SynckroDatabase.MIGRATION_9_10.migrate(db)
+        SynckroDatabase.MIGRATION_10_11.migrate(db)
+        SynckroDatabase.MIGRATION_11_12.migrate(db)
+        SynckroDatabase.MIGRATION_12_13.migrate(db)
+        SynckroDatabase.MIGRATION_13_14.migrate(db)
+        SynckroDatabase.MIGRATION_14_15.migrate(db)
     }
 
     // -------------------------------------------------------------------------
