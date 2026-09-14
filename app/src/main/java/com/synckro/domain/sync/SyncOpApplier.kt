@@ -770,18 +770,22 @@ class SyncOpApplier(
                 SyncEventTaxonomy.dispatchQuotaFallback("upload_retry"),
             )
         }
-        localIndexDao.upsert(
-            LocalIndexEntity(
-                pairId = pair.id,
-                relativePath = op.relativePath,
-                sizeBytes = stat.sizeBytes,
-                mtimeMs = stat.mtimeMs,
-                contentHash = null,
-                remoteId = remote.id,
-                remoteSizeBytes = remote.size,
-                remoteMtimeMs = remote.lastModifiedMs,
-                remoteEtag = remote.eTag,
-            ),
+        persistUploadedRemoteState(
+            relativePath = op.relativePath,
+            uploadedStat = stat,
+            remote = remote,
+            entry =
+                LocalIndexEntity(
+                    pairId = pair.id,
+                    relativePath = op.relativePath,
+                    sizeBytes = stat.sizeBytes,
+                    mtimeMs = stat.mtimeMs,
+                    contentHash = null,
+                    remoteId = remote.id,
+                    remoteSizeBytes = remote.size,
+                    remoteMtimeMs = remote.lastModifiedMs,
+                    remoteEtag = remote.eTag,
+                ),
         )
     }
 
@@ -857,16 +861,20 @@ class SyncOpApplier(
                 SyncEventTaxonomy.dispatchQuotaFallback("update_remote_retry"),
             )
         }
-        localIndexDao.upsert(
-            index.copy(
-                sizeBytes = stat.sizeBytes,
-                mtimeMs = stat.mtimeMs,
-                contentHash = null,
-                remoteId = remote.id,
-                remoteSizeBytes = remote.size,
-                remoteMtimeMs = remote.lastModifiedMs,
-                remoteEtag = remote.eTag,
-            ),
+        persistUploadedRemoteState(
+            relativePath = op.relativePath,
+            uploadedStat = stat,
+            remote = remote,
+            entry =
+                index.copy(
+                    sizeBytes = stat.sizeBytes,
+                    mtimeMs = stat.mtimeMs,
+                    contentHash = null,
+                    remoteId = remote.id,
+                    remoteSizeBytes = remote.size,
+                    remoteMtimeMs = remote.lastModifiedMs,
+                    remoteEtag = remote.eTag,
+                ),
         )
     }
 
@@ -1009,15 +1017,20 @@ class SyncOpApplier(
                             SyncEventTaxonomy.dispatchQuotaFallback("conflict_local_wins_retry"),
                         )
                     }
-                    localIndexDao.upsert(
-                        index.copy(
-                            sizeBytes = stat.sizeBytes,
-                            mtimeMs = stat.mtimeMs,
-                            contentHash = null,
-                            remoteSizeBytes = updatedRemote.size,
-                            remoteMtimeMs = updatedRemote.lastModifiedMs,
-                            remoteEtag = updatedRemote.eTag,
-                        ),
+                    persistUploadedRemoteState(
+                        relativePath = op.relativePath,
+                        uploadedStat = stat,
+                        remote = updatedRemote,
+                        entry =
+                            index.copy(
+                                sizeBytes = stat.sizeBytes,
+                                mtimeMs = stat.mtimeMs,
+                                contentHash = null,
+                                remoteId = updatedRemote.id,
+                                remoteSizeBytes = updatedRemote.size,
+                                remoteMtimeMs = updatedRemote.lastModifiedMs,
+                                remoteEtag = updatedRemote.eTag,
+                            ),
                     )
                 } else if (remote == null) {
                     // Remote was deleted; upload as new
@@ -1099,6 +1112,32 @@ class SyncOpApplier(
     // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
+
+    private suspend fun persistUploadedRemoteState(
+        relativePath: String,
+        uploadedStat: LocalFileStat,
+        remote: RemoteFile,
+        entry: LocalIndexEntity,
+    ) {
+        check(entry.remoteId == remote.id) {
+            "Uploaded remote ID mismatch for $relativePath"
+        }
+        val currentStat =
+            localFileAccess.stat(relativePath)
+                ?: error("Local file not found after upload: $relativePath")
+        if (currentStat.sizeBytes != uploadedStat.sizeBytes || currentStat.mtimeMs != uploadedStat.mtimeMs) {
+            throw LocalFileChangedDuringUploadException(
+                "Local file changed during upload: $relativePath " +
+                    "expectedSize=${uploadedStat.sizeBytes} actualSize=${currentStat.sizeBytes} " +
+                    "expectedMtime=${uploadedStat.mtimeMs} actualMtime=${currentStat.mtimeMs}",
+            )
+        }
+        localIndexDao.upsertSyncedRemoteState(entry)
+    }
+
+    private class LocalFileChangedDuringUploadException(
+        message: String,
+    ) : Exception(message)
 
     /**
      * Per-run cache of resolved remote folder IDs, keyed by `(parentId, folderName)`.

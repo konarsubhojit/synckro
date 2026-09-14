@@ -124,6 +124,59 @@ class LocalIndexDaoTest {
         }
 
     @Test
+    fun `upsertSyncedRemoteState atomically persists remote baseline`() =
+        runTest {
+            val pairId = insertPair()
+            localIndexDao.upsert(buildEntry(pairId, sizeBytes = 10L, mtimeMs = 1_000L, contentHash = "old-hash"))
+
+            localIndexDao.upsertSyncedRemoteState(
+                buildEntry(
+                    pairId = pairId,
+                    sizeBytes = 20L,
+                    mtimeMs = 2_000L,
+                    remoteId = "remote-1",
+                ).copy(
+                    remoteSizeBytes = 20L,
+                    remoteMtimeMs = 3_000L,
+                    remoteEtag = "etag-1",
+                ),
+            )
+
+            val stored = localIndexDao.get(pairId, "docs/file.txt")
+            assertEquals(20L, stored?.sizeBytes)
+            assertEquals(2_000L, stored?.mtimeMs)
+            assertEquals("remote-1", stored?.remoteId)
+            assertEquals(20L, stored?.remoteSizeBytes)
+            assertEquals(3_000L, stored?.remoteMtimeMs)
+            assertEquals("etag-1", stored?.remoteEtag)
+            assertNull(stored?.contentHash)
+        }
+
+    @Test
+    fun `upsertSyncedRemoteState preserves content hash when local metadata matches`() =
+        runTest {
+            val pairId = insertPair()
+            localIndexDao.upsert(buildEntry(pairId, sizeBytes = 10L, mtimeMs = 1_000L, contentHash = "current-hash"))
+
+            localIndexDao.upsertSyncedRemoteState(
+                buildEntry(
+                    pairId = pairId,
+                    sizeBytes = 10L,
+                    mtimeMs = 1_000L,
+                    remoteId = "remote-1",
+                ).copy(
+                    remoteSizeBytes = 10L,
+                    remoteMtimeMs = 3_000L,
+                    remoteEtag = "etag-1",
+                ),
+            )
+
+            val stored = localIndexDao.get(pairId, "docs/file.txt")
+            assertEquals("current-hash", stored?.contentHash)
+            assertEquals("remote-1", stored?.remoteId)
+        }
+
+    @Test
     fun `upsertAll inserts multiple entries`() =
         runTest {
             val pairId = insertPair()

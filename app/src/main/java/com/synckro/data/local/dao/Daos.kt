@@ -646,6 +646,29 @@ interface LocalIndexDao {
     suspend fun upsert(entry: LocalIndexEntity)
 
     /**
+     * Atomically persists the local and remote metadata from one successful sync operation.
+     *
+     * When [entry] has a null [LocalIndexEntity.contentHash], the existing hash is
+     * retained only if the stored local size and mtime still match [entry]; otherwise
+     * the hash is cleared as stale.
+     */
+    @Transaction
+    suspend fun upsertSyncedRemoteState(entry: LocalIndexEntity) {
+        val current = get(entry.pairId, entry.relativePath)
+        upsert(
+            if (entry.contentHash == null &&
+                current?.contentHash != null &&
+                current.sizeBytes == entry.sizeBytes &&
+                current.mtimeMs == entry.mtimeMs
+            ) {
+                entry.copy(contentHash = current.contentHash)
+            } else {
+                entry
+            },
+        )
+    }
+
+    /**
      * Inserts or updates all entries in [entries].  On conflict each row is replaced.
      *
      * @param entries The entries to persist.
