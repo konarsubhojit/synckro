@@ -50,7 +50,10 @@ class SyncPairDaoTest {
     // Helpers
     // ---------------------------------------------------------------------------
 
-    private fun buildEntity(localTreeUri: String) =
+    private fun buildEntity(
+        localTreeUri: String,
+        instantSyncEnabled: Boolean = false,
+    ) =
         SyncPairEntity(
             displayName = "Test Pair",
             localTreeUri = localTreeUri,
@@ -62,6 +65,7 @@ class SyncPairDaoTest {
             excludeGlobs = "",
             wifiOnly = true,
             requiresCharging = false,
+            instantSyncEnabled = instantSyncEnabled,
         )
 
     // ---------------------------------------------------------------------------
@@ -117,6 +121,17 @@ class SyncPairDaoTest {
                 updatedUri,
                 retrieved!!.localTreeUri,
             )
+        }
+
+    @Test
+    fun `insert and getById round-trips instantSyncEnabled`() =
+        runTest {
+            val id = dao.insert(buildEntity("content://test/tree", instantSyncEnabled = true))
+
+            val retrieved = dao.getById(id)
+
+            assertNotNull(retrieved)
+            assertEquals(true, retrieved!!.instantSyncEnabled)
         }
 
     @Test

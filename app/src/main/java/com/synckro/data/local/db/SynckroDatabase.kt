@@ -407,6 +407,9 @@ abstract class SynckroDatabase : RoomDatabase() {
             object : Migration(15, 16) {
                 override fun migrate(db: SupportSQLiteDatabase) {
                     db.execSQL(
+                        "ALTER TABLE `sync_pair` ADD COLUMN `instantSyncEnabled` INTEGER NOT NULL DEFAULT 0",
+                    )
+                    db.execSQL(
                         "CREATE TABLE IF NOT EXISTS `pending_upload` (" +
                             "`pairId` INTEGER NOT NULL, " +
                             "`relativePath` TEXT NOT NULL, " +

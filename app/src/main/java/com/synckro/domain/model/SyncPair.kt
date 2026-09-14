@@ -103,4 +103,6 @@ data class SyncPair(
      * skipped file.  Upload operations are never blocked by this limit.
      */
     val localStorageLimitBytes: Long? = null,
+    /** Whether local changes may trigger Instant Sync for this pair. */
+    val instantSyncEnabled: Boolean = false,
 )
