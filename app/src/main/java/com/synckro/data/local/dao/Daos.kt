@@ -730,7 +730,7 @@ interface PendingUploadDao {
         }
     }
 
-    /** Internal insert step for [upsert]; returns -1 when an existing candidate conflicts. */
+    /** Internal insert step for [upsert]; returns -1 on the `(pairId, relativePath)` primary-key conflict. */
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertIfAbsent(upload: PendingUploadEntity): Long
 

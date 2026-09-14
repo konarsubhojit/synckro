@@ -46,7 +46,7 @@ class PendingUploadDaoTest {
 
     @After
     fun tearDown() {
-        db.close()
+        if (db.isOpen) db.close()
     }
 
     @Test
@@ -228,14 +228,12 @@ class PendingUploadDaoTest {
                 assertEquals(1, rows.size)
                 assertEquals("after-restart-source", rows.single().documentIdHint)
             } finally {
+                if (db.isOpen) db.close()
                 dbFile.delete()
             }
         }
 
-    private suspend fun insertPair(): Long =
-        insertPair("Test Pair")
-
-    private suspend fun insertPair(displayName: String): Long =
+    private suspend fun insertPair(displayName: String = "Test Pair"): Long =
         pairDao.insert(
             SyncPairEntity(
                 displayName = displayName,
