@@ -677,7 +677,7 @@ class SyncWorker
                 if (upload.relativePath in completedPaths) {
                     queue.complete(upload.pairId, upload.relativePath, batch.claimToken)
                 } else {
-                    releaseInstantUpload(queue, upload, batch.claimToken)
+                    releaseInstantUpload(queue, upload, batch.claimToken, backoff = true)
                 }
             }
         }
@@ -687,17 +687,27 @@ class SyncWorker
             batch.uploads.forEach { releaseInstantUpload(queue, it, batch.claimToken) }
         }
 
+        /**
+         * Requeues one claimed row.
+         *
+         * Rows that were dispatched and did not complete — including uploads rejected
+         * because the local file mutated while it was streaming — are requeued with
+         * [backoff] so a file that keeps changing (or a persistently failing upload)
+         * cannot be re-claimed in a tight loop. A fresh observation from the watcher
+         * still resets `eligibleAtMs`, so the delay never holds back a settled file.
+         */
         private suspend fun releaseInstantUpload(
             queue: PendingUploadDao,
             upload: PendingUploadEntity,
             claimToken: String,
+            backoff: Boolean = false,
         ) {
             val nowMs = System.currentTimeMillis()
             queue.release(
                 pairId = upload.pairId,
                 relativePath = upload.relativePath,
                 claimToken = claimToken,
-                eligibleAtMs = nowMs,
+                eligibleAtMs = if (backoff) nowMs + instantRetryDelayMs(upload.attempts) else nowMs,
                 updatedAtMs = nowMs,
             )
         }
@@ -928,6 +938,23 @@ class SyncWorker
 
             internal const val INSTANT_BATCH_SIZE = 25
             internal const val INSTANT_CLAIM_TIMEOUT_MS = 15 * 60 * 1_000L
+
+            /** First requeue delay for an instant-upload row that was dispatched but did not complete. */
+            internal const val INSTANT_RETRY_BASE_DELAY_MS = 30_000L
+
+            /** Upper bound for the instant-upload requeue backoff. */
+            internal const val INSTANT_RETRY_MAX_DELAY_MS = 30 * 60 * 1_000L
+
+            /**
+             * Bounded exponential backoff for requeued instant-upload rows:
+             * 30 s → 1 min → 2 min → … capped at [INSTANT_RETRY_MAX_DELAY_MS].
+             *
+             * @param attempts Number of previous requeues recorded on the row.
+             */
+            internal fun instantRetryDelayMs(attempts: Int): Long {
+                val shift = attempts.coerceIn(0, 16)
+                return (INSTANT_RETRY_BASE_DELAY_MS shl shift).coerceAtMost(INSTANT_RETRY_MAX_DELAY_MS)
+            }
 
             /**
              * Initial delay for WorkManager exponential backoff (sub-issue #142).

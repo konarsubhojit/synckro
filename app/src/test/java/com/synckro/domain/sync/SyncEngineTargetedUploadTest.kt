@@ -353,7 +353,9 @@ class SyncEngineTargetedUploadTest {
             assertEquals(emptyList<String>(), outcome.uploadedPaths)
             assertEquals(listOf("notes.txt"), outcome.failedPaths)
             assertNull(localIndexDao.get(pair.id, "notes.txt")?.remoteId)
-            assertEquals(1, fakeProvider.list("remote-root").size)
+            // The uploaded remote result is removed again, so the mutated file cannot leave
+            // a half-written orphan behind for the retry to duplicate.
+            assertTrue(fakeProvider.list("remote-root").isEmpty())
         }
 
     @Test
