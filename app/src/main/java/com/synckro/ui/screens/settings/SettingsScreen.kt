@@ -598,6 +598,14 @@ private fun SyncSettingsContent(
             )
         }
         item {
+            SwitchRow(
+                title = stringResource(R.string.settings_global_instant_sync_title),
+                body = stringResource(R.string.settings_global_instant_sync_body),
+                checked = state.globalInstantSyncEnabled,
+                onCheckedChange = viewModel::setGlobalInstantSync,
+            )
+        }
+        item {
             ActionRow(
                 title = stringResource(R.string.settings_auto_sync_schedule_title),
                 body = autoSyncScheduleLabel(state.autoSyncSchedule),

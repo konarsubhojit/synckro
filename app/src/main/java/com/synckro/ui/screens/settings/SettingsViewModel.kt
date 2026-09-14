@@ -11,8 +11,10 @@ import com.synckro.data.repository.DarkModePreference
 import com.synckro.data.repository.InternetConnectionScope
 import com.synckro.data.repository.SettingsRepository
 import com.synckro.data.repository.SyncPairRepository
+import com.synckro.data.watcher.WatcherServiceController
 import com.synckro.data.worker.SyncScheduler
 import com.synckro.domain.model.ConflictPolicy
+import com.synckro.domain.sync.WatcherLifecycleTrigger
 import com.synckro.domain.telemetry.Telemetry
 import com.synckro.domain.telemetry.TelemetryEvents
 import com.synckro.util.logging.LogExporter
@@ -47,12 +49,14 @@ class SettingsViewModel
         private val settingsRepository: SettingsRepository,
         private val syncPairRepository: SyncPairRepository,
         private val syncScheduler: SyncScheduler,
+        private val watcherServiceController: WatcherServiceController,
         private val logExporter: LogExporter,
         private val telemetry: Telemetry,
     ) : ViewModel() {
         data class UiState(
             // Sync defaults
             val globalAutoSyncEnabled: Boolean = true,
+            val globalInstantSyncEnabled: Boolean = false,
             val defaultWifiOnly: Boolean = true,
             val defaultChargingOnly: Boolean = false,
             val defaultConflictPolicy: ConflictPolicy = ConflictPolicy.NEWEST_WINS,
@@ -135,6 +139,7 @@ class SettingsViewModel
             combine(
                 combine(
                     settingsRepository.globalAutoSyncEnabled,
+                    settingsRepository.globalInstantSyncEnabled,
                     settingsRepository.defaultWifiOnly,
                     settingsRepository.defaultChargingOnly,
                     settingsRepository.defaultConflictPolicy,
@@ -178,31 +183,32 @@ class SettingsViewModel
             ) { syncBundle, appearanceBundle, miscBundle ->
                 @Suppress("UNCHECKED_CAST")
                 // syncBundle index map:
-                // 0 autoSync, 1 defaultWifiOnly, 2 defaultChargingOnly, 3 conflictPolicy,
-                // 4 warnMobile, 5 retryAuto, 6 retryWaitMin, 7 retryMaxAttempts,
-                // 8 parallelUploads, 9 parallelDownloads, 10 schedule, 11 chargingOnly,
-                // 12 batteryThreshold, 13 internetScope, 14 meteredWifi, 15 allowedWifi,
-                // 16 disallowedWifi, 17 roaming, 18 slow2g.
+                // 0 autoSync, 1 instantSync, 2 defaultWifiOnly, 3 defaultChargingOnly,
+                // 4 conflictPolicy, 5 warnMobile, 6 retryAuto, 7 retryWaitMin,
+                // 8 retryMaxAttempts, 9 parallelUploads, 10 parallelDownloads, 11 schedule,
+                // 12 chargingOnly, 13 batteryThreshold, 14 internetScope, 15 meteredWifi,
+                // 16 allowedWifi, 17 disallowedWifi, 18 roaming, 19 slow2g.
                 UiState(
                     globalAutoSyncEnabled = syncBundle[0] as Boolean,
-                    defaultWifiOnly = syncBundle[1] as Boolean,
-                    defaultChargingOnly = syncBundle[2] as Boolean,
-                    defaultConflictPolicy = syncBundle[3] as ConflictPolicy,
-                    warnOnMobileNetworkSync = syncBundle[4] as Boolean,
-                    retryAutomaticallyAfterError = syncBundle[5] as Boolean,
-                    retryWaitMinutes = syncBundle[6] as Int,
-                    retryMaxAttempts = syncBundle[7] as Int,
-                    parallelUploads = syncBundle[8] as Int,
-                    parallelDownloads = syncBundle[9] as Int,
-                    autoSyncSchedule = syncBundle[10] as AutoSyncSchedule,
-                    autoSyncChargingOnly = syncBundle[11] as Boolean,
-                    autoSyncBatteryThresholdPercent = syncBundle[12] as Int,
-                    internetConnectionScope = syncBundle[13] as InternetConnectionScope,
-                    syncOnMeteredWifi = syncBundle[14] as Boolean,
-                    allowedWifiNetworks = syncBundle[15] as Set<String>,
-                    disallowedWifiNetworks = syncBundle[16] as Set<String>,
-                    syncOnMobileRoaming = syncBundle[17] as Boolean,
-                    syncOnSlow2g = syncBundle[18] as Boolean,
+                    globalInstantSyncEnabled = syncBundle[1] as Boolean,
+                    defaultWifiOnly = syncBundle[2] as Boolean,
+                    defaultChargingOnly = syncBundle[3] as Boolean,
+                    defaultConflictPolicy = syncBundle[4] as ConflictPolicy,
+                    warnOnMobileNetworkSync = syncBundle[5] as Boolean,
+                    retryAutomaticallyAfterError = syncBundle[6] as Boolean,
+                    retryWaitMinutes = syncBundle[7] as Int,
+                    retryMaxAttempts = syncBundle[8] as Int,
+                    parallelUploads = syncBundle[9] as Int,
+                    parallelDownloads = syncBundle[10] as Int,
+                    autoSyncSchedule = syncBundle[11] as AutoSyncSchedule,
+                    autoSyncChargingOnly = syncBundle[12] as Boolean,
+                    autoSyncBatteryThresholdPercent = syncBundle[13] as Int,
+                    internetConnectionScope = syncBundle[14] as InternetConnectionScope,
+                    syncOnMeteredWifi = syncBundle[15] as Boolean,
+                    allowedWifiNetworks = syncBundle[16] as Set<String>,
+                    disallowedWifiNetworks = syncBundle[17] as Set<String>,
+                    syncOnMobileRoaming = syncBundle[18] as Boolean,
+                    syncOnSlow2g = syncBundle[19] as Boolean,
                     darkMode = appearanceBundle[0] as DarkModePreference,
                     appLanguage = appearanceBundle[1] as AppLanguagePreference,
                     dynamicColor = appearanceBundle[2] as Boolean,
@@ -245,6 +251,20 @@ class SettingsViewModel
                 settingsRepository.setGlobalAutoSync(enabled)
                 val pairs = syncPairRepository.observeAll(context.contentResolver).first()
                 syncScheduler.scheduleOrCancelAll(pairs, enabled)
+            }
+        }
+
+        /**
+         * Updates the global Instant Sync preference. Disabling immediately stops watcher hosting and
+         * cancels instant work, but deliberately retains durable pending-upload rows and periodic work.
+         */
+        fun setGlobalInstantSync(enabled: Boolean) {
+            Timber.i("SettingsViewModel.setGlobalInstantSync(enabled=$enabled)")
+            viewModelScope.launch {
+                settingsRepository.setGlobalInstantSync(enabled)
+                val pairs = syncPairRepository.observeAll(context.contentResolver).first()
+                if (!enabled) pairs.forEach { syncScheduler.cancelInstant(it.id) }
+                watcherServiceController.evaluate(WatcherLifecycleTrigger.CONFIGURATION_CHANGED)
             }
         }
 

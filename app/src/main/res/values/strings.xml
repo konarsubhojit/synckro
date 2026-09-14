@@ -588,6 +588,8 @@
     <string name="settings_action">Settings</string>
     <string name="settings_global_auto_sync_title">Auto-sync</string>
     <string name="settings_global_auto_sync_body">Automatically keep all sync pairs up to date in the background. Disable to pause all periodic syncing; manual "Sync now" still works.</string>
+    <string name="settings_global_instant_sync_title">Instant Sync</string>
+    <string name="settings_global_instant_sync_body">Watch selected folders and upload eligible changes soon after detection. This can use extra battery, and detection is best-effort because storage providers may not support it. Turning it off stops watchers and cancels instant work; queued changes are kept.</string>
     <string name="home_auto_sync_paused">Auto-sync paused</string>
 
     <!-- Settings: section headers -->
