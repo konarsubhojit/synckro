@@ -228,3 +228,34 @@ enum class PendingUploadState {
     PENDING,
     CLAIMED,
 }
+
+/**
+ * Durable per-pair execution ownership record.
+ *
+ * At most one sync run may own a pair at a time, regardless of which WorkManager
+ * unique name (instant, manual "sync now", or periodic) enqueued it. Ownership is
+ * kept fresh by [heartbeatAtMs]; a lease whose heartbeat is older than the
+ * configured timeout is considered stale and may be taken over by another run so
+ * ownership recovers after process death.
+ */
+@Entity(
+    tableName = "pair_run_lease",
+    foreignKeys = [
+        ForeignKey(
+            entity = SyncPairEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["pairId"],
+            onDelete = ForeignKey.CASCADE,
+        ),
+    ],
+    indices = [Index(value = ["heartbeatAtMs"])],
+)
+data class PairRunLeaseEntity(
+    @PrimaryKey val pairId: Long,
+    /** Opaque owner identity; the owning worker's WorkManager run id. */
+    val ownerToken: String,
+    /** Low-cardinality label of the run that owns the pair (`instant`, `manual`, `periodic`). */
+    val ownerKind: String,
+    val acquiredAtMs: Long,
+    val heartbeatAtMs: Long,
+)

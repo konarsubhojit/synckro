@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import androidx.work.Configuration
 import androidx.work.WorkManager
+import com.synckro.data.local.dao.PairRunLeaseDao
 import com.synckro.data.local.dao.PendingUploadDao
 import com.synckro.data.local.dao.SyncPairDao
 import com.synckro.data.repository.SettingsRepository
@@ -156,6 +157,7 @@ class SyncWorkerRetryCapTest {
                     settingsRepository = mockk<SettingsRepository>(relaxed = true),
                     pendingUploadDao = mockk<PendingUploadDao>(relaxed = true),
                     instantCandidateResolver = mockk<InstantCandidateResolver>(relaxed = true),
+                    pairRunLeaseDao = mockk<PairRunLeaseDao>(relaxed = true),
                 )
 
             coEvery { syncStatusNotifier.notifyFailure(pair, "boom") } returns Unit

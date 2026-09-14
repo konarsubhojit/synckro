@@ -97,6 +97,35 @@ class MigrationTest {
     }
 
     // -------------------------------------------------------------------------
+    // MIGRATION_16_17 – per-pair run lease
+    // -------------------------------------------------------------------------
+
+    @Test
+    fun `MIGRATION_16_17 creates indexed cascade run lease table`() {
+        insertSyncPair(db)
+        migrateV6To15(db)
+        SynckroDatabase.MIGRATION_15_16.migrate(db)
+        val pairId = firstPairId(db)
+
+        SynckroDatabase.MIGRATION_16_17.migrate(db)
+
+        assertTrue("pair_run_lease" in tableNames(db))
+        assertTrue(
+            setOf("pairId", "ownerToken", "ownerKind", "acquiredAtMs", "heartbeatAtMs")
+                .all { it in columnNames(db, "pair_run_lease") },
+        )
+        assertTrue("index_pair_run_lease_heartbeatAtMs" in indexNames(db, "pair_run_lease"))
+
+        db.execSQL(
+            "INSERT INTO pair_run_lease (pairId, ownerToken, ownerKind, acquiredAtMs, heartbeatAtMs) " +
+                "VALUES ($pairId, 'owner', 'periodic', 1, 2)",
+        )
+        db.execSQL("PRAGMA foreign_keys = ON")
+        db.execSQL("DELETE FROM sync_pair WHERE id = $pairId")
+        assertEquals(0L, longAt(db, "SELECT COUNT(*) FROM pair_run_lease"))
+    }
+
+    // -------------------------------------------------------------------------
     // MIGRATION_6_7 – sync_pair changes
     // -------------------------------------------------------------------------
 
