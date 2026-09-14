@@ -57,6 +57,17 @@ class PendingDispatchResumer
                 Timber.d("PendingDispatchResumer.resume() already ran for this process; skipping")
                 return
             }
+            try {
+                resumeQueue(nowMs)
+            } catch (t: Throwable) {
+                // Allow a later startup callback to retry so a transient failure cannot
+                // strand the durable queue for the rest of the process lifetime.
+                resumed.set(false)
+                throw t
+            }
+        }
+
+        private suspend fun resumeQueue(nowMs: Long) {
             pendingUploadDao.recoverStaleClaims(
                 staleBeforeMs = nowMs - SyncWorker.INSTANT_CLAIM_TIMEOUT_MS,
                 recoveredAtMs = nowMs,

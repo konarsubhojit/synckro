@@ -18,10 +18,12 @@ import io.mockk.verify
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import org.junit.Assert.assertThrows
 import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -123,6 +125,27 @@ class PendingDispatchResumerTest {
             coVerify(exactly = 1) { pendingUploadDao.pairIdsWithEligibleRows(NOW_MS) }
         }
 
+    @Test
+    fun `a failed resume can be retried`() =
+        runTest(dispatcher) {
+            val pair = pair()
+            givenQueue(pairIds = listOf(pair.id), pairs = listOf(pair))
+            givenFlags()
+            coEvery {
+                pendingUploadDao.recoverStaleClaims(any(), any(), any(), any())
+            } throws IllegalStateException("database unavailable") andThen 0
+            val resumer = resumer(CoroutineScope(this.coroutineContext))
+
+            assertThrows(IllegalStateException::class.java) {
+                runBlocking { resumer.resume(nowMs = NOW_MS) }
+            }
+            resumer.resume(nowMs = NOW_MS)
+            advanceTimeBy(PairSignalCoordinator.DEFAULT_DEBOUNCE_MS)
+            runCurrent()
+
+            verify(exactly = 1) { syncScheduler.enqueueInstant(pair) }
+        }
+
     private fun resumer(scope: CoroutineScope) =
         PendingDispatchResumer(
             context = context,
@@ -138,7 +161,7 @@ class PendingDispatchResumerTest {
         pairIds: List<Long>,
         pairs: List<SyncPair>,
     ) {
-        coEvery { pendingUploadDao.pairIdsWithEligibleRows(any(), any()) } returns pairIds
+        coEvery { pendingUploadDao.pairIdsWithEligibleRows(eq(NOW_MS), any()) } returns pairIds
         coEvery { syncPairRepository.getAll(contentResolver) } returns pairs
     }
 
