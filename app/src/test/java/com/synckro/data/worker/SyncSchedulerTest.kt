@@ -6,6 +6,7 @@ import androidx.work.BackoffPolicy
 import androidx.work.Configuration
 import androidx.work.ExistingWorkPolicy
 import androidx.work.NetworkType
+import androidx.work.OneTimeWorkRequest
 import androidx.work.OutOfQuotaPolicy
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
@@ -301,7 +302,7 @@ class SyncSchedulerTest {
             mockWm.enqueueUniqueWork(
                 SyncWorker.instantName(syncPair.id),
                 ExistingWorkPolicy.KEEP,
-                any<androidx.work.OneTimeWorkRequest>(),
+                any<OneTimeWorkRequest>(),
             )
         }
     }
