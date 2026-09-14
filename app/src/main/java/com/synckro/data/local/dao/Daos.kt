@@ -730,13 +730,15 @@ interface PendingUploadDao {
         }
     }
 
+    /** Internal insert step for [upsert]; returns -1 when an existing candidate conflicts. */
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertIfAbsent(upload: PendingUploadEntity): Long
 
+    /** Internal refresh step for [upsert]; preserves the row's original creation time and attempts. */
     @Query(
         "UPDATE pending_upload SET documentIdHint = :documentIdHint, " +
             "observedSizeBytes = :observedSizeBytes, observedMtimeMs = :observedMtimeMs, " +
-            "state = :state, attempts = :attempts, eligibleAtMs = :eligibleAtMs, " +
+            "state = :state, eligibleAtMs = :eligibleAtMs, " +
             "claimToken = :claimToken, claimedAtMs = :claimedAtMs, updatedAtMs = :updatedAtMs " +
             "WHERE pairId = :pairId AND relativePath = :relativePath",
     )
@@ -747,7 +749,6 @@ interface PendingUploadDao {
         observedSizeBytes: Long,
         observedMtimeMs: Long,
         state: PendingUploadState,
-        attempts: Int,
         eligibleAtMs: Long,
         claimToken: String?,
         claimedAtMs: Long?,
@@ -762,7 +763,6 @@ interface PendingUploadDao {
             observedSizeBytes = upload.observedSizeBytes,
             observedMtimeMs = upload.observedMtimeMs,
             state = upload.state,
-            attempts = upload.attempts,
             eligibleAtMs = upload.eligibleAtMs,
             claimToken = upload.claimToken,
             claimedAtMs = upload.claimedAtMs,

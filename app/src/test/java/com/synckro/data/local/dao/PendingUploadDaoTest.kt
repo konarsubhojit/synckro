@@ -113,7 +113,7 @@ class PendingUploadDaoTest {
     fun `upsert refreshes duplicate candidate without creating another row`() =
         runTest {
             val pairId = insertPair()
-            pendingUploadDao.upsert(upload(pairId))
+            pendingUploadDao.upsert(upload(pairId, attempts = 2))
 
             pendingUploadDao.upsert(
                 upload(
@@ -134,6 +134,7 @@ class PendingUploadDaoTest {
                 assertEquals(200L, observedSizeBytes)
                 assertEquals(800L, observedMtimeMs)
                 assertEquals(PendingUploadState.PENDING, state)
+                assertEquals(2, attempts)
                 assertEquals(1_500L, eligibleAtMs)
                 assertEquals(500L, createdAtMs)
                 assertEquals(900L, updatedAtMs)
@@ -209,23 +210,26 @@ class PendingUploadDaoTest {
             db.close()
             val context = ApplicationProvider.getApplicationContext<Context>()
             val dbFile = File(context.cacheDir, "pending-upload-dedup-${System.nanoTime()}.db")
-            db = openPersistentDb(dbFile)
-            pairDao = db.syncPairDao()
-            pendingUploadDao = db.pendingUploadDao()
+            try {
+                db = openPersistentDb(dbFile)
+                pairDao = db.syncPairDao()
+                pendingUploadDao = db.pendingUploadDao()
 
-            val pairId = insertPair()
-            pendingUploadDao.upsert(upload(pairId))
-            pendingUploadDao.upsert(upload(pairId, documentIdHint = "after-restart-source", updatedAtMs = 900L))
-            db.close()
+                val pairId = insertPair()
+                pendingUploadDao.upsert(upload(pairId))
+                pendingUploadDao.upsert(upload(pairId, documentIdHint = "after-restart-source", updatedAtMs = 900L))
+                db.close()
 
-            db = openPersistentDb(dbFile)
-            pairDao = db.syncPairDao()
-            pendingUploadDao = db.pendingUploadDao()
+                db = openPersistentDb(dbFile)
+                pairDao = db.syncPairDao()
+                pendingUploadDao = db.pendingUploadDao()
 
-            val rows = pendingUploadDao.getForPair(pairId)
-            assertEquals(1, rows.size)
-            assertEquals("after-restart-source", rows.single().documentIdHint)
-            dbFile.delete()
+                val rows = pendingUploadDao.getForPair(pairId)
+                assertEquals(1, rows.size)
+                assertEquals("after-restart-source", rows.single().documentIdHint)
+            } finally {
+                dbFile.delete()
+            }
         }
 
     private suspend fun insertPair(): Long =
@@ -253,6 +257,7 @@ class PendingUploadDaoTest {
         documentIdHint: String? = "document-id",
         observedSizeBytes: Long = 100L,
         observedMtimeMs: Long = 500L,
+        attempts: Int = 0,
         eligibleAtMs: Long = 1_000L,
         createdAtMs: Long = 500L,
         updatedAtMs: Long = 500L,
@@ -262,6 +267,7 @@ class PendingUploadDaoTest {
         documentIdHint = documentIdHint,
         observedSizeBytes = observedSizeBytes,
         observedMtimeMs = observedMtimeMs,
+        attempts = attempts,
         eligibleAtMs = eligibleAtMs,
         createdAtMs = createdAtMs,
         updatedAtMs = updatedAtMs,
