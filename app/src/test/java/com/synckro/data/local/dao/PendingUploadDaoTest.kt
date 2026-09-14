@@ -141,6 +141,27 @@ class PendingUploadDaoTest {
         }
 
     @Test
+    fun `eligible pair ids skip claimed and not yet eligible rows`() =
+        runTest {
+            val readyPairId = insertPair("Ready Pair")
+            val laterPairId = insertPair("Later Pair")
+            val claimedPairId = insertPair("Claimed Pair")
+            pendingUploadDao.upsert(upload(readyPairId, path = "ready.txt", eligibleAtMs = 500L))
+            pendingUploadDao.upsert(upload(laterPairId, path = "later.txt", eligibleAtMs = 5_000L))
+            pendingUploadDao.upsert(upload(claimedPairId, path = "claimed.txt", eligibleAtMs = 100L))
+            pendingUploadDao.claimEligibleForPair(claimedPairId, "worker-a", claimedAtMs = 200L, limit = 10)
+
+            assertEquals(listOf(readyPairId), pendingUploadDao.pairIdsWithEligibleRows(nowMs = 1_000L))
+
+            pendingUploadDao.recoverStaleClaims(staleBeforeMs = 200L, recoveredAtMs = 300L)
+
+            assertEquals(
+                listOf(claimedPairId, readyPairId),
+                pendingUploadDao.pairIdsWithEligibleRows(nowMs = 1_000L),
+            )
+        }
+
+    @Test
     fun `complete only removes the matching claim and pair deletion cascades`() =
         runTest {
             val pairId = insertPair()

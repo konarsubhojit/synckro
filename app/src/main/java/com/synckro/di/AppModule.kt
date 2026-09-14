@@ -30,8 +30,10 @@ import com.synckro.domain.auth.AuthManager
 import com.synckro.domain.model.CloudProviderType
 import com.synckro.domain.provider.CloudProviderFactory
 import com.synckro.domain.scan.LocalFolderScanner
+import com.synckro.domain.sync.InstantSyncEligibilityPolicy
 import com.synckro.domain.sync.LocalChangeWatcher
 import com.synckro.domain.sync.LocalChangeWatcherRefresher
+import com.synckro.domain.sync.PairSignalCoordinator
 import com.synckro.domain.sync.RemoteEnumerator
 import com.synckro.domain.sync.SyncEngine
 import com.synckro.domain.telemetry.Telemetry
@@ -166,6 +168,21 @@ object AppModule {
      */
     @Provides @Singleton
     fun provideSyncScheduler(workManager: WorkManager): SyncScheduler = SyncScheduler(workManager)
+
+    /** Provides the stateless Instant Sync eligibility policy shared by dispatch call sites. */
+    @Provides @Singleton
+    fun provideInstantSyncEligibilityPolicy(): InstantSyncEligibilityPolicy = InstantSyncEligibilityPolicy()
+
+    /**
+     * Provides the process-wide debounce coordinator for instant dispatch.
+     *
+     * Its scope lives for the whole process; pending debounce windows are in-memory only and
+     * are re-armed from the durable queue on startup by
+     * [com.synckro.data.worker.PendingDispatchResumer].
+     */
+    @Provides @Singleton
+    fun providePairSignalCoordinator(): PairSignalCoordinator =
+        PairSignalCoordinator(CoroutineScope(Dispatchers.Default + SupervisorJob()))
 
     /**
      * Provides the singleton [DataStore]<[Preferences]> used by [SettingsRepository].

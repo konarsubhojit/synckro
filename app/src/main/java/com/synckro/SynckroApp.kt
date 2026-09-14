@@ -10,6 +10,7 @@ import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
 import com.synckro.data.repository.AppLanguagePreference
 import com.synckro.data.repository.SettingsRepository
+import com.synckro.data.worker.PendingDispatchResumer
 import com.synckro.data.worker.SyncWorker
 import com.synckro.domain.telemetry.Telemetry
 import com.synckro.providers.onedrive.OneDriveMultiAccountStartupProbe
@@ -45,6 +46,8 @@ class SynckroApp :
 
     @Inject lateinit var oneDriveMultiAccountStartupProbe: OneDriveMultiAccountStartupProbe
 
+    @Inject lateinit var pendingDispatchResumer: PendingDispatchResumer
+
     @Inject lateinit var settingsRepository: SettingsRepository
 
     @Inject lateinit var telemetry: Telemetry
@@ -58,6 +61,10 @@ class SynckroApp :
         createNotificationChannels()
         applicationScope.launch {
             oneDriveMultiAccountStartupProbe.runIfNeeded()
+        }
+        applicationScope.launch {
+            runCatching { pendingDispatchResumer.resume() }
+                .onFailure { Timber.w(it, "Failed to resume pending instant dispatch") }
         }
         if (BuildConfig.DEBUG) {
             Timber.plant(Timber.DebugTree())
