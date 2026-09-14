@@ -6,7 +6,6 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
-import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Conflates signals into independent trailing-edge debounce windows for each sync pair.
@@ -21,29 +20,47 @@ class PairSignalCoordinator(
     private val scope: CoroutineScope,
     private val debounceMs: Long = DEFAULT_DEBOUNCE_MS,
 ) {
-    private val pendingSignals = ConcurrentHashMap<Long, Job>()
-
     init {
-        require(debounceMs >= 0) { "debounceMs must be >= 0" }
+        require(debounceMs >= 0) { "debounceMs must be >= 0 but was $debounceMs" }
     }
+
+    private val lock = Any()
+    private val pendingSignals = mutableMapOf<Long, Job>()
 
     /**
      * Resets [pairId]'s debounce window, replacing any pending signal and its callback.
      */
-    suspend fun signal(
+    fun signal(
         pairId: Long,
         onDebounced: suspend (Long) -> Unit,
     ) {
         val job =
             scope.launch(start = CoroutineStart.LAZY) {
                 delay(debounceMs)
-                if (pendingSignals.remove(pairId, coroutineContext.job)) {
+                val currentJob = coroutineContext.job
+                val shouldDispatch =
+                    synchronized(lock) {
+                        if (pendingSignals[pairId] === currentJob) {
+                            pendingSignals.remove(pairId)
+                            true
+                        } else {
+                            false
+                        }
+                    }
+                if (shouldDispatch) {
                     onDebounced(pairId)
                 }
             }
-        val replaced = pendingSignals.put(pairId, job)
+        val replaced =
+            synchronized(lock) {
+                pendingSignals.put(pairId, job)
+            }
         job.invokeOnCompletion {
-            pendingSignals.remove(pairId, job)
+            synchronized(lock) {
+                if (pendingSignals[pairId] === job) {
+                    pendingSignals.remove(pairId)
+                }
+            }
         }
         replaced?.cancel()
         job.start()
@@ -54,12 +71,14 @@ class PairSignalCoordinator(
      *
      * Persisted work is unaffected and can be signaled again after cancellation or restart.
      */
-    suspend fun cancelPendingSignals() {
-        pendingSignals.entries.toList().forEach { (pairId, job) ->
-            if (pendingSignals.remove(pairId, job)) {
-                job.cancel()
+    fun cancelPendingSignals() {
+        val jobs =
+            synchronized(lock) {
+                pendingSignals.values.toList().also {
+                    pendingSignals.clear()
+                }
             }
-        }
+        jobs.forEach(Job::cancel)
     }
 
     companion object {

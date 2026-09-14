@@ -55,6 +55,22 @@ class PairSignalCoordinatorTest {
         }
 
     @Test
+    fun `pair can be signaled again after dispatch`() =
+        runTest(dispatcher) {
+            val coordinator = PairSignalCoordinator(this, debounceMs = 100L)
+            val dispatched = mutableListOf<Long>()
+
+            coordinator.signal(1L, dispatched::add)
+            advanceTimeBy(100L)
+            runCurrent()
+            coordinator.signal(1L, dispatched::add)
+            advanceTimeBy(100L)
+            runCurrent()
+
+            assertEquals(listOf(1L, 1L), dispatched)
+        }
+
+    @Test
     fun `cancellation and restart do not consume durable rows`() =
         runTest(dispatcher) {
             val durableRows = mutableSetOf(1L, 2L)
