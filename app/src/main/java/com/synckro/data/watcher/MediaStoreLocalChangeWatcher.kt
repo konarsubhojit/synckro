@@ -7,6 +7,8 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.provider.MediaStore
+import com.synckro.domain.sync.FileCandidateDecision
+import com.synckro.domain.sync.FileCandidatePolicy
 import com.synckro.domain.sync.LocalChangeEvent
 import com.synckro.domain.sync.LocalChangeWatchFailure
 import com.synckro.domain.sync.LocalChangeWatchRegistration
@@ -14,19 +16,20 @@ import com.synckro.domain.sync.LocalChangeWatchRegistrationResult
 import com.synckro.domain.sync.LocalChangeWatcher
 import com.synckro.domain.sync.LocalChangeWatcherCapability
 import com.synckro.domain.sync.LocalChangeWatcherFallback
+import com.synckro.domain.sync.MediaStorePendingState
 import timber.log.Timber
 
 /** The outcome of reading the scoping metadata of a changed MediaStore item. */
 sealed interface MediaItemLookup {
     /**
      * Metadata was read. [relativePath] follows the `MediaStore.MediaColumns.RELATIVE_PATH`
-     * convention and is `null` when the provider did not report one; [isPending] mirrors
-     * `MediaStore.MediaColumns.IS_PENDING` and is `false` on platforms without that column.
+     * convention and is `null` when the provider did not report one; [pendingState] mirrors
+     * `MediaStore.MediaColumns.IS_PENDING` where the column applies.
      * [displayName] is the item's file name when the provider reported one.
      */
     data class Found(
         val relativePath: String?,
-        val isPending: Boolean,
+        val pendingState: MediaStorePendingState,
         val displayName: String? = null,
     ) : MediaItemLookup
 
@@ -156,8 +159,15 @@ class MediaStoreLocalChangeWatcher(
                 MediaItemLookup.PermissionDenied -> emitFailure(LocalChangeWatchFailure.PermissionDenied)
                 MediaItemLookup.Unknown -> Unit
                 is MediaItemLookup.Found -> {
-                    if (lookup.isPending) return
                     if (!isInPairScope(lookup.relativePath)) return
+                    if (
+                        FileCandidatePolicy.evaluate(
+                            relativePath = lookup.displayName,
+                            mediaStorePendingState = lookup.pendingState,
+                        ) != FileCandidateDecision.Eligible
+                    ) {
+                        return
+                    }
                     val deliver = synchronized(registrationLock) { isActive }
                     if (deliver) listener(LocalChangeEvent.Changed(pairId, locationHint(lookup, itemUri)))
                 }
@@ -281,18 +291,24 @@ class ContentResolverMediaItemMetadataReader(
                 val relativePathIndex = cursor.getColumnIndex(MediaStore.MediaColumns.RELATIVE_PATH)
                 val relativePath =
                     if (relativePathIndex >= 0) cursor.getString(relativePathIndex) else null
-                val isPending =
+                val pendingState =
                     if (supportsPending) {
                         val pendingIndex = cursor.getColumnIndex(MediaStore.MediaColumns.IS_PENDING)
-                        pendingIndex >= 0 && cursor.getInt(pendingIndex) == 1
+                        if (pendingIndex < 0 || cursor.isNull(pendingIndex)) {
+                            MediaStorePendingState.UNAVAILABLE
+                        } else if (cursor.getInt(pendingIndex) == 1) {
+                            MediaStorePendingState.PENDING
+                        } else {
+                            MediaStorePendingState.NOT_PENDING
+                        }
                     } else {
-                        false
+                        MediaStorePendingState.NOT_APPLICABLE
                     }
                 val displayNameIndex = cursor.getColumnIndex(MediaStore.MediaColumns.DISPLAY_NAME)
                 val displayName = if (displayNameIndex >= 0) cursor.getString(displayNameIndex) else null
                 MediaItemLookup.Found(
                     relativePath = relativePath,
-                    isPending = isPending,
+                    pendingState = pendingState,
                     displayName = displayName,
                 )
             }

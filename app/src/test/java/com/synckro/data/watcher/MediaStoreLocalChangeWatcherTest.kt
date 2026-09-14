@@ -5,6 +5,7 @@ import com.synckro.domain.sync.LocalChangeWatchFailure
 import com.synckro.domain.sync.LocalChangeWatchRegistrationResult
 import com.synckro.domain.sync.LocalChangeWatcherCapability
 import com.synckro.domain.sync.LocalChangeWatcherFallback
+import com.synckro.domain.sync.MediaStorePendingState
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -17,13 +18,13 @@ class MediaStoreLocalChangeWatcherTest {
     fun `only completed items inside the pair subtree are reported`() {
         val events = mutableListOf<LocalChangeEvent>()
         metadata.items["content://media/external/images/media/1"] =
-            MediaItemLookup.Found("DCIM/Camera/", isPending = false, displayName = "photo.jpg")
+            MediaItemLookup.Found("DCIM/Camera/", MediaStorePendingState.NOT_PENDING, "photo.jpg")
         metadata.items["content://media/external/images/media/2"] =
-            MediaItemLookup.Found("DCIM/Camera/", isPending = true, displayName = "pending.jpg")
+            MediaItemLookup.Found("DCIM/Camera/", MediaStorePendingState.PENDING, "pending.jpg")
         metadata.items["content://media/external/images/media/3"] =
-            MediaItemLookup.Found("Pictures/Other/", isPending = false, displayName = "other.jpg")
+            MediaItemLookup.Found("Pictures/Other/", MediaStorePendingState.NOT_PENDING, "other.jpg")
         metadata.items["content://media/external/images/media/4"] =
-            MediaItemLookup.Found(relativePath = null, isPending = false)
+            MediaItemLookup.Found(relativePath = null, MediaStorePendingState.NOT_PENDING)
         val watcher = watcher(mediaTree("DCIM/Camera/"))
 
         val result = watcher.register(pairId = 3, listener = events::add)
@@ -40,12 +41,35 @@ class MediaStoreLocalChangeWatcherTest {
     fun `nested subdirectories stay in scope`() {
         val events = mutableListOf<LocalChangeEvent>()
         metadata.items["content://media/external/images/media/1"] =
-            MediaItemLookup.Found("DCIM/Camera/Trip/", isPending = false, displayName = "a.jpg")
+            MediaItemLookup.Found("DCIM/Camera/Trip/", MediaStorePendingState.NOT_PENDING, "a.jpg")
         watcher(mediaTree("DCIM/Camera/")).register(pairId = 3, listener = events::add)
 
         factory.change("content://media/external/images/media/1")
 
         assertEquals(listOf(LocalChangeEvent.Changed(3, "DCIM/Camera/Trip/a.jpg")), events)
+    }
+
+    @Test
+    fun `temporary pending and inconclusive items are ignored but final rename is re-evaluated`() {
+        val uri = "content://media/external/images/media/1"
+        val events = mutableListOf<LocalChangeEvent>()
+        val watcher = watcher(mediaTree("DCIM/Camera/"))
+        watcher.register(pairId = 3, listener = events::add)
+
+        metadata.items[uri] =
+            MediaItemLookup.Found("DCIM/Camera/", MediaStorePendingState.NOT_PENDING, "photo.jpg.part")
+        factory.change(uri)
+        metadata.items[uri] =
+            MediaItemLookup.Found("DCIM/Camera/", MediaStorePendingState.PENDING, "photo.jpg")
+        factory.change(uri)
+        metadata.items[uri] =
+            MediaItemLookup.Found("DCIM/Camera/", MediaStorePendingState.UNAVAILABLE, "photo.jpg")
+        factory.change(uri)
+        metadata.items[uri] =
+            MediaItemLookup.Found("DCIM/Camera/", MediaStorePendingState.NOT_PENDING, "photo.jpg")
+        factory.change(uri)
+
+        assertEquals(listOf(LocalChangeEvent.Changed(3, "DCIM/Camera/photo.jpg")), events)
     }
 
     @Test
@@ -83,7 +107,7 @@ class MediaStoreLocalChangeWatcherTest {
     fun `unregister and shutdown stop observing and are idempotent`() {
         val events = mutableListOf<LocalChangeEvent>()
         metadata.items["content://media/external/images/media/1"] =
-            MediaItemLookup.Found("DCIM/Camera/", isPending = false, displayName = "photo.jpg")
+            MediaItemLookup.Found("DCIM/Camera/", MediaStorePendingState.NOT_PENDING, "photo.jpg")
         val watcher = watcher(mediaTree("DCIM/Camera/"))
         val registration =
             (watcher.register(pairId = 3, listener = events::add) as LocalChangeWatchRegistrationResult.Registered)

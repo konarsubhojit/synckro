@@ -9,6 +9,8 @@ import com.synckro.data.local.entity.LocalIndexEntity
 import com.synckro.data.scanner.DefaultDocumentChildrenQuery
 import com.synckro.data.scanner.DocumentChildrenQuery
 import com.synckro.data.scanner.RawDocChild
+import com.synckro.domain.sync.FileCandidateDecision
+import com.synckro.domain.sync.FileCandidatePolicy
 import com.synckro.domain.sync.SyncPathScope
 import dagger.hilt.android.qualifiers.ApplicationContext
 import timber.log.Timber
@@ -199,9 +201,9 @@ class LocalFsEnumerator internal constructor(
                     continue
                 }
 
-                // Skip hidden files.
-                if (child.name.startsWith('.')) {
-                    Timber.d("LocalFsEnumerator: skipping hidden file '%s'", relativePath)
+                // Fail closed for hidden, temporary, or otherwise inconclusive names.
+                if (FileCandidatePolicy.evaluate(relativePath) != FileCandidateDecision.Eligible) {
+                    Timber.d("LocalFsEnumerator: skipping excluded file '%s'", relativePath)
                     continue
                 }
 

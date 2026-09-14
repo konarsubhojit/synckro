@@ -120,6 +120,17 @@ Use glob patterns to narrow the set of files included in a sync:
 | **Exclude sub-folders** | When enabled, only files directly inside the root folder are synced; nested directories are ignored on both sides. |
 | **Exclude empty folders** | Remote folders that contain no files are not created on the local side (and vice versa). |
 
+Synckro always excludes hidden leaf names (names beginning with `.`), names
+ending in `.part`, `.crdownload`, or `.tmp`, names beginning with `.pending-`,
+and names beginning with `~$`. These built-in checks are case-insensitive and
+cannot be overridden by an include glob. MediaStore items with `IS_PENDING=1`
+are also excluded; when a required name or pending value is unavailable, the
+candidate remains inconclusive rather than being accepted.
+
+These checks use the current name for each observation. Renaming a temporary
+file to its final name causes the final name to be evaluated from scratch, so it
+can enter normal scope once MediaStore reports it as complete.
+
 Patterns use standard glob syntax: `*` matches any sequence of characters within
 a path component; `**` is not currently supported — patterns are matched against
 the filename only, not the full relative path.

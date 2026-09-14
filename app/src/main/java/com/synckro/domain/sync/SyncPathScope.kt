@@ -4,7 +4,8 @@ package com.synckro.domain.sync
  * Precompiled relative-path scope rules shared by full enumeration, targeted
  * candidate resolution, and Instant Sync eligibility.
  *
- * Hidden leaf files and empty file names are always rejected. Ignore globs take
+ * Hidden and temporary leaf files are always rejected. Empty file names are
+ * inconclusive and therefore also fail closed. Ignore globs take
  * precedence over include globs; when the include filter is inactive all
  * non-ignored files are accepted.
  */
@@ -15,8 +16,7 @@ class SyncPathScope internal constructor(
     val excludeSubfolders: Boolean,
 ) {
     fun contains(relativePath: String): Boolean {
-        val fileName = relativePath.substringAfterLast('/')
-        if (fileName.isEmpty() || fileName.startsWith('.')) return false
+        if (FileCandidatePolicy.evaluate(relativePath) != FileCandidateDecision.Eligible) return false
         if (excludeSubfolders && relativePath.contains('/')) return false
 
         if (ignoreGlobs.any { it.matches(relativePath) }) return false

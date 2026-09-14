@@ -357,4 +357,20 @@ class SafLocalFileAccessTest {
             sample,
         )
     }
+
+    @Test
+    fun `sampler is inconclusive when required MediaStore pending state is unavailable`() {
+        val sample =
+            sampler(
+                metadata = mapOf("id" to SafDocumentMetadata(77L, 2_000L, "text/plain")),
+                pendingQuery = MediaStorePendingStateQuery { _, _, _ -> null },
+            ).sample(documentId = "id")
+
+        assertEquals(
+            TargetedSafMetadataSample.Inconclusive(
+                TargetedSafMetadataSample.Inconclusive.Reason.METADATA_UNAVAILABLE,
+            ),
+            sample,
+        )
+    }
 }
