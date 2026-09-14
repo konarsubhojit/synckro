@@ -121,7 +121,7 @@ class PendingDispatchResumerTest {
             runCurrent()
 
             verify(exactly = 1) { syncScheduler.enqueueInstant(pair) }
-            coVerify(exactly = 1) { pendingUploadDao.pairIdsWithEligibleRows(NOW_MS) }
+            coVerify(exactly = 1) { pendingUploadDao.pairIdsWithEligibleRows(eq(NOW_MS), any()) }
         }
 
     @Test
