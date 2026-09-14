@@ -1186,7 +1186,12 @@ class SyncOpApplier(
                 pair.id,
                 SyncEventLevel.ERROR,
                 SyncEventTag.OP_APPLIER,
-                SyncEventTaxonomy.outcomeFailed("upload_cleanup", "cleanup_failed"),
+                SyncEventTaxonomy.outcomeFailed(
+                    "upload_cleanup",
+                    // The exception type keeps the event actionable without risking file
+                    // paths or account identifiers leaking through a provider message.
+                    t::class.simpleName ?: "cleanup_failed",
+                ),
             )
         }
     }
