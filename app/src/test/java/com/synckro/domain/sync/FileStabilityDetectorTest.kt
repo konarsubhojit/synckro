@@ -133,6 +133,23 @@ class FileStabilityDetectorTest {
         }
 
     @Test
+    fun `metadata read failure defers without openability probe`() =
+        runTest {
+            val openabilityProbe = RecordingOpenabilityProbe(canOpen = true)
+            val detector =
+                QuietPeriodFileStabilityDetector(
+                    metadataReader = FailingMetadataReader(),
+                    openabilityProbe = openabilityProbe,
+                )
+
+            assertEquals(
+                FileStabilityResult.Deferred(FileStabilityDeferralReason.METADATA_READ_FAILED),
+                detector.awaitStable(FILE_ID),
+            )
+            assertEquals(0, openabilityProbe.calls)
+        }
+
+    @Test
     fun `openability failure defers after quiet period`() =
         runTest {
             val detector =
@@ -203,6 +220,13 @@ class FileStabilityDetectorTest {
             }
             calls += 1
             return samples[nextIndex++]
+        }
+    }
+
+    private class FailingMetadataReader : FileStabilityMetadataReader<String> {
+        override suspend fun readMetadata(target: String): FileStabilityMetadata {
+            check(target == FILE_ID)
+            throw IllegalStateException("metadata unavailable")
         }
     }
 
