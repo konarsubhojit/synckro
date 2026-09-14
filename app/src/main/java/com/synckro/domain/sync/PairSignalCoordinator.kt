@@ -6,21 +6,22 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Conflates signals into independent trailing-edge debounce windows for each sync pair.
  *
  * This coordinator deliberately stores no pending work. Callers must persist work before signaling
  * so cancelling or recreating the coordinator cannot discard durable rows.
+ *
+ * @param debounceMs quiet period required before dispatch; zero dispatches immediately
+ * @throws IllegalArgumentException when [debounceMs] is negative
  */
 class PairSignalCoordinator(
     private val scope: CoroutineScope,
     private val debounceMs: Long = DEFAULT_DEBOUNCE_MS,
 ) {
-    private val mutex = Mutex()
-    private val pendingSignals = mutableMapOf<Long, Job>()
+    private val pendingSignals = ConcurrentHashMap<Long, Job>()
 
     init {
         require(debounceMs >= 0) { "debounceMs must be >= 0" }
@@ -34,29 +35,17 @@ class PairSignalCoordinator(
         onDebounced: suspend (Long) -> Unit,
     ) {
         val job =
-            mutex.withLock {
-                pendingSignals.remove(pairId)?.cancel()
-
-                scope
-                    .launch(start = CoroutineStart.LAZY) {
-                        delay(debounceMs)
-                        val currentJob = coroutineContext.job
-                        val shouldDispatch =
-                            mutex.withLock {
-                                if (pendingSignals[pairId] === currentJob) {
-                                    pendingSignals.remove(pairId)
-                                    true
-                                } else {
-                                    false
-                                }
-                            }
-                        if (shouldDispatch) {
-                            onDebounced(pairId)
-                        }
-                    }.also {
-                        pendingSignals[pairId] = it
-                    }
+            scope.launch(start = CoroutineStart.LAZY) {
+                delay(debounceMs)
+                if (pendingSignals.remove(pairId, coroutineContext.job)) {
+                    onDebounced(pairId)
+                }
             }
+        val replaced = pendingSignals.put(pairId, job)
+        job.invokeOnCompletion {
+            pendingSignals.remove(pairId, job)
+        }
+        replaced?.cancel()
         job.start()
     }
 
@@ -66,11 +55,11 @@ class PairSignalCoordinator(
      * Persisted work is unaffected and can be signaled again after cancellation or restart.
      */
     suspend fun cancelPendingSignals() {
-        val jobs =
-            mutex.withLock {
-                pendingSignals.values.toList().also { pendingSignals.clear() }
+        pendingSignals.entries.toList().forEach { (pairId, job) ->
+            if (pendingSignals.remove(pairId, job)) {
+                job.cancel()
             }
-        jobs.forEach(Job::cancel)
+        }
     }
 
     companion object {
