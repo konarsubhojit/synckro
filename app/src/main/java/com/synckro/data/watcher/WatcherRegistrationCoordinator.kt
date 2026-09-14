@@ -22,9 +22,13 @@ class WatcherRegistrationCoordinator(
     private val watcher: LocalChangeWatcher,
     private val onChange: (LocalChangeEvent.Changed) -> Unit = {},
 ) {
+    /** Guards [registrations] and [generation]; always the innermost lock. */
     private val lock = Any()
 
-    /** Serializes [reconcile] so overlapping passes cannot register the same pair twice. */
+    /**
+     * Serializes [reconcile] so overlapping passes cannot register the same pair twice. Acquired
+     * before [lock] and never from code that already holds [lock].
+     */
     private val reconcileLock = Any()
     private val registrations = mutableMapOf<Long, LocalChangeWatchRegistration>()
 

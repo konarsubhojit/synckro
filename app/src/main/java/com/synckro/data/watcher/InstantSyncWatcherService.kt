@@ -57,10 +57,6 @@ class InstantSyncWatcherService : Service() {
         flags: Int,
         startId: Int,
     ): Int {
-        if (intent?.action == ACTION_STOP) {
-            stopSelf()
-            return START_NOT_STICKY
-        }
         if (intent == null) {
             // The system re-created the sticky service after process death. This restart is
             // system-initiated, so entering the foreground is permitted; promoteToForeground()
@@ -73,6 +69,8 @@ class InstantSyncWatcherService : Service() {
         }
         controller.onHostStarted()
         startObserving()
+        // Sticky so watching resumes after process death. A later stopSelf() (no watchable pairs)
+        // or stopService() ends the service for good, so this cannot loop.
         return START_STICKY
     }
 
@@ -152,11 +150,8 @@ class InstantSyncWatcherService : Service() {
     }
 
     companion object {
-        /** Starts (or reconciles) the watcher host. */
+        /** Starts (or reconciles) the watcher host. Stopping uses `Context.stopService`. */
         const val ACTION_START = "com.synckro.action.START_WATCHERS"
-
-        /** Stops the watcher host. */
-        const val ACTION_STOP = "com.synckro.action.STOP_WATCHERS"
 
         /**
          * Notification channel for the persistent watcher notification. Created by

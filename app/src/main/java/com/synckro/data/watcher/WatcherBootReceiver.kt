@@ -9,6 +9,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
 import timber.log.Timber
 import javax.inject.Inject
 
@@ -37,7 +38,7 @@ class WatcherBootReceiver : BroadcastReceiver() {
         val pendingResult = goAsync()
         receiverScope.launch {
             try {
-                val action = controller.evaluate(trigger)
+                val action = withTimeout(EVALUATION_TIMEOUT_MS) { controller.evaluate(trigger) }
                 Timber.i("Watcher restart after %s resolved to %s", trigger, action)
             } catch (e: Exception) {
                 // A restart failure must never crash the boot broadcast; periodic sync still runs.
@@ -54,5 +55,11 @@ class WatcherBootReceiver : BroadcastReceiver() {
          * broadcasts are rare and the work is short-lived, so the scope is never cancelled.
          */
         val receiverScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+        /**
+         * `goAsync()` only keeps the broadcast alive for about ten seconds, so give up before the
+         * system force-finishes it and `pendingResult.finish()` would throw.
+         */
+        const val EVALUATION_TIMEOUT_MS = 8_000L
     }
 }

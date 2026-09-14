@@ -100,6 +100,8 @@ class SynckroApp :
     private fun observeWatcherHostLifecycle() {
         registerActivityLifecycleCallbacks(
             object : ActivityLifecycleCallbacks {
+                // Only mutated from the main thread; visibility for the collector below is carried
+                // by the @Volatile isAppVisible field.
                 private var startedActivities = 0
 
                 override fun onActivityStarted(activity: Activity) {

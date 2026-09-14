@@ -90,6 +90,9 @@ class WatcherServiceController
             return when (action) {
                 WatcherLifecycleAction.START ->
                     if (starter.start()) {
+                        // Mark the host as running before onHostStarted() arrives so a trigger that
+                        // fires while the service is still starting does not request a second start.
+                        isHostRunning = true
                         action
                     } else {
                         isHostRunning = false
