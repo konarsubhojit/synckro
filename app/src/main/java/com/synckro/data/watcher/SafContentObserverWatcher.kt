@@ -1,5 +1,6 @@
 package com.synckro.data.watcher
 
+import android.content.ContentResolver
 import android.database.ContentObserver
 import android.net.Uri
 import android.os.Handler
@@ -36,13 +37,16 @@ class SafContentObserverWatcher(
         pairId: Long,
         listener: (LocalChangeEvent) -> Unit,
     ): LocalChangeWatchRegistrationResult {
+        // register() is synchronous by contract. Resolve pair metadata on IO to avoid main-thread
+        // Room access, then continue with thread-safe observer registration.
         val pair =
-            runBlocking(Dispatchers.IO) { syncPairDao.getById(pairId) }
-                ?: return LocalChangeWatchRegistrationResult.Failed(
-                    LocalChangeWatchFailure.Unknown("pair_not_found"),
-                )
+            runBlocking(Dispatchers.IO) {
+                syncPairDao.getById(pairId)
+            } ?: return LocalChangeWatchRegistrationResult.Failed(
+                LocalChangeWatchFailure.Unknown("pair_not_found"),
+            )
 
-        if (!pair.direction.allowsUpload() || pair.localTreeUri.isBlank()) {
+        if (!pair.direction.allowsUpload() || pair.localTreeUri.isBlank() || !pair.autoSyncEnabled) {
             return unavailableResult()
         }
 
@@ -57,36 +61,20 @@ class SafContentObserverWatcher(
                     return LocalChangeWatchRegistrationResult.Failed(LocalChangeWatchFailure.Shutdown)
                 }
 
-                val existing = registrationsByPairId[pairId]
-                if (existing != null && existing.treeUriString != pair.localTreeUri) {
-                    registrationsByPairId.remove(pairId)
-                    observerRegistry.unregisterContentObserver(existing.observer)
+                val registration = registrationsByPairId[pairId]
+                if (registration == null) {
+                    registrationsByPairId[pairId] = createRegistration(pairId, pair.localTreeUri)
+                } else if (registration.treeUriString != pair.localTreeUri) {
+                    val existingListeners = registration.listeners.toList()
+                    observerRegistry.unregisterContentObserver(registration.observer)
+                    val updated = createRegistration(pairId, pair.localTreeUri)
+                    updated.listeners.addAll(existingListeners)
+                    registrationsByPairId[pairId] = updated
                 }
 
-                val registration =
-                    registrationsByPairId.getOrPut(pairId) {
-                        val treeUri = Uri.parse(pair.localTreeUri)
-                        val observer =
-                            object : ContentObserver(observerHandler) {
-                                override fun onChange(selfChange: Boolean) {
-                                    onPairChanged(pairId, null)
-                                }
-
-                                override fun onChange(
-                                    selfChange: Boolean,
-                                    uri: Uri?,
-                                ) {
-                                    onPairChanged(pairId, uri)
-                                }
-                            }
-                        observerRegistry.registerContentObserver(treeUri, true, observer)
-                        PairRegistration(
-                            treeUriString = pair.localTreeUri,
-                            observer = observer,
-                            listeners = mutableListOf(),
-                        )
-                    }
-                registration.listeners.add(RegisteredListener(observerRegistrationToken, listener))
+                registrationsByPairId.getValue(pairId).listeners.add(
+                    RegisteredListener(observerRegistrationToken, listener),
+                )
             }
         } catch (_: SecurityException) {
             return unavailableResult()
@@ -116,6 +104,32 @@ class SafContentObserverWatcher(
             registrationsByPairId.values.forEach { observerRegistry.unregisterContentObserver(it.observer) }
             registrationsByPairId.clear()
         }
+    }
+
+    private fun createRegistration(
+        pairId: Long,
+        treeUriString: String,
+    ): PairRegistration {
+        val treeUri = Uri.parse(treeUriString)
+        val observer =
+            object : ContentObserver(observerHandler) {
+                override fun onChange(selfChange: Boolean) {
+                    onPairChanged(pairId, null)
+                }
+
+                override fun onChange(
+                    selfChange: Boolean,
+                    uri: Uri?,
+                ) {
+                    onPairChanged(pairId, uri)
+                }
+            }
+        observerRegistry.registerContentObserver(treeUri, true, observer)
+        return PairRegistration(
+            treeUriString = treeUriString,
+            observer = observer,
+            listeners = mutableListOf(),
+        )
     }
 
     private fun onPairChanged(
@@ -162,6 +176,10 @@ class SafContentObserverWatcher(
     )
 }
 
+/**
+ * Thin abstraction over ContentResolver's observer APIs so watcher behavior can be unit-tested
+ * without a live DocumentsProvider.
+ */
 interface ContentObserverRegistry {
     fun registerContentObserver(
         uri: Uri,
@@ -173,7 +191,7 @@ interface ContentObserverRegistry {
 }
 
 class ContentResolverContentObserverRegistry(
-    private val contentResolver: android.content.ContentResolver,
+    private val contentResolver: ContentResolver,
 ) : ContentObserverRegistry {
     override fun registerContentObserver(
         uri: Uri,
