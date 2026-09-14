@@ -47,6 +47,17 @@ class SettingsRepository
             dataStore.data.map { it[KEY_GLOBAL_AUTO_SYNC] ?: DEFAULT_GLOBAL_AUTO_SYNC }
 
         /**
+         * Emits `true` when the user has opted in to Instant Sync.
+         *
+         * Defaults to `false`. Instant Sync is background-triggered automatic sync,
+         * so the eligibility policy also requires [globalAutoSyncEnabled] to remain
+         * enabled; turning off the global background-sync master pauses both periodic
+         * and instant background work while leaving manual "Sync now" unaffected.
+         */
+        val globalInstantSyncEnabled: Flow<Boolean> =
+            dataStore.data.map { it[KEY_GLOBAL_INSTANT_SYNC] ?: DEFAULT_GLOBAL_INSTANT_SYNC }
+
+        /**
          * Persists the new global auto-sync preference.
          *
          * @param enabled `true` to allow periodic sync for all eligible pairs;
@@ -54,6 +65,11 @@ class SettingsRepository
          */
         suspend fun setGlobalAutoSync(enabled: Boolean) {
             dataStore.edit { it[KEY_GLOBAL_AUTO_SYNC] = enabled }
+        }
+
+        /** Persists the global Instant Sync opt-in preference. */
+        suspend fun setGlobalInstantSync(enabled: Boolean) {
+            dataStore.edit { it[KEY_GLOBAL_INSTANT_SYNC] = enabled }
         }
 
         /** Default value for [com.synckro.domain.model.SyncPair.wifiOnly] when creating a new pair. */
@@ -466,6 +482,7 @@ class SettingsRepository
 
         companion object {
             internal val KEY_GLOBAL_AUTO_SYNC = booleanPreferencesKey("global_auto_sync_enabled")
+            internal val KEY_GLOBAL_INSTANT_SYNC = booleanPreferencesKey("global_instant_sync_enabled")
             internal val KEY_DEFAULT_WIFI_ONLY = booleanPreferencesKey("default_wifi_only")
             internal val KEY_DEFAULT_CHARGING_ONLY = booleanPreferencesKey("default_charging_only")
             internal val KEY_DEFAULT_CONFLICT_POLICY = stringPreferencesKey("default_conflict_policy")
@@ -514,6 +531,7 @@ class SettingsRepository
             internal val KEY_ANALYTICS_ENABLED = booleanPreferencesKey("analytics_enabled")
 
             internal const val DEFAULT_GLOBAL_AUTO_SYNC = true
+            internal const val DEFAULT_GLOBAL_INSTANT_SYNC = false
             internal const val DEFAULT_WIFI_ONLY = true
             internal const val DEFAULT_CHARGING_ONLY = false
             internal val DEFAULT_CONFLICT_POLICY = ConflictPolicy.NEWEST_WINS

@@ -70,6 +70,39 @@ class SettingsRepositoryTest {
         }
 
     @Test
+    fun `globalInstantSyncEnabled defaults to false`() =
+        testScope.runTest {
+            val repo = buildRepository()
+            assertFalse(
+                "Expected globalInstantSyncEnabled to default to false",
+                repo.globalInstantSyncEnabled.first(),
+            )
+        }
+
+    @Test
+    fun `setGlobalInstantSync true persists true`() =
+        testScope.runTest {
+            val repo = buildRepository()
+            repo.setGlobalInstantSync(true)
+            assertTrue(
+                "Expected globalInstantSyncEnabled to be true after setGlobalInstantSync(true)",
+                repo.globalInstantSyncEnabled.first(),
+            )
+        }
+
+    @Test
+    fun `setGlobalInstantSync toggles back to false`() =
+        testScope.runTest {
+            val repo = buildRepository()
+            repo.setGlobalInstantSync(true)
+            repo.setGlobalInstantSync(false)
+            assertFalse(
+                "Expected globalInstantSyncEnabled to be false after toggling back",
+                repo.globalInstantSyncEnabled.first(),
+            )
+        }
+
+    @Test
     fun `multiple writes reflect the latest value`() =
         testScope.runTest {
             val repo = buildRepository()
