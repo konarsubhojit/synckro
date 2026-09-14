@@ -637,6 +637,19 @@ interface LocalIndexDao {
     ): LocalIndexEntity?
 
     /**
+     * Returns the local-index entries for [pairId] whose path is in [relativePaths].
+     *
+     * Used by the targeted upload path so a claimed batch resolves its index rows in one
+     * query instead of one query per path. Callers must keep [relativePaths] below SQLite's
+     * bound-parameter limit; chunk larger inputs.
+     */
+    @Query("SELECT * FROM local_index WHERE pairId = :pairId AND relativePath IN (:relativePaths)")
+    suspend fun getForPaths(
+        pairId: Long,
+        relativePaths: List<String>,
+    ): List<LocalIndexEntity>
+
+    /**
      * Inserts or updates a single [LocalIndexEntity].  On conflict the existing row is
      * replaced in its entirety.
      *

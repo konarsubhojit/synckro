@@ -288,10 +288,13 @@ class SyncEngine(
         }
 
         return try {
+            // One query per chunk instead of one per path: claimed batches are bounded, and
+            // chunking keeps the IN clause under SQLite's bound-parameter limit.
             val localIndexByPath =
                 eligiblePaths
-                    .mapNotNull { path -> indexDao.get(pair.id, path)?.let { path to it } }
-                    .toMap()
+                    .chunked(INDEX_LOOKUP_CHUNK_SIZE)
+                    .flatMap { chunk -> indexDao.getForPaths(pair.id, chunk) }
+                    .associateBy { it.relativePath }
             val ops =
                 eligiblePaths.map { path ->
                     if (localIndexByPath[path]?.remoteId != null) {
@@ -323,7 +326,7 @@ class SyncEngine(
                     maxConcurrent = maxConcurrent,
                     onProgress = onProgress,
                 )
-            val uploadedPaths = applyResult.appliedPaths.toSet()
+            val appliedPathSet = applyResult.appliedPaths.toSet()
             // Any eligible path the applier neither uploaded nor reported as failed (it
             // never reached the op) stays retriable rather than being reported as done.
             TargetedUploadResult(
@@ -337,8 +340,8 @@ class SyncEngine(
                             errors = applyResult.errors,
                         )
                     },
-                uploadedPaths = eligiblePaths.filter { it in uploadedPaths },
-                failedPaths = eligiblePaths.filterNot { it in uploadedPaths },
+                uploadedPaths = eligiblePaths.filter { it in appliedPathSet },
+                failedPaths = eligiblePaths.filterNot { it in appliedPathSet },
                 skippedPaths = skippedPaths,
             )
         } catch (c: CancellationException) {
@@ -1349,6 +1352,9 @@ class SyncEngine(
             val copyName = "$stem (conflict $dateLabel)$ext"
             return if (dir.isEmpty()) copyName else "$dir/$copyName"
         }
+
+        /** Chunk size for batched local-index lookups; well below SQLite's parameter limit. */
+        private const val INDEX_LOOKUP_CHUNK_SIZE = 500
 
         internal const val DELTA_TOKEN_RESET_EVENT_PREFIX = "Incremental sync token expired (HTTP 410)"
         internal val PERIODIC_REMOTE_REENUMERATION_INTERVAL_MS: Long = TimeUnit.DAYS.toMillis(7)
