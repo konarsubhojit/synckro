@@ -47,11 +47,11 @@ class MigrationTest {
     }
 
     // -------------------------------------------------------------------------
-    // MIGRATION_15_16 – pending_upload table
+    // MIGRATION_15_16 – Instant Sync opt-in and pending_upload table
     // -------------------------------------------------------------------------
 
     @Test
-    fun `MIGRATION_15_16 preserves v15 data and creates indexed cascade queue`() {
+    fun `MIGRATION_15_16 disables Instant Sync and creates indexed cascade queue`() {
         insertSyncPair(db)
         migrateV6To15(db)
         val pairId = firstPairId(db)
@@ -59,6 +59,7 @@ class MigrationTest {
         SynckroDatabase.MIGRATION_15_16.migrate(db)
 
         assertEquals("Migration Test", stringAt(db, "SELECT displayName FROM sync_pair WHERE id = $pairId"))
+        assertEquals(0L, longAt(db, "SELECT instantSyncEnabled FROM sync_pair WHERE id = $pairId"))
         assertTrue("pending_upload" in tableNames(db))
         assertTrue(
             setOf(

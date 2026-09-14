@@ -80,6 +80,8 @@ data class SyncPairEntity(
      * See [SyncPair.localStorageLimitBytes] for the full rationale.
      */
     val localStorageLimitBytes: Long? = null,
+    /** Whether local changes may trigger Instant Sync for this pair. */
+    val instantSyncEnabled: Boolean = false,
 )
 
 @Entity(

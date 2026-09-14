@@ -46,6 +46,7 @@ class EntityMappersTest {
         excludeSubfolders: Boolean = false,
         excludeEmptyFolders: Boolean = false,
         accountId: String? = null,
+        instantSyncEnabled: Boolean = false,
     ) = SyncPairEntity(
         id = id,
         displayName = displayName,
@@ -68,6 +69,7 @@ class EntityMappersTest {
         retentionDays = retentionDays,
         excludeSubfolders = excludeSubfolders,
         excludeEmptyFolders = excludeEmptyFolders,
+        instantSyncEnabled = instantSyncEnabled,
     )
 
     // ---------------------------------------------------------------------------
@@ -177,6 +179,16 @@ class EntityMappersTest {
     fun `toDomain maps scheduleIntervalMinutes`() {
         val entity = buildEntity(scheduleIntervalMinutes = 120L)
         assertEquals(120L, entity.toDomain().scheduleIntervalMinutes)
+    }
+
+    @Test
+    fun `toDomain maps instantSyncEnabled`() {
+        assertTrue(buildEntity(instantSyncEnabled = true).toDomain().instantSyncEnabled)
+    }
+
+    @Test
+    fun `instantSyncEnabled defaults to false`() {
+        assertFalse(buildEntity().toDomain().instantSyncEnabled)
     }
 
     // ---------------------------------------------------------------------------
@@ -299,6 +311,7 @@ class EntityMappersTest {
                 retentionDays = 7,
                 excludeSubfolders = true,
                 excludeEmptyFolders = true,
+                instantSyncEnabled = true,
             )
         val pair = entity.toDomain(needsReLink = true)
 
@@ -322,6 +335,7 @@ class EntityMappersTest {
         assertEquals(7, pair.retentionDays)
         assertTrue(pair.excludeSubfolders)
         assertTrue(pair.excludeEmptyFolders)
+        assertTrue(pair.instantSyncEnabled)
         assertTrue(pair.needsReLink)
     }
 }
