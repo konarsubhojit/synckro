@@ -46,6 +46,8 @@ class InstantSyncWatcherService : Service() {
 
     @Inject lateinit var controller: WatcherServiceController
 
+    @Inject lateinit var candidateIngestor: InstantSyncCandidateIngestor
+
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var coordinator: WatcherRegistrationCoordinator? = null
     private var observeJob: Job? = null
@@ -115,7 +117,13 @@ class InstantSyncWatcherService : Service() {
     private fun startObserving() {
         if (observeJob?.isActive == true) return
         val registrations =
-            coordinator ?: WatcherRegistrationCoordinator(watcher).also { coordinator = it }
+            coordinator
+                ?: WatcherRegistrationCoordinator(
+                    watcher = watcher,
+                    onChange = { event ->
+                        serviceScope.launch { candidateIngestor.onLocalChange(event) }
+                    },
+                ).also { coordinator = it }
         observeJob =
             serviceScope.launch {
                 watchablePairs.observe().collect { desiredPairIds ->

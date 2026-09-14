@@ -28,7 +28,9 @@ import com.synckro.data.scanner.LocalFolderScannerImpl
 import com.synckro.data.watcher.ContentResolverContentObserverRegistry
 import com.synckro.data.watcher.ContextWatcherServiceStarter
 import com.synckro.data.watcher.DefaultWatchablePairs
+import com.synckro.data.watcher.InstantSyncCandidateTarget
 import com.synckro.data.watcher.SafContentObserverWatcher
+import com.synckro.data.watcher.SafInstantSyncCandidateSampler
 import com.synckro.data.watcher.WatchablePairs
 import com.synckro.data.watcher.WatcherServiceStarter
 import com.synckro.data.worker.SyncScheduler
@@ -36,10 +38,12 @@ import com.synckro.domain.auth.AuthManager
 import com.synckro.domain.model.CloudProviderType
 import com.synckro.domain.provider.CloudProviderFactory
 import com.synckro.domain.scan.LocalFolderScanner
+import com.synckro.domain.sync.FileStabilityDetector
 import com.synckro.domain.sync.InstantSyncEligibilityPolicy
 import com.synckro.domain.sync.LocalChangeWatcher
 import com.synckro.domain.sync.LocalChangeWatcherRefresher
 import com.synckro.domain.sync.PairSignalCoordinator
+import com.synckro.domain.sync.QuietPeriodFileStabilityDetector
 import com.synckro.domain.sync.RemoteEnumerator
 import com.synckro.domain.sync.SyncEngine
 import com.synckro.domain.sync.WatcherLifecyclePolicy
@@ -183,6 +187,15 @@ object AppModule {
     /** Provides the stateless Instant Sync eligibility policy shared by dispatch call sites. */
     @Provides @Singleton
     fun provideInstantSyncEligibilityPolicy(): InstantSyncEligibilityPolicy = InstantSyncEligibilityPolicy()
+
+    @Provides @Singleton
+    fun provideInstantSyncFileStabilityDetector(
+        sampler: SafInstantSyncCandidateSampler,
+    ): FileStabilityDetector<InstantSyncCandidateTarget> =
+        QuietPeriodFileStabilityDetector(
+            metadataReader = sampler,
+            openabilityProbe = sampler,
+        )
 
     /**
      * Provides the process-wide debounce coordinator for instant dispatch.
