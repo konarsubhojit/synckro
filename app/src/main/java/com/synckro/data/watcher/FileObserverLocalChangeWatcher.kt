@@ -199,7 +199,9 @@ object AndroidDirectoryObserverFactory : DirectoryObserverFactory {
     ): DirectoryWatchHandle {
         @Suppress("DEPRECATION")
         val observer =
-            object : FileObserver(path, WATCH_MASK or IN_UNMOUNT or IN_Q_OVERFLOW or IN_IGNORED) {
+            // inotify always reports IN_UNMOUNT, IN_Q_OVERFLOW and IN_IGNORED regardless of the
+            // requested mask, so they are handled below without being requested here.
+            object : FileObserver(path, WATCH_MASK) {
                 override fun onEvent(
                     event: Int,
                     childPath: String?,
