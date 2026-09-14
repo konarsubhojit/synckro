@@ -722,9 +722,56 @@ interface LocalIndexDao {
 
 @Dao
 interface PendingUploadDao {
-    /** Inserts a new candidate or updates the queued candidate with the same pair and relative path. */
-    @Upsert
-    suspend fun upsert(upload: PendingUploadEntity)
+    /** Inserts a new candidate or refreshes the candidate with the same pair and relative path. */
+    @Transaction
+    suspend fun upsert(upload: PendingUploadEntity) {
+        if (insertIfAbsent(upload) == -1L) {
+            refreshCandidate(upload)
+        }
+    }
+
+    /** Internal insert step for [upsert]; returns -1 on the `(pairId, relativePath)` primary-key conflict. */
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertIfAbsent(upload: PendingUploadEntity): Long
+
+    /** Internal refresh step for [upsert]; preserves the row's original creation time and attempts. */
+    @Query(
+        "UPDATE pending_upload SET documentIdHint = :documentIdHint, " +
+            "observedSizeBytes = :observedSizeBytes, observedMtimeMs = :observedMtimeMs, " +
+            "state = :state, eligibleAtMs = :eligibleAtMs, " +
+            "claimToken = :claimToken, claimedAtMs = :claimedAtMs, updatedAtMs = :updatedAtMs " +
+            "WHERE pairId = :pairId AND relativePath = :relativePath",
+    )
+    suspend fun refreshCandidateFields(
+        pairId: Long,
+        relativePath: String,
+        documentIdHint: String?,
+        observedSizeBytes: Long,
+        observedMtimeMs: Long,
+        state: PendingUploadState,
+        eligibleAtMs: Long,
+        claimToken: String?,
+        claimedAtMs: Long?,
+        updatedAtMs: Long,
+    ): Int
+
+    /**
+     * Refreshes an existing candidate with [upload]'s observation metadata.
+     * The row is always made pending and any in-flight claim is invalidated.
+     */
+    suspend fun refreshCandidate(upload: PendingUploadEntity): Int =
+        refreshCandidateFields(
+            pairId = upload.pairId,
+            relativePath = upload.relativePath,
+            documentIdHint = upload.documentIdHint,
+            observedSizeBytes = upload.observedSizeBytes,
+            observedMtimeMs = upload.observedMtimeMs,
+            state = PendingUploadState.PENDING,
+            eligibleAtMs = upload.eligibleAtMs,
+            claimToken = null,
+            claimedAtMs = null,
+            updatedAtMs = upload.updatedAtMs,
+        )
 
     /** Returns all rows for [pairId], primarily for queue inspection and tests. */
     @Query("SELECT * FROM pending_upload WHERE pairId = :pairId ORDER BY relativePath ASC")
