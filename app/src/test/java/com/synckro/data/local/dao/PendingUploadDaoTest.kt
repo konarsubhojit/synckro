@@ -5,6 +5,7 @@ import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.synckro.data.local.db.SynckroDatabase
 import com.synckro.data.local.entity.PendingUploadEntity
+import com.synckro.data.local.entity.PendingUploadState
 import com.synckro.data.local.entity.SyncPairEntity
 import com.synckro.domain.model.CloudProviderType
 import com.synckro.domain.model.ConflictPolicy
@@ -15,12 +16,14 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import java.io.File
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
@@ -106,10 +109,132 @@ class PendingUploadDaoTest {
             assertTrue(pendingUploadDao.getForPair(pairId).isEmpty())
         }
 
+    @Test
+    fun `upsert refreshes duplicate candidate without creating another row`() =
+        runTest {
+            val pairId = insertPair()
+            pendingUploadDao.upsert(upload(pairId))
+
+            pendingUploadDao.upsert(
+                upload(
+                    pairId = pairId,
+                    documentIdHint = "document-id-2",
+                    observedSizeBytes = 200L,
+                    observedMtimeMs = 800L,
+                    eligibleAtMs = 1_500L,
+                    createdAtMs = 900L,
+                    updatedAtMs = 900L,
+                ),
+            )
+
+            val rows = pendingUploadDao.getForPair(pairId)
+            assertEquals(1, rows.size)
+            with(rows.single()) {
+                assertEquals("document-id-2", documentIdHint)
+                assertEquals(200L, observedSizeBytes)
+                assertEquals(800L, observedMtimeMs)
+                assertEquals(PendingUploadState.PENDING, state)
+                assertEquals(1_500L, eligibleAtMs)
+                assertEquals(500L, createdAtMs)
+                assertEquals(900L, updatedAtMs)
+            }
+        }
+
+    @Test
+    fun `upsert during claim leaves refreshed candidate pending after old claim completes`() =
+        runTest {
+            val pairId = insertPair()
+            pendingUploadDao.upsert(upload(pairId))
+            pendingUploadDao.claimEligible("worker-a", claimedAtMs = 1_000L, limit = 1).single()
+
+            pendingUploadDao.upsert(
+                upload(
+                    pairId = pairId,
+                    documentIdHint = "new-document-id",
+                    observedSizeBytes = 300L,
+                    observedMtimeMs = 900L,
+                    eligibleAtMs = 1_500L,
+                    createdAtMs = 1_100L,
+                    updatedAtMs = 1_100L,
+                ),
+            )
+
+            assertEquals(0, pendingUploadDao.complete(pairId, "file.txt", "worker-a"))
+            val row = pendingUploadDao.getForPair(pairId).single()
+            assertEquals(PendingUploadState.PENDING, row.state)
+            assertEquals("new-document-id", row.documentIdHint)
+            assertEquals(300L, row.observedSizeBytes)
+            assertEquals(900L, row.observedMtimeMs)
+            assertNull(row.claimToken)
+            assertNull(row.claimedAtMs)
+            assertEquals(
+                listOf("file.txt"),
+                pendingUploadDao.claimEligible("worker-b", claimedAtMs = 1_500L, limit = 1).map { it.relativePath },
+            )
+        }
+
+    @Test
+    fun `upsert is isolated by pair for the same relative path`() =
+        runTest {
+            val firstPairId = insertPair("First Pair")
+            val secondPairId = insertPair("Second Pair")
+            pendingUploadDao.upsert(upload(firstPairId, path = "shared.txt"))
+            pendingUploadDao.upsert(
+                upload(
+                    secondPairId,
+                    path = "shared.txt",
+                    documentIdHint = "second-document-id",
+                    observedSizeBytes = 400L,
+                    updatedAtMs = 700L,
+                ),
+            )
+
+            pendingUploadDao.upsert(
+                upload(
+                    firstPairId,
+                    path = "shared.txt",
+                    documentIdHint = "first-document-id-2",
+                    observedSizeBytes = 500L,
+                    updatedAtMs = 800L,
+                ),
+            )
+
+            assertEquals("first-document-id-2", pendingUploadDao.getForPair(firstPairId).single().documentIdHint)
+            assertEquals("second-document-id", pendingUploadDao.getForPair(secondPairId).single().documentIdHint)
+        }
+
+    @Test
+    fun `pending candidates remain deduplicated across database reopen`() =
+        runTest {
+            db.close()
+            val context = ApplicationProvider.getApplicationContext<Context>()
+            val dbFile = File(context.cacheDir, "pending-upload-dedup-${System.nanoTime()}.db")
+            db = openPersistentDb(dbFile)
+            pairDao = db.syncPairDao()
+            pendingUploadDao = db.pendingUploadDao()
+
+            val pairId = insertPair()
+            pendingUploadDao.upsert(upload(pairId))
+            pendingUploadDao.upsert(upload(pairId, documentIdHint = "after-restart-source", updatedAtMs = 900L))
+            db.close()
+
+            db = openPersistentDb(dbFile)
+            pairDao = db.syncPairDao()
+            pendingUploadDao = db.pendingUploadDao()
+
+            val rows = pendingUploadDao.getForPair(pairId)
+            assertEquals(1, rows.size)
+            assertEquals("after-restart-source", rows.single().documentIdHint)
+            dbFile.delete()
+        }
+
     private suspend fun insertPair(): Long =
+        insertPair("Test Pair")
+
+    private suspend fun insertPair(displayName: String): Long =
         pairDao.insert(
             SyncPairEntity(
-                displayName = "Test Pair",
+                displayName = displayName,
                 localTreeUri = "content://example/tree/root",
                 provider = CloudProviderType.FAKE,
                 remoteFolderId = "root",
@@ -125,14 +250,29 @@ class PendingUploadDaoTest {
     private fun upload(
         pairId: Long,
         path: String = "file.txt",
+        documentIdHint: String? = "document-id",
+        observedSizeBytes: Long = 100L,
+        observedMtimeMs: Long = 500L,
+        eligibleAtMs: Long = 1_000L,
+        createdAtMs: Long = 500L,
+        updatedAtMs: Long = 500L,
     ) = PendingUploadEntity(
         pairId = pairId,
         relativePath = path,
-        documentIdHint = "document-id",
-        observedSizeBytes = 100L,
-        observedMtimeMs = 500L,
-        eligibleAtMs = 1_000L,
-        createdAtMs = 500L,
-        updatedAtMs = 500L,
+        documentIdHint = documentIdHint,
+        observedSizeBytes = observedSizeBytes,
+        observedMtimeMs = observedMtimeMs,
+        eligibleAtMs = eligibleAtMs,
+        createdAtMs = createdAtMs,
+        updatedAtMs = updatedAtMs,
     )
+
+    private fun openPersistentDb(dbFile: File): SynckroDatabase =
+        Room
+            .databaseBuilder(
+                ApplicationProvider.getApplicationContext(),
+                SynckroDatabase::class.java,
+                dbFile.absolutePath,
+            ).allowMainThreadQueries()
+            .build()
 }
