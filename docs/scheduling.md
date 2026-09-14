@@ -126,6 +126,10 @@ Instant Sync is not a real-time or guaranteed-latency service:
   especially for removable storage or after a process/device restart.
 - A hint only queues a candidate. Stability checks must establish that the file
   is complete before any upload starts.
+- Each pair dispatches at most one instant request per 60 seconds. Signals that
+  arrive inside that window are delayed to the end of it, never dropped, and the
+  window is persisted so a restart cannot dispatch more often. Pairs are rate
+  limited independently.
 - Dispatch uses constrained WorkManager work. Expedited quota exhaustion falls
   back to ordinary non-expedited work; Doze, standby buckets, constraints, and
   OEM policy can defer either form.

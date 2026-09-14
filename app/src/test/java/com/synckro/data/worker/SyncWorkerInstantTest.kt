@@ -9,6 +9,7 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import com.synckro.data.local.dao.LocalIndexDao
+import com.synckro.data.local.dao.PairRunLeaseDao
 import com.synckro.data.local.dao.PendingUploadDao
 import com.synckro.data.local.dao.SyncPairDao
 import com.synckro.data.local.entity.PendingUploadEntity
@@ -26,6 +27,7 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.slot
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -43,6 +45,7 @@ class SyncWorkerInstantTest {
     private val context: Context = ApplicationProvider.getApplicationContext()
     private val syncPairDao = mockk<SyncPairDao>(relaxed = true)
     private val pendingUploadDao = mockk<PendingUploadDao>(relaxed = true)
+    private val pairRunLeaseDao = mockk<PairRunLeaseDao>(relaxed = true)
     private val localIndexDao = mockk<LocalIndexDao>(relaxed = true)
     private val instantCandidateResolver = mockk<InstantCandidateResolver>()
     private val engine = mockk<SyncEngine>(relaxed = true)
@@ -60,6 +63,7 @@ class SyncWorkerInstantTest {
         every { settingsRepository.globalAutoSyncEnabled } returns flowOf(true)
         every { settingsRepository.globalInstantSyncEnabled } returns flowOf(true)
         every { settingsRepository.maxConcurrentTransfers } returns flowOf(2)
+        coEvery { pairRunLeaseDao.acquire(any(), any(), any(), any(), any()) } returns true
     }
 
     @Test
@@ -152,6 +156,50 @@ class SyncWorkerInstantTest {
         }
 
     @Test
+    fun `dispatched row that did not complete is requeued with bounded backoff`() =
+        runTest {
+            val pair = pair()
+            val upload = upload("mutated.txt").copy(attempts = 2)
+            coEvery { syncPairDao.getById(pair.id) } returns pair
+            coEvery {
+                pendingUploadDao.claimEligibleForPair(pair.id, any(), any(), SyncWorker.INSTANT_BATCH_SIZE)
+            } returns listOf(upload)
+            mockResolvedCandidates()
+            coEvery {
+                engine.runTargetedUploads(any(), any<Collection<String>>(), any(), 2)
+            } returns
+                SyncEngine.TargetedUploadResult(
+                    result = SyncEngine.Result.PartialFailure(0, 0, listOf("changed during upload")),
+                    failedPaths = listOf("mutated.txt"),
+                )
+
+            val beforeMs = System.currentTimeMillis()
+            worker(instant = true).doWork()
+
+            val eligibleAtMs = slot<Long>()
+            coVerify(exactly = 1) {
+                pendingUploadDao.release(
+                    pair.id,
+                    upload.relativePath,
+                    any(),
+                    capture(eligibleAtMs),
+                    any(),
+                )
+            }
+            coVerify(exactly = 0) { pendingUploadDao.complete(pair.id, upload.relativePath, any()) }
+            assertTrue(
+                eligibleAtMs.captured >= beforeMs + SyncWorker.instantRetryDelayMs(upload.attempts),
+            )
+        }
+
+    @Test
+    fun `instant retry backoff grows and stays bounded`() {
+        assertEquals(SyncWorker.INSTANT_RETRY_BASE_DELAY_MS, SyncWorker.instantRetryDelayMs(0))
+        assertEquals(SyncWorker.INSTANT_RETRY_BASE_DELAY_MS * 4, SyncWorker.instantRetryDelayMs(2))
+        assertEquals(SyncWorker.INSTANT_RETRY_MAX_DELAY_MS, SyncWorker.instantRetryDelayMs(99))
+    }
+
+    @Test
     fun `full instant batch schedules a follow-up`() =
         runTest {
             val pair = pair()
@@ -228,6 +276,7 @@ class SyncWorkerInstantTest {
             localIndexDao = localIndexDao,
             pendingUploadDao = pendingUploadDao,
             instantCandidateResolver = instantCandidateResolver,
+            pairRunLeaseDao = pairRunLeaseDao,
         )
     }
 

@@ -15,6 +15,7 @@ import com.synckro.data.repository.SettingsRepository
 import com.synckro.data.watcher.InstantSyncWatcherService
 import com.synckro.data.watcher.WatchablePairs
 import com.synckro.data.watcher.WatcherServiceController
+import com.synckro.data.worker.PendingDispatchResumer
 import com.synckro.data.worker.SyncWorker
 import com.synckro.domain.sync.WatcherLifecycleTrigger
 import com.synckro.domain.telemetry.Telemetry
@@ -52,6 +53,8 @@ class SynckroApp :
 
     @Inject lateinit var oneDriveMultiAccountStartupProbe: OneDriveMultiAccountStartupProbe
 
+    @Inject lateinit var pendingDispatchResumer: PendingDispatchResumer
+
     @Inject lateinit var settingsRepository: SettingsRepository
 
     @Inject lateinit var telemetry: Telemetry
@@ -74,6 +77,10 @@ class SynckroApp :
             oneDriveMultiAccountStartupProbe.runIfNeeded()
         }
         observeWatcherHostLifecycle()
+        applicationScope.launch {
+            runCatching { pendingDispatchResumer.resume() }
+                .onFailure { Timber.w(it, "Failed to resume pending instant dispatch") }
+        }
         if (BuildConfig.DEBUG) {
             Timber.plant(Timber.DebugTree())
             val fileTree = FileLoggingTree(this)

@@ -28,6 +28,7 @@ import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import com.synckro.R
 import com.synckro.data.local.dao.LocalIndexDao
+import com.synckro.data.local.dao.PairRunLeaseDao
 import com.synckro.data.local.dao.PendingUploadDao
 import com.synckro.data.local.dao.SyncPairDao
 import com.synckro.data.local.entity.PendingUploadEntity
@@ -65,10 +66,13 @@ import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import timber.log.Timber
 import java.net.URLDecoder
 import java.net.URLEncoder
@@ -104,6 +108,7 @@ class SyncWorker
         private val settingsRepository: SettingsRepository,
         private val pendingUploadDao: PendingUploadDao,
         private val instantCandidateResolver: InstantCandidateResolver,
+        private val pairRunLeaseDao: PairRunLeaseDao,
         private val localIndexDao: LocalIndexDao? = null,
         private val telemetry: Telemetry = NoOpTelemetry(),
     ) : CoroutineWorker(appContext, params) {
@@ -190,6 +195,110 @@ class SyncWorker
                 )
             }
 
+            val leaseToken = id.toString()
+            val runKind =
+                when {
+                    isInstantRun -> RUN_KIND_INSTANT
+                    isPeriodicRun -> RUN_KIND_PERIODIC
+                    else -> RUN_KIND_MANUAL
+                }
+            val leaseAcquired =
+                pairRunLeaseDao.acquire(
+                    pairId = pairId,
+                    ownerToken = leaseToken,
+                    ownerKind = runKind,
+                    nowMs = System.currentTimeMillis(),
+                    staleAfterMs = LEASE_STALE_AFTER_MS,
+                )
+            if (!leaseAcquired) {
+                return handleLeaseBusy(pairId, runKind)
+            }
+            return try {
+                coroutineScope {
+                    // Keeps the lease fresh so a long-running pass is not mistaken
+                    // for a dead owner, while still expiring after process death.
+                    val leaseLost = AtomicBoolean(false)
+                    val passJob = async { runSyncPass(pair, pairId, isPeriodicRun, isInstantRun) }
+                    val heartbeatJob =
+                        launch {
+                            while (true) {
+                                delay(LEASE_HEARTBEAT_INTERVAL_MS)
+                                // A failed heartbeat write is treated as still-owned: a transient
+                                // database error must not abort an otherwise healthy sync pass.
+                                // Ownership then simply relies on the next heartbeat, or expires.
+                                val renewed =
+                                    runCatching {
+                                        pairRunLeaseDao.renew(pairId, leaseToken, System.currentTimeMillis())
+                                    }.onFailure {
+                                        Timber.w(it, "SyncWorker: run-lease heartbeat failed for pair %d.", pairId)
+                                    }.getOrDefault(1)
+                                if (renewed == 0) {
+                                    // Another run took the lease over (this one looked stale);
+                                    // stop immediately so a pair is never processed twice.
+                                    Timber.w("SyncWorker: lost the run lease for pair %d; aborting this pass.", pairId)
+                                    leaseLost.set(true)
+                                    passJob.cancel()
+                                    break
+                                }
+                            }
+                        }
+                    try {
+                        passJob.await()
+                    } catch (c: CancellationException) {
+                        if (leaseLost.get()) Result.retry() else throw c
+                    } finally {
+                        heartbeatJob.cancel()
+                    }
+                }
+            } finally {
+                withContext(NonCancellable) {
+                    runCatching { pairRunLeaseDao.release(pairId, leaseToken) }
+                }
+            }
+        }
+
+        /**
+         * Handles an enqueued run whose pair is already owned by another in-flight
+         * run (a different WorkManager unique name, e.g. instant vs. periodic).
+         *
+         * The run is retried with WorkManager's exponential backoff so it can take
+         * over once the owner finishes, and gives up with `success()` after
+         * [MAX_RETRY_ATTEMPTS] attempts: the owning run is doing the same work, so
+         * neither a failure nor an unbounded retry chain is warranted.
+         */
+        private suspend fun handleLeaseBusy(
+            pairId: Long,
+            runKind: String,
+        ): Result {
+            val holderKind = runCatching { pairRunLeaseDao.get(pairId)?.ownerKind }.getOrNull() ?: "unknown"
+            val givingUp = runAttemptCount + 1 >= MAX_RETRY_ATTEMPTS
+            val busyMessage = "SyncWorker: pair %d is already owned by a %s run; %s %s run."
+            if (givingUp) {
+                Timber.w(busyMessage, pairId, holderKind, "dropping", runKind)
+            } else {
+                Timber.i(busyMessage, pairId, holderKind, "deferring", runKind)
+            }
+            syncEventRepository.logRateLimited(
+                pairId,
+                if (givingUp) SyncEventLevel.WARN else SyncEventLevel.INFO,
+                SyncEventTag.SYNC_WORKER,
+                SyncEventTaxonomy.format(
+                    if (givingUp) RUN_LEASE_DROPPED else RUN_LEASE_BUSY,
+                    "run" to runKind,
+                    "holder" to holderKind,
+                ),
+                throttleKey = "lease-busy-$runKind",
+            )
+            return if (givingUp) Result.success() else Result.retry()
+        }
+
+        /** Runs one sync pass for [pair]; the caller must already own the pair's run lease. */
+        private suspend fun runSyncPass(
+            pair: SyncPair,
+            pairId: Long,
+            isPeriodicRun: Boolean,
+            isInstantRun: Boolean,
+        ): Result {
             val instantBatch =
                 if (isInstantRun) {
                     prepareInstantBatch(pair) ?: return Result.success()
@@ -677,7 +786,7 @@ class SyncWorker
                 if (upload.relativePath in completedPaths) {
                     queue.complete(upload.pairId, upload.relativePath, batch.claimToken)
                 } else {
-                    releaseInstantUpload(queue, upload, batch.claimToken)
+                    releaseInstantUpload(queue, upload, batch.claimToken, backoff = true)
                 }
             }
         }
@@ -687,17 +796,27 @@ class SyncWorker
             batch.uploads.forEach { releaseInstantUpload(queue, it, batch.claimToken) }
         }
 
+        /**
+         * Requeues one claimed row.
+         *
+         * Rows that were dispatched and did not complete — including uploads rejected
+         * because the local file mutated while it was streaming — are requeued with
+         * [backoff] so a file that keeps changing (or a persistently failing upload)
+         * cannot be re-claimed in a tight loop. A fresh observation from the watcher
+         * still resets `eligibleAtMs`, so the delay never holds back a settled file.
+         */
         private suspend fun releaseInstantUpload(
             queue: PendingUploadDao,
             upload: PendingUploadEntity,
             claimToken: String,
+            backoff: Boolean = false,
         ) {
             val nowMs = System.currentTimeMillis()
             queue.release(
                 pairId = upload.pairId,
                 relativePath = upload.relativePath,
                 claimToken = claimToken,
-                eligibleAtMs = nowMs,
+                eligibleAtMs = if (backoff) nowMs + instantRetryDelayMs(upload.attempts) else nowMs,
                 updatedAtMs = nowMs,
             )
         }
@@ -926,8 +1045,46 @@ class SyncWorker
              */
             const val MAX_RETRY_ATTEMPTS = 5
 
+            /** Run-kind labels persisted in the per-pair run lease and emitted in sync events. */
+            internal const val RUN_KIND_INSTANT = "instant"
+            internal const val RUN_KIND_MANUAL = "manual"
+            internal const val RUN_KIND_PERIODIC = "periodic"
+
+            /** Privacy-safe event name logged when a pair is already owned by another run. */
+            internal const val RUN_LEASE_BUSY = "sync.lease.busy"
+
+            /** Privacy-safe event name logged when a deferred run stops waiting for the lease. */
+            internal const val RUN_LEASE_DROPPED = "sync.lease.dropped"
+
+            /**
+             * Age after which a per-pair run lease is considered abandoned and may be
+             * taken over. Owners refresh their lease every [LEASE_HEARTBEAT_INTERVAL_MS],
+             * so this only elapses when the owning process died without releasing it.
+             */
+            internal const val LEASE_STALE_AFTER_MS = 5 * 60 * 1_000L
+
+            /** Interval at which a running worker refreshes its per-pair run lease. */
+            internal const val LEASE_HEARTBEAT_INTERVAL_MS = 60 * 1_000L
+
             internal const val INSTANT_BATCH_SIZE = 25
             internal const val INSTANT_CLAIM_TIMEOUT_MS = 15 * 60 * 1_000L
+
+            /** First requeue delay for an instant-upload row that was dispatched but did not complete. */
+            internal const val INSTANT_RETRY_BASE_DELAY_MS = 30_000L
+
+            /** Upper bound for the instant-upload requeue backoff. */
+            internal const val INSTANT_RETRY_MAX_DELAY_MS = 30 * 60 * 1_000L
+
+            /**
+             * Bounded exponential backoff for requeued instant-upload rows:
+             * 30 s → 1 min → 2 min → … capped at [INSTANT_RETRY_MAX_DELAY_MS].
+             *
+             * @param attempts Number of previous requeues recorded on the row.
+             */
+            internal fun instantRetryDelayMs(attempts: Int): Long {
+                val shift = attempts.coerceIn(0, 16)
+                return (INSTANT_RETRY_BASE_DELAY_MS shl shift).coerceAtMost(INSTANT_RETRY_MAX_DELAY_MS)
+            }
 
             /**
              * Initial delay for WorkManager exponential backoff (sub-issue #142).
