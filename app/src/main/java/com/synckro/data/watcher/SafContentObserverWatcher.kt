@@ -6,6 +6,7 @@ import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import com.synckro.data.local.dao.SyncPairDao
+import com.synckro.data.local.entity.SyncPairEntity
 import com.synckro.data.local.fs.LocalFolderAccessChecker
 import com.synckro.domain.model.allowsUpload
 import com.synckro.domain.sync.LocalChangeEvent
@@ -15,6 +16,7 @@ import com.synckro.domain.sync.LocalChangeWatchRegistrationResult
 import com.synckro.domain.sync.LocalChangeWatcher
 import com.synckro.domain.sync.LocalChangeWatcherCapability
 import com.synckro.domain.sync.LocalChangeWatcherFallback
+import com.synckro.domain.sync.LocalChangeWatcherRefresher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 
@@ -26,7 +28,8 @@ class SafContentObserverWatcher(
     private val localFolderAccessChecker: LocalFolderAccessChecker,
     private val observerRegistry: ContentObserverRegistry,
     private val observerHandler: Handler = Handler(Looper.getMainLooper()),
-) : LocalChangeWatcher {
+) : LocalChangeWatcher,
+    LocalChangeWatcherRefresher {
     override val capability: LocalChangeWatcherCapability = LocalChangeWatcherCapability.Available
 
     private val lock = Any()
@@ -46,7 +49,7 @@ class SafContentObserverWatcher(
                 LocalChangeWatchFailure.Unknown("pair_not_found"),
             )
 
-        if (!pair.direction.allowsUpload || pair.localTreeUri.isBlank() || !pair.autoSyncEnabled) {
+        if (!pair.hasWatchableSource()) {
             return unavailableResult()
         }
 
@@ -94,6 +97,56 @@ class SafContentObserverWatcher(
                     isUnregistered = true
                 }
             },
+        )
+    }
+
+    /**
+     * Reconciles a registration already owned by the lifecycle coordinator.
+     * Initial registration remains the coordinator's responsibility.
+     */
+    override suspend fun refresh(pairId: Long) {
+        val pair = syncPairDao.getById(pairId)
+        val canWatch =
+            pair?.let {
+                it.instantSyncEnabled &&
+                    it.hasWatchableSource() &&
+                    localFolderAccessChecker.hasReadWriteAccess(it.localTreeUri)
+            } == true
+        val current = synchronized(lock) { registrationsByPairId[pairId] } ?: return
+        if (!canWatch) {
+            val removed =
+                synchronized(lock) {
+                    if (registrationsByPairId[pairId] === current) {
+                        registrationsByPairId.remove(pairId)
+                        true
+                    } else {
+                        false
+                    }
+                }
+            if (removed) observerRegistry.unregisterContentObserver(current.observer)
+            return
+        }
+        checkNotNull(pair)
+        if (current.treeUriString == pair.localTreeUri) return
+
+        val replacement =
+            try {
+                createRegistration(pairId, pair.localTreeUri)
+            } catch (_: SecurityException) {
+                return
+            }
+        val replaced =
+            synchronized(lock) {
+                if (isShutdown || registrationsByPairId[pairId] !== current) {
+                    false
+                } else {
+                    replacement.listeners.addAll(current.listeners)
+                    registrationsByPairId[pairId] = replacement
+                    true
+                }
+            }
+        observerRegistry.unregisterContentObserver(
+            if (replaced) current.observer else replacement.observer,
         )
     }
 
@@ -163,6 +216,9 @@ class SafContentObserverWatcher(
         LocalChangeWatchRegistrationResult.Unavailable(
             LocalChangeWatcherCapability.Unavailable(LocalChangeWatcherFallback.PERIODIC_SCAN),
         )
+
+    private fun SyncPairEntity.hasWatchableSource(): Boolean =
+        direction.allowsUpload && localTreeUri.isNotBlank() && autoSyncEnabled
 
     private data class PairRegistration(
         val treeUriString: String,

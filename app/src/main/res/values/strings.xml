@@ -163,6 +163,14 @@
     <string name="pair_editor_wifi_only">Sync on Wi-Fi only</string>
     <string name="pair_editor_requires_charging">Sync only while charging</string>
     <string name="pair_editor_auto_sync">Auto-sync</string>
+    <string name="pair_editor_instant_sync">Instant Sync</string>
+    <string name="pair_editor_instant_sync_description">Upload local changes shortly after Android detects them. Files are checked for stability before upload.</string>
+    <string name="pair_editor_instant_sync_provider_note">Works with upload-capable directions. Change detection depends on your local storage provider, so scheduled sync remains the fallback.</string>
+    <string name="pair_editor_instant_sync_requires_auto_sync">Turn on Auto-sync to use Instant Sync.</string>
+    <string name="pair_editor_instant_sync_requires_upload">Choose a sync direction that uploads to the cloud to use Instant Sync.</string>
+    <string name="pair_editor_instant_sync_requires_local_folder">Select a local folder to use Instant Sync.</string>
+    <string name="pair_editor_instant_sync_requires_folder_access">Re-select the local folder to restore access before using Instant Sync.</string>
+    <string name="pair_editor_instant_sync_requires_account">Select a connected cloud account to use Instant Sync.</string>
     <string name="pair_editor_schedule_preset">Sync schedule</string>
     <string name="pair_editor_schedule_custom_interval">Custom interval (minutes)</string>
     <string name="pair_editor_schedule_15min">Every 15 minutes</string>

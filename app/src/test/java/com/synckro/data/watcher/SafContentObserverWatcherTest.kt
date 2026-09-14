@@ -179,9 +179,44 @@ class SafContentObserverWatcherTest {
             assertTrue(observerRegistry.registrations.isEmpty())
         }
 
+    @Test
+    fun `refresh moves an active registration to the saved tree URI`() =
+        runTest {
+            val oldUri = "content://com.example/tree/old"
+            val newUri = "content://com.example/tree/new"
+            val pairId = insertPair(localTreeUri = oldUri, instantSyncEnabled = true)
+            accessChecker.grant(oldUri)
+            accessChecker.grant(newUri)
+            watcher.register(pairId = pairId) {}
+            val saved = checkNotNull(db.syncPairDao().getById(pairId))
+            db.syncPairDao().upsert(saved.copy(localTreeUri = newUri))
+
+            watcher.refresh(pairId)
+
+            assertEquals(Uri.parse(newUri), observerRegistry.registrations.single().uri)
+            assertEquals(1, observerRegistry.unregisteredObservers.size)
+        }
+
+    @Test
+    fun `refresh stops an active registration when instant sync is disabled`() =
+        runTest {
+            val treeUri = "content://com.example/tree/root"
+            val pairId = insertPair(localTreeUri = treeUri, instantSyncEnabled = true)
+            accessChecker.grant(treeUri)
+            watcher.register(pairId = pairId) {}
+            val saved = checkNotNull(db.syncPairDao().getById(pairId))
+            db.syncPairDao().upsert(saved.copy(instantSyncEnabled = false))
+
+            watcher.refresh(pairId)
+
+            assertTrue(observerRegistry.registrations.isEmpty())
+            assertEquals(1, observerRegistry.unregisteredObservers.size)
+        }
+
     private suspend fun insertPair(
         localTreeUri: String,
         direction: SyncDirection = SyncDirection.BIDIRECTIONAL,
+        instantSyncEnabled: Boolean = false,
     ): Long =
         db.syncPairDao().insert(
             SyncPairEntity(
@@ -195,6 +230,7 @@ class SafContentObserverWatcherTest {
                 excludeGlobs = "",
                 wifiOnly = true,
                 requiresCharging = false,
+                instantSyncEnabled = instantSyncEnabled,
             ),
         )
 

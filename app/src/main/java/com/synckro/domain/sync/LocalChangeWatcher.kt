@@ -40,6 +40,17 @@ interface LocalChangeWatcher {
     fun shutdown()
 }
 
+/** Reconciles active watcher registrations after a pair's persisted configuration changes. */
+fun interface LocalChangeWatcherRefresher {
+    /**
+     * Updates or stops an existing registration for [pairId].
+     *
+     * This does not create a registration when none exists; lifecycle owners remain responsible
+     * for deciding which pairs to watch.
+     */
+    suspend fun refresh(pairId: Long)
+}
+
 /** Whether local-change notifications are available, including the required fallback when not. */
 sealed interface LocalChangeWatcherCapability {
     data object Available : LocalChangeWatcherCapability
