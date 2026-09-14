@@ -19,7 +19,7 @@ class InstantSyncEligibilityPolicyTest {
                     booleans.forEach { globalInstantSyncEnabled ->
                         booleans.forEach { pairInstantSyncEnabled ->
                             booleans.forEach { uploadCapableDirection ->
-                                AccountState.values().forEach { accountState ->
+                                InstantSyncAccountState.values().forEach { accountState ->
                                     booleans.forEach { pathInScope ->
                                         add(
                                             TruthTableRow(
@@ -48,6 +48,7 @@ class InstantSyncEligibilityPolicyTest {
                     pair = pair,
                     globalAutoSyncEnabled = row.globalAutoSyncEnabled,
                     globalInstantSyncEnabled = row.globalInstantSyncEnabled,
+                    accountState = row.accountState,
                     relativePath = "notes.txt",
                 )
 
@@ -63,6 +64,7 @@ class InstantSyncEligibilityPolicyTest {
                 pair = eligiblePair(),
                 globalAutoSyncEnabled = true,
                 globalInstantSyncEnabled = true,
+                accountState = InstantSyncAccountState.READY,
                 relativePath = "notes.txt",
             )
 
@@ -77,6 +79,7 @@ class InstantSyncEligibilityPolicyTest {
                 pair = eligiblePair(includeGlobs = listOf("*.jpg")),
                 globalAutoSyncEnabled = true,
                 globalInstantSyncEnabled = true,
+                accountState = InstantSyncAccountState.READY,
                 relativePath = null,
             )
 
@@ -95,6 +98,7 @@ class InstantSyncEligibilityPolicyTest {
                     ),
                 globalAutoSyncEnabled = true,
                 globalInstantSyncEnabled = true,
+                accountState = InstantSyncAccountState.READY,
                 relativePath = "docs/notes.txt",
             )
 
@@ -111,14 +115,6 @@ class InstantSyncEligibilityPolicyTest {
                     SyncDirection.REMOTE_TO_LOCAL
                 },
             instantSyncEnabled = pairInstantSyncEnabled,
-            accountId = if (accountState == AccountState.MISSING_ACCOUNT) null else "account",
-            needsReLink = accountState == AccountState.NEEDS_RELINK,
-            lastSyncResult =
-                when (accountState) {
-                    AccountState.NEEDS_REAUTH -> InstantSyncEligibilityPolicy.NEEDS_REAUTH
-                    AccountState.NEEDS_RELINK -> InstantSyncEligibilityPolicy.NEEDS_RELINK
-                    AccountState.READY, AccountState.MISSING_ACCOUNT -> null
-                },
             includeGlobs = if (pathInScope) listOf("*.txt") else listOf("*.jpg"),
         )
 
@@ -138,10 +134,11 @@ class InstantSyncEligibilityPolicyTest {
                     add(InstantSyncIneligibilityReason.DIRECTION_NOT_UPLOAD_CAPABLE)
                 }
                 when (accountState) {
-                    AccountState.READY -> Unit
-                    AccountState.MISSING_ACCOUNT -> add(InstantSyncIneligibilityReason.ACCOUNT_NOT_LINKED)
-                    AccountState.NEEDS_REAUTH -> add(InstantSyncIneligibilityReason.NEEDS_REAUTH)
-                    AccountState.NEEDS_RELINK -> add(InstantSyncIneligibilityReason.NEEDS_RELINK)
+                    InstantSyncAccountState.READY -> Unit
+                    InstantSyncAccountState.ACCOUNT_NOT_LINKED ->
+                        add(InstantSyncIneligibilityReason.ACCOUNT_NOT_LINKED)
+                    InstantSyncAccountState.NEEDS_REAUTH -> add(InstantSyncIneligibilityReason.NEEDS_REAUTH)
+                    InstantSyncAccountState.NEEDS_RELINK -> add(InstantSyncIneligibilityReason.NEEDS_RELINK)
                 }
                 if (!pathInScope) {
                     add(InstantSyncIneligibilityReason.PATH_OUT_OF_SCOPE)
@@ -152,8 +149,6 @@ class InstantSyncEligibilityPolicyTest {
         direction: SyncDirection = SyncDirection.BIDIRECTIONAL,
         instantSyncEnabled: Boolean = true,
         accountId: String? = "account",
-        needsReLink: Boolean = false,
-        lastSyncResult: String? = null,
         includeGlobs: List<String> = emptyList(),
         excludeGlobs: List<String> = emptyList(),
         excludeSubfolders: Boolean = false,
@@ -167,8 +162,6 @@ class InstantSyncEligibilityPolicyTest {
             remoteFolderId = "remote",
             direction = direction,
             instantSyncEnabled = instantSyncEnabled,
-            needsReLink = needsReLink,
-            lastSyncResult = lastSyncResult,
             includeGlobs = includeGlobs,
             excludeGlobs = excludeGlobs,
             excludeSubfolders = excludeSubfolders,
@@ -179,16 +172,9 @@ class InstantSyncEligibilityPolicyTest {
         val globalInstantSyncEnabled: Boolean,
         val pairInstantSyncEnabled: Boolean,
         val uploadCapableDirection: Boolean,
-        val accountState: AccountState,
+        val accountState: InstantSyncAccountState,
         val pathInScope: Boolean,
     )
-
-    private enum class AccountState {
-        READY,
-        MISSING_ACCOUNT,
-        NEEDS_REAUTH,
-        NEEDS_RELINK,
-    }
 
     private companion object {
         val booleans = listOf(false, true)

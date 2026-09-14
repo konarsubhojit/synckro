@@ -11,12 +11,17 @@ import com.synckro.domain.model.SyncPair
  * Instant Sync in addition to the dedicated global Instant Sync opt-in and the
  * per-pair Instant Sync toggle. This keeps the existing "pause background sync"
  * control authoritative for every automatic sync trigger.
+ *
+ * Callers provide [accountState] after resolving provider authentication and
+ * SAF re-link status, keeping this policy independent of persisted result
+ * strings or UI labels.
  */
 class InstantSyncEligibilityPolicy {
     fun evaluate(
         pair: SyncPair,
         globalAutoSyncEnabled: Boolean,
         globalInstantSyncEnabled: Boolean,
+        accountState: InstantSyncAccountState,
         relativePath: String? = null,
     ): InstantSyncEligibilityDecision {
         val reasons =
@@ -25,10 +30,12 @@ class InstantSyncEligibilityPolicy {
                 if (!globalInstantSyncEnabled) add(InstantSyncIneligibilityReason.GLOBAL_INSTANT_SYNC_DISABLED)
                 if (!pair.instantSyncEnabled) add(InstantSyncIneligibilityReason.PAIR_INSTANT_SYNC_DISABLED)
                 if (!pair.direction.allowsUpload()) add(InstantSyncIneligibilityReason.DIRECTION_NOT_UPLOAD_CAPABLE)
-                if (pair.accountId.isNullOrBlank()) add(InstantSyncIneligibilityReason.ACCOUNT_NOT_LINKED)
-                if (pair.lastSyncResult == NEEDS_REAUTH) add(InstantSyncIneligibilityReason.NEEDS_REAUTH)
-                if (pair.needsReLink || pair.lastSyncResult == NEEDS_RELINK) {
-                    add(InstantSyncIneligibilityReason.NEEDS_RELINK)
+                when (accountState) {
+                    InstantSyncAccountState.READY -> Unit
+                    InstantSyncAccountState.ACCOUNT_NOT_LINKED ->
+                        add(InstantSyncIneligibilityReason.ACCOUNT_NOT_LINKED)
+                    InstantSyncAccountState.NEEDS_REAUTH -> add(InstantSyncIneligibilityReason.NEEDS_REAUTH)
+                    InstantSyncAccountState.NEEDS_RELINK -> add(InstantSyncIneligibilityReason.NEEDS_RELINK)
                 }
                 if (relativePath != null && !pair.containsRelativePath(relativePath)) {
                     add(InstantSyncIneligibilityReason.PATH_OUT_OF_SCOPE)
@@ -48,17 +55,19 @@ class InstantSyncEligibilityPolicy {
     private fun SyncDirection.allowsUpload(): Boolean =
         this != SyncDirection.REMOTE_TO_LOCAL &&
             this != SyncDirection.DOWNLOAD_AND_DELETE_REMOTE_AFTER_N_DAYS
-
-    companion object {
-        const val NEEDS_REAUTH = "NEEDS_REAUTH"
-        const val NEEDS_RELINK = "NEEDS_RELINK"
-    }
 }
 
 data class InstantSyncEligibilityDecision(
     val isEligible: Boolean,
     val reasons: Set<InstantSyncIneligibilityReason>,
 )
+
+enum class InstantSyncAccountState {
+    READY,
+    ACCOUNT_NOT_LINKED,
+    NEEDS_REAUTH,
+    NEEDS_RELINK,
+}
 
 enum class InstantSyncIneligibilityReason {
     GLOBAL_AUTO_SYNC_DISABLED,
