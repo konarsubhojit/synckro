@@ -421,5 +421,23 @@ class LocalFsEnumerator internal constructor(
                     append(ch)
                 }
             }
+
+        internal fun isInScope(
+            relativePath: String,
+            includeGlobs: List<String>,
+            ignoreGlobs: List<String>,
+            excludeSubfolders: Boolean,
+        ): Boolean {
+            val fileName = relativePath.substringAfterLast('/')
+            if (fileName.isEmpty() || fileName.startsWith('.')) return false
+            if (excludeSubfolders && relativePath.contains('/')) return false
+
+            val compiledIgnoreGlobs = ignoreGlobs.mapNotNull { runCatching { globToRegex(it) }.getOrNull() }
+            if (compiledIgnoreGlobs.any { it.matches(relativePath) }) return false
+
+            if (includeGlobs.isEmpty()) return true
+            val compiledIncludeGlobs = includeGlobs.mapNotNull { runCatching { globToRegex(it) }.getOrNull() }
+            return compiledIncludeGlobs.any { it.matches(relativePath) }
+        }
     }
 }

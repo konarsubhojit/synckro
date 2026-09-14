@@ -629,6 +629,13 @@ interface LocalIndexDao {
     @Query("SELECT * FROM local_index WHERE pairId = :pairId ORDER BY relativePath ASC")
     suspend fun getForPair(pairId: Long): List<LocalIndexEntity>
 
+    /** Returns one local-index entry, or null when [relativePath] is not indexed for [pairId]. */
+    @Query("SELECT * FROM local_index WHERE pairId = :pairId AND relativePath = :relativePath")
+    suspend fun get(
+        pairId: Long,
+        relativePath: String,
+    ): LocalIndexEntity?
+
     /**
      * Inserts or updates a single [LocalIndexEntity].  On conflict the existing row is
      * replaced in its entirety.
