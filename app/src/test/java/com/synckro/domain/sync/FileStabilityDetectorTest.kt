@@ -76,6 +76,7 @@ class FileStabilityDetectorTest {
     @Test
     fun `touched file defers without openability probe`() =
         runTest {
+            val openabilityProbe = RecordingOpenabilityProbe(canOpen = true)
             val detector =
                 QuietPeriodFileStabilityDetector(
                     metadataReader =
@@ -83,7 +84,7 @@ class FileStabilityDetectorTest {
                             metadata(sizeBytes = 10, mtimeMs = 100),
                             metadata(sizeBytes = 10, mtimeMs = 101),
                         ),
-                    openabilityProbe = RecordingOpenabilityProbe(canOpen = true),
+                    openabilityProbe = openabilityProbe,
                 )
 
             assertEquals(
@@ -92,11 +93,13 @@ class FileStabilityDetectorTest {
                 ),
                 detector.awaitStable(FILE_ID),
             )
+            assertEquals(0, openabilityProbe.calls)
         }
 
     @Test
     fun `replaced file defers without openability probe`() =
         runTest {
+            val openabilityProbe = RecordingOpenabilityProbe(canOpen = true)
             val detector =
                 QuietPeriodFileStabilityDetector(
                     metadataReader =
@@ -104,7 +107,7 @@ class FileStabilityDetectorTest {
                             metadata(sizeBytes = 10, mtimeMs = 100),
                             metadata(sizeBytes = 20, mtimeMs = 200),
                         ),
-                    openabilityProbe = RecordingOpenabilityProbe(canOpen = true),
+                    openabilityProbe = openabilityProbe,
                 )
 
             assertEquals(
@@ -113,6 +116,7 @@ class FileStabilityDetectorTest {
                 ),
                 detector.awaitStable(FILE_ID),
             )
+            assertEquals(0, openabilityProbe.calls)
         }
 
     @Test
@@ -215,10 +219,10 @@ class FileStabilityDetectorTest {
 
         override suspend fun readMetadata(target: String): FileStabilityMetadata? {
             check(target == FILE_ID)
-            if (nextIndex >= samples.size) {
-                throw AssertionError("No metadata sample configured for call ${nextIndex + 1}")
-            }
             calls += 1
+            if (nextIndex >= samples.size) {
+                throw AssertionError("No metadata sample configured for call $calls")
+            }
             return samples[nextIndex++]
         }
     }

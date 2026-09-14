@@ -11,6 +11,8 @@ interface FileStabilityDetector<T> {
      * Suspends for [FileStabilityConfig.quietIntervals] intervals before declaring [target]
      * stable. Returns a deferred result instead of stable when comparable metadata is missing,
      * changes during the quiet period, or the final openability probe fails.
+     *
+     * Coroutine cancellation is propagated and never converted to a stable result.
      */
     suspend fun awaitStable(target: T): FileStabilityResult
 }
