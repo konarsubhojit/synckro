@@ -31,6 +31,8 @@ import com.synckro.data.repository.SettingsRepository
 import com.synckro.data.repository.SyncEventRepository
 import com.synckro.domain.model.CloudProviderType
 import com.synckro.domain.model.SyncEventLevel
+import com.synckro.domain.model.SyncEventTag
+import com.synckro.domain.model.SyncEventTaxonomy
 import com.synckro.domain.model.SyncPair
 import com.synckro.domain.provider.CloudProviderException
 import com.synckro.domain.provider.CloudProviderFactory
@@ -179,6 +181,12 @@ class SyncWorker
                 SyncEventLevel.INFO,
                 LOG_TAG,
                 "Sync started for \"${pair.displayName}\" (attempt ${runAttemptCount + 1})",
+            )
+            syncEventRepository.log(
+                pairId,
+                SyncEventLevel.INFO,
+                SyncEventTag.INSTANT_DISPATCH,
+                SyncEventTaxonomy.dispatchEnqueued(if (isPeriodicRun) "periodic" else "manual"),
             )
             Timber.i("SyncWorker.doWork: start pairId=%d attempt=%d", pairId, runAttemptCount + 1)
             applySyncTelemetryContext(pair)
@@ -342,6 +350,13 @@ class SyncWorker
                                         MAX_RETRY_ATTEMPTS,
                                         r.reason,
                                     )
+                                    syncEventRepository.logRateLimited(
+                                        pairId,
+                                        SyncEventLevel.WARN,
+                                        SyncEventTag.INSTANT_STABILITY,
+                                        SyncEventTaxonomy.stabilityDeferred("retriable_result"),
+                                        throttleKey = "retriable-${runAttemptCount + 1}",
+                                    )
                                     syncEventRepository.log(
                                         pairId,
                                         SyncEventLevel.WARN,
@@ -445,6 +460,13 @@ class SyncWorker
                                         runAttemptCount + 1,
                                         MAX_RETRY_ATTEMPTS,
                                         mapped.reason,
+                                    )
+                                    syncEventRepository.logRateLimited(
+                                        pairId,
+                                        SyncEventLevel.WARN,
+                                        SyncEventTag.INSTANT_STABILITY,
+                                        SyncEventTaxonomy.stabilityDeferred("provider_retriable"),
+                                        throttleKey = "provider-retriable-${runAttemptCount + 1}",
                                     )
                                     syncEventRepository.log(
                                         pairId,

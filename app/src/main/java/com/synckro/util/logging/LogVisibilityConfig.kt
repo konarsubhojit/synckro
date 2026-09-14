@@ -38,11 +38,13 @@ object LogVisibilityConfig {
         setOf(
             // SyncWorker emits sync-started / completed / retry / failed events.
             com.synckro.domain.model.SyncEventTag.SYNC_WORKER,
-            // SyncOpApplier emits one INFO per file: "Uploaded/Downloaded/
-            // Updated/Deleted ... <relativePath>" and one ERROR per failed op.
-            "SyncOpApplier",
+            // Instant Sync taxonomy events cover queueing, dispatch, and targeted
+            // outcomes without paths or account identifiers.
+            com.synckro.domain.model.SyncEventTag.INSTANT_QUEUE,
+            com.synckro.domain.model.SyncEventTag.INSTANT_DISPATCH,
+            com.synckro.domain.model.SyncEventTag.INSTANT_OUTCOME,
             // auth-tagged events surface "needs re-link" prompts to the user.
-            "auth",
+            com.synckro.domain.model.SyncEventTag.AUTH,
         )
 
     /**

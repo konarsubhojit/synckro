@@ -7,6 +7,8 @@ import com.synckro.data.repository.SyncEventRepository
 import com.synckro.domain.model.ConflictPolicy
 import com.synckro.domain.model.ConflictRecord
 import com.synckro.domain.model.SyncEventLevel
+import com.synckro.domain.model.SyncEventTag
+import com.synckro.domain.model.SyncEventTaxonomy
 import com.synckro.domain.model.SyncPair
 import com.synckro.domain.provider.CloudProvider
 import com.synckro.domain.provider.CloudProviderException
@@ -278,8 +280,8 @@ class SyncOpApplier(
                                 eventRepository.log(
                                     pair.id,
                                     SyncEventLevel.INFO,
-                                    TAG,
-                                    "Uploaded new file: ${op.relativePath}",
+                                    SyncEventTag.INSTANT_OUTCOME,
+                                    SyncEventTaxonomy.outcomeApplied(opKind(op)),
                                 )
                             }
 
@@ -292,8 +294,8 @@ class SyncOpApplier(
                                 eventRepository.log(
                                     pair.id,
                                     SyncEventLevel.INFO,
-                                    TAG,
-                                    "Downloaded new file: ${op.relativePath}",
+                                    SyncEventTag.INSTANT_OUTCOME,
+                                    SyncEventTaxonomy.outcomeApplied(opKind(op)),
                                 )
                             }
 
@@ -306,8 +308,8 @@ class SyncOpApplier(
                                 eventRepository.log(
                                     pair.id,
                                     SyncEventLevel.INFO,
-                                    TAG,
-                                    "Updated remote file: ${op.relativePath}",
+                                    SyncEventTag.INSTANT_OUTCOME,
+                                    SyncEventTaxonomy.outcomeApplied(opKind(op)),
                                 )
                             }
 
@@ -320,8 +322,8 @@ class SyncOpApplier(
                                 eventRepository.log(
                                     pair.id,
                                     SyncEventLevel.INFO,
-                                    TAG,
-                                    "Updated local file: ${op.relativePath}",
+                                    SyncEventTag.INSTANT_OUTCOME,
+                                    SyncEventTaxonomy.outcomeApplied(opKind(op)),
                                 )
                             }
 
@@ -334,8 +336,8 @@ class SyncOpApplier(
                                 eventRepository.log(
                                     pair.id,
                                     SyncEventLevel.INFO,
-                                    TAG,
-                                    "Deleted remote file: ${op.relativePath}",
+                                    SyncEventTag.INSTANT_OUTCOME,
+                                    SyncEventTaxonomy.outcomeApplied(opKind(op)),
                                 )
                             }
 
@@ -345,8 +347,8 @@ class SyncOpApplier(
                                 eventRepository.log(
                                     pair.id,
                                     SyncEventLevel.INFO,
-                                    TAG,
-                                    "Deleted local file: ${op.relativePath}",
+                                    SyncEventTag.INSTANT_OUTCOME,
+                                    SyncEventTaxonomy.outcomeApplied(opKind(op)),
                                 )
                             }
 
@@ -359,8 +361,8 @@ class SyncOpApplier(
                                 eventRepository.log(
                                     pair.id,
                                     SyncEventLevel.INFO,
-                                    TAG,
-                                    "Moved local file: ${op.fromRelativePath} -> ${op.relativePath}",
+                                    SyncEventTag.INSTANT_OUTCOME,
+                                    SyncEventTaxonomy.outcomeApplied(opKind(op)),
                                 )
                             }
 
@@ -371,8 +373,8 @@ class SyncOpApplier(
                                     eventRepository.log(
                                         pair.id,
                                         SyncEventLevel.WARN,
-                                        TAG,
-                                        "Skipped retention-delete local [${pair.displayName}]: ${op.relativePath} — remote copy not confirmed in index",
+                                        SyncEventTag.INSTANT_OUTCOME,
+                                        SyncEventTaxonomy.outcomeSkipped(opKind(op), "remote_copy_not_confirmed"),
                                     )
                                 } else {
                                     applyDeleteLocal(SyncOp.DeleteLocal(op.relativePath), pair)
@@ -380,8 +382,8 @@ class SyncOpApplier(
                                     eventRepository.log(
                                         pair.id,
                                         SyncEventLevel.INFO,
-                                        TAG,
-                                        "Retention delete (local, ${pair.retentionDays}d) [${pair.displayName}]: ${op.relativePath}",
+                                        SyncEventTag.INSTANT_OUTCOME,
+                                        SyncEventTaxonomy.outcomeApplied(opKind(op)),
                                     )
                                 }
                             }
@@ -393,8 +395,8 @@ class SyncOpApplier(
                                     eventRepository.log(
                                         pair.id,
                                         SyncEventLevel.WARN,
-                                        TAG,
-                                        "Skipped retention-delete remote [${pair.displayName}]: ${op.relativePath} — remote copy not confirmed in index",
+                                        SyncEventTag.INSTANT_OUTCOME,
+                                        SyncEventTaxonomy.outcomeSkipped(opKind(op), "remote_copy_not_confirmed"),
                                     )
                                 } else {
                                     val localStat = localFileAccess.stat(op.relativePath)
@@ -403,8 +405,8 @@ class SyncOpApplier(
                                         eventRepository.log(
                                             pair.id,
                                             SyncEventLevel.WARN,
-                                            TAG,
-                                            "Skipped retention-delete remote [${pair.displayName}]: ${op.relativePath} — local copy not found",
+                                            SyncEventTag.INSTANT_OUTCOME,
+                                            SyncEventTaxonomy.outcomeSkipped(opKind(op), "local_copy_not_found"),
                                         )
                                     } else {
                                         applyDeleteRemote(SyncOp.DeleteRemote(op.relativePath), pair, index)
@@ -412,8 +414,8 @@ class SyncOpApplier(
                                         eventRepository.log(
                                             pair.id,
                                             SyncEventLevel.INFO,
-                                            TAG,
-                                            "Retention delete (remote, ${pair.retentionDays}d) [${pair.displayName}]: ${op.relativePath}",
+                                            SyncEventTag.INSTANT_OUTCOME,
+                                            SyncEventTaxonomy.outcomeApplied(opKind(op)),
                                         )
                                     }
                                 }
@@ -432,9 +434,9 @@ class SyncOpApplier(
                     } catch (e: CloudProviderException.NotConfigured) {
                         throw e
                     } catch (e: Throwable) {
-                        val msg = "Failed ${opLabel(op)}: ${e.message}"
+                        val msg = SyncEventTaxonomy.outcomeFailed(opKind(op), e.message ?: "unknown")
                         errors += msg
-                        eventRepository.log(pair.id, SyncEventLevel.ERROR, TAG, msg)
+                        eventRepository.log(pair.id, SyncEventLevel.ERROR, SyncEventTag.INSTANT_OUTCOME, msg)
                     }
 
                     filesProcessed++
@@ -510,8 +512,8 @@ class SyncOpApplier(
                                             eventRepository.log(
                                                 pair.id,
                                                 SyncEventLevel.INFO,
-                                                TAG,
-                                                "Uploaded new file: ${op.relativePath}",
+                                                SyncEventTag.INSTANT_OUTCOME,
+                                                SyncEventTaxonomy.outcomeApplied(opKind(op)),
                                             )
                                         }
 
@@ -524,8 +526,8 @@ class SyncOpApplier(
                                             eventRepository.log(
                                                 pair.id,
                                                 SyncEventLevel.INFO,
-                                                TAG,
-                                                "Downloaded new file: ${op.relativePath}",
+                                                SyncEventTag.INSTANT_OUTCOME,
+                                                SyncEventTaxonomy.outcomeApplied(opKind(op)),
                                             )
                                         }
 
@@ -538,8 +540,8 @@ class SyncOpApplier(
                                             eventRepository.log(
                                                 pair.id,
                                                 SyncEventLevel.INFO,
-                                                TAG,
-                                                "Updated remote file: ${op.relativePath}",
+                                                SyncEventTag.INSTANT_OUTCOME,
+                                                SyncEventTaxonomy.outcomeApplied(opKind(op)),
                                             )
                                         }
 
@@ -552,8 +554,8 @@ class SyncOpApplier(
                                             eventRepository.log(
                                                 pair.id,
                                                 SyncEventLevel.INFO,
-                                                TAG,
-                                                "Updated local file: ${op.relativePath}",
+                                                SyncEventTag.INSTANT_OUTCOME,
+                                                SyncEventTaxonomy.outcomeApplied(opKind(op)),
                                             )
                                         }
 
@@ -566,8 +568,8 @@ class SyncOpApplier(
                                             eventRepository.log(
                                                 pair.id,
                                                 SyncEventLevel.INFO,
-                                                TAG,
-                                                "Deleted remote file: ${op.relativePath}",
+                                                SyncEventTag.INSTANT_OUTCOME,
+                                                SyncEventTaxonomy.outcomeApplied(opKind(op)),
                                             )
                                         }
 
@@ -577,8 +579,8 @@ class SyncOpApplier(
                                             eventRepository.log(
                                                 pair.id,
                                                 SyncEventLevel.INFO,
-                                                TAG,
-                                                "Deleted local file: ${op.relativePath}",
+                                                SyncEventTag.INSTANT_OUTCOME,
+                                                SyncEventTaxonomy.outcomeApplied(opKind(op)),
                                             )
                                         }
 
@@ -591,8 +593,8 @@ class SyncOpApplier(
                                             eventRepository.log(
                                                 pair.id,
                                                 SyncEventLevel.INFO,
-                                                TAG,
-                                                "Moved local file: ${op.fromRelativePath} -> ${op.relativePath}",
+                                                SyncEventTag.INSTANT_OUTCOME,
+                                                SyncEventTaxonomy.outcomeApplied(opKind(op)),
                                             )
                                         }
 
@@ -602,8 +604,8 @@ class SyncOpApplier(
                                                 eventRepository.log(
                                                     pair.id,
                                                     SyncEventLevel.WARN,
-                                                    TAG,
-                                                    "Skipped retention-delete local [${pair.displayName}]: ${op.relativePath} — remote copy not confirmed in index",
+                                                    SyncEventTag.INSTANT_OUTCOME,
+                                                    SyncEventTaxonomy.outcomeSkipped(opKind(op), "remote_copy_not_confirmed"),
                                                 )
                                             } else {
                                                 applyDeleteLocal(SyncOp.DeleteLocal(op.relativePath), pair)
@@ -611,8 +613,8 @@ class SyncOpApplier(
                                                 eventRepository.log(
                                                     pair.id,
                                                     SyncEventLevel.INFO,
-                                                    TAG,
-                                                    "Retention delete (local, ${pair.retentionDays}d) [${pair.displayName}]: ${op.relativePath}",
+                                                    SyncEventTag.INSTANT_OUTCOME,
+                                                    SyncEventTaxonomy.outcomeApplied(opKind(op)),
                                                 )
                                             }
                                         }
@@ -623,8 +625,8 @@ class SyncOpApplier(
                                                 eventRepository.log(
                                                     pair.id,
                                                     SyncEventLevel.WARN,
-                                                    TAG,
-                                                    "Skipped retention-delete remote [${pair.displayName}]: ${op.relativePath} — remote copy not confirmed in index",
+                                                    SyncEventTag.INSTANT_OUTCOME,
+                                                    SyncEventTaxonomy.outcomeSkipped(opKind(op), "remote_copy_not_confirmed"),
                                                 )
                                             } else {
                                                 val localStat = localFileAccess.stat(op.relativePath)
@@ -632,8 +634,8 @@ class SyncOpApplier(
                                                     eventRepository.log(
                                                         pair.id,
                                                         SyncEventLevel.WARN,
-                                                        TAG,
-                                                        "Skipped retention-delete remote [${pair.displayName}]: ${op.relativePath} — local copy not found",
+                                                        SyncEventTag.INSTANT_OUTCOME,
+                                                        SyncEventTaxonomy.outcomeSkipped(opKind(op), "local_copy_not_found"),
                                                     )
                                                 } else {
                                                     applyDeleteRemote(SyncOp.DeleteRemote(op.relativePath), pair, index)
@@ -641,8 +643,8 @@ class SyncOpApplier(
                                                     eventRepository.log(
                                                         pair.id,
                                                         SyncEventLevel.INFO,
-                                                        TAG,
-                                                        "Retention delete (remote, ${pair.retentionDays}d) [${pair.displayName}]: ${op.relativePath}",
+                                                        SyncEventTag.INSTANT_OUTCOME,
+                                                        SyncEventTaxonomy.outcomeApplied(opKind(op)),
                                                     )
                                                 }
                                             }
@@ -661,9 +663,9 @@ class SyncOpApplier(
                                 } catch (e: CloudProviderException.NotConfigured) {
                                     authFailure.compareAndSet(null, e)
                                 } catch (e: Throwable) {
-                                    val msg = "Failed ${opLabel(op)}: ${e.message}"
+                                    val msg = SyncEventTaxonomy.outcomeFailed(opKind(op), e.message ?: "unknown")
                                     concurrentErrors += msg
-                                    eventRepository.log(pair.id, SyncEventLevel.ERROR, TAG, msg)
+                                    eventRepository.log(pair.id, SyncEventLevel.ERROR, SyncEventTag.INSTANT_OUTCOME, msg)
                                 }
 
                                 val fp = atomicFiles.incrementAndGet()
@@ -728,7 +730,12 @@ class SyncOpApplier(
                 )
             }
         if (retried) {
-            eventRepository.log(pair.id, SyncEventLevel.WARN, TAG, "Retried upload: ${op.relativePath}")
+            eventRepository.log(
+                pair.id,
+                SyncEventLevel.WARN,
+                SyncEventTag.INSTANT_DISPATCH,
+                SyncEventTaxonomy.dispatchQuotaFallback("upload_retry"),
+            )
         }
         localIndexDao.upsert(
             LocalIndexEntity(
@@ -762,7 +769,12 @@ class SyncOpApplier(
                 )
             }
         if (retried) {
-            eventRepository.log(pair.id, SyncEventLevel.WARN, TAG, "Retried download: ${op.relativePath}")
+            eventRepository.log(
+                pair.id,
+                SyncEventLevel.WARN,
+                SyncEventTag.INSTANT_DISPATCH,
+                SyncEventTaxonomy.dispatchQuotaFallback("download_retry"),
+            )
         }
         localIndexDao.upsert(
             LocalIndexEntity(
@@ -805,7 +817,12 @@ class SyncOpApplier(
                 )
             }
         if (retried) {
-            eventRepository.log(pair.id, SyncEventLevel.WARN, TAG, "Retried update-remote: ${op.relativePath}")
+            eventRepository.log(
+                pair.id,
+                SyncEventLevel.WARN,
+                SyncEventTag.INSTANT_DISPATCH,
+                SyncEventTaxonomy.dispatchQuotaFallback("update_remote_retry"),
+            )
         }
         localIndexDao.upsert(
             index.copy(
@@ -837,7 +854,12 @@ class SyncOpApplier(
                 )
             }
         if (retried) {
-            eventRepository.log(pair.id, SyncEventLevel.WARN, TAG, "Retried update-local: ${op.relativePath}")
+            eventRepository.log(
+                pair.id,
+                SyncEventLevel.WARN,
+                SyncEventTag.INSTANT_DISPATCH,
+                SyncEventTaxonomy.dispatchQuotaFallback("update_local_retry"),
+            )
         }
         localIndexDao.upsert(
             LocalIndexEntity(
@@ -867,7 +889,12 @@ class SyncOpApplier(
             provider.delete(remoteId)
         }
         if (retried) {
-            eventRepository.log(pair.id, SyncEventLevel.WARN, TAG, "Retried delete-remote: ${op.relativePath}")
+            eventRepository.log(
+                pair.id,
+                SyncEventLevel.WARN,
+                SyncEventTag.INSTANT_DISPATCH,
+                SyncEventTaxonomy.dispatchQuotaFallback("delete_remote_retry"),
+            )
         }
         localIndexDao.delete(pair.id, op.relativePath)
     }
@@ -945,8 +972,8 @@ class SyncOpApplier(
                         eventRepository.log(
                             pair.id,
                             SyncEventLevel.WARN,
-                            TAG,
-                            "Retried conflict-local-wins: ${op.relativePath}",
+                            SyncEventTag.INSTANT_DISPATCH,
+                            SyncEventTaxonomy.dispatchQuotaFallback("conflict_local_wins_retry"),
                         )
                     }
                     localIndexDao.upsert(
@@ -966,8 +993,8 @@ class SyncOpApplier(
                 eventRepository.log(
                     pair.id,
                     SyncEventLevel.INFO,
-                    TAG,
-                    "Conflict resolved (local wins): ${op.relativePath}",
+                    SyncEventTag.INSTANT_OUTCOME,
+                    SyncEventTaxonomy.outcomeApplied("conflict_local_wins"),
                 )
             }
 
@@ -1005,8 +1032,8 @@ class SyncOpApplier(
                         eventRepository.log(
                             pair.id,
                             SyncEventLevel.WARN,
-                            TAG,
-                            "Retried conflict-remote-wins: ${op.relativePath}",
+                            SyncEventTag.INSTANT_DISPATCH,
+                            SyncEventTaxonomy.dispatchQuotaFallback("conflict_remote_wins_retry"),
                         )
                     }
                     localIndexDao.upsert(
@@ -1029,8 +1056,8 @@ class SyncOpApplier(
                 eventRepository.log(
                     pair.id,
                     SyncEventLevel.INFO,
-                    TAG,
-                    "Conflict resolved (remote wins): ${op.relativePath}",
+                    SyncEventTag.INSTANT_OUTCOME,
+                    SyncEventTaxonomy.outcomeApplied("conflict_remote_wins"),
                 )
             }
         }
@@ -1105,18 +1132,18 @@ class SyncOpApplier(
         return currentId
     }
 
-    private fun opLabel(op: SyncOp): String =
+    private fun opKind(op: SyncOp): String =
         when (op) {
-            is SyncOp.UploadNew -> "UploadNew(${op.relativePath})"
-            is SyncOp.DownloadNew -> "DownloadNew(${op.relativePath})"
-            is SyncOp.UpdateRemote -> "UpdateRemote(${op.relativePath})"
-            is SyncOp.UpdateLocal -> "UpdateLocal(${op.relativePath})"
-            is SyncOp.DeleteRemote -> "DeleteRemote(${op.relativePath})"
-            is SyncOp.DeleteLocal -> "DeleteLocal(${op.relativePath})"
-            is SyncOp.MoveLocal -> "MoveLocal(${op.fromRelativePath} -> ${op.relativePath})"
-            is SyncOp.DeleteLocalRetention -> "DeleteLocalRetention(${op.relativePath})"
-            is SyncOp.DeleteRemoteRetention -> "DeleteRemoteRetention(${op.relativePath})"
-            is SyncOp.Conflict -> "Conflict(${op.relativePath})"
+            is SyncOp.UploadNew -> "upload_new"
+            is SyncOp.DownloadNew -> "download_new"
+            is SyncOp.UpdateRemote -> "update_remote"
+            is SyncOp.UpdateLocal -> "update_local"
+            is SyncOp.DeleteRemote -> "delete_remote"
+            is SyncOp.DeleteLocal -> "delete_local"
+            is SyncOp.MoveLocal -> "move_local"
+            is SyncOp.DeleteLocalRetention -> "delete_local_retention"
+            is SyncOp.DeleteRemoteRetention -> "delete_remote_retention"
+            is SyncOp.Conflict -> "conflict"
         }
 
     private fun opTransferDirection(op: SyncOp): TransferDirection? =

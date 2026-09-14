@@ -14,7 +14,9 @@ import com.synckro.data.worker.SyncScheduler
 import com.synckro.data.worker.SyncWorker
 import com.synckro.domain.model.CloudProviderType
 import com.synckro.domain.model.SyncEvent
+import com.synckro.domain.model.SyncEventLevel
 import com.synckro.domain.model.SyncEventTag
+import com.synckro.domain.model.SyncEventTaxonomy
 import com.synckro.domain.model.SyncPair
 import com.synckro.domain.sync.SyncEngine
 import com.synckro.domain.sync.TransferProgress
@@ -479,6 +481,16 @@ class HomeViewModel
                 Timber.i(
                     "HomeViewModel.syncNow(id=${pair.id}) skipped: not eligible ($blockedReason)",
                 )
+                viewModelScope.launch {
+                    val reason = blockedReason.name.lowercase()
+                    syncEventRepository.logRateLimited(
+                        pairId = pair.id,
+                        level = SyncEventLevel.INFO,
+                        tag = SyncEventTag.INSTANT_QUEUE,
+                        message = SyncEventTaxonomy.queueDropped(reason),
+                        throttleKey = "sync-now-dropped-$reason",
+                    )
+                }
                 _syncNowBlocked.tryEmit(blockedReason)
                 return
             }
@@ -493,6 +505,20 @@ class HomeViewModel
                 ExistingWorkPolicy.KEEP,
                 req,
             )
+            viewModelScope.launch {
+                syncEventRepository.log(
+                    pair.id,
+                    SyncEventLevel.INFO,
+                    SyncEventTag.INSTANT_QUEUE,
+                    SyncEventTaxonomy.queueEnqueued("manual"),
+                )
+                syncEventRepository.log(
+                    pair.id,
+                    SyncEventLevel.INFO,
+                    SyncEventTag.INSTANT_WATCHER,
+                    SyncEventTaxonomy.watcherRegistered("work_info"),
+                )
+            }
             viewModelScope.launch {
                 val result =
                     runCatching {
@@ -512,6 +538,13 @@ class HomeViewModel
                     }
                 if (result.isFailure) {
                     Timber.w(result.exceptionOrNull(), "syncNow watcher failed for pair=${pair.id}")
+                    syncEventRepository.logRateLimited(
+                        pairId = pair.id,
+                        level = SyncEventLevel.WARN,
+                        tag = SyncEventTag.INSTANT_WATCHER,
+                        message = SyncEventTaxonomy.watcherFallback("work_info_observer_failed"),
+                        throttleKey = "sync-now-watcher-fallback",
+                    )
                 }
                 // Always clear the syncing flag — leaving it set on watcher failure
                 // would disable the Sync now button indefinitely with no way to retry.

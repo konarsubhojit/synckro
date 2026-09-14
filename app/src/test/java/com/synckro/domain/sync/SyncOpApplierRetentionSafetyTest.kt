@@ -8,6 +8,8 @@ import com.synckro.domain.model.CloudProviderType
 import com.synckro.domain.model.ConflictPolicy
 import com.synckro.domain.model.SyncDirection
 import com.synckro.domain.model.SyncEventLevel
+import com.synckro.domain.model.SyncEventTag
+import com.synckro.domain.model.SyncEventTaxonomy
 import com.synckro.domain.model.SyncPair
 import com.synckro.providers.fake.FakeCloudProvider
 import io.mockk.coVerify
@@ -161,7 +163,14 @@ class SyncOpApplierRetentionSafetyTest {
             // Local file must still exist.
             assertEquals("data".toByteArray().toList(), localFs.get("photo.jpg")?.toList())
             // A WARN event must have been emitted.
-            coVerify { eventRepo.log(1L, SyncEventLevel.WARN, "SyncOpApplier", match { it.contains("not confirmed") }) }
+            coVerify {
+                eventRepo.log(
+                    1L,
+                    SyncEventLevel.WARN,
+                    SyncEventTag.INSTANT_OUTCOME,
+                    match { it.contains("remote_copy_not_confirmed") },
+                )
+            }
         }
 
     @Test
@@ -182,7 +191,14 @@ class SyncOpApplierRetentionSafetyTest {
             assertEquals(0, result.errors.size)
             // File must still be present.
             assertEquals("content".toByteArray().toList(), localFs.get("doc.txt")?.toList())
-            coVerify { eventRepo.log(1L, SyncEventLevel.WARN, "SyncOpApplier", match { it.contains("not confirmed") }) }
+            coVerify {
+                eventRepo.log(
+                    1L,
+                    SyncEventLevel.WARN,
+                    SyncEventTag.INSTANT_OUTCOME,
+                    match { it.contains("remote_copy_not_confirmed") },
+                )
+            }
         }
 
     @Test
@@ -204,17 +220,17 @@ class SyncOpApplierRetentionSafetyTest {
             assertEquals(0, result.errors.size)
             // Local file must be removed.
             assertEquals(null, localFs.get("old.txt"))
-            // INFO event must include retention days info.
+            // INFO event must use the privacy-safe targeted outcome taxonomy.
             val logSlot = slot<String>()
-            coVerify { eventRepo.log(1L, SyncEventLevel.INFO, "SyncOpApplier", capture(logSlot)) }
+            coVerify { eventRepo.log(1L, SyncEventLevel.INFO, SyncEventTag.INSTANT_OUTCOME, capture(logSlot)) }
             val msg = logSlot.captured
-            assertTrue("Expected '7d' in log message but got: $msg", msg.contains("7d"))
-            assertTrue("Expected 'local' in log message but got: $msg", msg.contains("local"))
-            assertTrue("Expected pair name in log message but got: $msg", msg.contains("My Pair"))
+            assertTrue("Expected taxonomy event in log message but got: $msg", msg.contains(SyncEventTaxonomy.OUTCOME_APPLIED))
+            assertTrue("Expected operation in log message but got: $msg", msg.contains("delete_local_retention"))
+            assertTrue("Pair name should not be logged: $msg", !msg.contains("My Pair"))
         }
 
     @Test
-    fun `DeleteLocalRetention log message includes pair displayName`() =
+    fun `DeleteLocalRetention log message omits pair displayName`() =
         runTest {
             val remote = seedRemote("file.txt", "bytes".toByteArray())
             localFs.put("file.txt", "bytes".toByteArray())
@@ -227,7 +243,14 @@ class SyncOpApplierRetentionSafetyTest {
                 localIndexByPath = mapOf("file.txt" to idx),
             )
 
-            coVerify { eventRepo.log(1L, SyncEventLevel.INFO, "SyncOpApplier", match { it.contains("My Pair") }) }
+            coVerify {
+                eventRepo.log(
+                    1L,
+                    SyncEventLevel.INFO,
+                    SyncEventTag.INSTANT_OUTCOME,
+                    match { !it.contains("My Pair") && it.contains("delete_local_retention") },
+                )
+            }
         }
 
     // =========================================================================
@@ -248,7 +271,14 @@ class SyncOpApplierRetentionSafetyTest {
 
             assertEquals(0, result.applied)
             assertEquals(0, result.errors.size)
-            coVerify { eventRepo.log(1L, SyncEventLevel.WARN, "SyncOpApplier", match { it.contains("not confirmed") }) }
+            coVerify {
+                eventRepo.log(
+                    1L,
+                    SyncEventLevel.WARN,
+                    SyncEventTag.INSTANT_OUTCOME,
+                    match { it.contains("remote_copy_not_confirmed") },
+                )
+            }
         }
 
     @Test
@@ -266,7 +296,14 @@ class SyncOpApplierRetentionSafetyTest {
 
             assertEquals(0, result.applied)
             assertEquals(0, result.errors.size)
-            coVerify { eventRepo.log(1L, SyncEventLevel.WARN, "SyncOpApplier", match { it.contains("not confirmed") }) }
+            coVerify {
+                eventRepo.log(
+                    1L,
+                    SyncEventLevel.WARN,
+                    SyncEventTag.INSTANT_OUTCOME,
+                    match { it.contains("remote_copy_not_confirmed") },
+                )
+            }
         }
 
     @Test
@@ -290,7 +327,14 @@ class SyncOpApplierRetentionSafetyTest {
             val remoteChildren = fakeProvider.list("root")
             assertEquals(1, remoteChildren.size)
             // A WARN event must have been emitted.
-            coVerify { eventRepo.log(1L, SyncEventLevel.WARN, "SyncOpApplier", match { it.contains("local copy not found") }) }
+            coVerify {
+                eventRepo.log(
+                    1L,
+                    SyncEventLevel.WARN,
+                    SyncEventTag.INSTANT_OUTCOME,
+                    match { it.contains("local_copy_not_found") },
+                )
+            }
         }
 
     @Test
@@ -313,17 +357,17 @@ class SyncOpApplierRetentionSafetyTest {
             // Remote file must be gone.
             val remoteChildren = fakeProvider.list("root")
             assertEquals(0, remoteChildren.size)
-            // INFO event must include retention days info.
+            // INFO event must use the privacy-safe targeted outcome taxonomy.
             val logSlot = slot<String>()
-            coVerify { eventRepo.log(1L, SyncEventLevel.INFO, "SyncOpApplier", capture(logSlot)) }
+            coVerify { eventRepo.log(1L, SyncEventLevel.INFO, SyncEventTag.INSTANT_OUTCOME, capture(logSlot)) }
             val msg = logSlot.captured
-            assertTrue("Expected '14d' in log message but got: $msg", msg.contains("14d"))
-            assertTrue("Expected 'remote' in log message but got: $msg", msg.contains("remote"))
-            assertTrue("Expected pair name in log message but got: $msg", msg.contains("My Pair"))
+            assertTrue("Expected taxonomy event in log message but got: $msg", msg.contains(SyncEventTaxonomy.OUTCOME_APPLIED))
+            assertTrue("Expected operation in log message but got: $msg", msg.contains("delete_remote_retention"))
+            assertTrue("Pair name should not be logged: $msg", !msg.contains("My Pair"))
         }
 
     @Test
-    fun `DeleteRemoteRetention log message includes pair displayName`() =
+    fun `DeleteRemoteRetention log message omits pair displayName`() =
         runTest {
             val remote = seedRemote("data.bin", "bytes".toByteArray())
             val idx = indexEntry("data.bin", remoteId = remote.id)
@@ -336,6 +380,13 @@ class SyncOpApplierRetentionSafetyTest {
                 localIndexByPath = mapOf("data.bin" to idx),
             )
 
-            coVerify { eventRepo.log(1L, SyncEventLevel.INFO, "SyncOpApplier", match { it.contains("My Pair") }) }
+            coVerify {
+                eventRepo.log(
+                    1L,
+                    SyncEventLevel.INFO,
+                    SyncEventTag.INSTANT_OUTCOME,
+                    match { !it.contains("My Pair") && it.contains("delete_remote_retention") },
+                )
+            }
         }
 }
