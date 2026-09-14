@@ -11,6 +11,8 @@
     <!-- Notifications for sync status (Android 13+). -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- Restores Instant Sync watchers after a device reboot. -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <queries>
         <intent>
@@ -67,6 +69,26 @@
             android:name="androidx.work.impl.foreground.SystemForegroundService"
             android:foregroundServiceType="dataSync"
             tools:node="merge" />
+
+        <!-- Hosts Instant Sync local-change watchers while the app is not in the foreground.
+             Declared with the dataSync type because watching only prompts sync work; the actual
+             transfers still run in SyncWorker. See docs/notifications.md. -->
+        <service
+            android:name=".data.watcher.InstantSyncWatcherService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
+        <!-- Restores the watcher host after boot or an app update. The receiver must be exported
+             so the system can deliver these protected broadcasts. -->
+        <receiver
+            android:name=".data.watcher.WatcherBootReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
 
         <!-- MSAL redirect. Host/path come from MSAL_REDIRECT_URI via Gradle
              placeholders. Non-debug builds get an empty host and therefore an

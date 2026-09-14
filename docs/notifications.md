@@ -78,6 +78,42 @@ not guaranteed. Missed changes are recovered by periodic reconciliation.
 
 ---
 
+### 4. `synckro_watcher` — Instant Sync watching
+
+| Property      | Value                                                   |
+|:--------------|:--------------------------------------------------------|
+| Constant      | `InstantSyncWatcherService.WATCHER_CHANNEL_ID`          |
+| Importance    | `IMPORTANCE_LOW`                                        |
+| Badge         | Disabled                                                |
+| Registered in | `SynckroApp.createNotificationChannels()`               |
+
+**Purpose:** The mandatory ongoing notification for `InstantSyncWatcherService`, the `dataSync`
+foreground service that keeps `LocalChangeWatcher` registrations alive while the app is not in the
+foreground. It is posted for as long as at least one pair is eligible for Instant Sync and is
+removed as soon as the service stops.
+
+**Text:** `watcher_notification_title` / `watcher_notification_content`. Tapping it opens
+`MainActivity`; users who do not want it can turn Instant Sync off (globally or per pair) or mute
+this channel in system settings — muting the channel does not stop the service.
+
+**Startup restrictions (no unrestricted background start is assumed):**
+
+| Trigger                              | Behaviour                                                                       |
+|:-------------------------------------|:--------------------------------------------------------------------------------|
+| App becomes visible                  | Service is started (or stopped when nothing is watchable).                       |
+| `ACTION_MY_PACKAGE_REPLACED`         | Service is started via the Android 12 broadcast exemption.                       |
+| `ACTION_BOOT_COMPLETED` (API < 35)   | Service is started via the same exemption.                                       |
+| `ACTION_BOOT_COMPLETED` (API 35+)    | Deferred: Android 15 forbids starting a `dataSync` service from boot.            |
+| Deferred / refused start             | Durable WorkManager periodic sync keeps running; the host resumes on next launch. |
+
+`WatcherLifecyclePolicy` encodes these rules, `WatcherServiceController` applies them, and
+`WatcherBootReceiver` only forwards the broadcast. A refused `startForegroundService` (for example
+`ForegroundServiceStartNotAllowedException`) is logged and treated as a deferral rather than a
+crash. While the service runs it re-reconciles watcher registrations whenever pairs or the global
+sync settings change, and stops itself once no pair is watchable.
+
+---
+
 ## Notification ID Ranges
 
 | Range               | Owner                          | Purpose                                   |
@@ -85,6 +121,7 @@ not guaranteed. Missed changes are recovered by periodic reconciliation.
 | 1,000 – 66,535      | `SyncWorker`                   | Per-pair sync-progress foreground service |
 | 99,999              | `ReauthNotificationHelper`     | Reauth group summary                      |
 | 100,000 – 104,095   | `ReauthNotificationHelper`     | Per-account reauth alerts (`MAX_ACCOUNTS = 4,096`) |
+| 200,000             | `InstantSyncWatcherService`    | Watcher foreground-service notification   |
 
 `SyncStatusNotifier` does not allocate notification IDs yet because Phase 8a only registers the channel; reserve a non-overlapping range when actual posts are added in later phases.
 

@@ -2,6 +2,7 @@ package com.synckro.di
 
 import android.content.ContentResolver
 import android.content.Context
+import android.os.Build
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.Preferences
@@ -24,7 +25,11 @@ import com.synckro.data.repository.ConflictRepository
 import com.synckro.data.repository.SyncEventRepository
 import com.synckro.data.scanner.LocalFolderScannerImpl
 import com.synckro.data.watcher.ContentResolverContentObserverRegistry
+import com.synckro.data.watcher.ContextWatcherServiceStarter
+import com.synckro.data.watcher.DefaultWatchablePairs
 import com.synckro.data.watcher.SafContentObserverWatcher
+import com.synckro.data.watcher.WatchablePairs
+import com.synckro.data.watcher.WatcherServiceStarter
 import com.synckro.data.worker.SyncScheduler
 import com.synckro.domain.auth.AuthManager
 import com.synckro.domain.model.CloudProviderType
@@ -34,6 +39,7 @@ import com.synckro.domain.sync.LocalChangeWatcher
 import com.synckro.domain.sync.LocalChangeWatcherRefresher
 import com.synckro.domain.sync.RemoteEnumerator
 import com.synckro.domain.sync.SyncEngine
+import com.synckro.domain.sync.WatcherLifecyclePolicy
 import com.synckro.domain.telemetry.Telemetry
 import com.synckro.providers.fake.FakeCloudProvider
 import com.synckro.providers.gdrive.GoogleDriveAuthManager
@@ -258,6 +264,20 @@ object AppModule {
 
     @Provides
     fun provideLocalChangeWatcherRefresher(impl: SafContentObserverWatcher): LocalChangeWatcherRefresher = impl
+
+    @Provides @Singleton
+    fun provideWatchablePairs(impl: DefaultWatchablePairs): WatchablePairs = impl
+
+    @Provides @Singleton
+    fun provideContentResolver(
+        @ApplicationContext context: Context,
+    ): ContentResolver = context.contentResolver
+
+    @Provides @Singleton
+    fun provideWatcherServiceStarter(impl: ContextWatcherServiceStarter): WatcherServiceStarter = impl
+
+    @Provides @Singleton
+    fun provideWatcherLifecyclePolicy(): WatcherLifecyclePolicy = WatcherLifecyclePolicy(Build.VERSION.SDK_INT)
 
     /**
      * Provides the shared [OkHttpClient] used by all network components (OneDrive Graph API, …).
