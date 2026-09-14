@@ -48,6 +48,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -876,7 +877,9 @@ internal fun InstantSyncControl(
                         role = Role.Switch,
                         onValueChange = onCheckedChange,
                     )
-                    .semantics(mergeDescendants = true) {}
+                    .semantics(mergeDescendants = true) {
+                        unavailableText?.let { stateDescription = it }
+                    }
                     .padding(vertical = 2.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,

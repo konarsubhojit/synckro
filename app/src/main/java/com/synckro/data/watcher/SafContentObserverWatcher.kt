@@ -99,6 +99,10 @@ class SafContentObserverWatcher(
         )
     }
 
+    /**
+     * Reconciles a registration already owned by the lifecycle coordinator.
+     * Initial registration remains the coordinator's responsibility.
+     */
     override suspend fun refresh(pairId: Long) {
         val pair = syncPairDao.getById(pairId)
         synchronized(lock) {

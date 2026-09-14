@@ -72,6 +72,7 @@ class PairEditorInstantSyncControlTest {
             .onNodeWithText(title)
             .assertIsNotEnabled()
             .assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Switch))
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, reason))
         composeRule.onNodeWithText(reason).assertExists()
     }
 

@@ -28,6 +28,7 @@ import com.synckro.domain.telemetry.TelemetryFailureCategory
 import com.synckro.domain.telemetry.toTelemetryLabel
 import com.synckro.util.StringProvider
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -974,6 +975,7 @@ class PairEditorViewModel
                     }
                     onSaved(savedId)
                 }.onFailure { t ->
+                    if (t is CancellationException) throw t
                     Timber.e(t, "PairEditorViewModel.save: failed")
                     syncEventRepository.log(
                         pairId = if (pairId != 0L) pairId else null,
