@@ -78,7 +78,7 @@ class FileCandidatePolicyTest {
             FileCandidatePolicy.evaluate(null),
         )
         assertEquals(
-            FileCandidateDecision.Inconclusive(FileCandidateInconclusiveReason.NAME_UNAVAILABLE),
+            FileCandidateDecision.Inconclusive(FileCandidateInconclusiveReason.EMPTY_NAME),
             FileCandidatePolicy.evaluate("folder/"),
         )
     }

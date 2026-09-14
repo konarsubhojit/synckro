@@ -66,6 +66,9 @@ class MediaStoreLocalChangeWatcherTest {
             MediaItemLookup.Found("DCIM/Camera/", MediaStorePendingState.UNAVAILABLE, "photo.jpg")
         factory.change(uri)
         metadata.items[uri] =
+            MediaItemLookup.Found("DCIM/Camera/", MediaStorePendingState.NOT_PENDING, displayName = null)
+        factory.change(uri)
+        metadata.items[uri] =
             MediaItemLookup.Found("DCIM/Camera/", MediaStorePendingState.NOT_PENDING, "photo.jpg")
         factory.change(uri)
 

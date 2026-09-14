@@ -12,9 +12,12 @@ object FileCandidatePolicy {
         pathOrName: String?,
         mediaStorePendingState: MediaStorePendingState = MediaStorePendingState.NOT_APPLICABLE,
     ): FileCandidateDecision {
-        val fileName = pathOrName?.substringAfterLast('/')
-        if (fileName.isNullOrEmpty()) {
+        if (pathOrName == null) {
             return FileCandidateDecision.Inconclusive(FileCandidateInconclusiveReason.NAME_UNAVAILABLE)
+        }
+        val fileName = pathOrName.substringAfterLast('/')
+        if (fileName.isEmpty()) {
+            return FileCandidateDecision.Inconclusive(FileCandidateInconclusiveReason.EMPTY_NAME)
         }
         if (fileName.hasTemporaryName()) {
             return FileCandidateDecision.Excluded(FileCandidateExclusionReason.TEMPORARY_NAME)
@@ -71,5 +74,6 @@ enum class FileCandidateExclusionReason {
 
 enum class FileCandidateInconclusiveReason {
     NAME_UNAVAILABLE,
+    EMPTY_NAME,
     MEDIASTORE_PENDING_UNAVAILABLE,
 }
