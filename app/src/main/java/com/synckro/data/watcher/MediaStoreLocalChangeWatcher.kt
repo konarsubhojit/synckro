@@ -162,12 +162,13 @@ class MediaStoreLocalChangeWatcher(
                 MediaItemLookup.Unknown -> Unit
                 is MediaItemLookup.Found -> {
                     if (!isInPairScope(lookup.relativePath)) return
-                    if (
+                    val decision =
                         FileCandidatePolicy.evaluate(
                             pathOrName = lookup.displayName,
                             mediaStorePendingState = lookup.pendingState,
-                        ) !is FileCandidateDecision.Eligible
-                    ) {
+                        )
+                    if (decision !is FileCandidateDecision.Eligible) {
+                        Timber.d("MediaStoreLocalChangeWatcher: candidate not eligible (%s)", decision)
                         return
                     }
                     val deliver = synchronized(registrationLock) { isActive }

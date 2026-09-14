@@ -44,7 +44,7 @@ object FileCandidatePolicy {
             endsWith(".crdownload", ignoreCase = true) ||
             endsWith(".tmp", ignoreCase = true) ||
             startsWith(".pending-", ignoreCase = true) ||
-            startsWith("~$")
+            startsWith("~$", ignoreCase = true)
 }
 
 enum class MediaStorePendingState {

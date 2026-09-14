@@ -7,7 +7,8 @@ package com.synckro.domain.sync
  * Hidden and temporary leaf files are always rejected. Empty file names are
  * inconclusive and therefore also fail closed. Ignore globs take
  * precedence over include globs; when the include filter is inactive all
- * non-ignored files are accepted.
+ * non-ignored files are accepted. MediaStore state is evaluated by callers that
+ * have access to it; this scope applies only the name-based candidate rules.
  */
 class SyncPathScope internal constructor(
     val includeGlobs: List<Regex>,
