@@ -427,17 +427,40 @@ class LocalFsEnumerator internal constructor(
             includeGlobs: List<String>,
             ignoreGlobs: List<String>,
             excludeSubfolders: Boolean,
-        ): Boolean {
-            val fileName = relativePath.substringAfterLast('/')
-            if (fileName.isEmpty() || fileName.startsWith('.')) return false
-            if (excludeSubfolders && relativePath.contains('/')) return false
+        ): Boolean =
+            compilePathScope(
+                includeGlobs = includeGlobs,
+                ignoreGlobs = ignoreGlobs,
+                excludeSubfolders = excludeSubfolders,
+            ).contains(relativePath)
 
-            val compiledIgnoreGlobs = ignoreGlobs.mapNotNull { runCatching { globToRegex(it) }.getOrNull() }
-            if (compiledIgnoreGlobs.any { it.matches(relativePath) }) return false
+        internal fun compilePathScope(
+            includeGlobs: List<String>,
+            ignoreGlobs: List<String>,
+            excludeSubfolders: Boolean,
+        ): LocalPathScope =
+            LocalPathScope(
+                includeGlobs = includeGlobs.mapNotNull { runCatching { globToRegex(it) }.getOrNull() },
+                ignoreGlobs = ignoreGlobs.mapNotNull { runCatching { globToRegex(it) }.getOrNull() },
+                includeFilterActive = includeGlobs.isNotEmpty(),
+                excludeSubfolders = excludeSubfolders,
+            )
+    }
+}
 
-            if (includeGlobs.isEmpty()) return true
-            val compiledIncludeGlobs = includeGlobs.mapNotNull { runCatching { globToRegex(it) }.getOrNull() }
-            return compiledIncludeGlobs.any { it.matches(relativePath) }
-        }
+internal data class LocalPathScope(
+    val includeGlobs: List<Regex>,
+    val ignoreGlobs: List<Regex>,
+    val includeFilterActive: Boolean,
+    val excludeSubfolders: Boolean,
+) {
+    fun contains(relativePath: String): Boolean {
+        val fileName = relativePath.substringAfterLast('/')
+        if (fileName.isEmpty() || fileName.startsWith('.')) return false
+        if (excludeSubfolders && relativePath.contains('/')) return false
+
+        if (ignoreGlobs.any { it.matches(relativePath) }) return false
+
+        return !includeFilterActive || includeGlobs.any { it.matches(relativePath) }
     }
 }

@@ -62,9 +62,23 @@ internal class TargetedLocalFileResolver(
         includeGlobs: List<String> = emptyList(),
         ignoreGlobs: List<String> = emptyList(),
         excludeSubfolders: Boolean = false,
+    ): TargetedLocalFileResolution =
+        resolve(
+            upload = upload,
+            pathScope =
+                LocalFsEnumerator.compilePathScope(
+                    includeGlobs = includeGlobs,
+                    ignoreGlobs = ignoreGlobs,
+                    excludeSubfolders = excludeSubfolders,
+                ),
+        )
+
+    suspend fun resolve(
+        upload: PendingUploadEntity,
+        pathScope: LocalPathScope,
     ): TargetedLocalFileResolution {
         val relativePath = upload.relativePath
-        if (!LocalFsEnumerator.isInScope(relativePath, includeGlobs, ignoreGlobs, excludeSubfolders)) {
+        if (!pathScope.contains(relativePath)) {
             localIndexDao.delete(upload.pairId, relativePath)
             return TargetedLocalFileResolution.OutOfScope
         }
@@ -80,16 +94,13 @@ internal class TargetedLocalFileResolver(
 
         sample as TargetedSafMetadataSample.Available
         val cached = localIndexDao.get(upload.pairId, relativePath)
-        val contentHash =
-            if (cached != null &&
-                cached.sizeBytes == sample.sizeBytes &&
-                cached.mtimeMs == sample.mtimeMs &&
-                cached.contentHash != null
-            ) {
-                cached.contentHash
-            } else {
-                computeHash(sample.documentId, relativePath)
-            }
+        val hashResolution = resolveHash(sample, cached, relativePath)
+        if (hashResolution == HashResolution.PermissionLost) {
+            return TargetedLocalFileResolution.Unavailable(
+                TargetedLocalFileResolution.Unavailable.Reason.PERMISSION_LOST,
+            )
+        }
+        val contentHash = (hashResolution as HashResolution.Available).contentHash
 
         upsertLocalIndex(upload, sample, cached, contentHash)
 
@@ -116,21 +127,46 @@ internal class TargetedLocalFileResolver(
         val hinted = upload.documentIdHint
         if (!hinted.isNullOrBlank()) {
             val direct = sampler.sample(documentId = hinted)
-            if (direct != TargetedSafMetadataSample.Missing) return direct
+            when {
+                direct is TargetedSafMetadataSample.Available && direct.matches(upload.relativePath) -> return direct
+                direct is TargetedSafMetadataSample.Inconclusive -> return direct
+            }
         }
         return sampler.sample(relativePath = upload.relativePath)
     }
 
+    private fun TargetedSafMetadataSample.Available.matches(relativePath: String): Boolean =
+        displayName == null || displayName == relativePath.substringAfterLast('/')
+
+    private fun resolveHash(
+        sample: TargetedSafMetadataSample.Available,
+        cached: LocalIndexEntity?,
+        relativePath: String,
+    ): HashResolution =
+        if (cached != null &&
+            cached.sizeBytes == sample.sizeBytes &&
+            cached.mtimeMs == sample.mtimeMs &&
+            cached.contentHash != null
+        ) {
+            HashResolution.Available(cached.contentHash)
+        } else {
+            computeHash(sample.documentId, relativePath)
+        }
+
     private fun computeHash(
         documentId: String,
         relativePath: String,
-    ): String? =
+    ): HashResolution =
         try {
-            fsAccess.openInputStream(treeUri, documentId)?.use(LocalFsEnumerator::sha256Hex)
+            HashResolution.Available(
+                fsAccess.openInputStream(treeUri, documentId)?.use(LocalFsEnumerator::sha256Hex),
+            )
+        } catch (_: SecurityException) {
+            HashResolution.PermissionLost
         } catch (_: Exception) {
-            null
+            HashResolution.Available(null)
         }.also { hash ->
-            if (hash == null) {
+            if (hash == HashResolution.Available(null)) {
                 Timber.w("TargetedLocalFileResolver: no read access for '%s'", relativePath)
             }
         }
@@ -163,4 +199,12 @@ internal class TargetedLocalFileResolver(
             TargetedSafMetadataSample.Inconclusive.Reason.PROVIDER_FAILURE ->
                 TargetedLocalFileResolution.Unavailable.Reason.PERMISSION_LOST
         }
+
+    private sealed interface HashResolution {
+        data class Available(
+            val contentHash: String?,
+        ) : HashResolution
+
+        data object PermissionLost : HashResolution
+    }
 }

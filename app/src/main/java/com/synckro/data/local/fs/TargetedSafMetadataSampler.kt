@@ -11,6 +11,7 @@ internal data class SafDocumentMetadata(
     val sizeBytes: Long?,
     val mtimeMs: Long?,
     val mimeType: String?,
+    val displayName: String? = null,
 )
 
 internal fun interface SafDocumentMetadataQuery {
@@ -35,6 +36,7 @@ internal object DefaultSafDocumentMetadataQuery : SafDocumentMetadataQuery {
             DocumentsContract.Document.COLUMN_SIZE,
             DocumentsContract.Document.COLUMN_LAST_MODIFIED,
             DocumentsContract.Document.COLUMN_MIME_TYPE,
+            DocumentsContract.Document.COLUMN_DISPLAY_NAME,
         )
 
     override fun query(
@@ -48,10 +50,12 @@ internal object DefaultSafDocumentMetadataQuery : SafDocumentMetadataQuery {
             val sizeIndex = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_SIZE)
             val mtimeIndex = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_LAST_MODIFIED)
             val mimeIndex = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_MIME_TYPE)
+            val nameIndex = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
             SafDocumentMetadata(
                 sizeBytes = cursor.getLongOrNull(sizeIndex),
                 mtimeMs = cursor.getLongOrNull(mtimeIndex),
                 mimeType = cursor.getString(mimeIndex),
+                displayName = cursor.getString(nameIndex),
             )
         } ?: throw SafMetadataUnavailableException()
     }
@@ -93,6 +97,7 @@ internal sealed interface TargetedSafMetadataSample {
         val mimeType: String,
         val openable: Boolean,
         val mediaStorePending: Boolean?,
+        val displayName: String? = null,
     ) : TargetedSafMetadataSample
 
     data object Missing : TargetedSafMetadataSample
@@ -195,6 +200,7 @@ internal class TargetedSafMetadataSampler(
             mimeType = mimeType,
             openable = openable,
             mediaStorePending = mediaStorePending,
+            displayName = metadata.displayName,
         )
     }
 

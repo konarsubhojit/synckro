@@ -121,6 +121,57 @@ class TargetedLocalFileResolverTest {
         }
 
     @Test
+    fun `non-openable target has explicit outcome even when cached hash matches`() =
+        runTest {
+            val pairId = insertPair()
+            localIndexDao.upsert(LocalIndexEntity(pairId, "locked.txt", 10L, 2_000L, contentHash = "cached"))
+
+            val result =
+                resolverWith(
+                    metadata = mapOf("doc-1" to SafDocumentMetadata(10L, 2_000L, "text/plain")),
+                    fsAccess = CountingFsAccess(),
+                ).resolve(upload(pairId, path = "locked.txt", documentIdHint = "doc-1"))
+
+            assertEquals(
+                TargetedLocalFileResolution.Unavailable(
+                    TargetedLocalFileResolution.Unavailable.Reason.NO_READ_ACCESS,
+                ),
+                result,
+            )
+            assertEquals("cached", localIndexDao.get(pairId, "locked.txt")?.contentHash)
+        }
+
+    @Test
+    fun `stale document ID hint falls back to relative path resolution`() =
+        runTest {
+            val pairId = insertPair()
+            val bytes = "actual content".toByteArray()
+            val fs = CountingFsAccess(mapOf("actual-doc" to bytes))
+            val children =
+                CountingChildrenQuery(
+                    mapOf(
+                        "root" to listOf(file("docs", docId = "docs")),
+                        "docs" to listOf(file("report.txt", docId = "actual-doc")),
+                    ),
+                )
+
+            val result =
+                resolverWith(
+                    childrenQuery = children,
+                    metadata =
+                        mapOf(
+                            "stale-doc" to SafDocumentMetadata(1L, 1_000L, "text/plain", displayName = "other.txt"),
+                            "actual-doc" to SafDocumentMetadata(bytes.size.toLong(), 2_000L, "text/plain", displayName = "report.txt"),
+                        ),
+                    fsAccess = fs,
+                ).resolve(upload(pairId, path = "docs/report.txt", documentIdHint = "stale-doc"))
+
+            assertTrue(result is TargetedLocalFileResolution.Resolved)
+            assertEquals("actual-doc", (result as TargetedLocalFileResolution.Resolved).documentId)
+            assertEquals(2, children.queryCount)
+        }
+
+    @Test
     fun `missing target deletes indexed row and returns missing`() =
         runTest {
             val pairId = insertPair()
@@ -237,6 +288,17 @@ class TargetedLocalFileResolverTest {
             return tree[parentDocId] ?: emptyList()
         }
     }
+
+    private fun file(
+        name: String,
+        docId: String,
+    ) = RawDocChild(
+        docId = docId,
+        name = name,
+        size = 0L,
+        lastModifiedMs = 0L,
+        mimeType = "application/octet-stream",
+    )
 
     private class CountingFsAccess(
         private val filesByDocId: Map<String, ByteArray> = emptyMap(),
