@@ -19,20 +19,21 @@ class InstantSyncEligibilityPolicy {
         globalInstantSyncEnabled: Boolean,
         relativePath: String? = null,
     ): InstantSyncEligibilityDecision {
-        val reasons = buildSet {
-            if (!globalAutoSyncEnabled) add(InstantSyncIneligibilityReason.GLOBAL_AUTO_SYNC_DISABLED)
-            if (!globalInstantSyncEnabled) add(InstantSyncIneligibilityReason.GLOBAL_INSTANT_SYNC_DISABLED)
-            if (!pair.instantSyncEnabled) add(InstantSyncIneligibilityReason.PAIR_INSTANT_SYNC_DISABLED)
-            if (!pair.direction.allowsUpload()) add(InstantSyncIneligibilityReason.DIRECTION_NOT_UPLOAD_CAPABLE)
-            if (pair.accountId.isNullOrBlank()) add(InstantSyncIneligibilityReason.ACCOUNT_NOT_LINKED)
-            if (pair.lastSyncResult == NEEDS_REAUTH) add(InstantSyncIneligibilityReason.NEEDS_REAUTH)
-            if (pair.needsReLink || pair.lastSyncResult == NEEDS_RELINK) {
-                add(InstantSyncIneligibilityReason.NEEDS_RELINK)
+        val reasons =
+            buildSet {
+                if (!globalAutoSyncEnabled) add(InstantSyncIneligibilityReason.GLOBAL_AUTO_SYNC_DISABLED)
+                if (!globalInstantSyncEnabled) add(InstantSyncIneligibilityReason.GLOBAL_INSTANT_SYNC_DISABLED)
+                if (!pair.instantSyncEnabled) add(InstantSyncIneligibilityReason.PAIR_INSTANT_SYNC_DISABLED)
+                if (!pair.direction.allowsUpload()) add(InstantSyncIneligibilityReason.DIRECTION_NOT_UPLOAD_CAPABLE)
+                if (pair.accountId.isNullOrBlank()) add(InstantSyncIneligibilityReason.ACCOUNT_NOT_LINKED)
+                if (pair.lastSyncResult == NEEDS_REAUTH) add(InstantSyncIneligibilityReason.NEEDS_REAUTH)
+                if (pair.needsReLink || pair.lastSyncResult == NEEDS_RELINK) {
+                    add(InstantSyncIneligibilityReason.NEEDS_RELINK)
+                }
+                if (relativePath != null && !pair.containsRelativePath(relativePath)) {
+                    add(InstantSyncIneligibilityReason.PATH_OUT_OF_SCOPE)
+                }
             }
-            if (relativePath != null && !pair.containsRelativePath(relativePath)) {
-                add(InstantSyncIneligibilityReason.PATH_OUT_OF_SCOPE)
-            }
-        }
         return InstantSyncEligibilityDecision(isEligible = reasons.isEmpty(), reasons = reasons)
     }
 
