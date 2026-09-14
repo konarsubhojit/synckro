@@ -127,7 +127,7 @@ class LocalIndexDaoTest {
     fun `upsertSyncedRemoteState atomically persists remote baseline`() =
         runTest {
             val pairId = insertPair()
-            localIndexDao.upsert(buildEntry(pairId, sizeBytes = 10L, mtimeMs = 1_000L))
+            localIndexDao.upsert(buildEntry(pairId, sizeBytes = 10L, mtimeMs = 1_000L, contentHash = "old-hash"))
 
             localIndexDao.upsertSyncedRemoteState(
                 buildEntry(
@@ -149,6 +149,7 @@ class LocalIndexDaoTest {
             assertEquals(20L, stored?.remoteSizeBytes)
             assertEquals(3_000L, stored?.remoteMtimeMs)
             assertEquals("etag-1", stored?.remoteEtag)
+            assertNull(stored?.contentHash)
         }
 
     @Test

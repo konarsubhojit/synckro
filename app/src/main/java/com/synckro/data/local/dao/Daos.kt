@@ -650,7 +650,11 @@ interface LocalIndexDao {
     suspend fun upsertSyncedRemoteState(entry: LocalIndexEntity) {
         val current = get(entry.pairId, entry.relativePath)
         upsert(
-            if (entry.contentHash == null && current?.contentHash != null) {
+            if (entry.contentHash == null &&
+                current?.contentHash != null &&
+                current.sizeBytes == entry.sizeBytes &&
+                current.mtimeMs == entry.mtimeMs
+            ) {
                 entry.copy(contentHash = current.contentHash)
             } else {
                 entry

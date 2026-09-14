@@ -1026,6 +1026,7 @@ class SyncOpApplier(
                                 sizeBytes = stat.sizeBytes,
                                 mtimeMs = stat.mtimeMs,
                                 contentHash = null,
+                                remoteId = updatedRemote.id,
                                 remoteSizeBytes = updatedRemote.size,
                                 remoteMtimeMs = updatedRemote.lastModifiedMs,
                                 remoteEtag = updatedRemote.eTag,
@@ -1125,7 +1126,11 @@ class SyncOpApplier(
             localFileAccess.stat(relativePath)
                 ?: error("Local file not found after upload: $relativePath")
         if (currentStat.sizeBytes != uploadedStat.sizeBytes || currentStat.mtimeMs != uploadedStat.mtimeMs) {
-            error("Local file changed during upload: $relativePath")
+            error(
+                "Local file changed during upload: $relativePath " +
+                    "expectedSize=${uploadedStat.sizeBytes} actualSize=${currentStat.sizeBytes} " +
+                    "expectedMtime=${uploadedStat.mtimeMs} actualMtime=${currentStat.mtimeMs}",
+            )
         }
         localIndexDao.upsertSyncedRemoteState(entry)
     }
