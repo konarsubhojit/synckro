@@ -97,6 +97,33 @@ class SafContentObserverWatcher(
         )
     }
 
+    override fun refresh(pairId: Long) {
+        val pair =
+            runBlocking(Dispatchers.IO) {
+                syncPairDao.getById(pairId)
+            }
+        synchronized(lock) {
+            val registration = registrationsByPairId[pairId] ?: return
+            if (pair == null ||
+                !pair.instantSyncEnabled ||
+                !pair.direction.allowsUpload ||
+                pair.localTreeUri.isBlank() ||
+                !pair.autoSyncEnabled ||
+                !localFolderAccessChecker.hasReadWriteAccess(pair.localTreeUri)
+            ) {
+                registrationsByPairId.remove(pairId)
+                observerRegistry.unregisterContentObserver(registration.observer)
+                return
+            }
+            if (registration.treeUriString != pair.localTreeUri) {
+                observerRegistry.unregisterContentObserver(registration.observer)
+                val updated = createRegistration(pairId, pair.localTreeUri)
+                updated.listeners.addAll(registration.listeners)
+                registrationsByPairId[pairId] = updated
+            }
+        }
+    }
+
     override fun shutdown() {
         synchronized(lock) {
             if (isShutdown) return

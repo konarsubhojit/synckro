@@ -33,6 +33,14 @@ interface LocalChangeWatcher {
     ): LocalChangeWatchRegistrationResult
 
     /**
+     * Reconciles an existing registration with the pair's latest persisted configuration.
+     *
+     * This does not create a registration when none exists; lifecycle owners remain responsible
+     * for deciding which pairs to watch.
+     */
+    fun refresh(pairId: Long) = Unit
+
+    /**
      * Stops all registrations and releases watcher resources.
      *
      * Implementations must make this operation idempotent.

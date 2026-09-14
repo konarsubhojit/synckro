@@ -47,6 +47,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -489,6 +490,13 @@ fun PairEditorScreen(
                     )
                 }
 
+                InstantSyncControl(
+                    checked = state.instantSyncEnabled,
+                    enabled = state.instantSyncUnavailableReason == null,
+                    unavailableReason = state.instantSyncUnavailableReason,
+                    onCheckedChange = viewModel::onInstantSyncEnabledChange,
+                )
+
                 // Schedule preset dropdown + custom interval — only shown when auto-sync is on
                 if (state.autoSyncEnabled) {
                     SchedulePresetDropdown(
@@ -832,6 +840,76 @@ fun PairEditorScreen(
                 }
             }
         }
+    }
+}
+
+@Composable
+internal fun InstantSyncControl(
+    checked: Boolean,
+    enabled: Boolean,
+    unavailableReason: InstantSyncUnavailableReason?,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    val title = stringResource(R.string.pair_editor_instant_sync)
+    val unavailableText =
+        when (unavailableReason) {
+            InstantSyncUnavailableReason.AUTO_SYNC_DISABLED ->
+                stringResource(R.string.pair_editor_instant_sync_requires_auto_sync)
+            InstantSyncUnavailableReason.DIRECTION_NOT_UPLOAD_CAPABLE ->
+                stringResource(R.string.pair_editor_instant_sync_requires_upload)
+            InstantSyncUnavailableReason.LOCAL_FOLDER_REQUIRED ->
+                stringResource(R.string.pair_editor_instant_sync_requires_local_folder)
+            InstantSyncUnavailableReason.LOCAL_FOLDER_ACCESS_LOST ->
+                stringResource(R.string.pair_editor_instant_sync_requires_folder_access)
+            InstantSyncUnavailableReason.ACCOUNT_REQUIRED ->
+                stringResource(R.string.pair_editor_instant_sync_requires_account)
+            null -> null
+        }
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .toggleable(
+                        value = checked,
+                        enabled = enabled,
+                        role = Role.Switch,
+                        onValueChange = onCheckedChange,
+                    )
+                    .semantics(mergeDescendants = true) {}
+                    .padding(vertical = 2.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(
+                modifier = Modifier.weight(1f).padding(end = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Text(text = title, style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    text = stringResource(R.string.pair_editor_instant_sync_description),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Switch(
+                checked = checked,
+                onCheckedChange = null,
+                enabled = enabled,
+            )
+        }
+        Text(
+            text =
+                unavailableText
+                    ?: stringResource(R.string.pair_editor_instant_sync_provider_note),
+            style = MaterialTheme.typography.bodySmall,
+            color =
+                if (unavailableText == null) {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                } else {
+                    MaterialTheme.colorScheme.error
+                },
+        )
     }
 }
 

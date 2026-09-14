@@ -10,7 +10,9 @@ import com.synckro.data.repository.SyncPairRepository
 import com.synckro.data.worker.SyncScheduler
 import com.synckro.domain.model.CloudProviderType
 import com.synckro.domain.model.ConflictPolicy
+import com.synckro.domain.model.SyncDirection
 import com.synckro.domain.model.SyncPair
+import com.synckro.domain.sync.LocalChangeWatcher
 import com.synckro.util.StringProvider
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -44,6 +46,7 @@ class PairEditorViewModelTest {
     private lateinit var mockAccountRepository: AccountRepository
     private lateinit var mockSettingsRepository: SettingsRepository
     private lateinit var mockAccessChecker: LocalFolderAccessChecker
+    private lateinit var mockLocalChangeWatcher: LocalChangeWatcher
 
     @Before
     fun setUp() {
@@ -88,6 +91,7 @@ class PairEditorViewModelTest {
             mockk {
                 every { hasReadWriteAccess(any()) } returns true
             }
+        mockLocalChangeWatcher = mockk(relaxed = true)
     }
 
     @After
@@ -105,6 +109,7 @@ class PairEditorViewModelTest {
             accountRepository = mockAccountRepository,
             settingsRepository = mockSettingsRepository,
             localFolderAccessChecker = mockAccessChecker,
+            localChangeWatcher = mockLocalChangeWatcher,
         )
 
     /**
@@ -132,6 +137,7 @@ class PairEditorViewModelTest {
             accountRepository = mockAccountRepository,
             settingsRepository = mockSettingsRepository,
             localFolderAccessChecker = mockAccessChecker,
+            localChangeWatcher = mockLocalChangeWatcher,
         )
 
     // -------------------------------------------------------------------------
@@ -146,8 +152,31 @@ class PairEditorViewModelTest {
         assertEquals("", state.displayName)
         assertEquals("", state.localTreeUri)
         assertFalse(state.isSaving)
+        assertFalse(state.instantSyncEnabled)
         assertNull(state.saveError)
     }
+
+    @Test
+    fun `instant sync availability explains invalid pair state`() =
+        runTest {
+            val vm = createVm()
+            advanceUntilIdle()
+
+            assertEquals(InstantSyncUnavailableReason.LOCAL_FOLDER_REQUIRED, vm.state.value.instantSyncUnavailableReason)
+
+            vm.onLocalFolderPicked("content://test")
+            vm.onDirectionChangeRequested(SyncDirection.REMOTE_TO_LOCAL)
+
+            assertEquals(
+                InstantSyncUnavailableReason.DIRECTION_NOT_UPLOAD_CAPABLE,
+                vm.state.value.instantSyncUnavailableReason,
+            )
+
+            vm.onDirectionChangeRequested(SyncDirection.LOCAL_TO_REMOTE)
+            vm.onAutoSyncEnabledChange(false)
+
+            assertEquals(InstantSyncUnavailableReason.AUTO_SYNC_DISABLED, vm.state.value.instantSyncUnavailableReason)
+        }
 
     @Test
     fun `single available account auto-selects on first load`() =
@@ -508,6 +537,7 @@ class PairEditorViewModelTest {
                     match { it.instantSyncEnabled },
                 )
             }
+            io.mockk.verify { mockLocalChangeWatcher.refresh(42L) }
             io.mockk.verify(exactly = 0) { mockSyncScheduler.cancelInstant(any()) }
         }
 
@@ -630,6 +660,7 @@ class PairEditorViewModelTest {
                     accountRepository = mockAccountRepository,
                     settingsRepository = mockSettingsRepository,
                     localFolderAccessChecker = mockAccessChecker,
+                    localChangeWatcher = mockLocalChangeWatcher,
                 )
             advanceUntilIdle()
 
@@ -667,6 +698,7 @@ class PairEditorViewModelTest {
                     accountRepository = mockAccountRepository,
                     settingsRepository = mockSettingsRepository,
                     localFolderAccessChecker = mockAccessChecker,
+                    localChangeWatcher = mockLocalChangeWatcher,
                 )
             advanceUntilIdle()
 

@@ -18,7 +18,9 @@ import com.synckro.domain.model.SyncDirection
 import com.synckro.domain.model.SyncEventLevel
 import com.synckro.domain.model.SyncEventTag
 import com.synckro.domain.model.SyncPair
+import com.synckro.domain.model.allowsUpload
 import com.synckro.domain.model.isDestructive
+import com.synckro.domain.sync.LocalChangeWatcher
 import com.synckro.domain.telemetry.NoOpTelemetry
 import com.synckro.domain.telemetry.Telemetry
 import com.synckro.domain.telemetry.TelemetryEvents
@@ -211,6 +213,7 @@ class PairEditorViewModel
         private val accountRepository: AccountRepository,
         private val settingsRepository: SettingsRepository,
         private val localFolderAccessChecker: LocalFolderAccessChecker,
+        private val localChangeWatcher: LocalChangeWatcher,
         private val telemetry: Telemetry = NoOpTelemetry(),
     ) : ViewModel() {
         private val pairId: Long = savedStateHandle.get<Long>("pairId") ?: 0L
@@ -327,6 +330,17 @@ class PairEditorViewModel
              */
             val currentStep: Int = 1,
         ) {
+            val instantSyncUnavailableReason: InstantSyncUnavailableReason?
+                get() =
+                    when {
+                        !autoSyncEnabled -> InstantSyncUnavailableReason.AUTO_SYNC_DISABLED
+                        !direction.allowsUpload -> InstantSyncUnavailableReason.DIRECTION_NOT_UPLOAD_CAPABLE
+                        localTreeUri.isBlank() -> InstantSyncUnavailableReason.LOCAL_FOLDER_REQUIRED
+                        localFolderAccessLost -> InstantSyncUnavailableReason.LOCAL_FOLDER_ACCESS_LOST
+                        accountId == null || accountDisappeared -> InstantSyncUnavailableReason.ACCOUNT_REQUIRED
+                        else -> null
+                    }
+
             /** Parses [customIntervalText] as a non-negative Long, or 0 if the text is blank/invalid. */
             private val parsedCustomInterval: Long
                 get() = customIntervalText.trim().toLongOrNull() ?: 0L
@@ -924,6 +938,8 @@ class PairEditorViewModel
                             localStorageLimitBytes = s.resolvedStorageLimitBytes,
                         )
                     val savedId = syncPairRepository.upsert(pair)
+                    runCatching { localChangeWatcher.refresh(savedId) }
+                        .onFailure { Timber.w(it, "PairEditorViewModel.save: watcher refresh failed for pair id=$savedId") }
                     // Schedule or cancel depending on both the global setting and
                     // the pair's own autoSyncEnabled flag.
                     val globalEnabled = settingsRepository.globalAutoSyncEnabled.first()
@@ -1082,3 +1098,11 @@ class PairEditorViewModel
             }
         }
     }
+
+enum class InstantSyncUnavailableReason {
+    AUTO_SYNC_DISABLED,
+    DIRECTION_NOT_UPLOAD_CAPABLE,
+    LOCAL_FOLDER_REQUIRED,
+    LOCAL_FOLDER_ACCESS_LOST,
+    ACCOUNT_REQUIRED,
+}
