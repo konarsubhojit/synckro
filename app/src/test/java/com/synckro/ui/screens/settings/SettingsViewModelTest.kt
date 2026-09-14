@@ -8,8 +8,14 @@ import com.synckro.data.repository.DarkModePreference
 import com.synckro.data.repository.InternetConnectionScope
 import com.synckro.data.repository.SettingsRepository
 import com.synckro.data.repository.SyncPairRepository
+import com.synckro.data.watcher.WatcherServiceController
 import com.synckro.data.worker.SyncScheduler
+import com.synckro.domain.model.CloudProviderType
 import com.synckro.domain.model.ConflictPolicy
+import com.synckro.domain.model.SyncDirection
+import com.synckro.domain.model.SyncPair
+import com.synckro.domain.sync.WatcherLifecycleAction
+import com.synckro.domain.sync.WatcherLifecycleTrigger
 import com.synckro.domain.telemetry.NoOpTelemetry
 import com.synckro.util.logging.LogExportConfig
 import com.synckro.util.logging.LogExporter
@@ -62,6 +68,7 @@ class SettingsViewModelTest {
     private lateinit var repo: SettingsRepository
     private lateinit var syncPairRepository: SyncPairRepository
     private lateinit var syncScheduler: SyncScheduler
+    private lateinit var watcherServiceController: WatcherServiceController
     private lateinit var logExporter: LogExporter
     private lateinit var ctx: Context
     private lateinit var filesDir: File
@@ -83,6 +90,7 @@ class SettingsViewModelTest {
                 coEvery { observeAll(any()) } returns flowOf(emptyList())
             }
         syncScheduler = mockk(relaxed = true)
+        watcherServiceController = mockk(relaxed = true)
         logExporter = mockk(relaxed = true)
         ctx = mockk(relaxed = true)
         every { ctx.filesDir } returns filesDir
@@ -97,6 +105,7 @@ class SettingsViewModelTest {
             settingsRepository = repo,
             syncPairRepository = syncPairRepository,
             syncScheduler = syncScheduler,
+            watcherServiceController = watcherServiceController,
             logExporter = logExporter,
             telemetry = NoOpTelemetry(),
         )
@@ -112,6 +121,7 @@ class SettingsViewModelTest {
             // (We re-read after touching the flow so the value reflects the latest combine.)
             vm.state.value.let {
                 assertTrue(it.globalAutoSyncEnabled)
+                assertFalse(it.globalInstantSyncEnabled)
                 assertTrue(it.defaultWifiOnly)
                 assertFalse(it.defaultChargingOnly)
                 assertEquals(ConflictPolicy.NEWEST_WINS, it.defaultConflictPolicy)
@@ -155,6 +165,47 @@ class SettingsViewModelTest {
             val vm = newVm()
             vm.setGlobalAutoSync(false)
             assertFalse(repo.globalAutoSyncEnabled.first())
+        }
+
+    @Test
+    fun `setGlobalInstantSync persists value`() =
+        testScope.runTest {
+            val vm = newVm()
+            vm.setGlobalInstantSync(true)
+            assertTrue(repo.globalInstantSyncEnabled.first())
+        }
+
+    @Test
+    fun `disabling global instant sync cancels instant work and stops watchers`() =
+        testScope.runTest {
+            val pair =
+                SyncPair(
+                    id = 7L,
+                    displayName = "Test",
+                    localTreeUri = "content://test/7",
+                    provider = CloudProviderType.FAKE,
+                    remoteFolderId = "root",
+                    direction = SyncDirection.BIDIRECTIONAL,
+                    conflictPolicy = ConflictPolicy.NEWEST_WINS,
+                    wifiOnly = true,
+                    requiresCharging = false,
+                    autoSyncEnabled = true,
+                )
+            coEvery { syncPairRepository.observeAll(any()) } returns flowOf(listOf(pair))
+            coEvery {
+                watcherServiceController.evaluate(WatcherLifecycleTrigger.CONFIGURATION_CHANGED)
+            } returns WatcherLifecycleAction.STOP
+            val vm = newVm()
+
+            vm.setGlobalInstantSync(false)
+            vm.setGlobalInstantSync(false)
+
+            assertFalse(repo.globalInstantSyncEnabled.first())
+            coVerify(exactly = 2) { syncScheduler.cancelInstant(pair.id) }
+            coVerify(exactly = 0) { syncScheduler.scheduleOrCancelAll(any(), any()) }
+            coVerify {
+                watcherServiceController.evaluate(WatcherLifecycleTrigger.CONFIGURATION_CHANGED)
+            }
         }
 
     @Test
