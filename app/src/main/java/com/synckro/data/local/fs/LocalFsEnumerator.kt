@@ -422,6 +422,10 @@ class LocalFsEnumerator internal constructor(
                 }
             }
 
+        /**
+         * Single-shot scope check for one relative file path. For batches, call
+         * [compilePathScope] once and reuse [LocalPathScope.contains].
+         */
         internal fun isInScope(
             relativePath: String,
             includeGlobs: List<String>,
@@ -448,6 +452,14 @@ class LocalFsEnumerator internal constructor(
     }
 }
 
+/**
+ * Precompiled local path scope rules shared by full enumeration and targeted
+ * candidate resolution.
+ *
+ * Hidden leaf files and empty file names are always rejected. Ignore globs take
+ * precedence over include globs; when the include filter is inactive all
+ * non-ignored files are accepted.
+ */
 internal data class LocalPathScope(
     val includeGlobs: List<Regex>,
     val ignoreGlobs: List<Regex>,

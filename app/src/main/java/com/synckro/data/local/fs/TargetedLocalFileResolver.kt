@@ -158,17 +158,18 @@ internal class TargetedLocalFileResolver(
         relativePath: String,
     ): HashResolution =
         try {
-            HashResolution.Available(
-                fsAccess.openInputStream(treeUri, documentId)?.use(LocalFsEnumerator::sha256Hex),
-            )
+            val stream = fsAccess.openInputStream(treeUri, documentId)
+            if (stream == null) {
+                Timber.w("TargetedLocalFileResolver: no read access for '%s'", relativePath)
+                HashResolution.Available(null)
+            } else {
+                HashResolution.Available(stream.use(LocalFsEnumerator::sha256Hex))
+            }
         } catch (_: SecurityException) {
             HashResolution.PermissionLost
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            Timber.w(e, "TargetedLocalFileResolver: failed to hash '%s'", relativePath)
             HashResolution.Available(null)
-        }.also { hash ->
-            if (hash == HashResolution.Available(null)) {
-                Timber.w("TargetedLocalFileResolver: no read access for '%s'", relativePath)
-            }
         }
 
     private suspend fun upsertLocalIndex(
