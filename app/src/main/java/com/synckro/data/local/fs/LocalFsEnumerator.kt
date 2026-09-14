@@ -421,5 +421,58 @@ class LocalFsEnumerator internal constructor(
                     append(ch)
                 }
             }
+
+        /**
+         * Single-shot scope check for one relative file path. For batches, call
+         * [compilePathScope] once and reuse [LocalPathScope.contains].
+         */
+        internal fun isInScope(
+            relativePath: String,
+            includeGlobs: List<String>,
+            ignoreGlobs: List<String>,
+            excludeSubfolders: Boolean,
+        ): Boolean =
+            compilePathScope(
+                includeGlobs = includeGlobs,
+                ignoreGlobs = ignoreGlobs,
+                excludeSubfolders = excludeSubfolders,
+            ).contains(relativePath)
+
+        internal fun compilePathScope(
+            includeGlobs: List<String>,
+            ignoreGlobs: List<String>,
+            excludeSubfolders: Boolean,
+        ): LocalPathScope =
+            LocalPathScope(
+                includeGlobs = includeGlobs.mapNotNull { runCatching { globToRegex(it) }.getOrNull() },
+                ignoreGlobs = ignoreGlobs.mapNotNull { runCatching { globToRegex(it) }.getOrNull() },
+                includeFilterActive = includeGlobs.isNotEmpty(),
+                excludeSubfolders = excludeSubfolders,
+            )
+    }
+}
+
+/**
+ * Precompiled local path scope rules shared by full enumeration and targeted
+ * candidate resolution.
+ *
+ * Hidden leaf files and empty file names are always rejected. Ignore globs take
+ * precedence over include globs; when the include filter is inactive all
+ * non-ignored files are accepted.
+ */
+internal data class LocalPathScope(
+    val includeGlobs: List<Regex>,
+    val ignoreGlobs: List<Regex>,
+    val includeFilterActive: Boolean,
+    val excludeSubfolders: Boolean,
+) {
+    fun contains(relativePath: String): Boolean {
+        val fileName = relativePath.substringAfterLast('/')
+        if (fileName.isEmpty() || fileName.startsWith('.')) return false
+        if (excludeSubfolders && relativePath.contains('/')) return false
+
+        if (ignoreGlobs.any { it.matches(relativePath) }) return false
+
+        return !includeFilterActive || includeGlobs.any { it.matches(relativePath) }
     }
 }
