@@ -33,31 +33,38 @@ class PairSignalCoordinator(
         pairId: Long,
         onDebounced: suspend (Long) -> Unit,
     ) {
-        mutex.withLock {
-            pendingSignals.remove(pairId)?.cancel()
+        val job =
+            mutex.withLock {
+                pendingSignals.remove(pairId)?.cancel()
 
-            val job =
-                scope.launch(start = CoroutineStart.LAZY) {
-                    delay(debounceMs)
-                    val currentJob = coroutineContext.job
-                    val shouldDispatch =
-                        mutex.withLock {
-                            if (pendingSignals[pairId] === currentJob) {
-                                pendingSignals.remove(pairId)
-                                true
-                            } else {
-                                false
+                scope
+                    .launch(start = CoroutineStart.LAZY) {
+                        delay(debounceMs)
+                        val currentJob = coroutineContext.job
+                        val shouldDispatch =
+                            mutex.withLock {
+                                if (pendingSignals[pairId] === currentJob) {
+                                    pendingSignals.remove(pairId)
+                                    true
+                                } else {
+                                    false
+                                }
                             }
+                        if (shouldDispatch) {
+                            onDebounced(pairId)
                         }
-                    if (shouldDispatch) {
-                        onDebounced(pairId)
+                    }.also {
+                        pendingSignals[pairId] = it
                     }
-                }
-            pendingSignals[pairId] = job
-            job.start()
-        }
+            }
+        job.start()
     }
 
+    /**
+     * Drops every callback that is still waiting for its debounce window.
+     *
+     * Persisted work is unaffected and can be signaled again after cancellation or restart.
+     */
     suspend fun cancelPendingSignals() {
         val jobs =
             mutex.withLock {

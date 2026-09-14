@@ -2,10 +2,12 @@ package com.synckro.domain.sync
 
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -81,5 +83,26 @@ class PairSignalCoordinatorTest {
 
             assertEquals(listOf(1L, 2L), dispatchedPairs)
             assertTrue(durableRows.isEmpty())
+        }
+
+    @Test
+    fun `zero debounce dispatches without locking an eager coroutine`() =
+        runTest(UnconfinedTestDispatcher()) {
+            val coordinator = PairSignalCoordinator(this, debounceMs = 0L)
+            val dispatched = mutableListOf<Long>()
+
+            coordinator.signal(1L, dispatched::add)
+
+            assertEquals(listOf(1L), dispatched)
+        }
+
+    @Test
+    fun `negative debounce is rejected`() =
+        runTest(dispatcher) {
+            val scope = this
+
+            assertThrows(IllegalArgumentException::class.java) {
+                PairSignalCoordinator(scope = scope, debounceMs = -1L)
+            }
         }
 }
