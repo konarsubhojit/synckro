@@ -16,7 +16,7 @@ class PendingUploadRepository
          *
          * Repeated observations refresh the existing row, reset it to pending to invalidate any
          * in-flight claim, and preserve the stored creation time and retry attempts.
-         * [observedAtMs] is used as both timestamps only when a new row is inserted.
+         * [observedAtMs] sets both timestamps on insert and only `updatedAtMs` on refresh.
          */
         suspend fun upsertCandidate(
             pairId: Long,
