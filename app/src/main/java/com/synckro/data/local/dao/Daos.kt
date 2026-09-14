@@ -959,7 +959,7 @@ interface PairRunLeaseDao {
                     heartbeatAtMs = nowMs,
                 ),
             )
-        if (inserted != -1L) return true
+        if (inserted > 0L) return true
         return takeOver(
             pairId = pairId,
             ownerToken = ownerToken,
@@ -969,7 +969,7 @@ interface PairRunLeaseDao {
         ) > 0
     }
 
-    /** Internal insert step for [acquire]; returns -1 when the pair is already owned. */
+    /** Internal insert step for [acquire]; returns a positive rowid, or -1 when the pair is already owned. */
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertIfAbsent(lease: PairRunLeaseEntity): Long
 

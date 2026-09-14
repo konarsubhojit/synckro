@@ -64,12 +64,14 @@ class PairRunLeaseDaoTest {
             val pairId = insertPair()
 
             val outcomes =
-                listOf("instant-run", "manual-run", "periodic-run")
-                    .map { token ->
-                        async(Dispatchers.IO) { acquire(pairId, token, "periodic") }
+                listOf("instant", "manual", "periodic")
+                    .map { kind ->
+                        async(Dispatchers.IO) { acquire(pairId, "$kind-run", kind) }
                     }.awaitAll()
 
             assertEquals(1, outcomes.count { it })
+            val owner = leaseDao.get(pairId)
+            assertEquals("${owner?.ownerKind}-run", owner?.ownerToken)
         }
 
     @Test

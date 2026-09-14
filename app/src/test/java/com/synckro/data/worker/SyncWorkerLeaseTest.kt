@@ -26,7 +26,10 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import org.junit.After
@@ -144,6 +147,33 @@ class SyncWorkerLeaseTest {
 
             assertEquals(ListenableWorker.Result.retry().javaClass, result.javaClass)
             assertNull(leaseDao.get(PAIR_ID))
+        }
+
+    @Test
+    fun `losing the lease to a takeover aborts the in-flight pass`() =
+        runTest {
+            coEvery { engine.runOnce(any(), any(), any()) } coAnswers {
+                delay(SyncWorker.LEASE_HEARTBEAT_INTERVAL_MS * 4)
+                SyncEngine.Result.Success(0, 0)
+            }
+
+            val result =
+                coroutineScope {
+                    launch {
+                        delay(SyncWorker.LEASE_HEARTBEAT_INTERVAL_MS / 2)
+                        leaseDao.acquire(
+                            pairId = PAIR_ID,
+                            ownerToken = "thief-run",
+                            ownerKind = "manual",
+                            nowMs = System.currentTimeMillis(),
+                            staleAfterMs = 0L,
+                        )
+                    }
+                    worker(instant = false).doWork()
+                }
+
+            assertEquals(ListenableWorker.Result.retry().javaClass, result.javaClass)
+            assertEquals("thief-run", leaseDao.get(PAIR_ID)?.ownerToken)
         }
 
     private suspend fun acquireForeignLease() {

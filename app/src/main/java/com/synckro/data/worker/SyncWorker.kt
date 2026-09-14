@@ -67,6 +67,7 @@ import dagger.assisted.AssistedInject
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
@@ -216,15 +217,30 @@ class SyncWorker
                 coroutineScope {
                     // Keeps the lease fresh so a long-running pass is not mistaken
                     // for a dead owner, while still expiring after process death.
+                    val leaseLost = AtomicBoolean(false)
+                    val passJob = async { runSyncPass(pair, pairId, isPeriodicRun, isInstantRun) }
                     val heartbeatJob =
                         launch {
                             while (true) {
                                 delay(LEASE_HEARTBEAT_INTERVAL_MS)
-                                runCatching { pairRunLeaseDao.renew(pairId, leaseToken, System.currentTimeMillis()) }
+                                val renewed =
+                                    runCatching {
+                                        pairRunLeaseDao.renew(pairId, leaseToken, System.currentTimeMillis())
+                                    }.getOrDefault(1)
+                                if (renewed == 0) {
+                                    // Another run took the lease over (this one looked stale);
+                                    // stop immediately so a pair is never processed twice.
+                                    Timber.w("SyncWorker: lost the run lease for pair %d; aborting this pass.", pairId)
+                                    leaseLost.set(true)
+                                    passJob.cancel()
+                                    break
+                                }
                             }
                         }
                     try {
-                        runSyncPass(pair, pairId, isPeriodicRun, isInstantRun)
+                        passJob.await()
+                    } catch (c: CancellationException) {
+                        if (leaseLost.get()) Result.retry() else throw c
                     } finally {
                         heartbeatJob.cancel()
                     }
@@ -250,20 +266,26 @@ class SyncWorker
             runKind: String,
         ): Result {
             val holderKind = runCatching { pairRunLeaseDao.get(pairId)?.ownerKind }.getOrNull() ?: "unknown"
+            val givingUp = runAttemptCount + 1 >= MAX_RETRY_ATTEMPTS
             Timber.i(
-                "SyncWorker: pair %d is already owned by a %s run; deferring %s run.",
+                "SyncWorker: pair %d is already owned by a %s run; %s %s run.",
                 pairId,
                 holderKind,
+                if (givingUp) "dropping" else "deferring",
                 runKind,
             )
             syncEventRepository.logRateLimited(
                 pairId,
-                SyncEventLevel.INFO,
+                if (givingUp) SyncEventLevel.WARN else SyncEventLevel.INFO,
                 SyncEventTag.SYNC_WORKER,
-                SyncEventTaxonomy.format(RUN_LEASE_BUSY, "run" to runKind, "holder" to holderKind),
+                SyncEventTaxonomy.format(
+                    if (givingUp) RUN_LEASE_DROPPED else RUN_LEASE_BUSY,
+                    "run" to runKind,
+                    "holder" to holderKind,
+                ),
                 throttleKey = "lease-busy-$runKind",
             )
-            return if (runAttemptCount + 1 >= MAX_RETRY_ATTEMPTS) Result.success() else Result.retry()
+            return if (givingUp) Result.success() else Result.retry()
         }
 
         /** Runs one sync pass for [pair]; the caller must already own the pair's run lease. */
@@ -1016,6 +1038,9 @@ class SyncWorker
 
             /** Privacy-safe event name logged when a pair is already owned by another run. */
             internal const val RUN_LEASE_BUSY = "sync.lease.busy"
+
+            /** Privacy-safe event name logged when a deferred run stops waiting for the lease. */
+            internal const val RUN_LEASE_DROPPED = "sync.lease.dropped"
 
             /**
              * Age after which a per-pair run lease is considered abandoned and may be
