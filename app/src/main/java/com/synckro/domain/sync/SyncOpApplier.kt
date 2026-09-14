@@ -165,11 +165,16 @@ class SyncOpApplier(
      * @param applied   Number of ops successfully applied.
      * @param conflicts Number of [SyncOp.Conflict] ops processed (written to inbox or auto-resolved).
      * @param errors    Human-readable error messages for failed ops.
+     * @param failedPaths Relative paths of the ops that raised an error (one entry per
+     *   message in [errors]). Callers that dispatch a named set of paths — e.g. the
+     *   targeted upload entry point in [SyncEngine] — use this to tell which of the
+     *   requested paths still need to be retried.
      */
     data class ApplyResult(
         val applied: Int,
         val conflicts: Int,
         val errors: List<String>,
+        val failedPaths: List<String> = emptyList(),
     )
 
     /**
@@ -219,6 +224,7 @@ class SyncOpApplier(
             var applied = 0
             var conflicts = 0
             val errors = mutableListOf<String>()
+            val failedPaths = mutableListOf<String>()
 
             val totalFiles = ops.size
             // Pre-compute per-op transfer bytes once so we don't repeat map lookups
@@ -436,6 +442,7 @@ class SyncOpApplier(
                     } catch (e: Throwable) {
                         val msg = SyncEventTaxonomy.outcomeFailed(opKind(op), e.message ?: "unknown")
                         errors += msg
+                        failedPaths += op.relativePath
                         eventRepository.log(pair.id, SyncEventLevel.ERROR, SyncEventTag.INSTANT_OUTCOME, msg)
                     }
 
@@ -460,6 +467,7 @@ class SyncOpApplier(
                 val atomicApplied = AtomicInteger(0)
                 val atomicConflicts = AtomicInteger(0)
                 val concurrentErrors = CopyOnWriteArrayList<String>()
+                val concurrentFailedPaths = CopyOnWriteArrayList<String>()
                 val authFailure = AtomicReference<Throwable?>(null)
 
                 coroutineScope {
@@ -665,6 +673,7 @@ class SyncOpApplier(
                                 } catch (e: Throwable) {
                                     val msg = SyncEventTaxonomy.outcomeFailed(opKind(op), e.message ?: "unknown")
                                     concurrentErrors += msg
+                                    concurrentFailedPaths += op.relativePath
                                     eventRepository.log(pair.id, SyncEventLevel.ERROR, SyncEventTag.INSTANT_OUTCOME, msg)
                                 }
 
@@ -687,10 +696,11 @@ class SyncOpApplier(
                     applied = atomicApplied.get(),
                     conflicts = atomicConflicts.get(),
                     errors = concurrentErrors,
+                    failedPaths = concurrentFailedPaths,
                 )
             }
 
-            ApplyResult(applied = applied, conflicts = conflicts, errors = errors)
+            ApplyResult(applied = applied, conflicts = conflicts, errors = errors, failedPaths = failedPaths)
         }
 
     // -------------------------------------------------------------------------
