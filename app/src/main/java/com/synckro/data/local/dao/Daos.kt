@@ -918,4 +918,20 @@ interface PendingUploadDao {
         pendingState: PendingUploadState = PendingUploadState.PENDING,
         claimedState: PendingUploadState = PendingUploadState.CLAIMED,
     ): Int
+
+    /**
+     * Returns the ids of every pair that currently owns at least one pending row
+     * eligible for dispatch at [nowMs], oldest eligibility first.
+     *
+     * Used on process restart to re-arm dispatch for queues that survived the
+     * previous process; rows that are still claimed or not yet eligible are excluded.
+     */
+    @Query(
+        "SELECT pairId FROM pending_upload WHERE state = :pendingState AND eligibleAtMs <= :nowMs " +
+            "GROUP BY pairId ORDER BY MIN(eligibleAtMs) ASC, pairId ASC",
+    )
+    suspend fun pairIdsWithEligibleRows(
+        nowMs: Long,
+        pendingState: PendingUploadState = PendingUploadState.PENDING,
+    ): List<Long>
 }
