@@ -6,10 +6,13 @@ import android.net.Uri
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.work.Configuration
+import androidx.work.ForegroundUpdater
 import androidx.work.ListenableWorker
+import androidx.work.ProgressUpdater
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
+import com.google.common.util.concurrent.Futures
 import com.synckro.data.local.dao.LocalIndexDao
 import com.synckro.data.local.dao.PairRunLeaseDao
 import com.synckro.data.local.dao.PendingUploadDao
@@ -421,6 +424,8 @@ class SyncWorkerInstantRecoveryTest {
             )
         every { params.id } returns UUID.randomUUID()
         every { params.runAttemptCount } returns 0
+        every { params.progressUpdater } returns ProgressUpdater { _, _, _ -> Futures.immediateFuture(null) }
+        every { params.foregroundUpdater } returns ForegroundUpdater { _, _, _ -> Futures.immediateFuture(null) }
         return SyncWorker(
             appContext = context,
             params = params,
