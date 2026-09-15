@@ -44,6 +44,7 @@ object SyncEventTaxonomy {
     const val QUEUE_DROPPED = "instant.queue.dropped"
     const val DISPATCH_ENQUEUED = "instant.dispatch.enqueued"
     const val DISPATCH_QUOTA_FALLBACK = "instant.dispatch.quota_fallback"
+    const val APPLY_STARTED = "instant.apply.started"
     const val OUTCOME_APPLIED = "instant.outcome.applied"
     const val OUTCOME_SKIPPED = "instant.outcome.skipped"
     const val OUTCOME_FAILED = "instant.outcome.failed"
@@ -65,6 +66,8 @@ object SyncEventTaxonomy {
     fun dispatchEnqueued(runType: String): String = format(DISPATCH_ENQUEUED, "run" to runType)
 
     fun dispatchQuotaFallback(reason: String): String = format(DISPATCH_QUOTA_FALLBACK, "reason" to reason)
+
+    fun applyStarted(): String = APPLY_STARTED
 
     fun outcomeApplied(operation: String): String = format(OUTCOME_APPLIED, "op" to operation)
 
