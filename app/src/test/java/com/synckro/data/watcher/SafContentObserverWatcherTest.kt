@@ -126,6 +126,7 @@ class SafContentObserverWatcherTest {
             assertTrue(callbackLogs[0].contains("uriNull=true"))
             assertTrue(callbackLogs[1].contains("treeRoot=true"))
             assertTrue(callbackLogs[2].contains("authority=com.example"))
+            assertTrue(callbackLogs.none { it.contains("child") })
         }
 
     @Test

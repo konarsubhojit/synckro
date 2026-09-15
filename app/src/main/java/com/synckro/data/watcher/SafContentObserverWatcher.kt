@@ -211,7 +211,6 @@ class SafContentObserverWatcher(
             registeredTreeUri != null && uri?.toString() == registeredTreeUri,
             uri?.pathSegments?.size ?: 0,
         )
-        Timber.d("instant.watch.callback.uri pairId=%d uri=%s", pairId, uri)
         val listenersAndEvent =
             synchronized(lock) {
                 val registration = registrationsByPairId[pairId] ?: return

@@ -21,6 +21,7 @@ object SyncEventTag {
     const val INSTANT_STABILITY = "InstantStability"
     const val INSTANT_QUEUE = "InstantQueue"
     const val INSTANT_DISPATCH = "InstantDispatch"
+    const val INSTANT_APPLY = "InstantApply"
     const val INSTANT_OUTCOME = "InstantOutcome"
     const val UI = "UI"
     const val EXPORT = "Export"
