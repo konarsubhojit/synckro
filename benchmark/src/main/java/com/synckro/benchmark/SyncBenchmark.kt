@@ -29,7 +29,6 @@ import org.junit.runner.RunWith
  */
 @RunWith(AndroidJUnit4::class)
 class SyncBenchmark {
-
     @get:Rule
     val benchmarkRule = MacrobenchmarkRule()
 
@@ -44,16 +43,17 @@ class SyncBenchmark {
      * screen.
      */
     @Test
-    fun startupCold() = benchmarkRule.measureRepeated(
-        packageName = targetAppPackage,
-        metrics = listOf(StartupTimingMetric()),
-        compilationMode = CompilationMode.None(),
-        startupMode = StartupMode.COLD,
-        iterations = 5,
-    ) {
-        pressHome()
-        startActivityAndWait()
-    }
+    fun startupCold() =
+        benchmarkRule.measureRepeated(
+            packageName = targetAppPackage,
+            metrics = listOf(StartupTimingMetric()),
+            compilationMode = CompilationMode.None(),
+            startupMode = StartupMode.COLD,
+            iterations = 5,
+        ) {
+            pressHome()
+            startActivityAndWait()
+        }
 
     /**
      * Measures warm-startup time (process already running, activity re-created).
@@ -63,15 +63,16 @@ class SyncBenchmark {
      * the "scan" path).
      */
     @Test
-    fun startupWarm() = benchmarkRule.measureRepeated(
-        packageName = targetAppPackage,
-        metrics = listOf(StartupTimingMetric()),
-        compilationMode = CompilationMode.None(),
-        startupMode = StartupMode.WARM,
-        iterations = 5,
-    ) {
-        startActivityAndWait()
-    }
+    fun startupWarm() =
+        benchmarkRule.measureRepeated(
+            packageName = targetAppPackage,
+            metrics = listOf(StartupTimingMetric()),
+            compilationMode = CompilationMode.None(),
+            startupMode = StartupMode.WARM,
+            iterations = 5,
+        ) {
+            startActivityAndWait()
+        }
 
     /**
      * Measures "first sync" startup: cold launch of the app as a new user
@@ -84,14 +85,15 @@ class SyncBenchmark {
      * to WorkManager completing the first FakeCloudProvider sync run.
      */
     @Test
-    fun firstSyncColdStart() = benchmarkRule.measureRepeated(
-        packageName = targetAppPackage,
-        metrics = listOf(StartupTimingMetric()),
-        compilationMode = CompilationMode.None(),
-        startupMode = StartupMode.COLD,
-        iterations = 5,
-    ) {
-        pressHome()
-        startActivityAndWait()
-    }
+    fun firstSyncColdStart() =
+        benchmarkRule.measureRepeated(
+            packageName = targetAppPackage,
+            metrics = listOf(StartupTimingMetric()),
+            compilationMode = CompilationMode.None(),
+            startupMode = StartupMode.COLD,
+            iterations = 5,
+        ) {
+            pressHome()
+            startActivityAndWait()
+        }
 }
