@@ -6,6 +6,7 @@ import com.synckro.domain.model.SyncEventTag
 import com.synckro.domain.model.SyncEventTaxonomy
 import com.synckro.domain.sync.LocalChangeEvent
 import com.synckro.domain.sync.LocalChangeWatchFailure
+import com.synckro.domain.sync.LocalChangeWatchRegistration
 import com.synckro.domain.sync.LocalChangeWatchRegistrationResult
 import com.synckro.domain.sync.LocalChangeWatcher
 import com.synckro.domain.sync.LocalChangeWatcherCapability
@@ -128,10 +129,19 @@ class CompositeLocalChangeWatcher(
 
         var unavailable: LocalChangeWatcherCapability.Unavailable? = null
         delegates.forEach { delegate ->
-            when (val result = delegate.register(pairId, listener)) {
+            val guardedListener: (LocalChangeEvent) -> Unit = { event ->
+                if (event is LocalChangeEvent.Failure) deduper.forget(pairId)
+                if (deduper.shouldDeliver(event)) listener(event)
+            }
+            when (val result = delegate.register(pairId, guardedListener)) {
                 is LocalChangeWatchRegistrationResult.Registered -> {
                     log(pairId, SyncEventTaxonomy.watchRegistered(delegateName(delegate)))
-                    return result
+                    return LocalChangeWatchRegistrationResult.Registered(
+                        LocalChangeWatchRegistration {
+                            result.registration.unregister()
+                            deduper.forget(pairId)
+                        },
+                    )
                 }
                 is LocalChangeWatchRegistrationResult.Failed -> return result
                 is LocalChangeWatchRegistrationResult.Unavailable ->

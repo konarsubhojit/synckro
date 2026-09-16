@@ -288,7 +288,7 @@ class InstantSyncChangedPathResolver
             event: LocalChangeEvent.Changed,
         ): Boolean {
             val hint = event.locationHint?.trim().orEmpty()
-            return hint.isEmpty() || resolve(pair, event).isEmpty()
+            return hint.isEmpty() || hint == pair.localTreeUri
         }
 
         private fun resolveContentUriHint(

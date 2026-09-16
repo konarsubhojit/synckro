@@ -21,7 +21,9 @@ import com.synckro.domain.sync.LocalChangeWatcher
 import com.synckro.domain.sync.LocalChangeWatcherCapability
 import com.synckro.domain.sync.LocalChangeWatcherFallback
 import com.synckro.domain.sync.LocalChangeWatcherRefresher
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import timber.log.Timber
 
@@ -36,6 +38,7 @@ class SafContentObserverWatcher(
     private val eventRepository: SyncEventRepository? = null,
 ) : LocalChangeWatcher,
     LocalChangeWatcherRefresher {
+    private val loggingScope = CoroutineScope(Dispatchers.IO)
     override val capability: LocalChangeWatcherCapability = LocalChangeWatcherCapability.Available
 
     private val lock = Any()
@@ -264,7 +267,7 @@ class SafContentObserverWatcher(
         message: String,
     ) {
         eventRepository ?: return
-        runBlocking(Dispatchers.IO) {
+        loggingScope.launch {
             eventRepository.log(pairId, SyncEventLevel.INFO, SyncEventTag.INSTANT_WATCH, message)
         }
     }

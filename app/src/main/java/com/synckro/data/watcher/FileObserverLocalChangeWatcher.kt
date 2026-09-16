@@ -199,7 +199,7 @@ class FileObserverLocalChangeWatcher(
                 // A failure ends this registration, so stop observing before delivering it.
                 if (event is LocalChangeEvent.Failure) isActive = false
             }
-            if (event is LocalChangeEvent.Failure) stopHandle()
+            if (event is LocalChangeEvent.Failure) stopHandles()
             listener(event)
         }
 
@@ -210,8 +210,6 @@ class FileObserverLocalChangeWatcher(
             }
             stopHandles()
         }
-
-        private fun stopHandle() = stopHandles()
 
         private fun stopHandles() {
             val started =
