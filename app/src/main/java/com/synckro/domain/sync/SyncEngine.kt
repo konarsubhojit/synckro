@@ -422,7 +422,7 @@ class SyncEngine(
                 excludeGlobs = key.excludeGlobs.mapNotNull { runCatching { LocalFsEnumerator.globToRegex(it) }.getOrNull() },
                 includeFilterActive = key.includeGlobs.isNotEmpty(),
                 excludedRelativePaths = normalizedExcludedRelativePaths,
-                localIgnoreGlobs = key.excludeGlobs + normalizedExcludedRelativePaths.map { "${LocalFsEnumerator.escapeGlobLiteral(it)}/**" },
+                localIgnoreGlobs = key.excludeGlobs + SyncPathScope.excludedFolderIgnoreGlobs(normalizedExcludedRelativePaths),
             )
         }
 
