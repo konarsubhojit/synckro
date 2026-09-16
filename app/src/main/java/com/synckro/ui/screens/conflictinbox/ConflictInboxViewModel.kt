@@ -108,7 +108,7 @@ class ConflictInboxViewModel
                 selectionState,
                 searchQueryFlow,
             ) { rows, enableHaptics, (isSelectionMode, selectedIds), searchQuery ->
-                val query = searchQuery.trim()
+                val query = searchQuery
                 UiState(
                     conflicts =
                         if (query.isEmpty()) {
@@ -137,9 +137,10 @@ class ConflictInboxViewModel
 
         /** Updates the filename or pair-ID search query. */
         fun setSearchQuery(query: String) {
-            if (searchQueryFlow.value == query) return
-            searchQueryFlow.value = query
-            if (selectionState.value.first) {
+            val normalizedQuery = query.trim()
+            if (searchQueryFlow.value == normalizedQuery) return
+            searchQueryFlow.value = normalizedQuery
+            if (selectionState.value.second.isNotEmpty()) {
                 exitSelectionMode()
             }
         }
