@@ -11,6 +11,7 @@ import com.synckro.domain.model.CloudProviderType
 import com.synckro.domain.model.ConflictRecord
 import com.synckro.domain.model.SyncPair
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.coVerifyOrder
 import io.mockk.every
 import io.mockk.mockk
@@ -400,8 +401,11 @@ class ConflictInboxViewModelTest {
             vm.enterSelectionMode(2L)
             vm.bulkKeepLocal()
             advanceUntilIdle()
-            coVerifyOrder {
+            coVerify(exactly = 1) {
                 conflictRepository.resolve(2L, ConflictRecord.RESOLUTION_KEEP_LOCAL)
+            }
+            coVerify(exactly = 0) {
+                conflictRepository.resolve(1L, ConflictRecord.RESOLUTION_KEEP_LOCAL)
             }
 
             vm.setSearchQuery("12")

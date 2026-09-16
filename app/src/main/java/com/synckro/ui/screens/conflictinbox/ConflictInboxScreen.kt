@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.InsertDriveFile
@@ -75,6 +76,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -419,17 +421,30 @@ private fun ConflictListPane(
                 .padding(horizontal = 16.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
+        item {
+            Spacer(Modifier.height(4.dp))
+            OutlinedTextField(
+                value = state.searchQuery,
+                onValueChange = onSearchQueryChange,
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                label = { Text(stringResource(R.string.conflict_inbox_search_label)) },
+                placeholder = { Text(stringResource(R.string.conflict_inbox_search_placeholder)) },
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                trailingIcon = {
+                    if (state.searchQuery.isNotEmpty()) {
+                        IconButton(onClick = { onSearchQueryChange("") }) {
+                            Icon(
+                                Icons.Default.Close,
+                                contentDescription = stringResource(R.string.conflict_inbox_clear_search),
+                            )
+                        }
+                    }
+                },
+            )
+        }
         if (!state.isSelectionMode) {
             item {
-                Spacer(Modifier.height(4.dp))
-                OutlinedTextField(
-                    value = state.searchQuery,
-                    onValueChange = onSearchQueryChange,
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    label = { Text(stringResource(R.string.conflict_inbox_search_label)) },
-                    placeholder = { Text(stringResource(R.string.conflict_inbox_search_placeholder)) },
-                )
                 Spacer(Modifier.height(8.dp))
                 Surface(
                     color = MaterialTheme.colorScheme.secondaryContainer,
