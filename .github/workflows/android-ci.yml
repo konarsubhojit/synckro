@@ -105,6 +105,7 @@ jobs:
 
       - name: Derive per-build-type MSAL redirect URIs
         env:
+          MS_CLIENT_ID: ${{ secrets.MS_CLIENT_ID }}
           MSAL_REDIRECT_URI: ${{ secrets.MSAL_REDIRECT_URI }}
         run: |
           # Gradle configures every build type up front, so each build type's
@@ -112,6 +113,12 @@ jobs:
           # host. From the single MSAL_REDIRECT_URI secret, derive both the
           # debug- and release-form URIs and expose them as build-type-specific
           # env vars consumed by app/build.gradle.kts.
+          if [ -z "$MS_CLIENT_ID" ] || [ -z "$MSAL_REDIRECT_URI" ]; then
+            if [ -n "$MS_CLIENT_ID" ] || [ -n "$MSAL_REDIRECT_URI" ]; then
+              echo "::warning::MS_CLIENT_ID and MSAL_REDIRECT_URI must both be set for CI auth config; continuing with OneDrive sign-in disabled."
+            fi
+            exit 0
+          fi
           DEBUG_URI="$MSAL_REDIRECT_URI"
           RELEASE_URI="$MSAL_REDIRECT_URI"
           if [ -n "$MSAL_REDIRECT_URI" ]; then
@@ -122,6 +129,7 @@ jobs:
               RELEASE_URI="msauth://com.synckro/$redirect_path"
             fi
           fi
+          echo "MS_CLIENT_ID=$MS_CLIENT_ID" >> "$GITHUB_ENV"
           echo "MSAL_REDIRECT_URI_DEBUG=$DEBUG_URI" >> "$GITHUB_ENV"
           echo "MSAL_REDIRECT_URI_RELEASE=$RELEASE_URI" >> "$GITHUB_ENV"
 
@@ -131,8 +139,6 @@ jobs:
       - name: Run unit tests, lint, and assemble debug APK
         env:
           GOOGLE_WEB_CLIENT_ID: ${{ secrets.GOOGLE_WEB_CLIENT_ID }}
-          MS_CLIENT_ID: ${{ secrets.MS_CLIENT_ID }}
-          MSAL_REDIRECT_URI: ${{ secrets.MSAL_REDIRECT_URI }}
           DEBUG_KEYSTORE_PATH: ${{ github.workspace }}/debug.keystore
           DEBUG_KEYSTORE_PASSWORD: ${{ secrets.DEBUG_KEYSTORE_PASSWORD }}
           DEBUG_KEY_ALIAS: ${{ secrets.DEBUG_KEY_ALIAS }}
@@ -143,8 +149,6 @@ jobs:
         if: github.event_name != 'pull_request'
         env:
           GOOGLE_WEB_CLIENT_ID: ${{ secrets.GOOGLE_WEB_CLIENT_ID }}
-          MS_CLIENT_ID: ${{ secrets.MS_CLIENT_ID }}
-          MSAL_REDIRECT_URI: ${{ secrets.MSAL_REDIRECT_URI }}
           DEBUG_KEYSTORE_PATH: ${{ github.workspace }}/debug.keystore
           DEBUG_KEYSTORE_PASSWORD: ${{ secrets.DEBUG_KEYSTORE_PASSWORD }}
           DEBUG_KEY_ALIAS: ${{ secrets.DEBUG_KEY_ALIAS }}
