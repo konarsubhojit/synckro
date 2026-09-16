@@ -411,9 +411,9 @@ private fun ConflictListPane(
     onKeepBoth: (Long) -> Unit,
     onLongPress: (Long) -> Unit,
     onToggleSelection: (Long) -> Unit,
+    onSearchQueryChange: (String) -> Unit,
     onResolved: () -> Unit = {},
     onOpenConflict: ((Long) -> Unit)? = null,
-    onSearchQueryChange: (String) -> Unit,
 ) {
     LazyColumn(
         modifier =

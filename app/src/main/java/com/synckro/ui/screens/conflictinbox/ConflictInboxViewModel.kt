@@ -137,6 +137,7 @@ class ConflictInboxViewModel
 
         /** Updates the filename or pair-ID search query. */
         fun setSearchQuery(query: String) {
+            if (searchQueryFlow.value == query) return
             searchQueryFlow.value = query
             if (selectionState.value.first) {
                 exitSelectionMode()
