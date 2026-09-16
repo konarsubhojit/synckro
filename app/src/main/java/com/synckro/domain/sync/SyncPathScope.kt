@@ -5,7 +5,9 @@ package com.synckro.domain.sync
  * candidate resolution, and Instant Sync eligibility.
  *
  * Hidden and temporary leaf files are always rejected. Empty file names are
- * inconclusive and therefore also fail closed. Ignore globs take
+ * inconclusive and therefore also fail closed. [excludedRelativePaths] (the
+ * persisted per-pair folder-exclusion set) is checked before glob patterns and
+ * excludes both the exact path and everything nested under it. Ignore globs take
  * precedence over include globs; when the include filter is inactive all
  * non-ignored files are accepted. MediaStore state is evaluated by callers that
  * have access to it; this scope applies only the name-based candidate rules.
@@ -15,10 +17,12 @@ class SyncPathScope internal constructor(
     val ignoreGlobs: List<Regex>,
     val includeFilterActive: Boolean,
     val excludeSubfolders: Boolean,
+    val excludedRelativePaths: List<String> = emptyList(),
 ) {
     fun contains(relativePath: String): Boolean {
         if (FileCandidatePolicy.evaluate(relativePath) !is FileCandidateDecision.Eligible) return false
         if (excludeSubfolders && relativePath.contains('/')) return false
+        if (isExcludedByFolder(relativePath, excludedRelativePaths)) return false
 
         if (ignoreGlobs.any { it.matches(relativePath) }) return false
 
@@ -111,6 +115,53 @@ class SyncPathScope internal constructor(
             }
 
         /**
+         * Normalizes a raw excluded-folder path by trimming whitespace and any
+         * leading/trailing `/`, returning `null` for blank entries so callers can
+         * filter them out with [List.mapNotNull].
+         */
+        private fun normalizeExcludedFolder(raw: String): String? = raw.trim().trim('/').takeIf { it.isNotEmpty() }
+
+        /**
+         * Normalizes every entry in [excludedRelativePaths] (see
+         * [normalizeExcludedFolder]), dropping blank entries. Callers that check many
+         * paths against the same exclusion set (e.g. [compile] or
+         * [SyncEngine.scopeFiltersFor]) should normalize once and reuse the result via
+         * [isExcludedByFolder] rather than re-normalizing per path.
+         */
+        internal fun normalizeExcludedFolders(excludedRelativePaths: List<String>): List<String> =
+            excludedRelativePaths.mapNotNull(::normalizeExcludedFolder)
+
+        /**
+         * Returns `true` when [relativePath] exactly matches, or is nested under, one
+         * of the folder paths in [normalizedExcludedRelativePaths]. Matching is by
+         * path segment (via a `/` boundary) so an excluded path like
+         * `"Photos/Private"` also excludes `"Photos/Private/img.jpg"` but not an
+         * unrelated sibling like `"Photos/PrivateNotes"`.
+         *
+         * @param normalizedExcludedRelativePaths Must already be normalized via
+         *   [normalizeExcludedFolders] (or [compile], which normalizes internally).
+         */
+        internal fun isExcludedByFolder(
+            relativePath: String,
+            normalizedExcludedRelativePaths: List<String>,
+        ): Boolean {
+            if (normalizedExcludedRelativePaths.isEmpty()) return false
+            return normalizedExcludedRelativePaths.any { normalized ->
+                relativePath == normalized || relativePath.startsWith("$normalized/")
+            }
+        }
+
+        /**
+         * Converts a set of excluded folder paths (as persisted on
+         * [com.synckro.domain.model.SyncPair.excludedRelativePaths]) into ignore-glob
+         * patterns matching every file nested under each folder. Useful for callers
+         * (such as [com.synckro.data.local.fs.LocalFsEnumerator]) that only understand
+         * glob-based ignore lists rather than [SyncPathScope]'s folder-prefix check.
+         */
+        internal fun excludedFolderIgnoreGlobs(excludedRelativePaths: List<String>): List<String> =
+            normalizeExcludedFolders(excludedRelativePaths).map { "${escapeGlobLiteral(it)}/**" }
+
+        /**
          * Single-shot scope check for one relative file path. For batches, call
          * [compile] once and reuse [SyncPathScope.contains].
          */
@@ -119,23 +170,27 @@ class SyncPathScope internal constructor(
             includeGlobs: List<String>,
             ignoreGlobs: List<String>,
             excludeSubfolders: Boolean,
+            excludedRelativePaths: List<String> = emptyList(),
         ): Boolean =
             compile(
                 includeGlobs = includeGlobs,
                 ignoreGlobs = ignoreGlobs,
                 excludeSubfolders = excludeSubfolders,
+                excludedRelativePaths = excludedRelativePaths,
             ).contains(relativePath)
 
         fun compile(
             includeGlobs: List<String>,
             ignoreGlobs: List<String>,
             excludeSubfolders: Boolean,
+            excludedRelativePaths: List<String> = emptyList(),
         ): SyncPathScope =
             SyncPathScope(
                 includeGlobs = includeGlobs.mapNotNull { runCatching { globToRegex(it) }.getOrNull() },
                 ignoreGlobs = ignoreGlobs.mapNotNull { runCatching { globToRegex(it) }.getOrNull() },
                 includeFilterActive = includeGlobs.isNotEmpty(),
                 excludeSubfolders = excludeSubfolders,
+                excludedRelativePaths = normalizeExcludedFolders(excludedRelativePaths),
             )
     }
 }

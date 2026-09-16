@@ -413,17 +413,24 @@ class SyncEngine(
             ScopeFilterCacheKey(
                 includeGlobs = pair.includeGlobs.toList(),
                 excludeGlobs = pair.excludeGlobs.toList(),
+                // Normalized and sorted so that equivalent exclusion sets (differing
+                // only in whitespace, trailing '/', or list order) share one cache
+                // entry instead of each producing a distinct ScopeFilters instance.
+                excludedRelativePaths = SyncPathScope.normalizeExcludedFolders(pair.excludedRelativePaths).sorted(),
             ),
         ) { key ->
             ScopeFilters(
                 includeGlobs = key.includeGlobs.mapNotNull { runCatching { LocalFsEnumerator.globToRegex(it) }.getOrNull() },
                 excludeGlobs = key.excludeGlobs.mapNotNull { runCatching { LocalFsEnumerator.globToRegex(it) }.getOrNull() },
                 includeFilterActive = key.includeGlobs.isNotEmpty(),
+                excludedRelativePaths = key.excludedRelativePaths,
+                localIgnoreGlobs = key.excludeGlobs + SyncPathScope.excludedFolderIgnoreGlobs(key.excludedRelativePaths),
             )
         }
 
     /**
-     * Returns `true` when [path] passes the include/exclude globs and the
+     * Returns `true` when [path] passes the include/exclude globs, the persisted
+     * folder-exclusion set ([SyncPair.excludedRelativePaths]), and the
      * `excludeSubfolders` setting configured on [pair].
      *
      * When `excludeSubfolders` is enabled, only root-level paths (no '/' separator)
@@ -435,6 +442,7 @@ class SyncEngine(
         path: String,
         filters: ScopeFilters,
     ): Boolean {
+        if (SyncPathScope.isExcludedByFolder(path, filters.excludedRelativePaths)) return false
         if (filters.excludeGlobs.any { it.matches(path) }) return false
         if (filters.includeFilterActive && filters.includeGlobs.none { it.matches(path) }) return false
         if (pair.excludeSubfolders && path.contains('/')) return false
@@ -552,7 +560,7 @@ class SyncEngine(
                 pairId = pair.id,
                 treeUri = treeUri,
                 includeGlobs = pair.includeGlobs,
-                ignoreGlobs = pair.excludeGlobs,
+                ignoreGlobs = scopeFiltersFor(pair).localIgnoreGlobs,
                 excludeSubfolders = pair.excludeSubfolders,
             )
 
@@ -626,11 +634,12 @@ class SyncEngine(
         //   local files (in index post-scan but not yet uploaded) do not
         //   appear as "in index but not in remote" → DeleteLocal.
         //
-        // The same include/exclude glob filter that LocalFsEnumerator applies
-        // to the local snapshot is mirrored here.  Without this, a previously-
-        // synced path that falls outside the configured globs (e.g. because the
-        // user added an includeGlobs pattern after the initial sync) would still
-        // appear in syntheticRemote and fileIndexEntries.  SyncDiffer would then
+        // The same include/exclude glob filter (plus the persisted folder-exclusion
+        // set, SyncPair.excludedRelativePaths) that LocalFsEnumerator applies to the
+        // local snapshot is mirrored here.  Without this, a previously-synced path
+        // that falls outside the configured scope (e.g. because the user added an
+        // includeGlobs pattern, or excluded a folder, after the initial sync) would
+        // still appear in syntheticRemote and fileIndexEntries.  SyncDiffer would then
         // interpret "in remote + in lastIndex, absent from local" as a local
         // deletion and emit a DeleteRemote — causing data loss from what is
         // effectively a configuration change.
@@ -1214,12 +1223,21 @@ class SyncEngine(
         internal data class ScopeFilterCacheKey(
             val includeGlobs: List<String>,
             val excludeGlobs: List<String>,
+            val excludedRelativePaths: List<String> = emptyList(),
         )
 
         internal data class ScopeFilters(
             val includeGlobs: List<Regex>,
             val excludeGlobs: List<Regex>,
             val includeFilterActive: Boolean,
+            val excludedRelativePaths: List<String> = emptyList(),
+            /**
+             * [excludeGlobs] (as raw glob strings) combined with the glob patterns
+             * derived from [excludedRelativePaths], precomputed once so
+             * [LocalFsEnumerator.enumerate] does not need to re-derive folder-exclusion
+             * globs from [excludedRelativePaths] on every sync run.
+             */
+            val localIgnoreGlobs: List<String> = emptyList(),
         )
 
         internal data class ColdStartReconciliation(

@@ -38,6 +38,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNotSame
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -1330,6 +1331,302 @@ class SyncEngineRealIntegrationTest {
             assertTrue("Expected Success, got: $result", result is SyncEngine.Result.Success)
             assertEquals(
                 "No ops should be applied — out-of-scope file must not trigger DeleteRemote",
+                0,
+                (result as SyncEngine.Result.Success).applied,
+            )
+        }
+
+    // -------------------------------------------------------------------------
+    // Folder-exclusion scope filtering (excludedRelativePaths)
+    // -------------------------------------------------------------------------
+
+    @Test
+    fun `scopeFiltersFor differentiates cache entries by excludedRelativePaths`() =
+        runTest {
+            val engine = buildEngine()
+            val pair = insertPair()
+
+            val excluded = engine.scopeFiltersFor(pair.copy(excludedRelativePaths = listOf("Photos/Private")))
+            val excludedAgain = engine.scopeFiltersFor(pair.copy(excludedRelativePaths = listOf("Photos/Private")))
+            val notExcluded = engine.scopeFiltersFor(pair.copy(excludedRelativePaths = emptyList()))
+
+            assertSame(excluded, excludedAgain)
+            assertNotSame(excluded, notExcluded)
+        }
+
+    @Test
+    fun `runReal excludes local file under an excluded folder from upload`() =
+        runTest {
+            val fileContent = "shh".toByteArray()
+            localFileAccess.put("Photos/Private/secret.txt", fileContent)
+            inMemoryChildren.set(
+                "root",
+                listOf(
+                    RawDocChild(
+                        docId = "doc-photos",
+                        name = "Photos",
+                        mimeType = "vnd.android.document/directory",
+                        size = 0L,
+                        lastModifiedMs = 1_000L,
+                    ),
+                ),
+            )
+            inMemoryChildren.set(
+                "doc-photos",
+                listOf(
+                    RawDocChild(
+                        docId = "doc-private",
+                        name = "Private",
+                        mimeType = "vnd.android.document/directory",
+                        size = 0L,
+                        lastModifiedMs = 1_000L,
+                    ),
+                ),
+            )
+            inMemoryChildren.set(
+                "doc-private",
+                listOf(
+                    RawDocChild(
+                        docId = "doc-secret",
+                        name = "secret.txt",
+                        mimeType = "text/plain",
+                        size = fileContent.size.toLong(),
+                        lastModifiedMs = 5_000L,
+                    ),
+                ),
+            )
+
+            val pair = insertPair().copy(excludedRelativePaths = listOf("Photos/Private"))
+            val engine = buildEngine()
+
+            val result = engine.runOnce(pair)
+
+            assertTrue("Expected Success, got: $result", result is SyncEngine.Result.Success)
+            assertEquals(
+                "Excluded folder's local file must not be uploaded",
+                0,
+                (result as SyncEngine.Result.Success).applied,
+            )
+            assertTrue(
+                "Excluded folder must not have been created on remote",
+                fakeProvider.list("remote-root").none { it.isFolder && it.name == "Photos" },
+            )
+        }
+
+    @Test
+    fun `runReal excludes nested remote file under an excluded folder from download`() =
+        runTest {
+            val photosFolder = fakeProvider.createFolder("remote-root", "Photos")
+            val privateFolder = fakeProvider.createFolder(photosFolder.id, "Private")
+            val fileContent = "shh from cloud".toByteArray()
+            fakeProvider.uploadNew(
+                parentId = privateFolder.id,
+                name = "secret.txt",
+                content = fileContent.inputStream(),
+                size = fileContent.size.toLong(),
+                mimeType = "text/plain",
+            )
+
+            val pair = insertPair().copy(excludedRelativePaths = listOf("Photos/Private"))
+            val engine = buildEngine()
+
+            val result = engine.runOnce(pair)
+
+            assertTrue("Expected Success, got: $result", result is SyncEngine.Result.Success)
+            assertEquals(
+                "Excluded folder's remote file must not be downloaded",
+                0,
+                (result as SyncEngine.Result.Success).applied,
+            )
+            assertNull(
+                "Excluded folder's file must not be created locally",
+                localFileAccess.openRead("Photos/Private/secret.txt"),
+            )
+        }
+
+    @Test
+    fun `previously-synced file under excludedRelativePaths does not generate DeleteRemote`() =
+        runTest {
+            // Seed local_index as if "Photos/Private/note.txt" was synced in a
+            // previous run: remoteId + remoteSizeBytes + remoteMtimeMs are all set,
+            // so the engine would normally place it in syntheticRemote and
+            // SyncDiffer would see "file in remote, absent from local" → DeleteRemote.
+            val pair = insertPair()
+            localIndexDao.upsert(
+                LocalIndexEntity(
+                    pairId = pair.id,
+                    relativePath = "Photos/Private/note.txt",
+                    sizeBytes = 256L,
+                    mtimeMs = 1_000L,
+                    remoteId = "remote-note-id",
+                    remoteSizeBytes = 256L,
+                    remoteMtimeMs = 1_000L,
+                ),
+            )
+
+            // Local FS is empty — inMemoryChildren returns nothing by default.
+
+            val pairWithExclusion = pair.copy(excludedRelativePaths = listOf("Photos/Private"))
+            val engine = buildEngine()
+
+            val result = engine.runOnce(pairWithExclusion)
+
+            assertTrue("Expected Success, got: $result", result is SyncEngine.Result.Success)
+            assertEquals(
+                "No ops should be applied — excluded file must not trigger DeleteRemote",
+                0,
+                (result as SyncEngine.Result.Success).applied,
+            )
+        }
+
+    @Test
+    fun `runReal re-includes a previously excluded folder without stale-tombstone deletes`() =
+        runTest {
+            val fileContent = "keep me".toByteArray()
+            localFileAccess.put("Photos/Private/keep.txt", fileContent)
+            inMemoryChildren.set(
+                "root",
+                listOf(
+                    RawDocChild(
+                        docId = "doc-photos",
+                        name = "Photos",
+                        mimeType = "vnd.android.document/directory",
+                        size = 0L,
+                        lastModifiedMs = 1_000L,
+                    ),
+                ),
+            )
+            inMemoryChildren.set(
+                "doc-photos",
+                listOf(
+                    RawDocChild(
+                        docId = "doc-private",
+                        name = "Private",
+                        mimeType = "vnd.android.document/directory",
+                        size = 0L,
+                        lastModifiedMs = 1_000L,
+                    ),
+                ),
+            )
+            inMemoryChildren.set(
+                "doc-private",
+                listOf(
+                    RawDocChild(
+                        docId = "doc-keep",
+                        name = "keep.txt",
+                        mimeType = "text/plain",
+                        size = fileContent.size.toLong(),
+                        lastModifiedMs = 5_000L,
+                    ),
+                ),
+            )
+
+            val pair = insertPair()
+            val engine = buildEngine()
+
+            // Baseline run: file uploads and is fully indexed (local + remote metadata).
+            val baseline = engine.runOnce(pair)
+            assertTrue("Baseline run should succeed", baseline is SyncEngine.Result.Success)
+            assertEquals(1, (baseline as SyncEngine.Result.Success).applied)
+            val tokenAfterBaseline = syncPairDao.getById(pair.id)!!.lastDeltaToken
+
+            // Exclude the folder: the file must drop out of scope with no delete ops.
+            val excludedPair = pair.copy(deltaToken = tokenAfterBaseline, excludedRelativePaths = listOf("Photos/Private"))
+            val excludedRun = engine.runOnce(excludedPair)
+            assertTrue("Excluded run should succeed", excludedRun is SyncEngine.Result.Success)
+            assertEquals(
+                "Excluded folder must not generate any ops",
+                0,
+                (excludedRun as SyncEngine.Result.Success).applied,
+            )
+            assertNotNull(
+                "Local file must survive being excluded (no DeleteLocal)",
+                localFileAccess.openRead("Photos/Private/keep.txt"),
+            )
+            assertTrue(
+                "Remote file must survive being excluded (no DeleteRemote)",
+                fakeProvider.list(fakeProvider.list("remote-root").single { it.isFolder && it.name == "Photos" }.id)
+                    .let { photosChildren -> photosChildren.singleOrNull { it.isFolder && it.name == "Private" } }
+                    ?.let { fakeProvider.list(it.id) }
+                    ?.any { it.name == "keep.txt" } == true,
+            )
+
+            // Re-include the folder: no stale-tombstone deletes should be produced,
+            // and the file must still be present on both sides afterwards.
+            val tokenAfterExclusion = syncPairDao.getById(pair.id)!!.lastDeltaToken
+            val reincludedPair = pair.copy(deltaToken = tokenAfterExclusion, excludedRelativePaths = emptyList())
+            val reincludedRun = engine.runOnce(reincludedPair)
+
+            assertTrue("Re-included run should succeed", reincludedRun is SyncEngine.Result.Success)
+            assertNotNull(
+                "Local file must still exist after re-inclusion",
+                localFileAccess.openRead("Photos/Private/keep.txt"),
+            )
+        }
+
+    @Test
+    fun `runReal applies excludedRelativePaths together with excludeGlobs`() =
+        runTest {
+            val secretContent = "shh".toByteArray()
+            val tempContent = "temp".toByteArray()
+            localFileAccess.put("Photos/Private/secret.txt", secretContent)
+            localFileAccess.put("notes.tmp", tempContent)
+            inMemoryChildren.set(
+                "root",
+                listOf(
+                    RawDocChild(
+                        docId = "doc-photos",
+                        name = "Photos",
+                        mimeType = "vnd.android.document/directory",
+                        size = 0L,
+                        lastModifiedMs = 1_000L,
+                    ),
+                    RawDocChild(
+                        docId = "doc-notes",
+                        name = "notes.tmp",
+                        mimeType = "text/plain",
+                        size = tempContent.size.toLong(),
+                        lastModifiedMs = 1_000L,
+                    ),
+                ),
+            )
+            inMemoryChildren.set(
+                "doc-photos",
+                listOf(
+                    RawDocChild(
+                        docId = "doc-private",
+                        name = "Private",
+                        mimeType = "vnd.android.document/directory",
+                        size = 0L,
+                        lastModifiedMs = 1_000L,
+                    ),
+                ),
+            )
+            inMemoryChildren.set(
+                "doc-private",
+                listOf(
+                    RawDocChild(
+                        docId = "doc-secret",
+                        name = "secret.txt",
+                        mimeType = "text/plain",
+                        size = secretContent.size.toLong(),
+                        lastModifiedMs = 5_000L,
+                    ),
+                ),
+            )
+
+            val pair =
+                insertPair().copy(
+                    excludeGlobs = listOf("*.tmp"),
+                    excludedRelativePaths = listOf("Photos/Private"),
+                )
+            val engine = buildEngine()
+
+            val result = engine.runOnce(pair)
+
+            assertTrue("Expected Success, got: $result", result is SyncEngine.Result.Success)
+            assertEquals(
+                "Both the glob-excluded and folder-excluded files must be filtered out",
                 0,
                 (result as SyncEngine.Result.Success).applied,
             )
