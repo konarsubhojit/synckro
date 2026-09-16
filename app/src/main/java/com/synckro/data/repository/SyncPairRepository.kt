@@ -206,4 +206,5 @@ private fun SyncPair.toEntity(): SyncPairEntity =
         excludeEmptyFolders = excludeEmptyFolders,
         localStorageLimitBytes = localStorageLimitBytes,
         instantSyncEnabled = instantSyncEnabled,
+        excludedRelativePaths = excludedRelativePaths.joinToString("\n"),
     )

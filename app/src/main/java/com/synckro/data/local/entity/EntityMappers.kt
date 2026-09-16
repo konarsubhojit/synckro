@@ -42,4 +42,5 @@ internal fun SyncPairEntity.toDomain(needsReLink: Boolean = false): SyncPair =
         excludeEmptyFolders = excludeEmptyFolders,
         localStorageLimitBytes = localStorageLimitBytes,
         instantSyncEnabled = instantSyncEnabled,
+        excludedRelativePaths = excludedRelativePaths.split('\n').filter { it.isNotBlank() },
     )

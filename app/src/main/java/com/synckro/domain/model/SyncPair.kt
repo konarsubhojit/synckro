@@ -80,6 +80,15 @@ data class SyncPair(
      */
     val excludeSubfolders: Boolean = false,
     /**
+     * Relative folder paths (from the sync root) excluded from this pair's sync
+     * scope, in addition to [excludeGlobs]. Unlike glob patterns, these are
+     * literal paths: a path such as `"Photos/Private"` excludes exactly that
+     * folder and everything nested under it on both the local and remote sides,
+     * without requiring the user to author a glob. See
+     * [com.synckro.domain.sync.SyncPathScope] for the matching semantics.
+     */
+    val excludedRelativePaths: List<String> = emptyList(),
+    /**
      * When `true`, empty directories are excluded from the sync scope.
      *
      * **Remote side**: folder entries reported by the remote enumerator are
