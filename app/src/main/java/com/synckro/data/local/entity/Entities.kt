@@ -52,6 +52,7 @@ data class SyncPairEntity(
     val excludeGlobs: String,
     val wifiOnly: Boolean,
     val requiresCharging: Boolean,
+    val avoidMeteredNetworks: Boolean = false,
     /** Whether automatic periodic sync is enabled. Existing rows default to true. */
     val autoSyncEnabled: Boolean = true,
     /** Opaque delta/changes token from the provider. */

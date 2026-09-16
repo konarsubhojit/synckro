@@ -195,6 +195,7 @@ private fun SyncPair.toEntity(): SyncPairEntity =
         includeGlobs = includeGlobs.joinToString("\n"),
         excludeGlobs = excludeGlobs.joinToString("\n"),
         wifiOnly = wifiOnly,
+        avoidMeteredNetworks = avoidMeteredNetworks,
         requiresCharging = requiresCharging,
         autoSyncEnabled = autoSyncEnabled,
         scheduleIntervalMinutes = scheduleIntervalMinutes,

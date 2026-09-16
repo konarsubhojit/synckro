@@ -126,6 +126,24 @@ class MigrationTest {
     }
 
     // -------------------------------------------------------------------------
+    // MIGRATION_17_18 – metered network policy
+    // -------------------------------------------------------------------------
+
+    @Test
+    fun `MIGRATION_17_18 adds avoidMeteredNetworks disabled by default`() {
+        insertSyncPair(db)
+        migrateV6To15(db)
+        SynckroDatabase.MIGRATION_15_16.migrate(db)
+        SynckroDatabase.MIGRATION_16_17.migrate(db)
+        val pairId = firstPairId(db)
+
+        SynckroDatabase.MIGRATION_17_18.migrate(db)
+
+        assertTrue("avoidMeteredNetworks" in columnNames(db, "sync_pair"))
+        assertEquals(0L, longAt(db, "SELECT avoidMeteredNetworks FROM sync_pair WHERE id = $pairId"))
+    }
+
+    // -------------------------------------------------------------------------
     // MIGRATION_6_7 – sync_pair changes
     // -------------------------------------------------------------------------
 

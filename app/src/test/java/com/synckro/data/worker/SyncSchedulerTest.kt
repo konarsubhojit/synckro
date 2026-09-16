@@ -61,6 +61,7 @@ class SyncSchedulerTest {
     private fun pair(
         id: Long = 1L,
         wifiOnly: Boolean = true,
+        avoidMeteredNetworks: Boolean = false,
         requiresCharging: Boolean = false,
         autoSyncEnabled: Boolean = true,
     ) = SyncPair(
@@ -72,6 +73,7 @@ class SyncSchedulerTest {
         direction = SyncDirection.BIDIRECTIONAL,
         conflictPolicy = ConflictPolicy.NEWEST_WINS,
         wifiOnly = wifiOnly,
+        avoidMeteredNetworks = avoidMeteredNetworks,
         requiresCharging = requiresCharging,
         autoSyncEnabled = autoSyncEnabled,
     )
@@ -128,7 +130,7 @@ class SyncSchedulerTest {
 
     @Test
     fun `wifiOnly false applies CONNECTED network constraint`() {
-        val p = pair(wifiOnly = false)
+        val p = pair(wifiOnly = false, avoidMeteredNetworks = false)
         scheduler.schedulePeriodic(p)
 
         val info =
@@ -137,6 +139,19 @@ class SyncSchedulerTest {
                 .get()
                 .first()
         assertEquals(NetworkType.CONNECTED, info.constraints.requiredNetworkType)
+    }
+
+    @Test
+    fun `avoidMeteredNetworks true applies UNMETERED network constraint without wifiOnly`() {
+        val p = pair(wifiOnly = false, avoidMeteredNetworks = true)
+        scheduler.schedulePeriodic(p)
+
+        val info =
+            workManager
+                .getWorkInfosForUniqueWork(SyncWorker.uniqueName(p.id))
+                .get()
+                .first()
+        assertEquals(NetworkType.UNMETERED, info.constraints.requiredNetworkType)
     }
 
     @Test
@@ -245,7 +260,7 @@ class SyncSchedulerTest {
 
     @Test
     fun `periodic and one-time requests share connected non-charging constraints`() {
-        val syncPair = pair(id = 103L, wifiOnly = false, requiresCharging = false)
+        val syncPair = pair(id = 103L, wifiOnly = false, avoidMeteredNetworks = false, requiresCharging = false)
 
         val periodic = SyncScheduler.periodicRequestFor(syncPair, SyncScheduler.MIN_PERIODIC_INTERVAL_MINUTES)
         val oneTime = SyncScheduler.oneTimeRequestFor(syncPair)
@@ -258,6 +273,17 @@ class SyncSchedulerTest {
         assertEquals(periodic.workSpec.constraints.requiresBatteryNotLow(), oneTime.workSpec.constraints.requiresBatteryNotLow())
         assertTrue(periodic.workSpec.constraints.requiresStorageNotLow())
         assertEquals(periodic.workSpec.constraints.requiresStorageNotLow(), oneTime.workSpec.constraints.requiresStorageNotLow())
+    }
+
+    @Test
+    fun `periodic and one-time requests share avoid metered network constraints`() {
+        val syncPair = pair(id = 108L, wifiOnly = false, avoidMeteredNetworks = true)
+
+        val periodic = SyncScheduler.periodicRequestFor(syncPair, SyncScheduler.MIN_PERIODIC_INTERVAL_MINUTES)
+        val oneTime = SyncScheduler.oneTimeRequestFor(syncPair)
+
+        assertEquals(NetworkType.UNMETERED, periodic.workSpec.constraints.requiredNetworkType)
+        assertEquals(periodic.workSpec.constraints.requiredNetworkType, oneTime.workSpec.constraints.requiredNetworkType)
     }
 
     @Test
@@ -337,7 +363,7 @@ class SyncSchedulerTest {
 
     @Test
     fun `instant request is expedited with quota fallback and shared policy`() {
-        val syncPair = pair(id = 106L, wifiOnly = true, requiresCharging = true)
+        val syncPair = pair(id = 106L, wifiOnly = false, avoidMeteredNetworks = true, requiresCharging = true)
 
         val periodic = SyncScheduler.periodicRequestFor(syncPair, SyncScheduler.MIN_PERIODIC_INTERVAL_MINUTES)
         val expeditedConstraints = SyncScheduler.expeditedConstraintsFor(syncPair)
@@ -348,6 +374,7 @@ class SyncSchedulerTest {
         assertTrue(instant.workSpec.input.getBoolean(SyncWorker.KEY_INSTANT, false))
         assertTrue(instant.workSpec.expedited)
         assertEquals(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST, instant.workSpec.outOfQuotaPolicy)
+        assertEquals(NetworkType.UNMETERED, periodic.workSpec.constraints.requiredNetworkType)
         assertEquals(expeditedConstraints.requiredNetworkType, instant.workSpec.constraints.requiredNetworkType)
         assertEquals(expeditedConstraints.requiresCharging(), instant.workSpec.constraints.requiresCharging())
         assertEquals(expeditedConstraints.requiresBatteryNotLow(), instant.workSpec.constraints.requiresBatteryNotLow())

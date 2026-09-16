@@ -542,6 +542,28 @@ class PairEditorViewModelTest {
         }
 
     @Test
+    fun `save persists avoidMeteredNetworks true`() =
+        runTest {
+            coEvery { mockRepo.upsert(any()) } returns 42L
+
+            val vm = createVmWithFolder()
+            vm.onDisplayNameChange("Test Pair")
+            vm.onRemoteFolderPicked("remote-id", "Remote")
+            vm.onAvoidMeteredNetworksChange(true)
+            advanceUntilIdle()
+            vm.onAccountChange("test-account")
+
+            vm.save {}
+            advanceUntilIdle()
+
+            coVerify {
+                mockRepo.upsert(
+                    match { it.avoidMeteredNetworks },
+                )
+            }
+        }
+
+    @Test
     fun `save with instantSyncEnabled unchanged false does not cancel instant work`() =
         runTest {
             coEvery { mockRepo.upsert(any()) } returns 42L
@@ -572,6 +594,7 @@ class PairEditorViewModelTest {
                     accountId = "test-account",
                     remoteFolderId = "remote",
                     conflictPolicy = ConflictPolicy.KEEP_BOTH,
+                    avoidMeteredNetworks = true,
                     instantSyncEnabled = true,
                 )
             coEvery { mockRepo.getById(7L) } returns existingPair
@@ -722,6 +745,7 @@ class PairEditorViewModelTest {
                     provider = CloudProviderType.FAKE,
                     remoteFolderId = "remote",
                     conflictPolicy = ConflictPolicy.KEEP_BOTH,
+                    avoidMeteredNetworks = true,
                     instantSyncEnabled = true,
                 )
             coEvery { mockRepo.getById(7L) } returns existingPair
@@ -734,6 +758,7 @@ class PairEditorViewModelTest {
             assertEquals("content://test", state.localTreeUri)
             assertEquals("remote", state.remoteFolderId)
             assertEquals(ConflictPolicy.KEEP_BOTH, state.conflictPolicy)
+            assertTrue(state.avoidMeteredNetworks)
             assertTrue(state.instantSyncEnabled)
             assertFalse(state.isLoading)
         }

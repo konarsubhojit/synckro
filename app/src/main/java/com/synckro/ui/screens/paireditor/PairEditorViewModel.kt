@@ -245,6 +245,7 @@ class PairEditorViewModel
             val conflictPolicy: ConflictPolicy = ConflictPolicy.NEWEST_WINS,
             val direction: SyncDirection = SyncDirection.BIDIRECTIONAL,
             val wifiOnly: Boolean = true,
+            val avoidMeteredNetworks: Boolean = false,
             val requiresCharging: Boolean = false,
             /** Whether periodic auto-sync is enabled for this pair. */
             val autoSyncEnabled: Boolean = true,
@@ -617,6 +618,7 @@ class PairEditorViewModel
                             conflictPolicy = entity.conflictPolicy,
                             direction = entity.direction,
                             wifiOnly = entity.wifiOnly,
+                            avoidMeteredNetworks = entity.avoidMeteredNetworks,
                             requiresCharging = entity.requiresCharging,
                             autoSyncEnabled = entity.autoSyncEnabled,
                             instantSyncEnabled = entity.instantSyncEnabled,
@@ -806,6 +808,8 @@ class PairEditorViewModel
 
         fun onWifiOnlyChange(value: Boolean) = _state.update { it.copy(wifiOnly = value) }
 
+        fun onAvoidMeteredNetworksChange(value: Boolean) = _state.update { it.copy(avoidMeteredNetworks = value) }
+
         fun onRequiresChargingChange(value: Boolean) = _state.update { it.copy(requiresCharging = value) }
 
         fun onAutoSyncEnabledChange(value: Boolean) = _state.update { it.copy(autoSyncEnabled = value) }
@@ -917,6 +921,7 @@ class PairEditorViewModel
                             conflictPolicy = s.conflictPolicy,
                             direction = s.direction,
                             wifiOnly = s.wifiOnly,
+                            avoidMeteredNetworks = s.avoidMeteredNetworks,
                             requiresCharging = s.requiresCharging,
                             autoSyncEnabled = s.autoSyncEnabled,
                             instantSyncEnabled = s.instantSyncEnabled,
@@ -1061,6 +1066,7 @@ class PairEditorViewModel
             val conflictPolicy: ConflictPolicy,
             val direction: SyncDirection,
             val wifiOnly: Boolean,
+            val avoidMeteredNetworks: Boolean,
             val requiresCharging: Boolean,
             val autoSyncEnabled: Boolean,
             val instantSyncEnabled: Boolean,
@@ -1086,6 +1092,7 @@ class PairEditorViewModel
                         conflictPolicy = s.conflictPolicy,
                         direction = s.direction,
                         wifiOnly = s.wifiOnly,
+                        avoidMeteredNetworks = s.avoidMeteredNetworks,
                         requiresCharging = s.requiresCharging,
                         autoSyncEnabled = s.autoSyncEnabled,
                         instantSyncEnabled = s.instantSyncEnabled,

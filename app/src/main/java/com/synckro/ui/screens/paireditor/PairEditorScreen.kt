@@ -458,6 +458,21 @@ fun PairEditorScreen(
                     )
                 }
 
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = stringResource(R.string.pair_editor_avoid_metered_networks),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Switch(
+                        checked = state.avoidMeteredNetworks,
+                        onCheckedChange = viewModel::onAvoidMeteredNetworksChange,
+                    )
+                }
+
                 // Requires charging toggle
                 Row(
                     modifier = Modifier.fillMaxWidth(),
