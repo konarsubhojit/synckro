@@ -75,10 +75,10 @@
         "gradle"
       ],
       "matchPackageNames": [
-        "com.android.*",
-        "org.jetbrains.kotlin.*",
-        "com.google.devtools.ksp*",
-        "com.google.dagger*"
+        "/^com\\.android(\\.|:)/",
+        "/^org\\.jetbrains\\.kotlin(\\.|:)/",
+        "/^com\\.google\\.devtools\\.ksp(\\.|:|$)/",
+        "/^com\\.google\\.dagger(\\.|:)/"
       ],
       "matchUpdateTypes": [
         "major"
