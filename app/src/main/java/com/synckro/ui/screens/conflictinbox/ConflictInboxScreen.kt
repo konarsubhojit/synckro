@@ -282,7 +282,7 @@ fun ConflictInboxScreen(
                             .padding(padding),
                 )
             }
-            state.totalConflictCount == 0 -> {
+            state.totalConflictCount == 0 && !state.hasActiveFilter -> {
                 EmptyState(
                     title = stringResource(R.string.conflict_inbox_empty_title),
                     body = stringResource(R.string.conflict_inbox_empty_body),
@@ -462,10 +462,17 @@ private fun ConflictListPane(
                 }
             }
         }
-        if (state.conflicts.isEmpty() && state.hasActiveFilter && state.totalConflictCount > 0) {
+        if (state.conflicts.isEmpty()) {
             item {
                 Text(
-                    text = stringResource(R.string.conflict_inbox_no_search_results),
+                    text =
+                        stringResource(
+                            if (state.totalConflictCount > 0) {
+                                R.string.conflict_inbox_no_search_results
+                            } else {
+                                R.string.conflict_inbox_empty_body
+                            },
+                        ),
                     style = MaterialTheme.typography.bodyLarge,
                     modifier =
                         Modifier
