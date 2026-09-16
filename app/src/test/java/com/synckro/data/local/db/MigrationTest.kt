@@ -126,6 +126,31 @@ class MigrationTest {
     }
 
     // -------------------------------------------------------------------------
+    // MIGRATION_17_18 – per-pair excluded relative paths
+    // -------------------------------------------------------------------------
+
+    @Test
+    fun `MIGRATION_17_18 adds empty excludedRelativePaths column to sync_pair`() {
+        insertSyncPair(db)
+        migrateV6To15(db)
+        SynckroDatabase.MIGRATION_15_16.migrate(db)
+        SynckroDatabase.MIGRATION_16_17.migrate(db)
+        val pairId = firstPairId(db)
+
+        SynckroDatabase.MIGRATION_17_18.migrate(db)
+
+        assertTrue(
+            "excludedRelativePaths column must exist in sync_pair after migration",
+            "excludedRelativePaths" in columnNames(db, "sync_pair"),
+        )
+        assertEquals(
+            "",
+            stringAt(db, "SELECT excludedRelativePaths FROM sync_pair WHERE id = $pairId"),
+        )
+        assertEquals("Migration Test", stringAt(db, "SELECT displayName FROM sync_pair WHERE id = $pairId"))
+    }
+
+    // -------------------------------------------------------------------------
     // MIGRATION_6_7 – sync_pair changes
     // -------------------------------------------------------------------------
 
