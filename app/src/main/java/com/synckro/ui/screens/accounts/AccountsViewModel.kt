@@ -333,24 +333,34 @@ class AccountsViewModel
             applyCachedQuotas()
         }
 
-        /** Merges the current [quotaCache] snapshot into the visible rows. */
+        /**
+         * Merges the current [quotaCache] snapshot into the visible rows. Accounts on a
+         * provider without a registered [CloudProviderFactory] can never report a quota,
+         * so they are resolved to `null` immediately instead of showing the "fetching"
+         * placeholder forever.
+         */
         private fun applyCachedQuotas() {
             _state.update { cur ->
                 cur.copy(
                     rows =
                         cur.rows.map { row ->
-                            val providerType = row.providerType() ?: return@map row
+                            val providerType = row.providerType()
+                            val unsupported = providerType == null || providerType !in providerFactories
                             row.copy(
                                 accounts =
                                     row.accounts.map { item ->
-                                        val cached =
-                                            quotaCache[
-                                                AccountKey(provider = providerType, accountId = item.account.id),
-                                            ]
-                                        if (cached == null) {
-                                            item
+                                        if (providerType == null || unsupported) {
+                                            item.copy(storageQuota = null, quotaResolved = true)
                                         } else {
-                                            item.copy(storageQuota = cached.quota, quotaResolved = true)
+                                            val cached =
+                                                quotaCache[
+                                                    AccountKey(provider = providerType, accountId = item.account.id),
+                                                ]
+                                            if (cached == null) {
+                                                item
+                                            } else {
+                                                item.copy(storageQuota = cached.quota, quotaResolved = true)
+                                            }
                                         }
                                     },
                             )

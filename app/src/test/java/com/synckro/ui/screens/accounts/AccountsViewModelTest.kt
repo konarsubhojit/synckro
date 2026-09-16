@@ -575,6 +575,20 @@ class AccountsViewModelTest {
             )
         }
 
+    @Test
+    fun `provider without a registered factory resolves to no quota`() =
+        runTest {
+            val account = account("gd-1", CloudProviderType.GOOGLE_DRIVE, "alpha@gmail.com")
+            val registry = singleProviderRegistry(account)
+
+            val vm = createVm(registry)
+            advanceUntilIdle()
+
+            val item = vm.state.value.rows.single().accounts.single()
+            assertNull(item.storageQuota)
+            assertTrue(item.quotaResolved)
+        }
+
     private fun singleProviderRegistry(account: Account): AuthManagerRegistry =
         AuthManagerRegistry(
             mapOf(
