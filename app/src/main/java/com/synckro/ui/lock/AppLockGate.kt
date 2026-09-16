@@ -1,5 +1,6 @@
 package com.synckro.ui.lock
 
+import android.os.Build
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_WEAK
 import androidx.biometric.BiometricManager.Authenticators.DEVICE_CREDENTIAL
@@ -46,7 +47,6 @@ import com.synckro.R
 @Composable
 fun AppLockGate(
     activity: FragmentActivity,
-    modifier: Modifier = Modifier,
     viewModel: AppLockViewModel = hiltViewModel(),
     content: @Composable () -> Unit,
 ) {
@@ -96,12 +96,11 @@ fun AppLockGate(
             error = state.error,
             onUnlockClick = viewModel::onRetryRequested,
             onDisableLockClick = viewModel::disableLock,
-            modifier = modifier,
         )
     } else {
         // Preference not read yet: render an empty surface so no content leaks
         // through before we know whether the lock is enabled.
-        Surface(modifier = modifier.fillMaxSize()) {}
+        Surface(modifier = Modifier.fillMaxSize()) {}
     }
 }
 
@@ -160,10 +159,10 @@ private fun AppLockScreen(
 }
 
 /**
- * Shows a `BiometricPrompt`, preferring a biometric + device-credential prompt
- * and falling back to whichever authenticator class the device supports. When
- * no authenticator is enrolled the caller is notified with
- * [AppLockError.Unavailable] so the app stays locked instead of proceeding.
+ * Shows a `BiometricPrompt` using biometrics when they are enrolled and the
+ * device credential (PIN/pattern/password) otherwise. When neither is available
+ * the caller is notified with [AppLockError.Unavailable] so the app stays locked
+ * instead of proceeding.
  */
 private fun showBiometricPrompt(
     activity: FragmentActivity,
@@ -189,11 +188,20 @@ private fun showBiometricPrompt(
             .setTitle(title)
             .setSubtitle(subtitle)
             .apply {
-                if (biometricsAvailable) {
-                    setAllowedAuthenticators(BIOMETRIC_WEAK)
-                    setNegativeButtonText(negativeButtonText)
-                } else {
-                    setAllowedAuthenticators(DEVICE_CREDENTIAL)
+                when {
+                    biometricsAvailable -> {
+                        setAllowedAuthenticators(BIOMETRIC_WEAK)
+                        setNegativeButtonText(negativeButtonText)
+                    }
+                    // A device-credential-only prompt may be requested through
+                    // `setAllowedAuthenticators` from API 30 onwards only.
+                    Build.VERSION.SDK_INT >= Build.VERSION_CODES.R ->
+                        setAllowedAuthenticators(DEVICE_CREDENTIAL)
+
+                    else -> {
+                        @Suppress("DEPRECATION")
+                        setDeviceCredentialAllowed(true)
+                    }
                 }
             }.build()
 
