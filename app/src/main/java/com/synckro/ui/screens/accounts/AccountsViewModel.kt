@@ -163,11 +163,17 @@ class AccountsViewModel
         /** Tracks the pending auto-clear timer for the active highlight, if any. */
         private var clearHighlightJob: kotlinx.coroutines.Job? = null
 
-        /** A storage quota fetch result plus the elapsed-realtime stamp of the fetch. */
+        /**
+         * A storage quota fetch result plus the elapsed-realtime stamp of the fetch.
+         * A result without a value (unsupported provider or failed fetch) is kept for
+         * a shorter [ttlMs] so a transient error retries sooner.
+         */
         private data class CachedQuota(
             val quota: StorageQuota?,
             val fetchedAtMs: Long,
-        )
+        ) {
+            val ttlMs: Long get() = if (quota != null) QUOTA_TTL_MS else QUOTA_FAILURE_TTL_MS
+        }
 
         /**
          * Per-account quota cache; entries older than [QUOTA_TTL_MS] are re-fetched.
@@ -215,6 +221,10 @@ class AccountsViewModel
         }
 
         private fun AccountRow.matchesAnyOf(types: Set<CloudProviderType>): Boolean = types.any { it.name == providerKey }
+
+        /** Parses [AccountRow.providerKey] back into a [CloudProviderType], or null when unknown. */
+        private fun AccountRow.providerType(): CloudProviderType? =
+            CloudProviderType.entries.firstOrNull { it.name == providerKey }
 
         fun refresh() {
             viewModelScope.launch {
@@ -279,18 +289,18 @@ class AccountsViewModel
          * resolved `null` so the card renders no progress bar instead of a stale
          * "fetching…" placeholder.
          *
-         * Results are cached per account for [QUOTA_TTL_MS]; every other refresh
-         * (rename, disconnect, re-auth, returning to the screen, …) reuses the cached
-         * value instead of issuing another provider API call.
+         * Results are cached per account for [QUOTA_TTL_MS] (or the shorter
+         * [QUOTA_FAILURE_TTL_MS] when the fetch produced no value, so a transient
+         * error does not suppress retries for long); every other refresh (rename,
+         * disconnect, re-auth, returning to the screen, …) reuses the cached value
+         * instead of issuing another provider API call.
          */
         private suspend fun fetchAllQuotas(rows: List<AccountRow>) {
             val now = SystemClock.elapsedRealtime()
             val liveKeys =
                 rows
                     .flatMap { row ->
-                        val providerType =
-                            runCatching { CloudProviderType.valueOf(row.providerKey) }.getOrNull()
-                                ?: return@flatMap emptyList()
+                        val providerType = row.providerType() ?: return@flatMap emptyList()
                         row.accounts.map { AccountKey(provider = providerType, accountId = it.account.id) }
                     }.toSet()
             // Drop cache entries for accounts that are gone, so the map cannot grow
@@ -299,14 +309,12 @@ class AccountsViewModel
             quotaCache.keys.retainAll(liveKeys)
             val tasks =
                 rows.flatMap { row ->
-                    val providerType =
-                        runCatching { CloudProviderType.valueOf(row.providerKey) }.getOrNull()
-                            ?: return@flatMap emptyList()
+                    val providerType = row.providerType() ?: return@flatMap emptyList()
                     val factory = providerFactories[providerType] ?: return@flatMap emptyList()
                     row.accounts.mapNotNull { item ->
                         val key = AccountKey(provider = providerType, accountId = item.account.id)
                         val cached = quotaCache[key]
-                        if (cached != null && now - cached.fetchedAtMs < QUOTA_TTL_MS) {
+                        if (cached != null && now - cached.fetchedAtMs < cached.ttlMs) {
                             return@mapNotNull null
                         }
                         viewModelScope.async {
@@ -331,9 +339,7 @@ class AccountsViewModel
                 cur.copy(
                     rows =
                         cur.rows.map { row ->
-                            val providerType =
-                                runCatching { CloudProviderType.valueOf(row.providerKey) }.getOrNull()
-                                    ?: return@map row
+                            val providerType = row.providerType() ?: return@map row
                             row.copy(
                                 accounts =
                                     row.accounts.map { item ->
@@ -887,5 +893,12 @@ class AccountsViewModel
              * again.
              */
             const val QUOTA_TTL_MS: Long = 5 * 60 * 1_000L
+
+            /**
+             * Shorter freshness window for a quota fetch that produced no value, so a
+             * transient failure is retried on the next refresh instead of being
+             * suppressed for the full [QUOTA_TTL_MS].
+             */
+            const val QUOTA_FAILURE_TTL_MS: Long = 30 * 1_000L
         }
     }

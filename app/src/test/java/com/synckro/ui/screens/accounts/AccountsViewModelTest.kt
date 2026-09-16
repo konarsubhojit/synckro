@@ -485,6 +485,36 @@ class AccountsViewModelTest {
         }
 
     @Test
+    fun `failed quota fetch is retried after the shorter failure ttl`() =
+        runTest {
+            val account = account("gd-1", CloudProviderType.GOOGLE_DRIVE, "alpha@gmail.com")
+            val registry = singleProviderRegistry(account)
+            var calls = 0
+            val recovered = StorageQuota(usedBytes = 3L, totalBytes = 4L)
+
+            val vm =
+                createVm(
+                    registry,
+                    mapOf(
+                        CloudProviderType.GOOGLE_DRIVE to
+                            factoryReturning {
+                                if (calls++ == 0) throw RuntimeException("transient") else recovered
+                            },
+                    ),
+                )
+            advanceUntilIdle()
+            assertEquals(1, calls)
+            assertNull(vm.state.value.rows.single().accounts.single().storageQuota)
+
+            ShadowSystemClock.advanceBy(Duration.ofMillis(AccountsViewModel.QUOTA_FAILURE_TTL_MS + 1))
+            vm.refresh()
+            advanceUntilIdle()
+
+            assertEquals(2, calls)
+            assertEquals(recovered, vm.state.value.rows.single().accounts.single().storageQuota)
+        }
+
+    @Test
     fun `repeated refreshes reuse the cached quota instead of calling the provider again`() =
         runTest {
             val account = account("gd-1", CloudProviderType.GOOGLE_DRIVE, "alpha@gmail.com")
