@@ -90,9 +90,10 @@ class ConflictInboxViewModel
             val selectedIds: Set<Long> = emptySet(),
             val enableHaptics: Boolean = true,
             val searchQuery: String = "",
-            val hasActiveFilter: Boolean = false,
+            val totalConflictCount: Int = 0,
         ) {
             val selectedCount: Int get() = selectedIds.size
+            val hasActiveFilter: Boolean get() = searchQuery.isNotBlank()
         }
 
         private val selectionState = MutableStateFlow(Pair(false, linkedSetOf<Long>()))
@@ -123,7 +124,7 @@ class ConflictInboxViewModel
                     selectedIds = selectedIds,
                     enableHaptics = enableHaptics,
                     searchQuery = searchQuery,
-                    hasActiveFilter = query.isNotEmpty(),
+                    totalConflictCount = rows.size,
                 )
             }.catch { e ->
                 Timber.w(e, "ConflictInboxViewModel: flow error")
@@ -137,6 +138,9 @@ class ConflictInboxViewModel
         /** Updates the filename or pair-ID search query. */
         fun setSearchQuery(query: String) {
             searchQueryFlow.value = query
+            if (selectionState.value.first) {
+                exitSelectionMode()
+            }
         }
 
         /** Records the user's choice to keep the local version for the conflict with [id]. */

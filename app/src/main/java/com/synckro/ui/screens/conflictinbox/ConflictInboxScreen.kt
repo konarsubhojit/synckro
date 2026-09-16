@@ -282,7 +282,7 @@ fun ConflictInboxScreen(
                             .padding(padding),
                 )
             }
-            state.conflicts.isEmpty() && !state.hasActiveFilter -> {
+            state.totalConflictCount == 0 -> {
                 EmptyState(
                     title = stringResource(R.string.conflict_inbox_empty_title),
                     body = stringResource(R.string.conflict_inbox_empty_body),
@@ -462,7 +462,7 @@ private fun ConflictListPane(
                 }
             }
         }
-        if (state.conflicts.isEmpty() && state.hasActiveFilter) {
+        if (state.conflicts.isEmpty() && state.hasActiveFilter && state.totalConflictCount > 0) {
             item {
                 Text(
                     text = stringResource(R.string.conflict_inbox_no_search_results),

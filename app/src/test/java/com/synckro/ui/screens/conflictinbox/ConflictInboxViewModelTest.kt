@@ -399,6 +399,15 @@ class ConflictInboxViewModelTest {
             assertEquals(listOf(2L), vm.state.value.conflicts.map { it.id })
 
             vm.enterSelectionMode(2L)
+            vm.setSearchQuery("12")
+            advanceUntilIdle()
+            assertFalse(vm.state.value.isSelectionMode)
+            assertTrue(vm.state.value.selectedIds.isEmpty())
+            assertEquals(listOf(1L), vm.state.value.conflicts.map { it.id })
+
+            vm.setSearchQuery("PHOTO")
+            advanceUntilIdle()
+            vm.enterSelectionMode(2L)
             vm.bulkKeepLocal()
             advanceUntilIdle()
             coVerify(exactly = 1) {
@@ -407,10 +416,6 @@ class ConflictInboxViewModelTest {
             coVerify(exactly = 0) {
                 conflictRepository.resolve(1L, ConflictRecord.RESOLUTION_KEEP_LOCAL)
             }
-
-            vm.setSearchQuery("12")
-            advanceUntilIdle()
-            assertEquals(listOf(1L), vm.state.value.conflicts.map { it.id })
 
             collectJob.cancel()
         }
