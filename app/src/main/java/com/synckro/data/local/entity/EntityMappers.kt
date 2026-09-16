@@ -28,6 +28,7 @@ internal fun SyncPairEntity.toDomain(needsReLink: Boolean = false): SyncPair =
         includeGlobs = includeGlobs.split('\n').filter { it.isNotBlank() },
         excludeGlobs = excludeGlobs.split('\n').filter { it.isNotBlank() },
         wifiOnly = wifiOnly,
+        avoidMeteredNetworks = avoidMeteredNetworks,
         requiresCharging = requiresCharging,
         autoSyncEnabled = autoSyncEnabled,
         scheduleIntervalMinutes = scheduleIntervalMinutes,

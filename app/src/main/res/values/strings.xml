@@ -161,6 +161,8 @@
     <string name="pair_editor_conflict_policy">Conflict resolution</string>
     <string name="pair_editor_direction">Sync direction</string>
     <string name="pair_editor_wifi_only">Sync on Wi-Fi only</string>
+    <string name="pair_editor_avoid_metered_networks">Avoid metered networks</string>
+    <string name="pair_editor_avoid_metered_networks_implied">Already enforced while Wi-Fi-only is on.</string>
     <string name="pair_editor_requires_charging">Sync only while charging</string>
     <string name="pair_editor_auto_sync">Auto-sync</string>
     <string name="pair_editor_instant_sync">Instant Sync</string>

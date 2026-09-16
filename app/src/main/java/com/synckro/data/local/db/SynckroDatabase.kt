@@ -83,7 +83,7 @@ class EnumConverters {
 
 @Database(
     entities = [AccountEntity::class, SyncPairEntity::class, FileIndexEntity::class, SyncEventEntity::class, ConflictRecordEntity::class, LocalIndexEntity::class, PendingUploadEntity::class, PairRunLeaseEntity::class],
-    version = 18,
+    version = 19,
     exportSchema = true,
 )
 @TypeConverters(EnumConverters::class)
@@ -485,6 +485,19 @@ abstract class SynckroDatabase : RoomDatabase() {
                         "ALTER TABLE `sync_pair` ADD COLUMN `excludedRelativePaths` TEXT NOT NULL DEFAULT ''",
                     )
                     db.execSQL("ALTER TABLE `local_index` ADD COLUMN `remoteContentHash` TEXT")
+                }
+            }
+
+        /**
+         * Adds `avoidMeteredNetworks` to `sync_pair` so each pair can avoid metered
+         * connections independently of the Wi-Fi-only toggle.
+         */
+        val MIGRATION_18_19 =
+            object : Migration(18, 19) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL(
+                        "ALTER TABLE `sync_pair` ADD COLUMN `avoidMeteredNetworks` INTEGER NOT NULL DEFAULT 0",
+                    )
                 }
             }
     }

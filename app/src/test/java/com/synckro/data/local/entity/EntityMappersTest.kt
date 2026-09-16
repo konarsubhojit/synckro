@@ -35,6 +35,7 @@ class EntityMappersTest {
         includeGlobs: String = "",
         excludeGlobs: String = "",
         wifiOnly: Boolean = true,
+        avoidMeteredNetworks: Boolean = false,
         requiresCharging: Boolean = false,
         autoSyncEnabled: Boolean = true,
         lastDeltaToken: String? = null,
@@ -59,6 +60,7 @@ class EntityMappersTest {
         includeGlobs = includeGlobs,
         excludeGlobs = excludeGlobs,
         wifiOnly = wifiOnly,
+        avoidMeteredNetworks = avoidMeteredNetworks,
         requiresCharging = requiresCharging,
         autoSyncEnabled = autoSyncEnabled,
         lastDeltaToken = lastDeltaToken,
@@ -184,6 +186,11 @@ class EntityMappersTest {
     @Test
     fun `toDomain maps instantSyncEnabled`() {
         assertTrue(buildEntity(instantSyncEnabled = true).toDomain().instantSyncEnabled)
+    }
+
+    @Test
+    fun `toDomain maps avoidMeteredNetworks`() {
+        assertTrue(buildEntity(avoidMeteredNetworks = true).toDomain().avoidMeteredNetworks)
     }
 
     @Test

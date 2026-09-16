@@ -37,6 +37,7 @@ data class SyncPair(
     val includeGlobs: List<String> = emptyList(),
     val excludeGlobs: List<String> = emptyList(),
     val wifiOnly: Boolean = true,
+    val avoidMeteredNetworks: Boolean = false,
     val requiresCharging: Boolean = false,
     /** Whether automatic periodic sync is enabled for this pair. When false the WorkManager
      *  periodic job is cancelled; manual "Sync now" remains available regardless. */

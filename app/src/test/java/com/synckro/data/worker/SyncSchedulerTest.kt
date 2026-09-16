@@ -61,6 +61,7 @@ class SyncSchedulerTest {
     private fun pair(
         id: Long = 1L,
         wifiOnly: Boolean = true,
+        avoidMeteredNetworks: Boolean = false,
         requiresCharging: Boolean = false,
         autoSyncEnabled: Boolean = true,
     ) = SyncPair(
@@ -72,6 +73,7 @@ class SyncSchedulerTest {
         direction = SyncDirection.BIDIRECTIONAL,
         conflictPolicy = ConflictPolicy.NEWEST_WINS,
         wifiOnly = wifiOnly,
+        avoidMeteredNetworks = avoidMeteredNetworks,
         requiresCharging = requiresCharging,
         autoSyncEnabled = autoSyncEnabled,
     )
@@ -128,7 +130,7 @@ class SyncSchedulerTest {
 
     @Test
     fun `wifiOnly false applies CONNECTED network constraint`() {
-        val p = pair(wifiOnly = false)
+        val p = pair(wifiOnly = false, avoidMeteredNetworks = false)
         scheduler.schedulePeriodic(p)
 
         val info =
@@ -137,6 +139,19 @@ class SyncSchedulerTest {
                 .get()
                 .first()
         assertEquals(NetworkType.CONNECTED, info.constraints.requiredNetworkType)
+    }
+
+    @Test
+    fun `avoidMeteredNetworks true applies UNMETERED network constraint without wifiOnly`() {
+        val p = pair(wifiOnly = false, avoidMeteredNetworks = true)
+        scheduler.schedulePeriodic(p)
+
+        val info =
+            workManager
+                .getWorkInfosForUniqueWork(SyncWorker.uniqueName(p.id))
+                .get()
+                .first()
+        assertEquals(NetworkType.UNMETERED, info.constraints.requiredNetworkType)
     }
 
     @Test
@@ -245,7 +260,7 @@ class SyncSchedulerTest {
 
     @Test
     fun `periodic and one-time requests share connected non-charging constraints`() {
-        val syncPair = pair(id = 103L, wifiOnly = false, requiresCharging = false)
+        val syncPair = pair(id = 103L, wifiOnly = false, avoidMeteredNetworks = false, requiresCharging = false)
 
         val periodic = SyncScheduler.periodicRequestFor(syncPair, SyncScheduler.MIN_PERIODIC_INTERVAL_MINUTES)
         val oneTime = SyncScheduler.oneTimeRequestFor(syncPair)
@@ -258,6 +273,17 @@ class SyncSchedulerTest {
         assertEquals(periodic.workSpec.constraints.requiresBatteryNotLow(), oneTime.workSpec.constraints.requiresBatteryNotLow())
         assertTrue(periodic.workSpec.constraints.requiresStorageNotLow())
         assertEquals(periodic.workSpec.constraints.requiresStorageNotLow(), oneTime.workSpec.constraints.requiresStorageNotLow())
+    }
+
+    @Test
+    fun `periodic and one-time requests share avoid metered network constraints`() {
+        val syncPair = pair(id = 108L, wifiOnly = false, avoidMeteredNetworks = true)
+
+        val periodic = SyncScheduler.periodicRequestFor(syncPair, SyncScheduler.MIN_PERIODIC_INTERVAL_MINUTES)
+        val oneTime = SyncScheduler.oneTimeRequestFor(syncPair)
+
+        assertEquals(NetworkType.UNMETERED, periodic.workSpec.constraints.requiredNetworkType)
+        assertEquals(periodic.workSpec.constraints.requiredNetworkType, oneTime.workSpec.constraints.requiredNetworkType)
     }
 
     @Test
@@ -358,6 +384,18 @@ class SyncSchedulerTest {
         assertFalse(instant.workSpec.constraints.requiresBatteryNotLow())
         assertEquals(periodic.workSpec.backoffPolicy, instant.workSpec.backoffPolicy)
         assertEquals(periodic.workSpec.backoffDelayDuration, instant.workSpec.backoffDelayDuration)
+    }
+
+    @Test
+    fun `instant request shares avoid metered network policy`() {
+        val syncPair = pair(id = 109L, wifiOnly = false, avoidMeteredNetworks = true)
+
+        val expeditedConstraints = SyncScheduler.expeditedConstraintsFor(syncPair)
+        val instant = SyncScheduler.instantRequestFor(syncPair)
+
+        assertEquals(NetworkType.UNMETERED, expeditedConstraints.requiredNetworkType)
+        assertEquals(NetworkType.UNMETERED, instant.workSpec.constraints.requiredNetworkType)
+        assertTrue(instant.workSpec.expedited)
     }
 
     // -------------------------------------------------------------------------

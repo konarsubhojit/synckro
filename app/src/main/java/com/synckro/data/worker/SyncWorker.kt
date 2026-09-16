@@ -1234,7 +1234,8 @@ class SyncScheduler(
      * pair's unique name and will replace any existing schedule.
      *
      * Constraints applied:
-     * - Network: UNMETERED (Wi-Fi) when [SyncPair.wifiOnly] is true, otherwise CONNECTED.
+     * - Network: UNMETERED when [SyncPair.wifiOnly] or [SyncPair.avoidMeteredNetworks]
+     *   is true, otherwise CONNECTED.
      * - Charging: required when [SyncPair.requiresCharging] is true.
      * - Battery-not-low: always required so Doze mode does not starve the worker on API 31+.
      * - Storage-not-low: always required to avoid filling the device.
@@ -1378,7 +1379,13 @@ class SyncScheduler(
         private fun baseConstraintsBuilderFor(pair: SyncPair): Constraints.Builder =
             Constraints
                 .Builder()
-                .setRequiredNetworkType(if (pair.wifiOnly) NetworkType.UNMETERED else NetworkType.CONNECTED)
+                .setRequiredNetworkType(
+                    if (pair.wifiOnly || pair.avoidMeteredNetworks) {
+                        NetworkType.UNMETERED
+                    } else {
+                        NetworkType.CONNECTED
+                    },
+                )
                 .setRequiresStorageNotLow(true)
 
         /** Builds the one-shot "Sync now" request with the shared sync policy. */

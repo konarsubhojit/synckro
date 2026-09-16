@@ -88,6 +88,8 @@ data class SyncPairEntity(
      * Empty means nothing is excluded.
      */
     val excludedRelativePaths: String = "",
+    /** Independent metered-network opt-out; existing rows default to false. */
+    val avoidMeteredNetworks: Boolean = false,
 )
 
 @Entity(
