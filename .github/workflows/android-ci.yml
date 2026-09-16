@@ -125,6 +125,9 @@ jobs:
           echo "MSAL_REDIRECT_URI_DEBUG=$DEBUG_URI" >> "$GITHUB_ENV"
           echo "MSAL_REDIRECT_URI_RELEASE=$RELEASE_URI" >> "$GITHUB_ENV"
 
+      - name: Run ktlintCheck
+        run: ./gradlew ktlintCheck --no-daemon --console=plain
+
       - name: Run unit tests, lint, and assemble debug APK
         env:
           GOOGLE_WEB_CLIENT_ID: ${{ secrets.GOOGLE_WEB_CLIENT_ID }}
