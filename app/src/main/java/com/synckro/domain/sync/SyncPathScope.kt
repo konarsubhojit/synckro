@@ -115,23 +115,39 @@ class SyncPathScope internal constructor(
             }
 
         /**
+         * Normalizes a raw excluded-folder path by trimming whitespace and any
+         * leading/trailing `/`, returning `null` for blank entries so callers can
+         * filter them out with [List.mapNotNull].
+         */
+        private fun normalizeExcludedFolder(raw: String): String? = raw.trim().trim('/').takeIf { it.isNotEmpty() }
+
+        /**
+         * Normalizes every entry in [excludedRelativePaths] (see
+         * [normalizeExcludedFolder]), dropping blank entries. Callers that check many
+         * paths against the same exclusion set (e.g. [compile] or
+         * [SyncEngine.scopeFiltersFor]) should normalize once and reuse the result via
+         * [isExcludedByFolder] rather than re-normalizing per path.
+         */
+        internal fun normalizeExcludedFolders(excludedRelativePaths: List<String>): List<String> =
+            excludedRelativePaths.mapNotNull(::normalizeExcludedFolder)
+
+        /**
          * Returns `true` when [relativePath] exactly matches, or is nested under, one
-         * of the folder paths in [excludedRelativePaths]. Entries are normalized by
-         * trimming whitespace and leading/trailing `/` before comparison, and blank
-         * entries are ignored. Matching is by path segment (via a `/` boundary) so
-         * an excluded path like `"Photos/Private"` also excludes
-         * `"Photos/Private/img.jpg"` but not an unrelated sibling like
-         * `"Photos/PrivateNotes"`.
+         * of the folder paths in [normalizedExcludedRelativePaths]. Matching is by
+         * path segment (via a `/` boundary) so an excluded path like
+         * `"Photos/Private"` also excludes `"Photos/Private/img.jpg"` but not an
+         * unrelated sibling like `"Photos/PrivateNotes"`.
+         *
+         * @param normalizedExcludedRelativePaths Must already be normalized via
+         *   [normalizeExcludedFolders] (or [compile], which normalizes internally).
          */
         internal fun isExcludedByFolder(
             relativePath: String,
-            excludedRelativePaths: List<String>,
+            normalizedExcludedRelativePaths: List<String>,
         ): Boolean {
-            if (excludedRelativePaths.isEmpty()) return false
-            return excludedRelativePaths.any { raw ->
-                val normalized = raw.trim().trim('/')
-                normalized.isNotEmpty() &&
-                    (relativePath == normalized || relativePath.startsWith("$normalized/"))
+            if (normalizedExcludedRelativePaths.isEmpty()) return false
+            return normalizedExcludedRelativePaths.any { normalized ->
+                relativePath == normalized || relativePath.startsWith("$normalized/")
             }
         }
 
@@ -143,10 +159,7 @@ class SyncPathScope internal constructor(
          * glob-based ignore lists rather than [SyncPathScope]'s folder-prefix check.
          */
         internal fun excludedFolderIgnoreGlobs(excludedRelativePaths: List<String>): List<String> =
-            excludedRelativePaths.mapNotNull { raw ->
-                val normalized = raw.trim().trim('/')
-                if (normalized.isEmpty()) null else "${escapeGlobLiteral(normalized)}/**"
-            }
+            normalizeExcludedFolders(excludedRelativePaths).map { "${escapeGlobLiteral(it)}/**" }
 
         /**
          * Single-shot scope check for one relative file path. For batches, call
@@ -177,7 +190,7 @@ class SyncPathScope internal constructor(
                 ignoreGlobs = ignoreGlobs.mapNotNull { runCatching { globToRegex(it) }.getOrNull() },
                 includeFilterActive = includeGlobs.isNotEmpty(),
                 excludeSubfolders = excludeSubfolders,
-                excludedRelativePaths = excludedRelativePaths,
+                excludedRelativePaths = normalizeExcludedFolders(excludedRelativePaths),
             )
     }
 }
