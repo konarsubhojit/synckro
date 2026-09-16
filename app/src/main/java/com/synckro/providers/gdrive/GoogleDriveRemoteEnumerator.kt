@@ -128,6 +128,7 @@ class GoogleDriveRemoteEnumerator
                             remoteId = file.id,
                             sizeBytes = file.size?.toLongOrNull(),
                             mtimeMs = file.modifiedTime?.let { parseIso8601(it) },
+                            // Drive md5Checksum is both the content hash and the persisted remote fingerprint.
                             etag = file.md5Checksum,
                             contentHash = file.md5Checksum,
                         )
@@ -231,6 +232,7 @@ internal fun DriveChange.toRemoteChange(pathCache: Map<String, String> = emptyMa
         remoteId = id,
         sizeBytes = f.size?.toLongOrNull(),
         mtimeMs = f.modifiedTime?.let { parseIso8601(it) },
+        // Drive md5Checksum is both the content hash and the persisted remote fingerprint.
         etag = f.md5Checksum,
         contentHash = f.md5Checksum,
         isFolder = f.mimeType == FOLDER_MIME_TYPE,
