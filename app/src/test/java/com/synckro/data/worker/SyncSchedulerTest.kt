@@ -363,7 +363,7 @@ class SyncSchedulerTest {
 
     @Test
     fun `instant request is expedited with quota fallback and shared policy`() {
-        val syncPair = pair(id = 106L, wifiOnly = false, avoidMeteredNetworks = true, requiresCharging = true)
+        val syncPair = pair(id = 106L, wifiOnly = true, requiresCharging = true)
 
         val periodic = SyncScheduler.periodicRequestFor(syncPair, SyncScheduler.MIN_PERIODIC_INTERVAL_MINUTES)
         val expeditedConstraints = SyncScheduler.expeditedConstraintsFor(syncPair)
@@ -384,6 +384,18 @@ class SyncSchedulerTest {
         assertFalse(instant.workSpec.constraints.requiresBatteryNotLow())
         assertEquals(periodic.workSpec.backoffPolicy, instant.workSpec.backoffPolicy)
         assertEquals(periodic.workSpec.backoffDelayDuration, instant.workSpec.backoffDelayDuration)
+    }
+
+    @Test
+    fun `instant request shares avoid metered network policy`() {
+        val syncPair = pair(id = 109L, wifiOnly = false, avoidMeteredNetworks = true)
+
+        val expeditedConstraints = SyncScheduler.expeditedConstraintsFor(syncPair)
+        val instant = SyncScheduler.instantRequestFor(syncPair)
+
+        assertEquals(NetworkType.UNMETERED, expeditedConstraints.requiredNetworkType)
+        assertEquals(NetworkType.UNMETERED, instant.workSpec.constraints.requiredNetworkType)
+        assertTrue(instant.workSpec.expedited)
     }
 
     // -------------------------------------------------------------------------

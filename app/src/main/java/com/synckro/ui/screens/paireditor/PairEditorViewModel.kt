@@ -343,6 +343,12 @@ class PairEditorViewModel
                         else -> null
                     }
 
+            val effectiveAvoidMeteredNetworks: Boolean
+                get() = wifiOnly || avoidMeteredNetworks
+
+            val canEditAvoidMeteredNetworks: Boolean
+                get() = !wifiOnly
+
             /** Parses [customIntervalText] as a non-negative Long, or 0 if the text is blank/invalid. */
             private val parsedCustomInterval: Long
                 get() = customIntervalText.trim().toLongOrNull() ?: 0L

@@ -464,13 +464,27 @@ fun PairEditorScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(
-                        text = stringResource(R.string.pair_editor_avoid_metered_networks),
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
+                    Column(
+                        modifier =
+                            Modifier
+                                .weight(1f)
+                                .padding(end = 16.dp),
+                    ) {
+                        Text(
+                            text = stringResource(R.string.pair_editor_avoid_metered_networks),
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        if (state.wifiOnly) {
+                            Text(
+                                text = stringResource(R.string.pair_editor_avoid_metered_networks_implied),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
                     Switch(
-                        checked = state.wifiOnly || state.avoidMeteredNetworks,
-                        enabled = !state.wifiOnly,
+                        checked = state.effectiveAvoidMeteredNetworks,
+                        enabled = state.canEditAvoidMeteredNetworks,
                         onCheckedChange = viewModel::onAvoidMeteredNetworksChange,
                     )
                 }

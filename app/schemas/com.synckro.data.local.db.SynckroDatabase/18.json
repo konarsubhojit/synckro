@@ -50,7 +50,7 @@
       },
       {
         "tableName": "sync_pair",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `displayName` TEXT NOT NULL, `localTreeUri` TEXT NOT NULL, `provider` TEXT NOT NULL, `accountId` TEXT, `remoteFolderId` TEXT NOT NULL, `remoteFolderName` TEXT, `direction` TEXT NOT NULL, `conflictPolicy` TEXT NOT NULL, `includeGlobs` TEXT NOT NULL, `excludeGlobs` TEXT NOT NULL, `wifiOnly` INTEGER NOT NULL, `requiresCharging` INTEGER NOT NULL, `avoidMeteredNetworks` INTEGER NOT NULL, `autoSyncEnabled` INTEGER NOT NULL, `lastDeltaToken` TEXT, `lastSyncAtMs` INTEGER, `lastSyncResult` TEXT, `scheduleIntervalMinutes` INTEGER NOT NULL, `lastFullScanAtMs` INTEGER, `retentionDays` INTEGER, `excludeSubfolders` INTEGER NOT NULL, `excludeEmptyFolders` INTEGER NOT NULL, `localStorageLimitBytes` INTEGER, `instantSyncEnabled` INTEGER NOT NULL)",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `displayName` TEXT NOT NULL, `localTreeUri` TEXT NOT NULL, `provider` TEXT NOT NULL, `accountId` TEXT, `remoteFolderId` TEXT NOT NULL, `remoteFolderName` TEXT, `direction` TEXT NOT NULL, `conflictPolicy` TEXT NOT NULL, `includeGlobs` TEXT NOT NULL, `excludeGlobs` TEXT NOT NULL, `wifiOnly` INTEGER NOT NULL, `requiresCharging` INTEGER NOT NULL, `autoSyncEnabled` INTEGER NOT NULL, `lastDeltaToken` TEXT, `lastSyncAtMs` INTEGER, `lastSyncResult` TEXT, `scheduleIntervalMinutes` INTEGER NOT NULL, `lastFullScanAtMs` INTEGER, `retentionDays` INTEGER, `excludeSubfolders` INTEGER NOT NULL, `excludeEmptyFolders` INTEGER NOT NULL, `localStorageLimitBytes` INTEGER, `instantSyncEnabled` INTEGER NOT NULL, `avoidMeteredNetworks` INTEGER NOT NULL)",
         "fields": [
           {
             "fieldPath": "id",
@@ -131,12 +131,6 @@
             "notNull": true
           },
           {
-            "fieldPath": "avoidMeteredNetworks",
-            "columnName": "avoidMeteredNetworks",
-            "affinity": "INTEGER",
-            "notNull": true
-          },
-          {
             "fieldPath": "autoSyncEnabled",
             "columnName": "autoSyncEnabled",
             "affinity": "INTEGER",
@@ -199,6 +193,12 @@
           {
             "fieldPath": "instantSyncEnabled",
             "columnName": "instantSyncEnabled",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "avoidMeteredNetworks",
+            "columnName": "avoidMeteredNetworks",
             "affinity": "INTEGER",
             "notNull": true
           }

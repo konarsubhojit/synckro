@@ -564,6 +564,32 @@ class PairEditorViewModelTest {
         }
 
     @Test
+    fun `wifiOnly derives avoid metered without persisting avoidMeteredNetworks`() =
+        runTest {
+            coEvery { mockRepo.upsert(any()) } returns 42L
+
+            val vm = createVmWithFolder()
+            vm.onDisplayNameChange("Test Pair")
+            vm.onRemoteFolderPicked("remote-id", "Remote")
+            advanceUntilIdle()
+            vm.onAccountChange("test-account")
+
+            assertTrue(vm.state.value.wifiOnly)
+            assertFalse(vm.state.value.avoidMeteredNetworks)
+            assertTrue(vm.state.value.effectiveAvoidMeteredNetworks)
+            assertFalse(vm.state.value.canEditAvoidMeteredNetworks)
+
+            vm.save {}
+            advanceUntilIdle()
+
+            coVerify {
+                mockRepo.upsert(
+                    match { it.wifiOnly && !it.avoidMeteredNetworks },
+                )
+            }
+        }
+
+    @Test
     fun `save with instantSyncEnabled unchanged false does not cancel instant work`() =
         runTest {
             coEvery { mockRepo.upsert(any()) } returns 42L
