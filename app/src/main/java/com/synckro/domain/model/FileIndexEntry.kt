@@ -14,6 +14,8 @@ data class FileIndexEntry(
     val remoteId: String? = null,
     /** Provider-specific opaque version tag (ETag / cTag). */
     val remoteETag: String? = null,
+    /** Provider content hash from the last successful sync (quickXorHash / md5Checksum). */
+    val remoteContentHash: String? = null,
     val remoteSize: Long? = null,
     val remoteLastModifiedMs: Long? = null,
     /** MIME type of the local file (e.g. "text/plain", "image/jpeg"). Null for directories. */

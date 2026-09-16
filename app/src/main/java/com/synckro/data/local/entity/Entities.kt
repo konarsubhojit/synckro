@@ -82,6 +82,12 @@ data class SyncPairEntity(
     val localStorageLimitBytes: Long? = null,
     /** Whether local changes may trigger Instant Sync for this pair. */
     val instantSyncEnabled: Boolean = false,
+    /**
+     * Newline-separated relative folder paths excluded from this pair's sync
+     * scope, using the same storage convention as [includeGlobs]/[excludeGlobs].
+     * Empty means nothing is excluded.
+     */
+    val excludedRelativePaths: String = "",
     /** Independent metered-network opt-out; existing rows default to false. */
     val avoidMeteredNetworks: Boolean = false,
 )
@@ -161,7 +167,7 @@ data class FileIndexEntity(
  * Rows are removed automatically (CASCADE) when the parent [SyncPairEntity] is
  * deleted.
  *
- * Remote metadata fields ([remoteSizeBytes], [remoteMtimeMs], [remoteEtag]) are
+ * Remote metadata fields ([remoteSizeBytes], [remoteMtimeMs], [remoteEtag], [remoteContentHash]) are
  * populated after each successful sync operation by [com.synckro.domain.sync.SyncOpApplier].
  * They allow [com.synckro.domain.sync.SyncDiffer] to distinguish a genuine
  * remote change from an echo of a locally-initiated upload in the provider's change log.
@@ -191,8 +197,10 @@ data class LocalIndexEntity(
     val remoteSizeBytes: Long? = null,
     /** Remote last-modified timestamp (epoch ms) from the last successful sync. */
     val remoteMtimeMs: Long? = null,
-    /** Provider content fingerprint (ETag / md5Checksum) from the last successful sync. */
+    /** Provider-specific opaque version tag (ETag / cTag) from the last successful sync. */
     val remoteEtag: String? = null,
+    /** Provider content hash (quickXorHash / md5Checksum) from the last successful sync. */
+    val remoteContentHash: String? = null,
 )
 
 @Entity(

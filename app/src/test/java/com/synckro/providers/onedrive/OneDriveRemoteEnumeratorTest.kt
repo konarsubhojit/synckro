@@ -91,10 +91,13 @@ class OneDriveRemoteEnumeratorTest {
                               "id": "file-1",
                               "name": "notes.txt",
                               "parentReference": {"id": "root-id"},
-                              "file": {"mimeType": "text/plain"},
+                              "file": {
+                                "mimeType": "text/plain",
+                                "hashes": {"quickXorHash": "quick-xor-1"}
+                              },
                               "size": 1024,
                               "lastModifiedDateTime": "2024-03-15T10:00:00Z",
-                              "eTag": "\"abc123\""
+                              "eTag": "\"version-etag-1\""
                             },
                             {
                               "id": "file-deleted",
@@ -118,7 +121,8 @@ class OneDriveRemoteEnumeratorTest {
             assertEquals("file-1", modify.remoteId)
             assertEquals("notes.txt", modify.relativePath)
             assertEquals(1024L, modify.sizeBytes)
-            assertEquals("abc123", modify.etag) // surrounding quotes stripped
+            assertEquals("version-etag-1", modify.etag) // surrounding quotes stripped
+            assertEquals("quick-xor-1", modify.contentHash)
             assertEquals(
                 java.time.Instant.parse("2024-03-15T10:00:00Z").toEpochMilli(),
                 modify.mtimeMs,

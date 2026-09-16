@@ -380,9 +380,9 @@ object SyncDiffer {
         snap: FileSnapshot,
         idx: FileIndexEntry,
     ): Boolean {
-        // Prefer the provider fingerprint when available so metadata-only changes
+        // Prefer the provider content hash when available so metadata-only changes
         // (such as renames that preserve content) do not force a transfer.
-        if (snap.hash != null && idx.remoteETag != null) return snap.hash != idx.remoteETag
+        if (snap.hash != null && idx.remoteContentHash != null) return snap.hash != idx.remoteContentHash
         // For the remote side we compare against the remote columns of the index.
         val idxSize = idx.remoteSize ?: return true
         val idxMtime = idx.remoteLastModifiedMs ?: return true

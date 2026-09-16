@@ -126,11 +126,11 @@ class MigrationTest {
     }
 
     // -------------------------------------------------------------------------
-    // MIGRATION_17_18 – metered network policy
+    // MIGRATION_17_18 – excluded relative paths and remote content hashes
     // -------------------------------------------------------------------------
 
     @Test
-    fun `MIGRATION_17_18 adds avoidMeteredNetworks disabled by default`() {
+    fun `MIGRATION_17_18 adds excludedRelativePaths and remoteContentHash columns`() {
         insertSyncPair(db)
         migrateV6To15(db)
         SynckroDatabase.MIGRATION_15_16.migrate(db)
@@ -138,6 +138,33 @@ class MigrationTest {
         val pairId = firstPairId(db)
 
         SynckroDatabase.MIGRATION_17_18.migrate(db)
+
+        assertTrue(
+            "excludedRelativePaths column must exist in sync_pair after migration",
+            "excludedRelativePaths" in columnNames(db, "sync_pair"),
+        )
+        assertEquals(
+            "",
+            stringAt(db, "SELECT excludedRelativePaths FROM sync_pair WHERE id = $pairId"),
+        )
+        assertEquals("Migration Test", stringAt(db, "SELECT displayName FROM sync_pair WHERE id = $pairId"))
+        assertTrue("remoteContentHash" in columnNames(db, "local_index"))
+    }
+
+    // -------------------------------------------------------------------------
+    // MIGRATION_18_19 – metered network policy
+    // -------------------------------------------------------------------------
+
+    @Test
+    fun `MIGRATION_18_19 adds avoidMeteredNetworks disabled by default`() {
+        insertSyncPair(db)
+        migrateV6To15(db)
+        SynckroDatabase.MIGRATION_15_16.migrate(db)
+        SynckroDatabase.MIGRATION_16_17.migrate(db)
+        SynckroDatabase.MIGRATION_17_18.migrate(db)
+        val pairId = firstPairId(db)
+
+        SynckroDatabase.MIGRATION_18_19.migrate(db)
 
         assertTrue("avoidMeteredNetworks" in columnNames(db, "sync_pair"))
         assertEquals(0L, longAt(db, "SELECT avoidMeteredNetworks FROM sync_pair WHERE id = $pairId"))

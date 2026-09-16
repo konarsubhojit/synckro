@@ -28,6 +28,14 @@ internal data class GraphParentReference(
 @Serializable
 internal data class GraphFileInfo(
     val mimeType: String? = null,
+    /** OneDrive content hashes; quickXorHash is the stable content fingerprint, unlike eTag. */
+    val hashes: GraphFileHashes? = null,
+)
+
+/** Hash values nested under Graph's driveItem.file facet. */
+@Serializable
+internal data class GraphFileHashes(
+    val quickXorHash: String? = null,
 )
 
 @Serializable

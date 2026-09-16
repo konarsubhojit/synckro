@@ -279,6 +279,7 @@ class LocalFsEnumerator internal constructor(
                         remoteSizeBytes = existing?.remoteSizeBytes,
                         remoteMtimeMs = existing?.remoteMtimeMs,
                         remoteEtag = existing?.remoteEtag,
+                        remoteContentHash = existing?.remoteContentHash,
                     )
                 }
         localIndexDao.reconcileForPair(pairId, toUpsert, snapshotPaths.toList())

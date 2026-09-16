@@ -16,6 +16,23 @@ data class StorageQuota(
 /**
  * Provider-agnostic view of a remote file or folder. Fields that are not
  * available on a given provider should be left null rather than faked.
+ *
+ * ### `eTag` vs `contentHash`
+ * These two fields serve different purposes and MUST NOT be assumed
+ * interchangeable by callers:
+ * - [eTag] is an **opaque version tag**. It changes whenever the item's
+ *   metadata or content changes, but it is not guaranteed to be derived from
+ *   file content, is not guaranteed to be stable across renames/moves, and
+ *   MUST NOT be compared across providers or persisted as a content
+ *   fingerprint. Treat it purely as a cheap "has this item changed since I
+ *   last saw it" signal for the provider that issued it.
+ * - [contentHash] is populated **only** when the provider can supply a hash
+ *   computed from the file's bytes (e.g. Google Drive's `md5Checksum`). When
+ *   a provider cannot cheaply provide a true content hash it MUST leave this
+ *   `null` rather than substituting a version tag. Callers that need to
+ *   detect actual content equality (independent of metadata-only changes)
+ *   should use [contentHash] and treat `null` as "unknown" rather than
+ *   "unchanged".
  */
 data class RemoteFile(
     val id: String,
@@ -26,6 +43,7 @@ data class RemoteFile(
     val lastModifiedMs: Long?,
     val eTag: String?,
     val mimeType: String?,
+    val contentHash: String? = null,
 )
 
 /**
@@ -155,6 +173,15 @@ interface CloudProvider {
      * Requests incremental change events from the provider since the given token.
      *
      * Pass `null` on the first call to obtain an initial token without retrieving past changes.
+     *
+     * ### Token contract
+     * [token] and [ChangesPage.nextToken] are **opaque, provider-defined strings**.
+     * Callers MUST treat them as an opaque blob: store and pass back exactly what
+     * [changesSince] returned, and MUST NOT parse them, assume a particular format
+     * (e.g. an integer index, a page URL, or a Drive `pageToken`), or construct one
+     * by hand. The only guarantee is that a token returned by one call will
+     * "round-trip" correctly when passed back into a later call on the same
+     * provider/account to resume from where it left off.
      *
      * @param token Paging token returned by a previous call, or `null` to obtain an initial token.
      * @return A ChangesPage containing the list of changes, a token for the next page, and a flag indicating whether more pages exist.
