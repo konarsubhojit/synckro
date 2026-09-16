@@ -129,7 +129,24 @@ class PairDetailViewModel
         // rather than throwing or padding with stale data.
         private val statsFlow =
             syncEventRepository.observeForPair(pairId, STATS_EVENT_LIMIT)
-                .map { events -> aggregatePairStats(events, STATS_WINDOW) }
+                .map { events ->
+                    val stats = aggregatePairStats(events, STATS_WINDOW)
+                    // Only log when the fetch itself was truncated (fetched rows ==
+                    // the limit) — that's the only case where under-filling could be
+                    // a truncation artifact rather than the pair simply not having
+                    // STATS_WINDOW terminal runs in its whole history yet.
+                    if (stats.runsConsidered < STATS_WINDOW && events.size >= STATS_EVENT_LIMIT) {
+                        Timber.d(
+                            "PairDetailViewModel: pair %d stats window under-filled (%d/%d terminal runs " +
+                                "found in %d fetched rows) — consider raising STATS_EVENT_LIMIT_MULTIPLIER",
+                            pairId,
+                            stats.runsConsidered,
+                            STATS_WINDOW,
+                            STATS_EVENT_LIMIT,
+                        )
+                    }
+                    stats
+                }
 
         val state: StateFlow<UiState> =
             combine(
