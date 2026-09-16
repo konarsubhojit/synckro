@@ -1,8 +1,9 @@
 # Self-hosted CI runner
 
 The Android CI workflow routes pushes to `master` and manual dispatches to the
-self-hosted runner labeled `self-hosted`, `Linux`, `X64`, and
-`android-builder`. Pull request builds always run on `ubuntu-latest`.
+self-hosted runner matched by `self-hosted` and `android-builder`. The runner
+also has the `Linux` and `X64` labels. Pull request builds always run on
+`ubuntu-latest`.
 
 ## Provisioning
 
