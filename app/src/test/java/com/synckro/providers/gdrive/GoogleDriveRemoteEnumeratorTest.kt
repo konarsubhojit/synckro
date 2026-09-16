@@ -125,6 +125,7 @@ class GoogleDriveRemoteEnumeratorTest {
             assertEquals("notes.txt", modify.relativePath)
             assertEquals(512L, modify.sizeBytes)
             assertEquals("md5-1", modify.etag)
+            assertEquals("md5-1", modify.contentHash)
             assertEquals(
                 java.time.Instant.parse("2024-01-01T00:00:00Z").toEpochMilli(),
                 modify.mtimeMs,

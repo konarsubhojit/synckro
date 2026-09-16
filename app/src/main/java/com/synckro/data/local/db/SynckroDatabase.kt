@@ -475,10 +475,8 @@ abstract class SynckroDatabase : RoomDatabase() {
             }
 
         /**
-         * Adds `excludedRelativePaths` (newline-separated TEXT) to `sync_pair`,
-         * holding the relative folder paths the user excluded from the pair's
-         * sync scope. Existing rows receive an empty string, preserving the
-         * prior behaviour where nothing is excluded.
+         * Adds `excludedRelativePaths` (newline-separated TEXT) to `sync_pair`
+         * and a separate remote content-hash column to `local_index`.
          */
         val MIGRATION_17_18 =
             object : Migration(17, 18) {
@@ -486,6 +484,7 @@ abstract class SynckroDatabase : RoomDatabase() {
                     db.execSQL(
                         "ALTER TABLE `sync_pair` ADD COLUMN `excludedRelativePaths` TEXT NOT NULL DEFAULT ''",
                     )
+                    db.execSQL("ALTER TABLE `local_index` ADD COLUMN `remoteContentHash` TEXT")
                 }
             }
     }

@@ -190,6 +190,7 @@ internal class TargetedLocalFileResolver(
                 remoteSizeBytes = cached?.remoteSizeBytes,
                 remoteMtimeMs = cached?.remoteMtimeMs,
                 remoteEtag = cached?.remoteEtag,
+                remoteContentHash = cached?.remoteContentHash,
             ),
         )
     }

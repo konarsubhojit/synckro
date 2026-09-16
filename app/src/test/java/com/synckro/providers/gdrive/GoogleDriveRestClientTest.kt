@@ -596,6 +596,7 @@ class GoogleDriveRestClientTest {
         val file = DriveFile(id = "x", name = "x.bin", md5Checksum = "abc123")
         val remote = file.toRemoteFile()
         assertEquals("abc123", remote.eTag)
+        assertEquals("abc123", remote.contentHash)
     }
 
     @Test

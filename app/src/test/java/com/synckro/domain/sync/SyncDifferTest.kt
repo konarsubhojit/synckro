@@ -24,6 +24,7 @@ class SyncDifferTest {
         remoteSize: Long? = size,
         remoteMtime: Long? = mtime,
         remoteId: String? = null,
+        remoteContentHash: String? = hash,
     ) = FileIndexEntry(
         pairId = 1,
         relativePath = path,
@@ -31,6 +32,7 @@ class SyncDifferTest {
         localLastModifiedMs = mtime,
         localHash = hash,
         remoteETag = hash,
+        remoteContentHash = remoteContentHash,
         remoteSize = remoteSize,
         remoteLastModifiedMs = remoteMtime,
         remoteId = remoteId,
@@ -405,6 +407,34 @@ class SyncDifferTest {
             )
 
         assertEquals(listOf<SyncOp>(SyncOp.UpdateRemote("a.txt")), ops)
+    }
+
+    @Test
+    fun `different remote hash triggers remote change detection when size and mtime match`() {
+        val ops =
+            SyncDiffer.diff(
+                local = listOf(snap("a.txt", size = 10, mtime = 1_000)),
+                remote = listOf(snap("a.txt", size = 10, mtime = 1_000, hash = "new-quick-xor")),
+                lastIndex = listOf(idx("a.txt", size = 10, mtime = 1_000, hash = "old-quick-xor")),
+                direction = SyncDirection.BIDIRECTIONAL,
+                conflictPolicy = ConflictPolicy.NEWEST_WINS,
+            )
+
+        assertEquals(listOf<SyncOp>(SyncOp.UpdateLocal("a.txt")), ops)
+    }
+
+    @Test
+    fun `matching remote hash suppresses remote change detection when mtime differs`() {
+        val ops =
+            SyncDiffer.diff(
+                local = listOf(snap("a.txt", size = 10, mtime = 1_000)),
+                remote = listOf(snap("a.txt", size = 10, mtime = 9_000, hash = "same-quick-xor")),
+                lastIndex = listOf(idx("a.txt", size = 10, mtime = 1_000, hash = "same-quick-xor")),
+                direction = SyncDirection.BIDIRECTIONAL,
+                conflictPolicy = ConflictPolicy.NEWEST_WINS,
+            )
+
+        assertTrue(ops.isEmpty())
     }
 
     @Test

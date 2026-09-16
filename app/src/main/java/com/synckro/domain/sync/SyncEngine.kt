@@ -669,7 +669,7 @@ class SyncEngine(
                     relativePath = idx.relativePath,
                     size = remoteSize,
                     lastModifiedMs = remoteMtime,
-                    hash = idx.remoteEtag,
+                    hash = idx.remoteContentHash,
                     stableId = idx.remoteId,
                 )
         }
@@ -720,7 +720,7 @@ class SyncEngine(
                                 relativePath = change.relativePath,
                                 size = resolvedSize,
                                 lastModifiedMs = resolvedMtime,
-                                hash = change.etag,
+                                hash = change.contentHash,
                                 stableId = change.remoteId,
                             )
                     } else if (isRename && baseline != null) {
@@ -858,6 +858,7 @@ class SyncEngine(
                                 isFolder = false,
                                 size = change.sizeBytes,
                                 lastModifiedMs = change.mtimeMs,
+                                contentHash = change.contentHash,
                                 eTag = change.etag,
                                 mimeType = null,
                             )
@@ -997,6 +998,7 @@ class SyncEngine(
                             isFolder = false,
                             size = indexEntry.remoteSizeBytes,
                             lastModifiedMs = indexEntry.remoteMtimeMs,
+                            contentHash = indexEntry.remoteContentHash,
                             eTag = indexEntry.remoteEtag,
                             mimeType = null,
                         )
@@ -1229,6 +1231,7 @@ class SyncEngine(
             val remoteId: String,
             val snapshot: FileSnapshot,
             val etag: String?,
+            val contentHash: String?,
         )
 
         /**
@@ -1245,6 +1248,7 @@ class SyncEngine(
                 localHash = contentHash,
                 remoteId = remoteId,
                 remoteETag = remoteEtag,
+                remoteContentHash = remoteContentHash,
                 remoteSize = remoteSizeBytes,
                 remoteLastModifiedMs = remoteMtimeMs,
             )
@@ -1269,7 +1273,8 @@ class SyncEngine(
                             ColdStartRemoteState(
                                 remoteId = remoteId,
                                 snapshot = snapshot,
-                                etag = change.etag ?: snapshot.hash,
+                                etag = change.etag,
+                                contentHash = change.contentHash ?: snapshot.hash,
                             ),
                         )
                     }
@@ -1291,6 +1296,7 @@ class SyncEngine(
                         remoteSizeBytes = remote.snapshot.size,
                         remoteMtimeMs = remote.snapshot.lastModifiedMs,
                         remoteEtag = remote.etag,
+                        remoteContentHash = remote.contentHash,
                     )
                 linkedEntriesByPath[local.relativePath] = linkedEntry
                 if (coldStartSnapshotsEquivalent(local, remote.snapshot)) {

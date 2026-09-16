@@ -20,7 +20,7 @@ import java.util.concurrent.ConcurrentHashMap
  * As a reference implementation for future provider test-writers, this fake
  * demonstrates the `CloudProvider` content-hash contract: [RemoteFile.eTag] is
  * an opaque version tag that changes on every write (even if the content is
- * unchanged), while [RemoteFile.contentHash] is a true content hash (MD5 of
+ * unchanged), while [RemoteFile.contentHash] is a true content hash (SHA-256 of
  * the stored bytes) that only changes when the bytes actually change.
  */
 class FakeCloudProvider : CloudProvider {
@@ -30,6 +30,12 @@ class FakeCloudProvider : CloudProvider {
         val meta: RemoteFile,
         val bytes: ByteArray,
     )
+
+    private fun ByteArray.sha256Hex(): String =
+        MessageDigest
+            .getInstance("SHA-256")
+            .digest(this)
+            .joinToString(separator = "") { "%02x".format(it) }
 
     private val store = ConcurrentHashMap<String, Record>()
     private val changeLog = mutableListOf<RemoteChange>()
@@ -150,7 +156,7 @@ class FakeCloudProvider : CloudProvider {
                     lastModifiedMs = System.currentTimeMillis(),
                     eTag = UUID.randomUUID().toString(),
                     mimeType = mimeType,
-                    contentHash = contentHashOf(bytes),
+                    contentHash = bytes.sha256Hex(),
                 )
             store[meta.id] = Record(meta, bytes)
             changeLog += RemoteChange(file = meta, removedId = null)
@@ -188,7 +194,7 @@ class FakeCloudProvider : CloudProvider {
                     lastModifiedMs = System.currentTimeMillis(),
                     eTag = UUID.randomUUID().toString(),
                     mimeType = mimeType ?: existing.meta.mimeType,
-                    contentHash = contentHashOf(bytes),
+                    contentHash = bytes.sha256Hex(),
                 )
             store[id] = Record(meta, bytes)
             changeLog += RemoteChange(file = meta, removedId = null)
@@ -309,14 +315,4 @@ class FakeCloudProvider : CloudProvider {
                 hasMore = false,
             )
         }
-
-    /**
-     * Computes a true content hash for [bytes], used to populate [RemoteFile.contentHash].
-     *
-     * Unlike [RemoteFile.eTag] (a version tag regenerated on every write), this is a
-     * deterministic digest of the actual bytes: uploading identical content twice yields
-     * the same [contentHashOf] result even though each upload gets a distinct `eTag`.
-     */
-    private fun contentHashOf(bytes: ByteArray): String =
-        MessageDigest.getInstance("MD5").digest(bytes).joinToString("") { "%02x".format(it) }
 }

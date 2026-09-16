@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 18,
-    "identityHash": "97697cd9981b7e66125e93ee075c0087",
+    "identityHash": "907af0bf8e8c635ddad085134bc4ef2a",
     "entities": [
       {
         "tableName": "account",
@@ -492,7 +492,7 @@
       },
       {
         "tableName": "local_index",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`pairId` INTEGER NOT NULL, `relativePath` TEXT NOT NULL, `sizeBytes` INTEGER NOT NULL, `mtimeMs` INTEGER NOT NULL, `contentHash` TEXT, `remoteId` TEXT, `remoteSizeBytes` INTEGER, `remoteMtimeMs` INTEGER, `remoteEtag` TEXT, PRIMARY KEY(`pairId`, `relativePath`), FOREIGN KEY(`pairId`) REFERENCES `sync_pair`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`pairId` INTEGER NOT NULL, `relativePath` TEXT NOT NULL, `sizeBytes` INTEGER NOT NULL, `mtimeMs` INTEGER NOT NULL, `contentHash` TEXT, `remoteId` TEXT, `remoteSizeBytes` INTEGER, `remoteMtimeMs` INTEGER, `remoteEtag` TEXT, `remoteContentHash` TEXT, PRIMARY KEY(`pairId`, `relativePath`), FOREIGN KEY(`pairId`) REFERENCES `sync_pair`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
         "fields": [
           {
             "fieldPath": "pairId",
@@ -545,6 +545,12 @@
           {
             "fieldPath": "remoteEtag",
             "columnName": "remoteEtag",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "remoteContentHash",
+            "columnName": "remoteContentHash",
             "affinity": "TEXT",
             "notNull": false
           }
@@ -761,7 +767,7 @@
     "views": [],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '97697cd9981b7e66125e93ee075c0087')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '907af0bf8e8c635ddad085134bc4ef2a')"
     ]
   }
 }

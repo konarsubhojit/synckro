@@ -391,7 +391,7 @@ internal fun DriveFile.toRemoteFile(): RemoteFile =
         isFolder = mimeType == FOLDER_MIME_TYPE,
         size = size?.toLongOrNull(),
         lastModifiedMs = modifiedTime?.let { parseIso8601(it) },
+        contentHash = md5Checksum,
         eTag = md5Checksum,
         mimeType = mimeType,
-        contentHash = md5Checksum,
     )
