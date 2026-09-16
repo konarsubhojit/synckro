@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.InsertDriveFile
@@ -46,6 +47,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -71,9 +73,12 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -277,7 +282,7 @@ fun ConflictInboxScreen(
                             .padding(padding),
                 )
             }
-            state.conflicts.isEmpty() -> {
+            state.totalConflictCount == 0 && !state.hasActiveFilter -> {
                 EmptyState(
                     title = stringResource(R.string.conflict_inbox_empty_title),
                     body = stringResource(R.string.conflict_inbox_empty_body),
@@ -305,6 +310,7 @@ fun ConflictInboxScreen(
                         onToggleSelection = viewModel::toggleSelection,
                         onResolved = { haptic?.success() },
                         onOpenConflict = { selectedConflictId = it },
+                        onSearchQueryChange = viewModel::setSearchQuery,
                     )
                     val selectedConflict = state.conflicts.firstOrNull { it.id == selectedConflictId }
                     if (selectedConflict != null && !state.isSelectionMode) {
@@ -351,6 +357,7 @@ fun ConflictInboxScreen(
                                             scaffoldNavigator.navigateTo(ListDetailPaneScaffoldRole.Detail, conflictId as Any)
                                         }
                                     },
+                                    onSearchQueryChange = viewModel::setSearchQuery,
                                 )
                             }
                         },
@@ -404,6 +411,7 @@ private fun ConflictListPane(
     onKeepBoth: (Long) -> Unit,
     onLongPress: (Long) -> Unit,
     onToggleSelection: (Long) -> Unit,
+    onSearchQueryChange: (String) -> Unit,
     onResolved: () -> Unit = {},
     onOpenConflict: ((Long) -> Unit)? = null,
 ) {
@@ -415,9 +423,31 @@ private fun ConflictListPane(
                 .padding(horizontal = 16.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
+        item {
+            Spacer(Modifier.height(4.dp))
+            OutlinedTextField(
+                value = state.searchQuery,
+                onValueChange = onSearchQueryChange,
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                label = { Text(stringResource(R.string.conflict_inbox_search_label)) },
+                placeholder = { Text(stringResource(R.string.conflict_inbox_search_placeholder)) },
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                trailingIcon = {
+                    if (state.searchQuery.isNotEmpty()) {
+                        IconButton(onClick = { onSearchQueryChange("") }) {
+                            Icon(
+                                Icons.Default.Close,
+                                contentDescription = stringResource(R.string.conflict_inbox_clear_search),
+                            )
+                        }
+                    }
+                },
+            )
+        }
         if (!state.isSelectionMode) {
             item {
-                Spacer(Modifier.height(4.dp))
+                Spacer(Modifier.height(8.dp))
                 Surface(
                     color = MaterialTheme.colorScheme.secondaryContainer,
                     shape = MaterialTheme.shapes.medium,
@@ -430,6 +460,25 @@ private fun ConflictListPane(
                         modifier = Modifier.padding(12.dp),
                     )
                 }
+            }
+        }
+        if (state.conflicts.isEmpty()) {
+            item {
+                Text(
+                    text =
+                        stringResource(
+                            if (state.totalConflictCount > 0) {
+                                R.string.conflict_inbox_no_search_results
+                            } else {
+                                R.string.conflict_inbox_empty_body
+                            },
+                        ),
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier =
+                        Modifier
+                            .semantics { liveRegion = LiveRegionMode.Polite }
+                            .padding(vertical = 16.dp),
+                )
             }
         }
         items(state.conflicts, key = { it.id }) { conflict ->

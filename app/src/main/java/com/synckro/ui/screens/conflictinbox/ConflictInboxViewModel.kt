@@ -89,11 +89,15 @@ class ConflictInboxViewModel
             val isSelectionMode: Boolean = false,
             val selectedIds: Set<Long> = emptySet(),
             val enableHaptics: Boolean = true,
+            val searchQuery: String = "",
+            val totalConflictCount: Int = 0,
         ) {
             val selectedCount: Int get() = selectedIds.size
+            val hasActiveFilter: Boolean get() = searchQuery.isNotBlank()
         }
 
         private val selectionState = MutableStateFlow(Pair(false, linkedSetOf<Long>()))
+        private val searchQueryFlow = MutableStateFlow("")
 
         val state: StateFlow<UiState> =
             combine(
@@ -102,13 +106,25 @@ class ConflictInboxViewModel
                     .map { projectRows(it) },
                 settingsRepository.enableHaptics,
                 selectionState,
-            ) { rows, enableHaptics, (isSelectionMode, selectedIds) ->
+                searchQueryFlow,
+            ) { rows, enableHaptics, (isSelectionMode, selectedIds), searchQuery ->
+                val normalizedQuery = searchQuery.trim()
                 UiState(
-                    conflicts = rows,
+                    conflicts =
+                        if (normalizedQuery.isEmpty()) {
+                            rows
+                        } else {
+                            rows.filter {
+                                it.relativePath.contains(normalizedQuery, ignoreCase = true) ||
+                                    it.pairId.toString() == normalizedQuery
+                            }
+                        },
                     isLoading = false,
                     isSelectionMode = isSelectionMode,
                     selectedIds = selectedIds,
                     enableHaptics = enableHaptics,
+                    searchQuery = searchQuery,
+                    totalConflictCount = rows.size,
                 )
             }.catch { e ->
                 Timber.w(e, "ConflictInboxViewModel: flow error")
@@ -118,6 +134,18 @@ class ConflictInboxViewModel
                 started = SharingStarted.WhileSubscribed(5_000),
                 initialValue = UiState(),
             )
+
+        /**
+         * Updates a query that matches relative-path substrings case-insensitively or a pair ID exactly.
+         * Changing the query exits selection mode so bulk actions cannot affect hidden conflicts.
+         */
+        fun setSearchQuery(query: String) {
+            if (searchQueryFlow.value == query) return
+            searchQueryFlow.value = query
+            if (selectionState.value.first) {
+                exitSelectionMode()
+            }
+        }
 
         /** Records the user's choice to keep the local version for the conflict with [id]. */
         fun keepLocal(id: Long) = resolve(id, ConflictRecord.RESOLUTION_KEEP_LOCAL)

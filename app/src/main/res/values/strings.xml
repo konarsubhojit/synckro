@@ -584,6 +584,10 @@
     <string name="conflict_inbox_selected">selected</string>
     <string name="conflict_inbox_not_selected">not selected</string>
     <string name="conflict_inbox_enter_selection_mode">Enter selection mode</string>
+    <string name="conflict_inbox_search_placeholder">Search paths or exact pair ID</string>
+    <string name="conflict_inbox_search_label">Search conflicts</string>
+    <string name="conflict_inbox_clear_search">Clear search</string>
+    <string name="conflict_inbox_no_search_results">No matching conflicts.</string>
 
     <!-- Settings screen -->
     <string name="settings_title">Settings</string>

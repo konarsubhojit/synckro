@@ -261,6 +261,27 @@ class LogsViewModelTest {
         }
 
     @Test
+    fun `search query filters visible events by message or outcome tag`() =
+        runTest(dispatcher) {
+            eventsFlow.value =
+                listOf(
+                    event(1, SyncEventLevel.INFO).copy(message = "Upload completed"),
+                    event(2, SyncEventLevel.INFO).copy(tag = SyncEventTag.INSTANT_OUTCOME),
+                    event(3, SyncEventLevel.INFO).copy(message = "Sync started"),
+                )
+            val vm = newViewModel()
+            backgroundScope.launch { vm.state.collect {} }
+
+            vm.setSearchQuery("upload")
+            advanceUntilIdle()
+            assertEquals(listOf(1L), vm.state.value.events.map { it.id })
+
+            vm.setSearchQuery("outcome")
+            advanceUntilIdle()
+            assertEquals(listOf(2L), vm.state.value.events.map { it.id })
+        }
+
+    @Test
     fun `export redaction toggles update export config state`() =
         runTest(dispatcher) {
             val vm = newViewModel()

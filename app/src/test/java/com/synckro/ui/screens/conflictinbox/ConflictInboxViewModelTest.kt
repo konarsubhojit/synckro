@@ -11,6 +11,7 @@ import com.synckro.domain.model.CloudProviderType
 import com.synckro.domain.model.ConflictRecord
 import com.synckro.domain.model.SyncPair
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.coVerifyOrder
 import io.mockk.every
 import io.mockk.mockk
@@ -371,6 +372,78 @@ class ConflictInboxViewModelTest {
 
             assertFalse(vm.state.value.isSelectionMode)
             assertTrue(vm.state.value.selectedIds.isEmpty())
+
+            collectJob.cancel()
+        }
+
+    @Test
+    fun `search query filters conflicts by filename and exact pair ID`() =
+        runTest {
+            every { conflictRepository.observeUnresolved() } returns
+                MutableStateFlow(
+                    listOf(
+                        makeConflict(id = 1L, pairId = 12L).copy(relativePath = "docs/report.pdf"),
+                        makeConflict(id = 2L, pairId = 34L).copy(relativePath = "photos/sunset.jpg"),
+                    ),
+                )
+            coEvery { fileIndexDao.getForPair(any()) } returns emptyList()
+            coEvery { syncPairRepository.getById(any()) } returns null
+            coEvery { accountRepository.getAll() } returns emptyList()
+
+            val vm = createVm()
+            val collectJob = launch { vm.state.collect {} }
+            advanceUntilIdle()
+
+            vm.setSearchQuery("PHOTO")
+            advanceUntilIdle()
+            assertEquals(listOf(2L), vm.state.value.conflicts.map { it.id })
+
+            vm.setSearchQuery("12")
+            advanceUntilIdle()
+            assertEquals(listOf(1L), vm.state.value.conflicts.map { it.id })
+
+            vm.setSearchQuery("1")
+            advanceUntilIdle()
+            assertTrue(vm.state.value.conflicts.isEmpty())
+
+            collectJob.cancel()
+        }
+
+    @Test
+    fun `changing a filter clears selection and bulk resolution targets the filtered row`() =
+        runTest {
+            every { conflictRepository.observeUnresolved() } returns
+                MutableStateFlow(
+                    listOf(
+                        makeConflict(id = 1L, pairId = 12L).copy(relativePath = "docs/report.pdf"),
+                        makeConflict(id = 2L, pairId = 34L).copy(relativePath = "photos/sunset.jpg"),
+                    ),
+                )
+            coEvery { fileIndexDao.getForPair(any()) } returns emptyList()
+            coEvery { syncPairRepository.getById(any()) } returns null
+            coEvery { accountRepository.getAll() } returns emptyList()
+
+            val vm = createVm()
+            val collectJob = launch { vm.state.collect {} }
+            advanceUntilIdle()
+
+            vm.setSearchQuery("PHOTO")
+            vm.enterSelectionMode(2L)
+            vm.setSearchQuery("12")
+            advanceUntilIdle()
+            assertFalse(vm.state.value.isSelectionMode)
+            assertTrue(vm.state.value.selectedIds.isEmpty())
+
+            vm.setSearchQuery("PHOTO")
+            vm.enterSelectionMode(2L)
+            vm.bulkKeepLocal()
+            advanceUntilIdle()
+            coVerify(exactly = 1) {
+                conflictRepository.resolve(2L, ConflictRecord.RESOLUTION_KEEP_LOCAL)
+            }
+            coVerify(exactly = 0) {
+                conflictRepository.resolve(1L, ConflictRecord.RESOLUTION_KEEP_LOCAL)
+            }
 
             collectJob.cancel()
         }
