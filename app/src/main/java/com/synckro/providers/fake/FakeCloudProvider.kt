@@ -8,6 +8,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.io.ByteArrayInputStream
 import java.io.InputStream
+import java.security.MessageDigest
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
@@ -23,6 +24,12 @@ class FakeCloudProvider : CloudProvider {
         val meta: RemoteFile,
         val bytes: ByteArray,
     )
+
+    private fun ByteArray.sha256Hex(): String =
+        MessageDigest
+            .getInstance("SHA-256")
+            .digest(this)
+            .joinToString(separator = "") { "%02x".format(it) }
 
     private val store = ConcurrentHashMap<String, Record>()
     private val changeLog = mutableListOf<RemoteChange>()
@@ -143,6 +150,7 @@ class FakeCloudProvider : CloudProvider {
                     lastModifiedMs = System.currentTimeMillis(),
                     eTag = UUID.randomUUID().toString(),
                     mimeType = mimeType,
+                    contentHash = bytes.sha256Hex(),
                 )
             store[meta.id] = Record(meta, bytes)
             changeLog += RemoteChange(file = meta, removedId = null)
@@ -180,6 +188,7 @@ class FakeCloudProvider : CloudProvider {
                     lastModifiedMs = System.currentTimeMillis(),
                     eTag = UUID.randomUUID().toString(),
                     mimeType = mimeType ?: existing.meta.mimeType,
+                    contentHash = bytes.sha256Hex(),
                 )
             store[id] = Record(meta, bytes)
             changeLog += RemoteChange(file = meta, removedId = null)

@@ -1654,6 +1654,7 @@ class SyncEngineRealIntegrationTest {
                                         sizeBytes = fileContent.size.toLong(),
                                         mtimeMs = 6_000L,
                                         etag = originalRemoteFile.eTag,
+                                        contentHash = originalRemoteFile.contentHash,
                                     ),
                                 ),
                             newDeltaToken = "2",
