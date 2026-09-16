@@ -50,6 +50,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -215,6 +216,8 @@ fun PairEditorScreen(
                         .padding(padding),
             )
         } else {
+            val avoidMeteredNetworksLabel = stringResource(R.string.pair_editor_avoid_metered_networks)
+            val avoidMeteredNetworksImplied = stringResource(R.string.pair_editor_avoid_metered_networks_implied)
             Column(
                 modifier =
                     Modifier
@@ -471,18 +474,25 @@ fun PairEditorScreen(
                                 .padding(end = 16.dp),
                     ) {
                         Text(
-                            text = stringResource(R.string.pair_editor_avoid_metered_networks),
+                            text = avoidMeteredNetworksLabel,
                             style = MaterialTheme.typography.bodyMedium,
                         )
                         if (state.wifiOnly) {
                             Text(
-                                text = stringResource(R.string.pair_editor_avoid_metered_networks_implied),
+                                text = avoidMeteredNetworksImplied,
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
                     }
                     Switch(
+                        modifier =
+                            Modifier.semantics {
+                                contentDescription = avoidMeteredNetworksLabel
+                                if (state.wifiOnly) {
+                                    stateDescription = avoidMeteredNetworksImplied
+                                }
+                            },
                         checked = state.effectiveAvoidMeteredNetworks,
                         enabled = state.canEditAvoidMeteredNetworks,
                         onCheckedChange = viewModel::onAvoidMeteredNetworksChange,
