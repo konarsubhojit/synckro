@@ -103,7 +103,10 @@ class OneDriveGraphClientTest {
                               "id": "file-1",
                               "name": "notes.txt",
                               "parentReference": {"id": "root-id"},
-                              "file": {"mimeType": "text/plain"},
+                              "file": {
+                                "mimeType": "text/plain",
+                                "hashes": {"quickXorHash": "quick-xor-1"}
+                              },
                               "size": 1024,
                               "lastModifiedDateTime": "2024-03-15T10:00:00Z",
                               "eTag": "\"abc123\""
@@ -134,6 +137,7 @@ class OneDriveGraphClientTest {
             assertEquals(3, items.size)
             assertEquals("file-1", items[0].id)
             assertEquals("notes.txt", items[0].name)
+            assertEquals("quick-xor-1", items[0].file?.hashes?.quickXorHash)
             assertEquals("file-2", items[1].id)
             assertEquals("file-deleted", items[2].id)
             assertNotNull(items[2].deleted)
@@ -511,6 +515,26 @@ class OneDriveGraphClientTest {
             )
         val remote = item.toRemoteFile()
         assertEquals("etag-value", remote.eTag)
+    }
+
+    @Test
+    fun `toRemoteFile maps quickXorHash as contentHash distinct from eTag`() {
+        val item =
+            GraphDriveItem(
+                id = "x",
+                name = "x.txt",
+                eTag = "\"version-etag\"",
+                file =
+                    GraphFileInfo(
+                        mimeType = "text/plain",
+                        hashes = GraphFileHashes(quickXorHash = "quick-xor-hash"),
+                    ),
+            )
+
+        val remote = item.toRemoteFile()
+
+        assertEquals("version-etag", remote.eTag)
+        assertEquals("quick-xor-hash", remote.contentHash)
     }
 
     @Test

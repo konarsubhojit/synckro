@@ -28,6 +28,12 @@ internal data class GraphParentReference(
 @Serializable
 internal data class GraphFileInfo(
     val mimeType: String? = null,
+    val hashes: GraphFileHashes? = null,
+)
+
+@Serializable
+internal data class GraphFileHashes(
+    val quickXorHash: String? = null,
 )
 
 @Serializable

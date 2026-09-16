@@ -26,6 +26,7 @@ data class RemoteFile(
     val lastModifiedMs: Long?,
     val eTag: String?,
     val mimeType: String?,
+    val contentHash: String? = null,
 )
 
 /**

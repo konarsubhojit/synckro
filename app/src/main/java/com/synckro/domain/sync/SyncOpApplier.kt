@@ -781,7 +781,7 @@ class SyncOpApplier(
                 remoteId = remote.id,
                 remoteSizeBytes = remote.size,
                 remoteMtimeMs = remote.lastModifiedMs,
-                remoteEtag = remote.eTag,
+                remoteEtag = remote.contentHash ?: remote.eTag,
             )
         persistUploadedRemoteState(
             pair = pair,
@@ -827,7 +827,7 @@ class SyncOpApplier(
                 remoteId = remote.id,
                 remoteSizeBytes = remote.size,
                 remoteMtimeMs = remote.lastModifiedMs,
-                remoteEtag = remote.eTag,
+                remoteEtag = remote.contentHash ?: remote.eTag,
             ),
         )
     }
@@ -878,7 +878,7 @@ class SyncOpApplier(
                     remoteId = remote.id,
                     remoteSizeBytes = remote.size,
                     remoteMtimeMs = remote.lastModifiedMs,
-                    remoteEtag = remote.eTag,
+                    remoteEtag = remote.contentHash ?: remote.eTag,
                 ),
             cleanupMutation = { invalidateOverwrittenRemote(index, remote) },
         )
@@ -918,7 +918,7 @@ class SyncOpApplier(
                 remoteId = remote.id,
                 remoteSizeBytes = remote.size,
                 remoteMtimeMs = remote.lastModifiedMs,
-                remoteEtag = remote.eTag,
+                remoteEtag = remote.contentHash ?: remote.eTag,
             ),
         )
     }
@@ -1036,7 +1036,7 @@ class SyncOpApplier(
                                 remoteId = updatedRemote.id,
                                 remoteSizeBytes = updatedRemote.size,
                                 remoteMtimeMs = updatedRemote.lastModifiedMs,
-                                remoteEtag = updatedRemote.eTag,
+                                remoteEtag = updatedRemote.contentHash ?: updatedRemote.eTag,
                             ),
                         cleanupMutation = { invalidateOverwrittenRemote(index, updatedRemote) },
                     )
@@ -1100,7 +1100,7 @@ class SyncOpApplier(
                             remoteId = remote.id,
                             remoteSizeBytes = remote.size,
                             remoteMtimeMs = remote.lastModifiedMs,
-                            remoteEtag = remote.eTag,
+                            remoteEtag = remote.contentHash ?: remote.eTag,
                         ),
                     )
                 } else {

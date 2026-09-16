@@ -720,7 +720,7 @@ class SyncEngine(
                                 relativePath = change.relativePath,
                                 size = resolvedSize,
                                 lastModifiedMs = resolvedMtime,
-                                hash = change.etag,
+                                hash = change.contentHash ?: change.etag,
                                 stableId = change.remoteId,
                             )
                     } else if (isRename && baseline != null) {
@@ -858,6 +858,7 @@ class SyncEngine(
                                 isFolder = false,
                                 size = change.sizeBytes,
                                 lastModifiedMs = change.mtimeMs,
+                                contentHash = change.contentHash,
                                 eTag = change.etag,
                                 mimeType = null,
                             )
@@ -997,6 +998,7 @@ class SyncEngine(
                             isFolder = false,
                             size = indexEntry.remoteSizeBytes,
                             lastModifiedMs = indexEntry.remoteMtimeMs,
+                            contentHash = indexEntry.remoteEtag,
                             eTag = indexEntry.remoteEtag,
                             mimeType = null,
                         )
@@ -1269,7 +1271,7 @@ class SyncEngine(
                             ColdStartRemoteState(
                                 remoteId = remoteId,
                                 snapshot = snapshot,
-                                etag = change.etag ?: snapshot.hash,
+                                etag = change.contentHash ?: change.etag ?: snapshot.hash,
                             ),
                         )
                     }

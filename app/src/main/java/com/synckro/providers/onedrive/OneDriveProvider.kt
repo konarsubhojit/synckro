@@ -381,6 +381,7 @@ internal fun GraphDriveItem.toRemoteFile(): RemoteFile =
         isFolder = folder != null,
         size = size,
         lastModifiedMs = lastModifiedDateTime?.let { parseIso8601(it) },
+        contentHash = file?.hashes?.quickXorHash,
         eTag = eTag?.trim('"'),
         mimeType = file?.mimeType,
     )
