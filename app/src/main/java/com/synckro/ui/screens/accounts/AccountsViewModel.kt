@@ -285,6 +285,18 @@ class AccountsViewModel
          */
         private suspend fun fetchAllQuotas(rows: List<AccountRow>) {
             val now = SystemClock.elapsedRealtime()
+            val liveKeys =
+                rows
+                    .flatMap { row ->
+                        val providerType =
+                            runCatching { CloudProviderType.valueOf(row.providerKey) }.getOrNull()
+                                ?: return@flatMap emptyList()
+                        row.accounts.map { AccountKey(provider = providerType, accountId = it.account.id) }
+                    }.toSet()
+            // Drop cache entries for accounts that are gone, so the map cannot grow
+            // unbounded and a reconnected account re-fetches instead of showing a
+            // stale value.
+            quotaCache.keys.retainAll(liveKeys)
             val tasks =
                 rows.flatMap { row ->
                     val providerType =
