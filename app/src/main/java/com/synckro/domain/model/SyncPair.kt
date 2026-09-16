@@ -106,4 +106,14 @@ data class SyncPair(
     val localStorageLimitBytes: Long? = null,
     /** Whether local changes may trigger Instant Sync for this pair. */
     val instantSyncEnabled: Boolean = false,
+    /**
+     * Relative folder paths (from the local sync root) explicitly excluded from
+     * this pair's sync scope via the folder-tree browser UI, using `/` as the
+     * path separator. Excluding a folder implicitly excludes all of its
+     * descendants without requiring each descendant path to be listed here —
+     * see `PairEditorViewModel.isFolderPathExcluded`. Empty means nothing is
+     * excluded via this mechanism; combine with [excludeGlobs] for
+     * pattern-based filtering.
+     */
+    val excludedRelativePaths: List<String> = emptyList(),
 )
