@@ -642,6 +642,20 @@
     <string name="settings_security_biometrics_body">Allow fingerprint or face unlock instead of entering the PIN each time.</string>
     <string name="settings_security_protect_settings_only_title">Only protect app settings</string>
     <string name="settings_security_protect_settings_only_body">Anyone can view sync status and run sync manually, but changing configuration still requires unlock.</string>
+    <string name="settings_security_app_lock_title">Biometric app lock</string>
+    <string name="settings_security_app_lock_body">Require fingerprint, face or your device screen lock every time Synckro is opened.</string>
+
+    <!-- App lock gate -->
+    <string name="app_lock_title">Synckro is locked</string>
+    <string name="app_lock_body">Unlock with your biometrics or device screen lock to continue.</string>
+    <string name="app_lock_prompt_title">Unlock Synckro</string>
+    <string name="app_lock_prompt_subtitle">Confirm it\'s you to view your folders and accounts.</string>
+    <string name="app_lock_prompt_cancel">Cancel</string>
+    <string name="app_lock_unlock">Unlock</string>
+    <string name="app_lock_error_cancelled">Unlock cancelled. Synckro stays locked.</string>
+    <string name="app_lock_error_failed">Could not verify it\'s you. Synckro stays locked.</string>
+    <string name="app_lock_error_unavailable">No biometrics or screen lock are set up on this device. Set one up, or turn the app lock off.</string>
+    <string name="app_lock_turn_off">Turn app lock off</string>
 
     <!-- Settings: telemetry opt-out -->
     <string name="settings_telemetry_header">Diagnostics</string>

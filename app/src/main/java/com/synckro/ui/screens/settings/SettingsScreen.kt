@@ -969,6 +969,14 @@ private fun SecuritySettingsContent(
                 onCheckedChange = viewModel::setProtectSettingsOnly,
             )
         }
+        item {
+            SwitchRow(
+                title = stringResource(R.string.settings_security_app_lock_title),
+                body = stringResource(R.string.settings_security_app_lock_body),
+                checked = state.biometricAppLockEnabled,
+                onCheckedChange = viewModel::setBiometricAppLockEnabled,
+            )
+        }
         item { SettingsGroupHeader(stringResource(R.string.settings_telemetry_header)) }
         item {
             SwitchRow(
