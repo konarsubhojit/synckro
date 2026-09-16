@@ -40,16 +40,25 @@ class AppLockViewModel
                         // from the screen they are on; the gate re-locks on the next
                         // foreground transition instead.
                         val enabledWhileRunning = enabled && current.initialized && !current.lockEnabled
+                        val unlocked =
+                            when {
+                                !enabled -> false
+                                enabledWhileRunning -> true
+                                else -> current.unlocked
+                            }
                         current.copy(
                             initialized = true,
                             lockEnabled = enabled,
-                            unlocked =
+                            unlocked = unlocked,
+                            promptRequested =
                                 when {
-                                    !enabled -> false
-                                    enabledWhileRunning -> true
-                                    else -> current.unlocked
+                                    !enabled || unlocked -> false
+                                    // The preference may load after the app is already
+                                    // visible, in which case no foreground event will
+                                    // arrive to ask for the prompt.
+                                    !current.initialized && current.appForegrounded -> true
+                                    else -> current.promptRequested
                                 },
-                            promptRequested = false,
                             error = if (enabled) current.error else null,
                         )
                     }
@@ -60,18 +69,23 @@ class AppLockViewModel
         /** Called when the app becomes visible (launch or return to foreground). */
         fun onAppForegrounded() {
             _state.update { current ->
-                if (!current.lockEnabled || current.unlocked || current.promptRequested) {
-                    current
-                } else {
-                    current.copy(promptRequested = true, error = null)
-                }
+                val shouldPrompt = current.lockEnabled && !current.unlocked && !current.promptRequested
+                current.copy(
+                    appForegrounded = true,
+                    promptRequested = current.promptRequested || shouldPrompt,
+                    error = if (shouldPrompt) null else current.error,
+                )
             }
         }
 
         /** Called when the app leaves the foreground: re-lock so the next launch prompts again. */
         fun onAppBackgrounded() {
             _state.update { current ->
-                if (!current.lockEnabled) current else current.copy(unlocked = false, promptRequested = false)
+                current.copy(
+                    appForegrounded = false,
+                    unlocked = if (current.lockEnabled) false else current.unlocked,
+                    promptRequested = false,
+                )
             }
         }
 
@@ -129,6 +143,8 @@ data class AppLockUiState(
     val unlocked: Boolean = false,
     /** `true` when the gate should show the biometric prompt. */
     val promptRequested: Boolean = false,
+    /** `true` while the app is in the foreground; drives the initial prompt. */
+    val appForegrounded: Boolean = false,
     val error: AppLockError? = null,
 ) {
     /** App content may be rendered only when the lock is off or already satisfied. */

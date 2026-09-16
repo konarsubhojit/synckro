@@ -58,7 +58,13 @@ fun AppLockGate(
             LifecycleEventObserver { _, event ->
                 when (event) {
                     Lifecycle.Event.ON_START -> viewModel.onAppForegrounded()
-                    Lifecycle.Event.ON_STOP -> viewModel.onAppBackgrounded()
+                    // A configuration change (e.g. rotation) is not a real
+                    // background transition, so it must not re-lock the app.
+                    Lifecycle.Event.ON_STOP ->
+                        if (!activity.isChangingConfigurations) {
+                            viewModel.onAppBackgrounded()
+                        }
+
                     else -> Unit
                 }
             }

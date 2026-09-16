@@ -1,9 +1,15 @@
 package com.synckro.ui.lock
 
+import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
+import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.emptyPreferences
+import androidx.datastore.preferences.core.mutablePreferencesOf
 import com.synckro.data.repository.SettingsRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -182,6 +188,28 @@ class AppLockViewModelTest {
         }
 
     @Test
+    fun `prompt is requested when the preference loads after the app is already visible`() =
+        runTest(testDispatcher) {
+            val preferences = MutableSharedFlow<Preferences>(replay = 1)
+            val slowRepo = SettingsRepository(FakeDataStore(preferences))
+            val vm = AppLockViewModel(slowRepo)
+
+            // Foreground event arrives before DataStore has emitted anything.
+            vm.onAppForegrounded()
+            assertFalse(vm.state.value.initialized)
+            assertFalse(vm.state.value.promptRequested)
+
+            preferences.emit(
+                mutablePreferencesOf(SettingsRepository.KEY_BIOMETRIC_APP_LOCK_ENABLED to true),
+            )
+
+            val state = vm.state.value
+            assertTrue(state.initialized)
+            assertTrue(state.lockScreenVisible)
+            assertTrue(state.promptRequested)
+        }
+
+    @Test
     fun `disableLock turns the preference off and reveals content`() =
         runTest(testDispatcher) {
             repo.setBiometricAppLockEnabled(true)
@@ -196,4 +224,10 @@ class AppLockViewModelTest {
             assertTrue(vm.state.value.contentVisible)
             assertNull(vm.state.value.error)
         }
+
+    private class FakeDataStore(
+        override val data: Flow<Preferences>,
+    ) : DataStore<Preferences> {
+        override suspend fun updateData(transform: suspend (t: Preferences) -> Preferences): Preferences = transform(emptyPreferences())
+    }
 }
