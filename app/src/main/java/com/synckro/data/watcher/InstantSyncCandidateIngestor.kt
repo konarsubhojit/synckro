@@ -81,6 +81,9 @@ class InstantSyncCandidateIngestor
 
             val candidates = pathResolver.resolve(pair, event)
             if (candidates.isEmpty()) {
+                // The INFO/DEBUG pair below is deliberate, not a duplicate: the INFO line stays
+                // path-free (only hintPresent) so it is safe for release-level log captures, while
+                // the DEBUG line carries the raw hint for local diagnosis only.
                 Timber.i(
                     "instant.ingest.rejected pairId=%d reason=no_resolvable_candidate hintPresent=%s",
                     pair.id,

@@ -50,6 +50,7 @@ class SafContentObserverWatcherTest {
         accessChecker = FakeLocalFolderAccessChecker()
         observerRegistry = FakeContentObserverRegistry()
         recordingTree = RecordingTree()
+        Timber.uprootAll()
         Timber.plant(recordingTree)
         watcher =
             SafContentObserverWatcher(
@@ -225,28 +226,58 @@ class SafContentObserverWatcherTest {
         }
 
     @Test
-    fun `refresh stops an active registration when instant sync is disabled`() =
+    fun `refresh stops an active registration when auto sync is disabled`() =
         runTest {
             val treeUri = "content://com.example/tree/root"
-            val pairId = insertPair(localTreeUri = treeUri, instantSyncEnabled = true)
+            val pairId = insertPair(localTreeUri = treeUri)
             accessChecker.grant(treeUri)
-            watcher.register(pairId = pairId) {}
+
+            val result = watcher.register(pairId = pairId) {}
+
+            assertTrue(result is LocalChangeWatchRegistrationResult.Registered)
+            assertEquals(1, observerRegistry.registrations.size)
+            val observer = observerRegistry.registrations.single().observer
+            val saved = checkNotNull(db.syncPairDao().getById(pairId))
+            db.syncPairDao().upsert(saved.copy(autoSyncEnabled = false))
+
+            watcher.refresh(pairId)
+
+            assertTrue(observerRegistry.unregisteredObservers.contains(observer))
+            assertTrue(observerRegistry.registrations.isEmpty())
+        }
+
+    @Test
+    fun `refresh unregisters a live registration when instant sync is turned off`() =
+        runTest {
+            val treeUri = "content://com.example/tree/root"
+            val pairId = insertPair(localTreeUri = treeUri)
+            accessChecker.grant(treeUri)
+
+            val result = watcher.register(pairId = pairId) {}
+
+            assertTrue(result is LocalChangeWatchRegistrationResult.Registered)
+            assertEquals(1, observerRegistry.registrations.size)
+            val observer = observerRegistry.registrations.single().observer
             val saved = checkNotNull(db.syncPairDao().getById(pairId))
             db.syncPairDao().upsert(saved.copy(instantSyncEnabled = false))
 
             watcher.refresh(pairId)
 
+            assertTrue(observerRegistry.unregisteredObservers.contains(observer))
             assertTrue(observerRegistry.registrations.isEmpty())
-            assertEquals(1, observerRegistry.unregisteredObservers.size)
         }
 
     @Test
-    fun `register and refresh agree across watchability gates`() =
+    fun `register enforces every watchability gate`() =
         runTest {
             val directions = listOf(SyncDirection.BIDIRECTIONAL, SyncDirection.REMOTE_TO_LOCAL)
             for (autoSyncEnabled in listOf(false, true)) {
                 for (instantSyncEnabled in listOf(false, true)) {
                     for (direction in directions) {
+                        // Reset the registry each iteration so assertions below observe only the
+                        // current combination instead of registrations accumulated by earlier ones.
+                        observerRegistry.registrations.clear()
+                        observerRegistry.unregisteredObservers.clear()
                         val treeUri =
                             "content://com.example/tree/$autoSyncEnabled-$instantSyncEnabled-${direction.name}"
                         val pairId =
@@ -263,15 +294,14 @@ class SafContentObserverWatcherTest {
                                 direction == SyncDirection.BIDIRECTIONAL
 
                         val result = watcher.register(pairId = pairId) {}
+
                         assertEquals(
                             "register result for auto=$autoSyncEnabled instant=$instantSyncEnabled direction=$direction",
                             shouldRegister,
                             result is LocalChangeWatchRegistrationResult.Registered,
                         )
-
-                        watcher.refresh(pairId)
                         assertEquals(
-                            "refresh state for auto=$autoSyncEnabled instant=$instantSyncEnabled direction=$direction",
+                            "observer state for auto=$autoSyncEnabled instant=$instantSyncEnabled direction=$direction",
                             shouldRegister,
                             observerRegistry.registrations.any { it.uri == Uri.parse(treeUri) },
                         )
