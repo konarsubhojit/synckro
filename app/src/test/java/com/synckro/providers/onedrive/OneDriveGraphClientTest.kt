@@ -514,6 +514,19 @@ class OneDriveGraphClientTest {
     }
 
     @Test
+    fun `toRemoteFile leaves contentHash null since quickXorHash is not requested`() {
+        val item =
+            GraphDriveItem(
+                id = "x",
+                name = "x.txt",
+                eTag = "\"etag-value\"",
+                file = GraphFileInfo("text/plain"),
+            )
+        val remote = item.toRemoteFile()
+        assertEquals(null, remote.contentHash)
+    }
+
+    @Test
     fun `toRemoteFile parses ISO-8601 lastModifiedDateTime`() {
         val item =
             GraphDriveItem(
