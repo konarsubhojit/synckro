@@ -475,13 +475,15 @@ abstract class SynckroDatabase : RoomDatabase() {
             }
 
         /**
-         * Adds a separate remote content-hash column to `local_index` so provider
-         * version tags (for example OneDrive eTag) are no longer conflated with
-         * content hashes (for example OneDrive quickXorHash).
+         * Adds `excludedRelativePaths` (newline-separated TEXT) to `sync_pair`
+         * and a separate remote content-hash column to `local_index`.
          */
         val MIGRATION_17_18 =
             object : Migration(17, 18) {
                 override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL(
+                        "ALTER TABLE `sync_pair` ADD COLUMN `excludedRelativePaths` TEXT NOT NULL DEFAULT ''",
+                    )
                     db.execSQL("ALTER TABLE `local_index` ADD COLUMN `remoteContentHash` TEXT")
                 }
             }

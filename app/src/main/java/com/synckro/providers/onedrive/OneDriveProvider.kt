@@ -372,6 +372,8 @@ class OneDriveProviderFactory
  *
  * - The `eTag` from Graph is wrapped in double-quotes; they are stripped here.
  * - `lastModifiedDateTime` is parsed from ISO-8601 (UTC) to epoch millis.
+ * - [GraphFileHashes.quickXorHash] is surfaced as [RemoteFile.contentHash]
+ *   separately from Graph's opaque version [RemoteFile.eTag].
  */
 internal fun GraphDriveItem.toRemoteFile(): RemoteFile =
     RemoteFile(

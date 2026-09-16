@@ -82,6 +82,36 @@ class FakeCloudProviderTest {
         }
 
     @Test
+    fun `contentHash reflects actual bytes while eTag is an opaque version tag`() =
+        runTest {
+            val provider = FakeCloudProvider()
+            val uploaded = provider.uploadNew("root", "file.txt", ByteArrayInputStream(bytes("same")), 4, "text/plain")
+
+            // Re-writing identical bytes changes the opaque eTag but not the content hash.
+            val rewritten =
+                provider.updateContent(
+                    id = uploaded.id,
+                    content = ByteArrayInputStream(bytes("same")),
+                    size = 4,
+                    mimeType = "text/plain",
+                )
+
+            assertNotEquals(uploaded.eTag, rewritten.eTag)
+            assertEquals(uploaded.contentHash, rewritten.contentHash)
+
+            // Changing the bytes changes the content hash too.
+            val changed =
+                provider.updateContent(
+                    id = uploaded.id,
+                    content = ByteArrayInputStream(bytes("different")),
+                    size = 9,
+                    mimeType = "text/plain",
+                )
+
+            assertNotEquals(rewritten.contentHash, changed.contentHash)
+        }
+
+    @Test
     fun `createFolder then list returns folder metadata`() =
         runTest {
             val provider = FakeCloudProvider()

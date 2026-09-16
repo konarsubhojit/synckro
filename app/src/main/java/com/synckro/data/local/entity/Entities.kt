@@ -82,6 +82,12 @@ data class SyncPairEntity(
     val localStorageLimitBytes: Long? = null,
     /** Whether local changes may trigger Instant Sync for this pair. */
     val instantSyncEnabled: Boolean = false,
+    /**
+     * Newline-separated relative folder paths excluded from this pair's sync
+     * scope, using the same storage convention as [includeGlobs]/[excludeGlobs].
+     * Empty means nothing is excluded.
+     */
+    val excludedRelativePaths: String = "",
 )
 
 @Entity(

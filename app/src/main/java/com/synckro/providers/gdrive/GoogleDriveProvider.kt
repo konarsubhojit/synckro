@@ -378,7 +378,9 @@ class GoogleDriveProviderFactory
  * Maps a Drive v3 [DriveFile] to the provider-agnostic [RemoteFile].
  *
  * - Drive returns [DriveFile.size] as a decimal string; it is parsed to [Long].
- * - [DriveFile.md5Checksum] is used as the eTag equivalent.
+ * - [DriveFile.md5Checksum] is a true content hash, so it is used for both
+ *   [RemoteFile.eTag] (Drive has no separate opaque version tag exposed here)
+ *   and [RemoteFile.contentHash] per the `CloudProvider` content-hash contract.
  * - [DriveFile.modifiedTime] is parsed from ISO-8601 (UTC) to epoch millis.
  */
 internal fun DriveFile.toRemoteFile(): RemoteFile =

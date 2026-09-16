@@ -63,6 +63,25 @@ class TelemetrySanitizerTest {
     }
 
     @Test
+    fun `OAuth token shapes are rejected and redacted`() {
+        val jwtLike = "eyJ" + "x".repeat(12) + "." + "y".repeat(12) + "." + "z".repeat(12)
+        val bearerLike = "Bearer " + "x".repeat(20)
+        val tokens =
+            listOf(
+                "ya29." + "x".repeat(30),
+                "1//" + "x".repeat(30),
+                jwtLike,
+                bearerLike,
+                "token refresh failed, got ya29." + "x".repeat(20) + " for account",
+            )
+        for (value in tokens) {
+            assertFalse("expected '$value' to look like a token", TelemetrySanitizer.isSafe(value))
+            assertTrue(TelemetrySanitizer.looksLikeToken(value))
+            assertEquals(TelemetrySanitizer.REDACTED, TelemetrySanitizer.sanitize(value))
+        }
+    }
+
+    @Test
     fun `sanitizeParams scrubs unsafe values while preserving keys and safe values`() {
         val params =
             mapOf(
