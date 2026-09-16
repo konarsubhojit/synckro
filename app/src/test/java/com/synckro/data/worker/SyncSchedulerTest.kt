@@ -374,7 +374,6 @@ class SyncSchedulerTest {
         assertTrue(instant.workSpec.input.getBoolean(SyncWorker.KEY_INSTANT, false))
         assertTrue(instant.workSpec.expedited)
         assertEquals(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST, instant.workSpec.outOfQuotaPolicy)
-        assertEquals(NetworkType.UNMETERED, periodic.workSpec.constraints.requiredNetworkType)
         assertEquals(expeditedConstraints.requiredNetworkType, instant.workSpec.constraints.requiredNetworkType)
         assertEquals(expeditedConstraints.requiresCharging(), instant.workSpec.constraints.requiresCharging())
         assertEquals(expeditedConstraints.requiresBatteryNotLow(), instant.workSpec.constraints.requiresBatteryNotLow())

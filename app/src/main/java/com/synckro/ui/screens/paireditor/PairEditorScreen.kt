@@ -458,6 +458,7 @@ fun PairEditorScreen(
                     )
                 }
 
+                // Avoid metered networks toggle
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -468,7 +469,8 @@ fun PairEditorScreen(
                         style = MaterialTheme.typography.bodyMedium,
                     )
                     Switch(
-                        checked = state.avoidMeteredNetworks,
+                        checked = state.wifiOnly || state.avoidMeteredNetworks,
+                        enabled = !state.wifiOnly,
                         onCheckedChange = viewModel::onAvoidMeteredNetworksChange,
                     )
                 }
