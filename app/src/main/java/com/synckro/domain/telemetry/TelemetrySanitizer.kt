@@ -20,7 +20,7 @@ object TelemetrySanitizer {
     // Matches OAuth token shapes that must never reach Crashlytics/Analytics:
     //  - JWT-style access/id tokens: three dot-separated base64url segments.
     //  - Google OAuth access tokens ("ya29....") and refresh tokens ("1//...").
-    //  - A literal "******" Authorization header value.
+    //  - The HTTP auth scheme prefix used for access tokens, followed by the token value.
     // Legitimate telemetry values (enum labels, bucket strings, counts) never
     // match any of these shapes.
     private val TOKEN_LIKE_REGEX =
