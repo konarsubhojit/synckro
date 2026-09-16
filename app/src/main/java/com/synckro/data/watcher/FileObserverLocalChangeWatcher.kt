@@ -146,8 +146,9 @@ class FileObserverLocalChangeWatcher(
         private fun watchDirectory(path: String) {
             val canonicalPath = directoryTreeReader.canonicalPath(path) ?: return
             synchronized(registrationLock) {
-                if (!isActive || !visitedCanonicalPaths.add(canonicalPath)) return
+                if (!isActive || canonicalPath in visitedCanonicalPaths) return
                 if (handlesByPath.size >= maxWatches) throw WatchLimitExceeded()
+                visitedCanonicalPaths += canonicalPath
             }
             val handle = observerFactory.start(path) { signal -> onSignal(path, signal) }
             val stopImmediately =
@@ -224,6 +225,7 @@ class FileObserverLocalChangeWatcher(
     }
 
     private companion object {
+        // Leave headroom below typical inotify per-process limits for other app components.
         const val DEFAULT_MAX_WATCHES = 512
         val UNAVAILABLE =
             LocalChangeWatchRegistrationResult.Unavailable(

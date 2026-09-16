@@ -87,7 +87,8 @@ class InstantSyncCandidateIngestor
 
             val candidates = pathResolver.resolve(pair, event)
             if (candidates.isEmpty()) {
-                if (pathResolver.isCoarse(pair, event)) {
+                val enumerator = localFsEnumerator
+                if (enumerator != null && pathResolver.isCoarse(pair, event)) {
                     eventRepository?.log(
                         pair.id,
                         SyncEventLevel.INFO,
@@ -95,15 +96,15 @@ class InstantSyncCandidateIngestor
                         SyncEventTaxonomy.watchRescan(),
                     )
                     pairSignalCoordinator.signal(pair.id) {
-                        localFsEnumerator
-                            ?.enumerate(
+                        enumerator
+                            .enumerate(
                                 pairId = pair.id,
                                 treeUri = Uri.parse(pair.localTreeUri),
                                 includeGlobs = pair.includeGlobs,
                                 ignoreGlobs = pair.excludeGlobs,
                                 excludeSubfolders = pair.excludeSubfolders,
                             )
-                            ?.snapshot
+                            .snapshot
                             ?.forEach { discovered ->
                                 onLocalChange(LocalChangeEvent.Changed(pair.id, discovered.relativePath))
                             }
@@ -283,6 +284,7 @@ class InstantSyncChangedPathResolver
             ).distinctBy { it.relativePath }
         }
 
+        /** True for an absent hint or for the pair tree root, neither of which identifies a file. */
         fun isCoarse(
             pair: SyncPair,
             event: LocalChangeEvent.Changed,

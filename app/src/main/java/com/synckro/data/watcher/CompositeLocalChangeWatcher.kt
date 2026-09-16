@@ -11,8 +11,9 @@ import com.synckro.domain.sync.LocalChangeWatchRegistrationResult
 import com.synckro.domain.sync.LocalChangeWatcher
 import com.synckro.domain.sync.LocalChangeWatcherCapability
 import com.synckro.domain.sync.LocalChangeWatcherFallback
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.launch
 
 /**
  * Normalizes best-effort location hints so hints describing the same file compare equal.
@@ -104,6 +105,7 @@ class CompositeLocalChangeWatcher(
     private val deduper: LocalChangeEventDeduper,
     private val eventRepository: SyncEventRepository? = null,
 ) : LocalChangeWatcher {
+    private val loggingScope = CoroutineScope(Dispatchers.IO)
     private val lock = Any()
     private var isShutdown = false
 
@@ -136,6 +138,12 @@ class CompositeLocalChangeWatcher(
             when (val result = delegate.register(pairId, guardedListener)) {
                 is LocalChangeWatchRegistrationResult.Registered -> {
                     log(pairId, SyncEventTaxonomy.watchRegistered(delegateName(delegate)))
+                    synchronized(lock) {
+                        if (isShutdown) {
+                            result.registration.unregister()
+                            return LocalChangeWatchRegistrationResult.Failed(LocalChangeWatchFailure.Shutdown)
+                        }
+                    }
                     return LocalChangeWatchRegistrationResult.Registered(
                         LocalChangeWatchRegistration {
                             result.registration.unregister()
@@ -176,7 +184,7 @@ class CompositeLocalChangeWatcher(
         message: String,
     ) {
         eventRepository ?: return
-        runBlocking(Dispatchers.IO) {
+        loggingScope.launch {
             eventRepository.log(pairId, SyncEventLevel.INFO, SyncEventTag.INSTANT_WATCH, message)
         }
     }
