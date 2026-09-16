@@ -253,7 +253,74 @@ fun PairDetailScreen(
                 }
             }
 
+            StatsCard(stats = state.stats)
+
             RecentEventsCard(events = state.recentEvents, onOpenLogs = { onOpenLogs(pair.id) })
+        }
+    }
+}
+
+@Composable
+private fun StatsCard(stats: PairStats) {
+    SectionCard(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = stringResource(R.string.pair_detail_stats_title),
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold,
+        )
+
+        if (stats.runsConsidered == 0) {
+            Text(
+                text = stringResource(R.string.pair_detail_stats_no_runs),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            return@SectionCard
+        }
+
+        Text(
+            text =
+                stringResource(
+                    R.string.pair_detail_stats_files_transferred_format,
+                    stats.totalFilesTransferred,
+                    stats.runsConsidered,
+                ),
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        Text(
+            text =
+                stringResource(
+                    R.string.pair_detail_stats_success_rate_format,
+                    stats.successCount,
+                    stats.runsConsidered,
+                ),
+            style = MaterialTheme.typography.bodyMedium,
+        )
+
+        val lastSuccessAtMs = stats.lastSuccessAtMs
+        if (lastSuccessAtMs != null) {
+            val dateFormatter =
+                remember {
+                    java.text.DateFormat.getDateTimeInstance(
+                        java.text.DateFormat.SHORT,
+                        java.text.DateFormat.SHORT,
+                    )
+                }
+            Text(
+                text =
+                    stringResource(
+                        R.string.pair_detail_stats_last_success,
+                        dateFormatter.format(java.util.Date(lastSuccessAtMs)),
+                    ),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        } else {
+            Text(
+                text = stringResource(R.string.pair_detail_stats_last_success_none),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }

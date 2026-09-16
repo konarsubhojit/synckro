@@ -41,6 +41,9 @@ import javax.inject.Inject
  *  - the count of unresolved conflicts for the pair
  *  - the next-run ETA computed via [SyncScheduler.estimateNextRunAtMs]
  *  - live WorkManager-backed sync progress for periodic and "sync now" runs
+ *  - aggregated per-pair transfer [PairStats] over the last [STATS_WINDOW] terminal
+ *    runs, computed by [aggregatePairStats] purely in-memory from `sync_event` rows
+ *    (issue #375 — no new Room entity/migration needed)
  *
  * `pairId` is read from [SavedStateHandle] using the [KEY_PAIR_ID] key so the
  * NavHost can pass it via a path arg without an explicit lambda.
@@ -82,6 +85,8 @@ class PairDetailViewModel
             val isSyncing: Boolean = false,
             /** Live transfer progress from WorkManager while a sync is actively running. */
             val progress: TransferProgress? = null,
+            /** Aggregated per-pair stats over the last [STATS_WINDOW] runs (issue #375). */
+            val stats: PairStats = PairStats(),
         )
 
         private data class WorkProgressState(
@@ -113,6 +118,13 @@ class PairDetailViewModel
                 )
             }
 
+        // Wider window than RECENT_EVENT_LIMIT so STATS_WINDOW terminal runs are
+        // reliably captured even with non-terminal rows (progress/debug/instant-sync
+        // taxonomy events) interspersed between them.
+        private val statsFlow =
+            syncEventRepository.observeForPair(pairId, STATS_EVENT_LIMIT)
+                .map { events -> aggregatePairStats(events, STATS_WINDOW) }
+
         val state: StateFlow<UiState> =
             combine(
                 pairFlow,
@@ -143,19 +155,26 @@ class PairDetailViewModel
                     isSyncing = workProgress.isSyncing,
                     progress = workProgress.progress,
                 )
-            }.catch { e ->
-                Timber.w(e, "PairDetailViewModel: state flow error")
-                emit(UiState(isLoading = false, error = e.message ?: e.javaClass.simpleName))
-            }.stateIn(
-                scope = viewModelScope,
-                started = SharingStarted.WhileSubscribed(5_000),
-                initialValue = UiState(),
-            )
+            }.combine(statsFlow) { state, stats -> state.copy(stats = stats) }
+                .catch { e ->
+                    Timber.w(e, "PairDetailViewModel: state flow error")
+                    emit(UiState(isLoading = false, error = e.message ?: e.javaClass.simpleName))
+                }.stateIn(
+                    scope = viewModelScope,
+                    started = SharingStarted.WhileSubscribed(5_000),
+                    initialValue = UiState(),
+                )
 
         companion object {
             const val KEY_PAIR_ID = "pairId"
 
             /** Number of recent events shown in the timeline section. */
             const val RECENT_EVENT_LIMIT = 5
+
+            /** Number of most-recent terminal runs folded into [UiState.stats]. */
+            const val STATS_WINDOW = DEFAULT_STATS_WINDOW
+
+            /** Row limit passed to [SyncEventRepository.observeForPair] for [statsFlow]. */
+            const val STATS_EVENT_LIMIT = 200
         }
     }

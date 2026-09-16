@@ -102,6 +102,12 @@
     <string name="pair_detail_conflicts_count_format">%1$d conflict(s)</string>
     <string name="pair_detail_resolve_reauth">Re-authenticate</string>
     <string name="pair_detail_resolve_relink">Re-link folder</string>
+    <string name="pair_detail_stats_title">Stats</string>
+    <string name="pair_detail_stats_no_runs">No sync runs recorded yet for this pair.</string>
+    <string name="pair_detail_stats_files_transferred_format">%1$d files transferred (last %2$d runs)</string>
+    <string name="pair_detail_stats_success_rate_format">%1$d/%2$d runs succeeded</string>
+    <string name="pair_detail_stats_last_success">Last successful sync: %1$s</string>
+    <string name="pair_detail_stats_last_success_none">No successful sync in this window yet</string>
     <string name="home_delete_title">Delete sync pair?</string>
     <string name="home_delete_body_format">"%1$s" will be removed. This cannot be undone.</string>
     <string name="home_delete_confirm">Delete</string>
