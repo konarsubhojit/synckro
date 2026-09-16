@@ -1,0 +1,106 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended"
+  ],
+  "enabledManagers": [
+    "gradle",
+    "github-actions"
+  ],
+  "includePaths": [
+    "gradle/libs.versions.toml",
+    ".github/workflows/**"
+  ],
+  "dependencyDashboard": true,
+  "packageRules": [
+    {
+      "description": "Limit Gradle updates to the version catalog.",
+      "matchManagers": [
+        "gradle"
+      ],
+      "matchFileNames": [
+        "gradle/libs.versions.toml"
+      ]
+    },
+    {
+      "description": "Group low-risk Gradle version catalog patch and minor updates.",
+      "matchManagers": [
+        "gradle"
+      ],
+      "matchFileNames": [
+        "gradle/libs.versions.toml"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch"
+      ],
+      "groupName": "Gradle version catalog patch and minor updates",
+      "groupSlug": "gradle-version-catalog-minor-patch",
+      "addLabels": [
+        "dependencies",
+        "renovate",
+        "low-risk"
+      ],
+      "automerge": false
+    },
+    {
+      "description": "Group low-risk GitHub Actions patch and minor updates.",
+      "matchManagers": [
+        "github-actions"
+      ],
+      "matchFileNames": [
+        ".github/workflows/**"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch"
+      ],
+      "groupName": "GitHub Actions patch and minor updates",
+      "groupSlug": "github-actions-minor-patch",
+      "addLabels": [
+        "dependencies",
+        "renovate",
+        "low-risk"
+      ],
+      "automerge": false
+    },
+    {
+      "description": "Require manual review before opening major dependency update PRs.",
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "dependencyDashboardApproval": true,
+      "addLabels": [
+        "dependencies",
+        "renovate",
+        "major",
+        "manual-review"
+      ],
+      "automerge": false
+    },
+    {
+      "description": "Highlight major updates for build-critical Android tooling.",
+      "matchManagers": [
+        "gradle"
+      ],
+      "matchPackageNames": [
+        "com.android.application",
+        "com.android.test",
+        "org.jetbrains.kotlin.android",
+        "org.jetbrains.kotlin.plugin.compose",
+        "org.jetbrains.kotlin.plugin.serialization",
+        "com.google.devtools.ksp",
+        "com.google.dagger.hilt.android",
+        "com.google.dagger:hilt-android",
+        "com.google.dagger:hilt-android-compiler"
+      ],
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "addLabels": [
+        "android-tooling",
+        "manual-review"
+      ]
+    }
+  ]
+}
