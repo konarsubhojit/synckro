@@ -2,7 +2,6 @@ package com.synckro
 
 import android.content.Intent
 import android.os.Bundle
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Box
@@ -23,8 +22,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.fragment.app.FragmentActivity
 import com.synckro.data.repository.DarkModePreference
 import com.synckro.data.repository.SettingsRepository
+import com.synckro.ui.lock.AppLockGate
 import com.synckro.ui.navigation.SynckroNavHost
 import com.synckro.ui.theme.SynckroTheme
 import com.synckro.util.error.LocalUserMessageReporter
@@ -38,7 +39,7 @@ import kotlinx.coroutines.flow.collectLatest
 import javax.inject.Inject
 
 @AndroidEntryPoint
-class MainActivity : ComponentActivity() {
+class MainActivity : FragmentActivity() {
     @Inject lateinit var userMessages: UserMessageReporter
 
     @Inject lateinit var appNavigationDispatcher: AppNavigationDispatcher
@@ -112,10 +113,14 @@ class MainActivity : ComponentActivity() {
                                     .fillMaxSize()
                                     .padding(padding),
                         ) {
-                            SynckroNavHost(
-                                activity = this@MainActivity,
-                                appNavigationDispatcher = appNavigationDispatcher,
-                            )
+                            // Optional, opt-in biometric app lock. When disabled
+                            // (the default) the gate renders the NavHost directly.
+                            AppLockGate(activity = this@MainActivity) {
+                                SynckroNavHost(
+                                    activity = this@MainActivity,
+                                    appNavigationDispatcher = appNavigationDispatcher,
+                                )
+                            }
                         }
                     }
                 }

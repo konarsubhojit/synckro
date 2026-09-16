@@ -90,6 +90,7 @@ class SettingsViewModel
             val pinTimeoutMinutes: Int = SettingsRepository.DEFAULT_PIN_TIMEOUT_MINUTES,
             val unlockWithBiometrics: Boolean = false,
             val protectSettingsOnly: Boolean = false,
+            val biometricAppLockEnabled: Boolean = false,
             // Telemetry (opt-out)
             val crashReportingEnabled: Boolean = true,
             val analyticsEnabled: Boolean = true,
@@ -179,6 +180,7 @@ class SettingsViewModel
                     settingsRepository.unlockWithBiometrics,
                     settingsRepository.protectSettingsOnly,
                     settingsRepository.logRetentionDays,
+                    settingsRepository.biometricAppLockEnabled,
                 ) { miscValues -> miscValues },
             ) { syncBundle, appearanceBundle, miscBundle ->
                 @Suppress("UNCHECKED_CAST")
@@ -221,6 +223,7 @@ class SettingsViewModel
                     unlockWithBiometrics = miscBundle[5] as Boolean,
                     protectSettingsOnly = miscBundle[6] as Boolean,
                     logRetentionDays = miscBundle[7] as Int,
+                    biometricAppLockEnabled = miscBundle[8] as Boolean,
                 )
             }.combine(settingsRepository.maxConcurrentTransfers) { uiState, maxConcurrent ->
                 uiState.copy(maxConcurrentTransfers = maxConcurrent)
@@ -402,6 +405,11 @@ class SettingsViewModel
 
         fun setProtectSettingsOnly(enabled: Boolean) {
             viewModelScope.launch { settingsRepository.setProtectSettingsOnly(enabled) }
+        }
+
+        /** Opt in or out of the biometric app lock shown on launch/foreground. */
+        fun setBiometricAppLockEnabled(enabled: Boolean) {
+            viewModelScope.launch { settingsRepository.setBiometricAppLockEnabled(enabled) }
         }
 
         // ---------------------------------------------------------------------

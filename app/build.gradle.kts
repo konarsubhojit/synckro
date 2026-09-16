@@ -456,6 +456,9 @@ dependencies {
     implementation(libs.androidx.documentfile)
     implementation(libs.androidx.security.crypto)
 
+    // Biometric / device-credential app lock
+    implementation(libs.androidx.biometric)
+
     // Room
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)

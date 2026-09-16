@@ -367,6 +367,20 @@ class SettingsRepository
             dataStore.edit { it[KEY_PROTECT_SETTINGS_ONLY] = enabled }
         }
 
+        /**
+         * Emits `true` when the optional biometric/device-credential app lock is
+         * enabled. Defaults to `false` so users who never opt in see no behaviour
+         * change. When enabled, the app content is hidden behind a lock gate on
+         * launch and whenever the app returns to the foreground.
+         */
+        val biometricAppLockEnabled: Flow<Boolean> =
+            dataStore.data.map { it[KEY_BIOMETRIC_APP_LOCK_ENABLED] ?: DEFAULT_BIOMETRIC_APP_LOCK_ENABLED }
+
+        /** Persists the biometric app lock opt-in preference. */
+        suspend fun setBiometricAppLockEnabled(enabled: Boolean) {
+            dataStore.edit { it[KEY_BIOMETRIC_APP_LOCK_ENABLED] = enabled }
+        }
+
         // -------------------------------------------------------------------------
         // Onboarding
         // -------------------------------------------------------------------------
@@ -521,6 +535,7 @@ class SettingsRepository
             internal val KEY_PIN_TIMEOUT_MINUTES = intPreferencesKey("pin_timeout_minutes")
             internal val KEY_UNLOCK_WITH_BIOMETRICS = booleanPreferencesKey("unlock_with_biometrics")
             internal val KEY_PROTECT_SETTINGS_ONLY = booleanPreferencesKey("protect_settings_only")
+            internal val KEY_BIOMETRIC_APP_LOCK_ENABLED = booleanPreferencesKey("biometric_app_lock_enabled")
 
             internal val KEY_LOG_RETENTION_DAYS = intPreferencesKey("log_retention_days")
 
@@ -570,6 +585,7 @@ class SettingsRepository
             internal const val DEFAULT_PIN_TIMEOUT_MINUTES = 2
             internal const val DEFAULT_UNLOCK_WITH_BIOMETRICS = false
             internal const val DEFAULT_PROTECT_SETTINGS_ONLY = false
+            internal const val DEFAULT_BIOMETRIC_APP_LOCK_ENABLED = false
 
             internal const val DEFAULT_LOG_RETENTION_DAYS = 30
             internal const val MIN_PIN_TIMEOUT_MINUTES = 1
