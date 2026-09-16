@@ -413,16 +413,18 @@ class SyncEngine(
             ScopeFilterCacheKey(
                 includeGlobs = pair.includeGlobs.toList(),
                 excludeGlobs = pair.excludeGlobs.toList(),
-                excludedRelativePaths = pair.excludedRelativePaths.toList(),
+                // Normalized and sorted so that equivalent exclusion sets (differing
+                // only in whitespace, trailing '/', or list order) share one cache
+                // entry instead of each producing a distinct ScopeFilters instance.
+                excludedRelativePaths = SyncPathScope.normalizeExcludedFolders(pair.excludedRelativePaths).sorted(),
             ),
         ) { key ->
-            val normalizedExcludedRelativePaths = SyncPathScope.normalizeExcludedFolders(key.excludedRelativePaths)
             ScopeFilters(
                 includeGlobs = key.includeGlobs.mapNotNull { runCatching { LocalFsEnumerator.globToRegex(it) }.getOrNull() },
                 excludeGlobs = key.excludeGlobs.mapNotNull { runCatching { LocalFsEnumerator.globToRegex(it) }.getOrNull() },
                 includeFilterActive = key.includeGlobs.isNotEmpty(),
-                excludedRelativePaths = normalizedExcludedRelativePaths,
-                localIgnoreGlobs = key.excludeGlobs + SyncPathScope.excludedFolderIgnoreGlobs(normalizedExcludedRelativePaths),
+                excludedRelativePaths = key.excludedRelativePaths,
+                localIgnoreGlobs = key.excludeGlobs + SyncPathScope.excludedFolderIgnoreGlobs(key.excludedRelativePaths),
             )
         }
 
