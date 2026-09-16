@@ -135,6 +135,11 @@ The release artifact is for internal/dev testing only. It reuses the same
 `GOOGLE_WEB_CLIENT_ID`, `MS_CLIENT_ID`, `MSAL_REDIRECT_URI`, and
 `DEBUG_KEYSTORE_*` values already used by debug builds.
 
+Pushes to `master` and manual dispatches use the self-hosted Android builder;
+pull requests deliberately use GitHub-hosted runners. See
+**[docs/ci-self-hosted-runner.md](docs/ci-self-hosted-runner.md)** for runner
+provisioning, operations, and the security rationale.
+
 ## Roadmap
 
 Completed work (current release):
