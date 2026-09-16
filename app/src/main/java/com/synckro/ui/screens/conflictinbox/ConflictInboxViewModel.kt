@@ -108,15 +108,14 @@ class ConflictInboxViewModel
                 selectionState,
                 searchQueryFlow,
             ) { rows, enableHaptics, (isSelectionMode, selectedIds), searchQuery ->
-                val query = searchQuery
                 UiState(
                     conflicts =
-                        if (query.isEmpty()) {
+                        if (searchQuery.isEmpty()) {
                             rows
                         } else {
                             rows.filter {
-                                it.relativePath.contains(query, ignoreCase = true) ||
-                                    it.pairId.toString() == query
+                                it.relativePath.contains(searchQuery, ignoreCase = true) ||
+                                    it.pairId.toString() == searchQuery
                             }
                         },
                     isLoading = false,
@@ -135,12 +134,15 @@ class ConflictInboxViewModel
                 initialValue = UiState(),
             )
 
-        /** Updates the filename or pair-ID search query. */
+        /**
+         * Updates a trimmed query that matches filename substrings case-insensitively or a pair ID exactly.
+         * Changing the query exits selection mode so bulk actions cannot affect hidden conflicts.
+         */
         fun setSearchQuery(query: String) {
             val normalizedQuery = query.trim()
             if (searchQueryFlow.value == normalizedQuery) return
             searchQueryFlow.value = normalizedQuery
-            if (selectionState.value.second.isNotEmpty()) {
+            if (selectionState.value.first) {
                 exitSelectionMode()
             }
         }
