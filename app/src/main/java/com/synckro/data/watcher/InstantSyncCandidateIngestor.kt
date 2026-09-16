@@ -106,12 +106,10 @@ class InstantSyncCandidateIngestor
                                     ignoreGlobs = pair.excludeGlobs,
                                     excludeSubfolders = pair.excludeSubfolders,
                                 ).let { it.added + it.modified }
-                        var queuedAny = false
                         var queuedCount = 0
                         changedPaths.forEach { relativePath ->
                             val candidate = InstantSyncCandidateTarget(Uri.parse(pair.localTreeUri), relativePath)
                             if (queueCandidate(pair, candidate, pathScope)) {
-                                queuedAny = true
                                 queuedCount++
                             }
                         }
@@ -121,7 +119,7 @@ class InstantSyncCandidateIngestor
                             SyncEventTag.INSTANT_WATCH,
                             SyncEventTaxonomy.watchRescan(queuedCount),
                         )
-                        if (queuedAny) syncScheduler.enqueueInstant(pair)
+                        if (queuedCount > 0) syncScheduler.enqueueInstant(pair)
                     }
                     return
                 }

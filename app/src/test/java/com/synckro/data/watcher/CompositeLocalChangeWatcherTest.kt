@@ -162,7 +162,7 @@ class CompositeLocalChangeWatcherTest {
                 5L,
                 SyncEventLevel.INFO,
                 SyncEventTag.INSTANT_WATCH,
-                SyncEventTaxonomy.watchUnavailable("other_failed"),
+                SyncEventTaxonomy.watchDelegateFailed("other", "permission_denied"),
             )
         }
     }

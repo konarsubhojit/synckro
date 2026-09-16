@@ -42,6 +42,7 @@ object SyncEventTaxonomy {
     const val WATCH_REGISTERED = "instant.watch.registered"
     const val WATCH_CALLBACK = "instant.watch.callback"
     const val WATCH_UNAVAILABLE = "instant.watch.unavailable"
+    const val WATCH_DELEGATE_FAILED = "instant.watch.delegate_failed"
     const val WATCH_RESCAN = "instant.watch.rescan"
     const val STABILITY_ACCEPTED = "instant.stability.accepted"
     const val STABILITY_DEFERRED = "instant.stability.deferred"
@@ -76,6 +77,11 @@ object SyncEventTaxonomy {
         )
 
     fun watchUnavailable(reason: String): String = format(WATCH_UNAVAILABLE, "reason" to reason)
+
+    fun watchDelegateFailed(
+        delegate: String,
+        failure: String,
+    ): String = format(WATCH_DELEGATE_FAILED, "delegate" to delegate, "failure" to failure)
 
     fun watchRescan(candidates: Int): String = format(WATCH_RESCAN, "candidates" to candidates.toString())
 
