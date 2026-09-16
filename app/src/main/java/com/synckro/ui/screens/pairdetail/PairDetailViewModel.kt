@@ -120,7 +120,13 @@ class PairDetailViewModel
 
         // Wider window than RECENT_EVENT_LIMIT so STATS_WINDOW terminal runs are
         // reliably captured even with non-terminal rows (progress/debug/instant-sync
-        // taxonomy events) interspersed between them.
+        // taxonomy events) interspersed between them. STATS_EVENT_LIMIT scales with
+        // STATS_WINDOW (see STATS_EVENT_LIMIT_MULTIPLIER) rather than being a fixed
+        // constant, but it is still a heuristic: a pair whose non-terminal row count
+        // exceeds the multiplier between terminal runs (e.g. very chatty Instant Sync
+        // taxonomy logging) can under-fill the window. aggregatePairStats() degrades
+        // gracefully in that case — runsConsidered is simply lower than STATS_WINDOW
+        // rather than throwing or padding with stale data.
         private val statsFlow =
             syncEventRepository.observeForPair(pairId, STATS_EVENT_LIMIT)
                 .map { events -> aggregatePairStats(events, STATS_WINDOW) }
@@ -174,7 +180,15 @@ class PairDetailViewModel
             /** Number of most-recent terminal runs folded into [UiState.stats]. */
             const val STATS_WINDOW = DEFAULT_STATS_WINDOW
 
+            /**
+             * How many non-terminal rows we expect, on average, per terminal run —
+             * used to size [STATS_EVENT_LIMIT] so the fetch scales with [STATS_WINDOW]
+             * instead of being a fixed constant that silently under-fills for larger
+             * windows.
+             */
+            private const val STATS_EVENT_LIMIT_MULTIPLIER = 10
+
             /** Row limit passed to [SyncEventRepository.observeForPair] for [statsFlow]. */
-            const val STATS_EVENT_LIMIT = 200
+            const val STATS_EVENT_LIMIT = STATS_WINDOW * STATS_EVENT_LIMIT_MULTIPLIER
         }
     }
