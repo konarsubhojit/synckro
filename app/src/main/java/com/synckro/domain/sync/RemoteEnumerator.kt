@@ -34,9 +34,9 @@ enum class RemoteChangeType {
  * @property sizeBytes     File size in bytes, when reported by the provider.
  * @property mtimeMs       Last-modified time as epoch milliseconds, when
  *   reported by the provider.
+ * @property etag          Provider-supplied opaque version tag, when available.
  * @property contentHash   Provider-supplied content hash (quickXorHash for
  *   OneDrive/Graph, md5Checksum for Google Drive), when available.
- * @property etag          Provider-supplied opaque version tag, when available.
  */
 data class RemoteChange(
     val relativePath: String,
