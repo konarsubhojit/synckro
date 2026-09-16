@@ -907,8 +907,8 @@ class SyncEngine(
         evtRepo.log(
             pair.id,
             SyncEventLevel.INFO,
-            SyncEventTag.INSTANT_QUEUE,
-            SyncEventTaxonomy.queueEnqueued("sync_engine"),
+            SyncEventTag.INSTANT_APPLY,
+            SyncEventTaxonomy.applyStarted(),
         )
         val applyResult =
             applier.apply(

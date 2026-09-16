@@ -50,9 +50,14 @@ class InstantSyncCandidateIngestor
         private val stabilityDetector: FileStabilityDetector<InstantSyncCandidateTarget>,
     ) {
         suspend fun onLocalChange(event: LocalChangeEvent.Changed) {
+            Timber.i(
+                "instant.ingest.received pairId=%d hintPresent=%s",
+                event.pairId,
+                !event.locationHint.isNullOrBlank(),
+            )
             val pair =
                 syncPairRepository.getById(event.pairId, contentResolver) ?: run {
-                    Timber.d("Skipping Instant Sync change for unknown pair %d", event.pairId)
+                    Timber.i("instant.ingest.rejected pairId=%d reason=unknown_pair", event.pairId)
                     return
                 }
 
@@ -66,16 +71,24 @@ class InstantSyncCandidateIngestor
                     accountState = PendingDispatchResumer.accountStateFor(pair),
                 )
             if (!pairDecision.isEligible) {
-                Timber.d(
-                    "Skipping Instant Sync change for pair %d: %s",
+                Timber.i(
+                    "instant.ingest.rejected pairId=%d reasons=%s",
                     pair.id,
-                    pairDecision.reasons.joinToString(),
+                    pairDecision.reasons.joinToString(",") { it.name.lowercase() },
                 )
                 return
             }
 
             val candidates = pathResolver.resolve(pair, event)
             if (candidates.isEmpty()) {
+                // The INFO/DEBUG pair below is deliberate, not a duplicate: the INFO line stays
+                // path-free (only hintPresent) so it is safe for release-level log captures, while
+                // the DEBUG line carries the raw hint for local diagnosis only.
+                Timber.i(
+                    "instant.ingest.rejected pairId=%d reason=no_resolvable_candidate hintPresent=%s",
+                    pair.id,
+                    !event.locationHint.isNullOrBlank(),
+                )
                 Timber.d(
                     "Skipping Instant Sync change for pair %d: no resolvable candidate from hint '%s'",
                     pair.id,

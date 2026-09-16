@@ -42,6 +42,7 @@ object LogVisibilityConfig {
             // outcomes without paths or account identifiers.
             com.synckro.domain.model.SyncEventTag.INSTANT_QUEUE,
             com.synckro.domain.model.SyncEventTag.INSTANT_DISPATCH,
+            com.synckro.domain.model.SyncEventTag.INSTANT_APPLY,
             com.synckro.domain.model.SyncEventTag.INSTANT_OUTCOME,
             // auth-tagged events surface "needs re-link" prompts to the user.
             com.synckro.domain.model.SyncEventTag.AUTH,

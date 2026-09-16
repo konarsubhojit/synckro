@@ -19,6 +19,7 @@ import com.synckro.domain.sync.LocalChangeWatcherFallback
 import com.synckro.domain.sync.LocalChangeWatcherRefresher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
+import timber.log.Timber
 
 /**
  * SAF-backed [LocalChangeWatcher] that registers one [ContentObserver] per pair tree URI.
@@ -45,15 +46,24 @@ class SafContentObserverWatcher(
         val pair =
             runBlocking(Dispatchers.IO) {
                 syncPairDao.getById(pairId)
-            } ?: return LocalChangeWatchRegistrationResult.Failed(
-                LocalChangeWatchFailure.Unknown("pair_not_found"),
-            )
+            } ?: run {
+                Timber.i("instant.watch.register.failed pairId=%d reason=pair_not_found", pairId)
+                return LocalChangeWatchRegistrationResult.Failed(
+                    LocalChangeWatchFailure.Unknown("pair_not_found"),
+                )
+            }
 
         if (!pair.hasWatchableSource()) {
+            Timber.i(
+                "instant.watch.register.unavailable pairId=%d reasons=%s",
+                pairId,
+                pair.watchabilityFailures().joinToString(","),
+            )
             return unavailableResult()
         }
 
         if (!localFolderAccessChecker.hasReadWriteAccess(pair.localTreeUri)) {
+            Timber.i("instant.watch.register.unavailable pairId=%d reasons=saf_access_lost", pairId)
             return unavailableResult()
         }
 
@@ -79,11 +89,14 @@ class SafContentObserverWatcher(
                     RegisteredListener(observerRegistrationToken, listener),
                 )
             }
-        } catch (_: SecurityException) {
+        } catch (e: SecurityException) {
+            Timber.i("instant.watch.register.unavailable pairId=%d reasons=security_exception", pairId)
+            Timber.d(e, "instant.watch.register.security_exception pairId=%d", pairId)
             return unavailableResult()
         }
 
         var isUnregistered = false
+        Timber.i("instant.watch.registered pairId=%d", pairId)
         return LocalChangeWatchRegistrationResult.Registered(
             LocalChangeWatchRegistration {
                 synchronized(lock) {
@@ -189,10 +202,20 @@ class SafContentObserverWatcher(
         pairId: Long,
         uri: Uri?,
     ) {
+        val registeredTreeUri = synchronized(lock) { registrationsByPairId[pairId]?.treeUriString }
+        Timber.i(
+            "instant.watch.callback pairId=%d uriNull=%s authority=%s treeRoot=%s pathSegments=%d",
+            pairId,
+            uri == null,
+            uri?.authority ?: "none",
+            registeredTreeUri != null && uri?.toString() == registeredTreeUri,
+            uri?.pathSegments?.size ?: 0,
+        )
         val listenersAndEvent =
             synchronized(lock) {
                 val registration = registrationsByPairId[pairId] ?: return
                 if (!localFolderAccessChecker.hasReadWriteAccess(registration.treeUriString)) {
+                    Timber.i("instant.watch.registration.ended pairId=%d reason=saf_access_lost", pairId)
                     registrationsByPairId.remove(pairId)
                     observerRegistry.unregisterContentObserver(registration.observer)
                     return@synchronized registration.listeners.toList() to
@@ -218,7 +241,15 @@ class SafContentObserverWatcher(
         )
 
     private fun SyncPairEntity.hasWatchableSource(): Boolean =
-        direction.allowsUpload && localTreeUri.isNotBlank() && autoSyncEnabled
+        watchabilityFailures().isEmpty()
+
+    private fun SyncPairEntity.watchabilityFailures(): List<String> =
+        buildList {
+            if (!direction.allowsUpload) add("direction_not_upload_capable")
+            if (localTreeUri.isBlank()) add("blank_tree_uri")
+            if (!autoSyncEnabled) add("auto_sync_off")
+            if (!instantSyncEnabled) add("instant_sync_off")
+        }
 
     private data class PairRegistration(
         val treeUriString: String,

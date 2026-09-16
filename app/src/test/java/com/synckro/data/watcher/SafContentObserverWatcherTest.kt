@@ -5,6 +5,7 @@ import android.database.ContentObserver
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.synckro.data.local.db.SynckroDatabase
@@ -27,6 +28,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import timber.log.Timber
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
@@ -35,6 +37,7 @@ class SafContentObserverWatcherTest {
     private lateinit var watcher: SafContentObserverWatcher
     private lateinit var accessChecker: FakeLocalFolderAccessChecker
     private lateinit var observerRegistry: FakeContentObserverRegistry
+    private lateinit var recordingTree: RecordingTree
 
     @Before
     fun setUp() {
@@ -46,6 +49,9 @@ class SafContentObserverWatcherTest {
                 .build()
         accessChecker = FakeLocalFolderAccessChecker()
         observerRegistry = FakeContentObserverRegistry()
+        recordingTree = RecordingTree()
+        Timber.uprootAll()
+        Timber.plant(recordingTree)
         watcher =
             SafContentObserverWatcher(
                 syncPairDao = db.syncPairDao(),
@@ -58,6 +64,7 @@ class SafContentObserverWatcherTest {
     @After
     fun tearDown() {
         watcher.shutdown()
+        Timber.uproot(recordingTree)
         db.close()
     }
 
@@ -100,6 +107,27 @@ class SafContentObserverWatcherTest {
                 ),
                 events,
             )
+        }
+
+    @Test
+    fun `callback entry is logged for null root and descendant URIs`() =
+        runTest {
+            val treeUri = "content://com.example/tree/root"
+            val pairId = insertPair(localTreeUri = treeUri)
+            accessChecker.grant(treeUri)
+            watcher.register(pairId = pairId) {}
+
+            observerRegistry.dispatch(null)
+            observerRegistry.dispatch(Uri.parse(treeUri))
+            observerRegistry.dispatch(Uri.parse("content://com.example/tree/root/document/child"))
+
+            val callbackLogs =
+                recordingTree.infoMessages.filter { it.startsWith("instant.watch.callback ") }
+            assertEquals(3, callbackLogs.size)
+            assertTrue(callbackLogs[0].contains("uriNull=true"))
+            assertTrue(callbackLogs[1].contains("treeRoot=true"))
+            assertTrue(callbackLogs[2].contains("authority=com.example"))
+            assertTrue(callbackLogs.none { it.contains("child") })
         }
 
     @Test
@@ -198,25 +226,95 @@ class SafContentObserverWatcherTest {
         }
 
     @Test
-    fun `refresh stops an active registration when instant sync is disabled`() =
+    fun `refresh stops an active registration when auto sync is disabled`() =
         runTest {
             val treeUri = "content://com.example/tree/root"
-            val pairId = insertPair(localTreeUri = treeUri, instantSyncEnabled = true)
+            val pairId = insertPair(localTreeUri = treeUri)
             accessChecker.grant(treeUri)
-            watcher.register(pairId = pairId) {}
+
+            val result = watcher.register(pairId = pairId) {}
+
+            assertTrue(result is LocalChangeWatchRegistrationResult.Registered)
+            assertEquals(1, observerRegistry.registrations.size)
+            val observer = observerRegistry.registrations.single().observer
+            val saved = checkNotNull(db.syncPairDao().getById(pairId))
+            db.syncPairDao().upsert(saved.copy(autoSyncEnabled = false))
+
+            watcher.refresh(pairId)
+
+            assertTrue(observerRegistry.unregisteredObservers.contains(observer))
+            assertTrue(observerRegistry.registrations.isEmpty())
+        }
+
+    @Test
+    fun `refresh unregisters a live registration when instant sync is turned off`() =
+        runTest {
+            val treeUri = "content://com.example/tree/root"
+            val pairId = insertPair(localTreeUri = treeUri)
+            accessChecker.grant(treeUri)
+
+            val result = watcher.register(pairId = pairId) {}
+
+            assertTrue(result is LocalChangeWatchRegistrationResult.Registered)
+            assertEquals(1, observerRegistry.registrations.size)
+            val observer = observerRegistry.registrations.single().observer
             val saved = checkNotNull(db.syncPairDao().getById(pairId))
             db.syncPairDao().upsert(saved.copy(instantSyncEnabled = false))
 
             watcher.refresh(pairId)
 
+            assertTrue(observerRegistry.unregisteredObservers.contains(observer))
             assertTrue(observerRegistry.registrations.isEmpty())
-            assertEquals(1, observerRegistry.unregisteredObservers.size)
+        }
+
+    @Test
+    fun `register enforces every watchability gate`() =
+        runTest {
+            val directions = listOf(SyncDirection.BIDIRECTIONAL, SyncDirection.REMOTE_TO_LOCAL)
+            for (autoSyncEnabled in listOf(false, true)) {
+                for (instantSyncEnabled in listOf(false, true)) {
+                    for (direction in directions) {
+                        // Reset the registry each iteration so assertions below observe only the
+                        // current combination instead of registrations accumulated by earlier ones.
+                        observerRegistry.registrations.clear()
+                        observerRegistry.unregisteredObservers.clear()
+                        val treeUri =
+                            "content://com.example/tree/$autoSyncEnabled-$instantSyncEnabled-${direction.name}"
+                        val pairId =
+                            insertPair(
+                                localTreeUri = treeUri,
+                                direction = direction,
+                                autoSyncEnabled = autoSyncEnabled,
+                                instantSyncEnabled = instantSyncEnabled,
+                            )
+                        accessChecker.grant(treeUri)
+                        val shouldRegister =
+                            autoSyncEnabled &&
+                                instantSyncEnabled &&
+                                direction == SyncDirection.BIDIRECTIONAL
+
+                        val result = watcher.register(pairId = pairId) {}
+
+                        assertEquals(
+                            "register result for auto=$autoSyncEnabled instant=$instantSyncEnabled direction=$direction",
+                            shouldRegister,
+                            result is LocalChangeWatchRegistrationResult.Registered,
+                        )
+                        assertEquals(
+                            "observer state for auto=$autoSyncEnabled instant=$instantSyncEnabled direction=$direction",
+                            shouldRegister,
+                            observerRegistry.registrations.any { it.uri == Uri.parse(treeUri) },
+                        )
+                    }
+                }
+            }
         }
 
     private suspend fun insertPair(
         localTreeUri: String,
         direction: SyncDirection = SyncDirection.BIDIRECTIONAL,
-        instantSyncEnabled: Boolean = false,
+        autoSyncEnabled: Boolean = true,
+        instantSyncEnabled: Boolean = true,
     ): Long =
         db.syncPairDao().insert(
             SyncPairEntity(
@@ -230,6 +328,7 @@ class SafContentObserverWatcherTest {
                 excludeGlobs = "",
                 wifiOnly = true,
                 requiresCharging = false,
+                autoSyncEnabled = autoSyncEnabled,
                 instantSyncEnabled = instantSyncEnabled,
             ),
         )
@@ -275,6 +374,19 @@ class SafContentObserverWatcherTest {
             registrations.toList().forEach { registration ->
                 registration.observer.onChange(false, uri)
             }
+        }
+    }
+
+    private class RecordingTree : Timber.Tree() {
+        val infoMessages = mutableListOf<String>()
+
+        override fun log(
+            priority: Int,
+            tag: String?,
+            message: String,
+            t: Throwable?,
+        ) {
+            if (priority == Log.INFO) infoMessages += message
         }
     }
 }
