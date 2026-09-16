@@ -65,6 +65,8 @@ import com.synckro.ui.components.SectionCard
 import com.synckro.ui.screens.home.HomeViewModel
 import com.synckro.ui.screens.home.PairSummary
 import com.synckro.ui.screens.home.buildSyncNowSnackbar
+import java.text.DateFormat
+import java.util.Date
 
 /**
  * Per-pair detail screen (Phase 5c — issue #163).
@@ -253,7 +255,74 @@ fun PairDetailScreen(
                 }
             }
 
+            StatsCard(stats = state.stats)
+
             RecentEventsCard(events = state.recentEvents, onOpenLogs = { onOpenLogs(pair.id) })
+        }
+    }
+}
+
+@Composable
+private fun StatsCard(stats: PairStats) {
+    SectionCard(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = stringResource(R.string.pair_detail_stats_title),
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold,
+        )
+
+        if (stats.runsConsidered == 0) {
+            Text(
+                text = stringResource(R.string.pair_detail_stats_no_runs),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            return@SectionCard
+        }
+
+        Text(
+            text =
+                stringResource(
+                    R.string.pair_detail_stats_files_transferred_format,
+                    stats.totalFilesTransferred,
+                    stats.runsConsidered,
+                ),
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        Text(
+            text =
+                stringResource(
+                    R.string.pair_detail_stats_success_rate_format,
+                    stats.successCount,
+                    stats.runsConsidered,
+                ),
+            style = MaterialTheme.typography.bodyMedium,
+        )
+
+        val lastSuccessAtMs = stats.lastSuccessAtMs
+        if (lastSuccessAtMs != null) {
+            val dateFormatter =
+                remember {
+                    DateFormat.getDateTimeInstance(
+                        DateFormat.SHORT,
+                        DateFormat.SHORT,
+                    )
+                }
+            Text(
+                text =
+                    stringResource(
+                        R.string.pair_detail_stats_last_success,
+                        dateFormatter.format(Date(lastSuccessAtMs)),
+                    ),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        } else {
+            Text(
+                text = stringResource(R.string.pair_detail_stats_last_success_none),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }
@@ -422,15 +491,15 @@ private fun RecentEventsCard(events: List<SyncEvent>, onOpenLogs: () -> Unit) {
 
         val dateFormatter =
             remember {
-                java.text.DateFormat.getDateTimeInstance(
-                    java.text.DateFormat.SHORT,
-                    java.text.DateFormat.SHORT,
+                DateFormat.getDateTimeInstance(
+                    DateFormat.SHORT,
+                    DateFormat.SHORT,
                 )
             }
         events.forEach { event ->
             Column(modifier = Modifier.fillMaxWidth()) {
                 Text(
-                    text = dateFormatter.format(java.util.Date(event.timestampMs)) + " · ${event.level.name}",
+                    text = dateFormatter.format(Date(event.timestampMs)) + " · ${event.level.name}",
                     style = MaterialTheme.typography.labelSmall,
                     color = eventLevelColor(event.level),
                     fontWeight = FontWeight.Medium,

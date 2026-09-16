@@ -14,6 +14,9 @@ import com.synckro.data.worker.SyncWorker
 import com.synckro.domain.model.CloudProviderType
 import com.synckro.domain.model.ConflictPolicy
 import com.synckro.domain.model.SyncDirection
+import com.synckro.domain.model.SyncEvent
+import com.synckro.domain.model.SyncEventLevel
+import com.synckro.domain.model.SyncEventTag
 import com.synckro.domain.model.SyncPair
 import io.mockk.every
 import io.mockk.mockk
@@ -155,6 +158,40 @@ class PairDetailViewModelProgressTest {
         }
 
     @Test
+    fun `state stats reflect terminal sync_event rows for the pair`() =
+        runTest {
+            val pair = pair(5L)
+            pairsFlow.value = listOf(pair)
+            every {
+                workManager.getWorkInfosForUniqueWorkFlow(SyncWorker.uniqueName(pair.id))
+            } returns flowOf(emptyList())
+            every {
+                workManager.getWorkInfosForUniqueWorkFlow(SyncWorker.syncNowUniqueName(pair.id))
+            } returns flowOf(emptyList())
+            every {
+                syncEventRepository.observeForPair(pair.id, PairDetailViewModel.STATS_EVENT_LIMIT)
+            } returns
+                flowOf(
+                    listOf(
+                        syncEvent(pair.id, SyncEventLevel.INFO, "Sync succeeded: 4 applied, 0 conflicts", t = 200L),
+                        syncEvent(pair.id, SyncEventLevel.ERROR, "Sync failed after 5 attempt(s), giving up: timeout", t = 100L),
+                    ),
+                )
+
+            val vm = createVm(pair.id)
+            val collectJob = launch { vm.state.collect {} }
+            advanceUntilIdle()
+
+            val stats = vm.state.value.stats
+            assertEquals(2, stats.runsConsidered)
+            assertEquals(1, stats.successCount)
+            assertEquals(1, stats.failureCount)
+            assertEquals(4, stats.totalFilesTransferred)
+            assertEquals(200L, stats.lastSuccessAtMs)
+            collectJob.cancel()
+        }
+
+    @Test
     fun `WorkManager flow throwing does not crash the ViewModel`() =
         runTest {
             val pair = pair(4L)
@@ -216,4 +253,11 @@ class PairDetailViewModelProgressTest {
             every { state } returns WorkInfo.State.SUCCEEDED
             every { progress } returns Data.EMPTY
         }
+
+    private fun syncEvent(
+        pairId: Long,
+        level: SyncEventLevel,
+        message: String,
+        t: Long,
+    ) = SyncEvent(pairId = pairId, timestampMs = t, level = level, tag = SyncEventTag.SYNC_WORKER, message = message)
 }
