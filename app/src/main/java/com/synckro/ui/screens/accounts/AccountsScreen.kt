@@ -547,7 +547,11 @@ private fun AccountCard(
             }
 
             // Storage usage line
-            StorageUsageRow(quota = item.storageQuota, context = context)
+            StorageUsageRow(
+                quota = item.storageQuota,
+                quotaResolved = item.quotaResolved,
+                context = context,
+            )
         }
     }
 }
@@ -556,24 +560,29 @@ private fun AccountCard(
 // Storage usage
 // ---------------------------------------------------------------------------
 
+/**
+ * Renders the inline storage-quota line for one account card.
+ *
+ * * Quota with a positive total → usage text plus a proportional progress bar.
+ * * Quota resolved to `null` (provider does not report it or the fetch failed)
+ *   or a non-positive total → nothing at all, never a zeroed/broken bar.
+ * * Quota not resolved yet → a subtle "fetching" placeholder.
+ */
 @Composable
-private fun StorageUsageRow(
+internal fun StorageUsageRow(
     quota: StorageQuota?,
+    quotaResolved: Boolean,
     context: android.content.Context,
 ) {
     when {
-        quota == null -> {
-            // Quota not yet loaded — show a subtle placeholder
-            Text(
-                text = stringResource(R.string.accounts_storage_fetching),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        quota.totalBytes > 0L -> {
+        quota != null && quota.totalBytes > 0L -> {
             val usedFormatted = Formatter.formatShortFileSize(context, quota.usedBytes)
             val totalFormatted = Formatter.formatShortFileSize(context, quota.totalBytes)
-            val percent = (quota.usedBytes * 100L / quota.totalBytes).toInt().coerceIn(0, 100)
+            val fraction =
+                (quota.usedBytes.toDouble() / quota.totalBytes.toDouble())
+                    .coerceIn(0.0, 1.0)
+                    .toFloat()
+            val percent = (fraction * 100f).toInt()
             val usageText =
                 stringResource(
                     R.string.accounts_storage_used_format,
@@ -588,7 +597,7 @@ private fun StorageUsageRow(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 LinearProgressIndicator(
-                    progress = { percent / 100f },
+                    progress = { fraction },
                     modifier =
                         Modifier
                             .fillMaxWidth()
@@ -602,6 +611,14 @@ private fun StorageUsageRow(
                     trackColor = MaterialTheme.colorScheme.surfaceVariant,
                 )
             }
+        }
+        !quotaResolved -> {
+            // Quota not fetched yet — show a subtle placeholder
+            Text(
+                text = stringResource(R.string.accounts_storage_fetching),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }

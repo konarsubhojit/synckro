@@ -12,6 +12,9 @@ import com.synckro.domain.auth.AuthManager
 import com.synckro.domain.auth.AuthManagerRegistry
 import com.synckro.domain.model.CloudProviderType
 import com.synckro.domain.model.SyncPair
+import com.synckro.domain.provider.CloudProvider
+import com.synckro.domain.provider.CloudProviderFactory
+import com.synckro.domain.provider.StorageQuota
 import com.synckro.util.error.UserMessageReporter
 import io.mockk.coEvery
 import io.mockk.every
@@ -35,6 +38,8 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.robolectric.shadows.ShadowSystemClock
+import java.time.Duration
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
@@ -174,17 +179,20 @@ class AccountsViewModelTest {
             assertEquals(listOf(42L), pending?.orphanedPairs?.map { it.id })
         }
 
-    private fun createVm(registry: AuthManagerRegistry) =
-        AccountsViewModel(
-            context = context,
-            registry = registry,
-            accountRepository = accountRepository,
-            syncPairDao = syncPairDao,
-            syncPairRepository = syncPairRepository,
-            syncScheduler = syncScheduler,
-            userMessages = UserMessageReporter(),
-            syncEventRepository = syncEventRepository,
-        )
+    private fun createVm(
+        registry: AuthManagerRegistry,
+        providerFactories: Map<CloudProviderType, CloudProviderFactory> = emptyMap(),
+    ) = AccountsViewModel(
+        context = context,
+        registry = registry,
+        accountRepository = accountRepository,
+        syncPairDao = syncPairDao,
+        syncPairRepository = syncPairRepository,
+        syncScheduler = syncScheduler,
+        userMessages = UserMessageReporter(),
+        syncEventRepository = syncEventRepository,
+        providerFactories = providerFactories,
+    )
 
     private fun manager(
         displayName: String,
@@ -420,4 +428,182 @@ class AccountsViewModelTest {
         displayName = email.substringBefore('@'),
         email = email,
     )
+
+    // -----------------------------------------------------------------------
+    // Storage quota
+    // -----------------------------------------------------------------------
+
+    @Test
+    fun `quota fetch populates the account item`() =
+        runTest {
+            val account = account("gd-1", CloudProviderType.GOOGLE_DRIVE, "alpha@gmail.com")
+            val registry = singleProviderRegistry(account)
+            val quota = StorageQuota(usedBytes = 25L, totalBytes = 100L)
+
+            val vm = createVm(registry, mapOf(CloudProviderType.GOOGLE_DRIVE to factoryReturning { quota }))
+            advanceUntilIdle()
+
+            val item = vm.state.value.rows.single().accounts.single()
+            assertEquals(quota, item.storageQuota)
+            assertTrue(item.quotaResolved)
+        }
+
+    @Test
+    fun `unsupported quota resolves to null without a quota value`() =
+        runTest {
+            val account = account("gd-1", CloudProviderType.GOOGLE_DRIVE, "alpha@gmail.com")
+            val registry = singleProviderRegistry(account)
+
+            val vm = createVm(registry, mapOf(CloudProviderType.GOOGLE_DRIVE to factoryReturning { null }))
+            advanceUntilIdle()
+
+            val item = vm.state.value.rows.single().accounts.single()
+            assertNull(item.storageQuota)
+            assertTrue(item.quotaResolved)
+        }
+
+    @Test
+    fun `failed quota fetch resolves to null instead of breaking the refresh`() =
+        runTest {
+            val account = account("gd-1", CloudProviderType.GOOGLE_DRIVE, "alpha@gmail.com")
+            val registry = singleProviderRegistry(account)
+
+            val vm =
+                createVm(
+                    registry,
+                    mapOf(
+                        CloudProviderType.GOOGLE_DRIVE to
+                            factoryReturning { throw RuntimeException("quota endpoint down") },
+                    ),
+                )
+            advanceUntilIdle()
+
+            val item = vm.state.value.rows.single().accounts.single()
+            assertNull(item.storageQuota)
+            assertTrue(item.quotaResolved)
+            assertNull(vm.state.value.error)
+        }
+
+    @Test
+    fun `failed quota fetch is retried after the shorter failure ttl`() =
+        runTest {
+            val account = account("gd-1", CloudProviderType.GOOGLE_DRIVE, "alpha@gmail.com")
+            val registry = singleProviderRegistry(account)
+            var calls = 0
+            val recovered = StorageQuota(usedBytes = 3L, totalBytes = 4L)
+
+            val vm =
+                createVm(
+                    registry,
+                    mapOf(
+                        CloudProviderType.GOOGLE_DRIVE to
+                            factoryReturning {
+                                if (calls++ == 0) throw RuntimeException("transient") else recovered
+                            },
+                    ),
+                )
+            advanceUntilIdle()
+            assertEquals(1, calls)
+            assertNull(vm.state.value.rows.single().accounts.single().storageQuota)
+
+            ShadowSystemClock.advanceBy(Duration.ofMillis(AccountsViewModel.QUOTA_FAILURE_TTL_MS + 1))
+            vm.refresh()
+            advanceUntilIdle()
+
+            assertEquals(2, calls)
+            assertEquals(recovered, vm.state.value.rows.single().accounts.single().storageQuota)
+        }
+
+    @Test
+    fun `repeated refreshes reuse the cached quota instead of calling the provider again`() =
+        runTest {
+            val account = account("gd-1", CloudProviderType.GOOGLE_DRIVE, "alpha@gmail.com")
+            val registry = singleProviderRegistry(account)
+            var calls = 0
+            val quota = StorageQuota(usedBytes = 1L, totalBytes = 2L)
+
+            val vm =
+                createVm(
+                    registry,
+                    mapOf(
+                        CloudProviderType.GOOGLE_DRIVE to
+                            factoryReturning {
+                                calls++
+                                quota
+                            },
+                    ),
+                )
+            advanceUntilIdle()
+            assertEquals(1, calls)
+
+            vm.refresh()
+            advanceUntilIdle()
+
+            assertEquals(1, calls)
+            assertEquals(quota, vm.state.value.rows.single().accounts.single().storageQuota)
+        }
+
+    @Test
+    fun `quota is re-fetched once the cache entry expires`() =
+        runTest {
+            val account = account("gd-1", CloudProviderType.GOOGLE_DRIVE, "alpha@gmail.com")
+            val registry = singleProviderRegistry(account)
+            var calls = 0
+
+            val vm =
+                createVm(
+                    registry,
+                    mapOf(
+                        CloudProviderType.GOOGLE_DRIVE to
+                            factoryReturning {
+                                calls++
+                                StorageQuota(usedBytes = calls.toLong(), totalBytes = 10L)
+                            },
+                    ),
+                )
+            advanceUntilIdle()
+            assertEquals(1, calls)
+
+            ShadowSystemClock.advanceBy(Duration.ofMillis(AccountsViewModel.QUOTA_TTL_MS + 1))
+            vm.refresh()
+            advanceUntilIdle()
+
+            assertEquals(2, calls)
+            assertEquals(
+                StorageQuota(usedBytes = 2L, totalBytes = 10L),
+                vm.state.value.rows.single().accounts.single().storageQuota,
+            )
+        }
+
+    @Test
+    fun `provider without a registered factory resolves to no quota`() =
+        runTest {
+            val account = account("gd-1", CloudProviderType.GOOGLE_DRIVE, "alpha@gmail.com")
+            val registry = singleProviderRegistry(account)
+
+            val vm = createVm(registry)
+            advanceUntilIdle()
+
+            val item = vm.state.value.rows.single().accounts.single()
+            assertNull(item.storageQuota)
+            assertTrue(item.quotaResolved)
+        }
+
+    private fun singleProviderRegistry(account: Account): AuthManagerRegistry =
+        AuthManagerRegistry(
+            mapOf(
+                CloudProviderType.GOOGLE_DRIVE to
+                    manager("Google Drive", CloudProviderType.GOOGLE_DRIVE, listOf(account)),
+            ),
+        )
+
+    private fun factoryReturning(quota: suspend () -> StorageQuota?): CloudProviderFactory {
+        val provider =
+            mockk<CloudProvider> {
+                coEvery { getStorageQuota() } coAnswers { quota() }
+            }
+        return object : CloudProviderFactory {
+            override fun providerFor(accountId: String): CloudProvider = provider
+        }
+    }
 }

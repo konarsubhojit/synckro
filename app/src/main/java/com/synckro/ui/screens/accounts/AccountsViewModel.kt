@@ -1,6 +1,7 @@
 package com.synckro.ui.screens.accounts
 
 import android.content.Context
+import android.os.SystemClock
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.synckro.R
@@ -71,11 +72,17 @@ class AccountsViewModel
          * A single connected account, augmented with a flag that indicates
          * whether this specific account needs re-authentication, and the
          * optional storage quota fetched from the cloud provider.
+         *
+         * [quotaResolved] is true once a quota fetch completed for this account,
+         * whether or not it produced a value. A resolved `null` [storageQuota]
+         * means the provider does not report quota or the fetch failed, and the
+         * card must render no progress bar at all.
          */
         data class AccountItem(
             val account: Account,
             val needsReauth: Boolean = false,
             val storageQuota: StorageQuota? = null,
+            val quotaResolved: Boolean = false,
         )
 
         data class AccountRow(
@@ -156,6 +163,25 @@ class AccountsViewModel
         /** Tracks the pending auto-clear timer for the active highlight, if any. */
         private var clearHighlightJob: kotlinx.coroutines.Job? = null
 
+        /**
+         * A storage quota fetch result plus the elapsed-realtime stamp of the fetch.
+         * A result without a value (unsupported provider or failed fetch) is kept for
+         * a shorter [ttlMs] so a transient error retries sooner.
+         */
+        private data class CachedQuota(
+            val quota: StorageQuota?,
+            val fetchedAtMs: Long,
+        ) {
+            val ttlMs: Long get() = if (quota != null) QUOTA_TTL_MS else QUOTA_FAILURE_TTL_MS
+        }
+
+        /**
+         * Per-account quota cache; entries older than [QUOTA_TTL_MS] are re-fetched.
+         * Only touched from coroutines on [viewModelScope] (main dispatcher), so a
+         * plain map is sufficient.
+         */
+        private val quotaCache = mutableMapOf<AccountKey, CachedQuota>()
+
         init {
             // Observe re-auth signals from sync_pair so the CTA appears as soon as
             // SyncWorker persists a NEEDS_REAUTH outcome — without forcing the user
@@ -195,6 +221,10 @@ class AccountsViewModel
         }
 
         private fun AccountRow.matchesAnyOf(types: Set<CloudProviderType>): Boolean = types.any { it.name == providerKey }
+
+        /** Parses [AccountRow.providerKey] back into a [CloudProviderType], or null when unknown. */
+        private fun AccountRow.providerType(): CloudProviderType? =
+            CloudProviderType.entries.firstOrNull { it.name == providerKey }
 
         fun refresh() {
             viewModelScope.launch {
@@ -254,42 +284,84 @@ class AccountsViewModel
          * Fetches storage quotas for every account across all provider rows in
          * parallel. Each quota is fetched via the corresponding [CloudProviderFactory]
          * and merged back into the existing [UiState.rows] without triggering a full
-         * reload. Failures are silently discarded — quota display is best-effort.
+         * reload. Failures are silently discarded — quota display is best-effort, and
+         * an unavailable quota (unsupported provider or failed fetch) is recorded as a
+         * resolved `null` so the card renders no progress bar instead of a stale
+         * "fetching…" placeholder.
+         *
+         * Results are cached per account for [QUOTA_TTL_MS] (or the shorter
+         * [QUOTA_FAILURE_TTL_MS] when the fetch produced no value, so a transient
+         * error does not suppress retries for long); every other refresh (rename,
+         * disconnect, re-auth, returning to the screen, …) reuses the cached value
+         * instead of issuing another provider API call.
          */
         private suspend fun fetchAllQuotas(rows: List<AccountRow>) {
+            val now = SystemClock.elapsedRealtime()
+            val liveKeys =
+                rows
+                    .flatMap { row ->
+                        val providerType = row.providerType() ?: return@flatMap emptyList()
+                        row.accounts.map { AccountKey(provider = providerType, accountId = it.account.id) }
+                    }.toSet()
+            // Drop cache entries for accounts that are gone, so the map cannot grow
+            // unbounded and a reconnected account re-fetches instead of showing a
+            // stale value.
+            quotaCache.keys.retainAll(liveKeys)
             val tasks =
                 rows.flatMap { row ->
-                    val providerType =
-                        runCatching { CloudProviderType.valueOf(row.providerKey) }.getOrNull()
-                            ?: return@flatMap emptyList()
+                    val providerType = row.providerType() ?: return@flatMap emptyList()
                     val factory = providerFactories[providerType] ?: return@flatMap emptyList()
-                    row.accounts.map { item ->
+                    row.accounts.mapNotNull { item ->
+                        val key = AccountKey(provider = providerType, accountId = item.account.id)
+                        val cached = quotaCache[key]
+                        if (cached != null && now - cached.fetchedAtMs < cached.ttlMs) {
+                            return@mapNotNull null
+                        }
                         viewModelScope.async {
                             val quota =
                                 runCatching {
                                     factory.providerFor(item.account.id).getStorageQuota()
                                 }.getOrNull()
-                            Triple(row.providerKey, item.account.id, quota)
+                            key to CachedQuota(quota = quota, fetchedAtMs = SystemClock.elapsedRealtime())
                         }
                     }
                 }
 
-            if (tasks.isEmpty()) return
-            val results = tasks.awaitAll()
+            if (tasks.isNotEmpty()) {
+                quotaCache.putAll(tasks.awaitAll())
+            }
+            applyCachedQuotas()
+        }
 
+        /**
+         * Merges the current [quotaCache] snapshot into the visible rows. Accounts on a
+         * provider without a registered [CloudProviderFactory] can never report a quota,
+         * so they are resolved to `null` immediately instead of showing the "fetching"
+         * placeholder forever.
+         */
+        private fun applyCachedQuotas() {
             _state.update { cur ->
                 cur.copy(
                     rows =
                         cur.rows.map { row ->
+                            val providerType = row.providerType()
+                            val unsupported = providerType == null || providerType !in providerFactories
                             row.copy(
                                 accounts =
                                     row.accounts.map { item ->
-                                        val quota =
-                                            results
-                                                .firstOrNull { (pk, id, _) ->
-                                                    pk == row.providerKey && id == item.account.id
-                                                }?.third
-                                        if (quota != null) item.copy(storageQuota = quota) else item
+                                        if (providerType == null || unsupported) {
+                                            item.copy(storageQuota = null, quotaResolved = true)
+                                        } else {
+                                            val cached =
+                                                quotaCache[
+                                                    AccountKey(provider = providerType, accountId = item.account.id),
+                                                ]
+                                            if (cached == null) {
+                                                item
+                                            } else {
+                                                item.copy(storageQuota = cached.quota, quotaResolved = true)
+                                            }
+                                        }
                                     },
                             )
                         },
@@ -823,5 +895,20 @@ class AccountsViewModel
              * auto-fades.
              */
             const val HIGHLIGHT_DURATION_MS: Long = 2_000L
+
+            /**
+             * How long a fetched storage quota stays fresh. Refreshes inside this
+             * window reuse the cached value so navigating back to the screen (or any
+             * of the many actions that call [refresh]) does not hit the provider APIs
+             * again.
+             */
+            const val QUOTA_TTL_MS: Long = 5 * 60 * 1_000L
+
+            /**
+             * Shorter freshness window for a quota fetch that produced no value, so a
+             * transient failure is retried on the next refresh instead of being
+             * suppressed for the full [QUOTA_TTL_MS].
+             */
+            const val QUOTA_FAILURE_TTL_MS: Long = 30 * 1_000L
         }
     }
