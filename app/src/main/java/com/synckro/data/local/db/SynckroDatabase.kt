@@ -83,7 +83,7 @@ class EnumConverters {
 
 @Database(
     entities = [AccountEntity::class, SyncPairEntity::class, FileIndexEntity::class, SyncEventEntity::class, ConflictRecordEntity::class, LocalIndexEntity::class, PendingUploadEntity::class, PairRunLeaseEntity::class],
-    version = 17,
+    version = 18,
     exportSchema = true,
 )
 @TypeConverters(EnumConverters::class)
@@ -470,6 +470,21 @@ abstract class SynckroDatabase : RoomDatabase() {
                     db.execSQL(
                         "CREATE INDEX IF NOT EXISTS `index_pair_run_lease_heartbeatAtMs` " +
                             "ON `pair_run_lease` (`heartbeatAtMs`)",
+                    )
+                }
+            }
+
+        /**
+         * Adds `excludedRelativePaths` (newline-separated TEXT) to `sync_pair`,
+         * holding the relative folder paths the user excluded from the pair's
+         * sync scope. Existing rows receive an empty string, preserving the
+         * prior behaviour where nothing is excluded.
+         */
+        val MIGRATION_17_18 =
+            object : Migration(17, 18) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL(
+                        "ALTER TABLE `sync_pair` ADD COLUMN `excludedRelativePaths` TEXT NOT NULL DEFAULT ''",
                     )
                 }
             }
