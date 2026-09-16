@@ -421,6 +421,7 @@ class SyncEngine(
                 excludeGlobs = key.excludeGlobs.mapNotNull { runCatching { LocalFsEnumerator.globToRegex(it) }.getOrNull() },
                 includeFilterActive = key.includeGlobs.isNotEmpty(),
                 excludedRelativePaths = key.excludedRelativePaths,
+                localIgnoreGlobs = key.excludeGlobs + SyncPathScope.excludedFolderIgnoreGlobs(key.excludedRelativePaths),
             )
         }
 
@@ -556,7 +557,7 @@ class SyncEngine(
                 pairId = pair.id,
                 treeUri = treeUri,
                 includeGlobs = pair.includeGlobs,
-                ignoreGlobs = pair.excludeGlobs + SyncPathScope.excludedFolderIgnoreGlobs(pair.excludedRelativePaths),
+                ignoreGlobs = scopeFiltersFor(pair).localIgnoreGlobs,
                 excludeSubfolders = pair.excludeSubfolders,
             )
 
@@ -1227,6 +1228,13 @@ class SyncEngine(
             val excludeGlobs: List<Regex>,
             val includeFilterActive: Boolean,
             val excludedRelativePaths: List<String> = emptyList(),
+            /**
+             * [excludeGlobs] (as raw glob strings) combined with the glob patterns
+             * derived from [excludedRelativePaths], precomputed once so
+             * [LocalFsEnumerator.enumerate] does not need to re-derive folder-exclusion
+             * globs from [excludedRelativePaths] on every sync run.
+             */
+            val localIgnoreGlobs: List<String> = emptyList(),
         )
 
         internal data class ColdStartReconciliation(
