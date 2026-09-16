@@ -38,6 +38,8 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.robolectric.shadows.ShadowSystemClock
+import java.time.Duration
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
@@ -509,6 +511,38 @@ class AccountsViewModelTest {
 
             assertEquals(1, calls)
             assertEquals(quota, vm.state.value.rows.single().accounts.single().storageQuota)
+        }
+
+    @Test
+    fun `quota is re-fetched once the cache entry expires`() =
+        runTest {
+            val account = account("gd-1", CloudProviderType.GOOGLE_DRIVE, "alpha@gmail.com")
+            val registry = singleProviderRegistry(account)
+            var calls = 0
+
+            val vm =
+                createVm(
+                    registry,
+                    mapOf(
+                        CloudProviderType.GOOGLE_DRIVE to
+                            factoryReturning {
+                                calls++
+                                StorageQuota(usedBytes = calls.toLong(), totalBytes = 10L)
+                            },
+                    ),
+                )
+            advanceUntilIdle()
+            assertEquals(1, calls)
+
+            ShadowSystemClock.advanceBy(Duration.ofMillis(AccountsViewModel.QUOTA_TTL_MS + 1))
+            vm.refresh()
+            advanceUntilIdle()
+
+            assertEquals(2, calls)
+            assertEquals(
+                StorageQuota(usedBytes = 2L, totalBytes = 10L),
+                vm.state.value.rows.single().accounts.single().storageQuota,
+            )
         }
 
     private fun singleProviderRegistry(account: Account): AuthManagerRegistry =

@@ -169,7 +169,11 @@ class AccountsViewModel
             val fetchedAtMs: Long,
         )
 
-        /** Per-account quota cache; entries older than [QUOTA_TTL_MS] are re-fetched. */
+        /**
+         * Per-account quota cache; entries older than [QUOTA_TTL_MS] are re-fetched.
+         * Only touched from coroutines on [viewModelScope] (main dispatcher), so a
+         * plain map is sufficient.
+         */
         private val quotaCache = mutableMapOf<AccountKey, CachedQuota>()
 
         init {
