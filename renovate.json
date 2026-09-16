@@ -9,21 +9,10 @@
   ],
   "includePaths": [
     "gradle/libs.versions.toml",
-    "**/*.gradle.kts",
     ".github/workflows/**"
   ],
   "dependencyDashboard": true,
   "packageRules": [
-    {
-      "description": "Read Gradle build scripts for context, but keep update PRs scoped to the version catalog.",
-      "matchManagers": [
-        "gradle"
-      ],
-      "matchFileNames": [
-        "**/*.gradle.kts"
-      ],
-      "enabled": false
-    },
     {
       "description": "Group low-risk Gradle version catalog patch and minor updates.",
       "matchManagers": [
