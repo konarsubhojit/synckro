@@ -102,8 +102,8 @@ class SafContentObserverWatcherTest {
                 listOf(
                     LocalChangeEvent.Changed(pairId, changedUri.toString()),
                     LocalChangeEvent.Changed(pairId, changedUri.toString()),
-                    LocalChangeEvent.Changed(pairId, treeUri),
-                    LocalChangeEvent.Changed(pairId, null),
+                    LocalChangeEvent.Changed(pairId, treeUri, isCoarse = true),
+                    LocalChangeEvent.Changed(pairId, null, isCoarse = true),
                 ),
                 events,
             )

@@ -72,7 +72,8 @@ fun interface MediaCollectionObserverFactory {
  * [LocalTreeWatchSource.MediaStoreTree]. MediaStore notifies for a whole collection, so every
  * notification is re-scoped against the pair's `RELATIVE_PATH` prefix before it is reported, and
  * items still marked `IS_PENDING` are ignored because they are not completely written yet.
- * Notifications that cannot be scoped are dropped rather than widened to the whole pair.
+ * Collection-level notifications are emitted as coarse prompts; item notifications that cannot be
+ * scoped are dropped rather than widened to the whole pair.
  */
 class MediaStoreLocalChangeWatcher(
     private val sourceProvider: LocalTreeWatchSourceProvider,
@@ -155,7 +156,10 @@ class MediaStoreLocalChangeWatcher(
 
         fun onChange(itemUri: String?) {
             synchronized(registrationLock) { if (!isActive) return }
-            if (itemUri == null) return
+            if (itemUri == null) {
+                listener(LocalChangeEvent.Changed(pairId, isCoarse = true))
+                return
+            }
 
             when (val lookup = metadataReader.read(itemUri)) {
                 MediaItemLookup.PermissionDenied -> emitFailure(LocalChangeWatchFailure.PermissionDenied)

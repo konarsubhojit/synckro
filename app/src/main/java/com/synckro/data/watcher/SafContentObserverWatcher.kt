@@ -5,6 +5,7 @@ import android.database.ContentObserver
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
+import android.provider.DocumentsContract
 import com.synckro.data.local.dao.SyncPairDao
 import com.synckro.data.local.entity.SyncPairEntity
 import com.synckro.data.local.fs.LocalFolderAccessChecker
@@ -23,6 +24,8 @@ import com.synckro.domain.sync.LocalChangeWatcherFallback
 import com.synckro.domain.sync.LocalChangeWatcherRefresher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import timber.log.Timber
@@ -38,7 +41,7 @@ class SafContentObserverWatcher(
     private val eventRepository: SyncEventRepository? = null,
 ) : LocalChangeWatcher,
     LocalChangeWatcherRefresher {
-    private val loggingScope = CoroutineScope(Dispatchers.IO)
+    private val loggingScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     override val capability: LocalChangeWatcherCapability = LocalChangeWatcherCapability.Available
 
     private val lock = Any()
@@ -183,6 +186,7 @@ class SafContentObserverWatcher(
             registrationsByPairId.values.forEach { observerRegistry.unregisterContentObserver(it.observer) }
             registrationsByPairId.clear()
         }
+        loggingScope.cancel()
     }
 
     private fun createRegistration(
@@ -247,10 +251,15 @@ class SafContentObserverWatcher(
                         )
                 }
 
+                val isCoarse =
+                    uri == null ||
+                        uri.toString() == registration.treeUriString ||
+                        uri.hasTreeRootDocumentId(registration.treeUriString)
                 registration.listeners.toList() to
                     LocalChangeEvent.Changed(
                         pairId = pairId,
                         locationHint = uri?.toString()?.takeIf { it.isNotBlank() },
+                        isCoarse = isCoarse,
                     )
             }
 
@@ -270,6 +279,16 @@ class SafContentObserverWatcher(
         loggingScope.launch {
             eventRepository.log(pairId, SyncEventLevel.INFO, SyncEventTag.INSTANT_WATCH, message)
         }
+    }
+
+    private fun Uri?.hasTreeRootDocumentId(treeUriString: String): Boolean {
+        this ?: return false
+        val treeRootDocumentId =
+            runCatching { DocumentsContract.getTreeDocumentId(Uri.parse(treeUriString)) }.getOrNull()
+        val callbackDocumentId =
+            runCatching { DocumentsContract.getDocumentId(this) }
+                .getOrElse { runCatching { DocumentsContract.getTreeDocumentId(this) }.getOrNull() }
+        return treeRootDocumentId != null && callbackDocumentId == treeRootDocumentId
     }
 
     private fun SyncPairEntity.hasWatchableSource(): Boolean =

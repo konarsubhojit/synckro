@@ -8,6 +8,7 @@ import android.provider.MediaStore
 import com.synckro.data.local.fs.DefaultSafDocumentMetadataQuery
 import com.synckro.data.local.fs.DefaultSafReadProbe
 import com.synckro.data.local.fs.LocalFsEnumerator
+import com.synckro.data.local.fs.LocalPathScope
 import com.synckro.data.local.fs.MediaStorePendingStateQuery
 import com.synckro.data.local.fs.TargetedSafMetadataSample
 import com.synckro.data.local.fs.TargetedSafMetadataSampler
@@ -85,29 +86,40 @@ class InstantSyncCandidateIngestor
                 return
             }
 
+            val pathScope =
+                LocalFsEnumerator.compilePathScope(
+                    includeGlobs = pair.includeGlobs,
+                    ignoreGlobs = pair.excludeGlobs,
+                    excludeSubfolders = pair.excludeSubfolders,
+                )
             val candidates = pathResolver.resolve(pair, event)
             if (candidates.isEmpty()) {
                 val enumerator = localFsEnumerator
                 if (enumerator != null && pathResolver.isCoarse(pair, event)) {
-                    eventRepository?.log(
-                        pair.id,
-                        SyncEventLevel.INFO,
-                        SyncEventTag.INSTANT_WATCH,
-                        SyncEventTaxonomy.watchRescan(),
-                    )
                     pairSignalCoordinator.signal(pair.id) {
-                        enumerator
-                            .enumerate(
-                                pairId = pair.id,
-                                treeUri = Uri.parse(pair.localTreeUri),
-                                includeGlobs = pair.includeGlobs,
-                                ignoreGlobs = pair.excludeGlobs,
-                                excludeSubfolders = pair.excludeSubfolders,
-                            )
-                            .snapshot
-                            ?.forEach { discovered ->
-                                onLocalChange(LocalChangeEvent.Changed(pair.id, discovered.relativePath))
+                        val changedPaths =
+                            enumerator
+                                .enumerate(
+                                    pairId = pair.id,
+                                    treeUri = Uri.parse(pair.localTreeUri),
+                                    includeGlobs = pair.includeGlobs,
+                                    ignoreGlobs = pair.excludeGlobs,
+                                    excludeSubfolders = pair.excludeSubfolders,
+                                ).let { it.added + it.modified }
+                        var queuedAny = false
+                        changedPaths.forEach { relativePath ->
+                            val candidate = InstantSyncCandidateTarget(Uri.parse(pair.localTreeUri), relativePath)
+                            if (queueCandidate(pair, candidate, pathScope)) {
+                                queuedAny = true
                             }
+                        }
+                        eventRepository?.log(
+                            pair.id,
+                            SyncEventLevel.INFO,
+                            SyncEventTag.INSTANT_WATCH,
+                            SyncEventTaxonomy.watchRescan(changedPaths.size),
+                        )
+                        if (queuedAny) syncScheduler.enqueueInstant(pair)
                     }
                     return
                 }
@@ -127,87 +139,88 @@ class InstantSyncCandidateIngestor
                 return
             }
 
-            val pathScope =
-                LocalFsEnumerator.compilePathScope(
-                    includeGlobs = pair.includeGlobs,
-                    ignoreGlobs = pair.excludeGlobs,
-                    excludeSubfolders = pair.excludeSubfolders,
-                )
-
             var queuedAny = false
             candidates.forEach { candidate ->
-                if (!pathScope.contains(candidate.relativePath)) {
-                    Timber.d(
-                        "Skipping Instant Sync candidate for pair %d: out of scope '%s'",
-                        pair.id,
-                        candidate.relativePath,
-                    )
-                    return@forEach
-                }
-
-                when (val preflight = candidateSampler.sample(candidate)) {
-                    InstantSyncCandidateSample.Missing -> {
-                        Timber.d(
-                            "Skipping Instant Sync candidate for pair %d: file missing '%s'",
-                            pair.id,
-                            candidate.relativePath,
-                        )
-                        return@forEach
-                    }
-                    is InstantSyncCandidateSample.Inconclusive -> {
-                        Timber.d(
-                            "Deferring Instant Sync candidate for pair %d: %s (%s)",
-                            pair.id,
-                            candidate.relativePath,
-                            preflight.reason,
-                        )
-                        return@forEach
-                    }
-                    is InstantSyncCandidateSample.Available -> {
-                        if (!preflight.isEligibleFile(candidate.relativePath)) return@forEach
-                    }
-                }
-
-                when (val stability = stabilityDetector.awaitStable(candidate)) {
-                    is FileStabilityResult.Deferred -> {
-                        Timber.d(
-                            "Deferring Instant Sync candidate for pair %d: %s (%s)",
-                            pair.id,
-                            candidate.relativePath,
-                            stability.reason,
-                        )
-                        return@forEach
-                    }
-                    FileStabilityResult.Stable -> Unit
-                }
-
-                val stable =
-                    candidateSampler.sample(candidate) as? InstantSyncCandidateSample.Available ?: run {
-                        Timber.d(
-                            "Skipping Instant Sync candidate for pair %d after stability gate: %s",
-                            pair.id,
-                            candidate.relativePath,
-                        )
-                        return@forEach
-                    }
-                if (!stable.isEligibleFile(candidate.relativePath)) return@forEach
-
-                val observedAtMs = System.currentTimeMillis()
-                pendingUploadRepository.upsertCandidate(
-                    pairId = pair.id,
-                    relativePath = candidate.relativePath,
-                    documentIdHint = stable.documentId,
-                    observedSizeBytes = stable.sizeBytes,
-                    observedMtimeMs = stable.mtimeMs,
-                    eligibleAtMs = observedAtMs,
-                    observedAtMs = observedAtMs,
-                )
-                queuedAny = true
+                if (queueCandidate(pair, candidate, pathScope)) queuedAny = true
             }
 
             if (queuedAny) {
                 pairSignalCoordinator.signal(pair.id) { syncScheduler.enqueueInstant(pair) }
             }
+        }
+
+        private suspend fun queueCandidate(
+            pair: SyncPair,
+            candidate: InstantSyncCandidateTarget,
+            pathScope: LocalPathScope,
+        ): Boolean {
+            if (!pathScope.contains(candidate.relativePath)) {
+                Timber.d(
+                    "Skipping Instant Sync candidate for pair %d: out of scope '%s'",
+                    pair.id,
+                    candidate.relativePath,
+                )
+                return false
+            }
+
+            when (val preflight = candidateSampler.sample(candidate)) {
+                InstantSyncCandidateSample.Missing -> {
+                    Timber.d(
+                        "Skipping Instant Sync candidate for pair %d: file missing '%s'",
+                        pair.id,
+                        candidate.relativePath,
+                    )
+                    return false
+                }
+                is InstantSyncCandidateSample.Inconclusive -> {
+                    Timber.d(
+                        "Deferring Instant Sync candidate for pair %d: %s (%s)",
+                        pair.id,
+                        candidate.relativePath,
+                        preflight.reason,
+                    )
+                    return false
+                }
+                is InstantSyncCandidateSample.Available -> {
+                    if (!preflight.isEligibleFile(candidate.relativePath)) return false
+                }
+            }
+
+            when (val stability = stabilityDetector.awaitStable(candidate)) {
+                is FileStabilityResult.Deferred -> {
+                    Timber.d(
+                        "Deferring Instant Sync candidate for pair %d: %s (%s)",
+                        pair.id,
+                        candidate.relativePath,
+                        stability.reason,
+                    )
+                    return false
+                }
+                FileStabilityResult.Stable -> Unit
+            }
+
+            val stable =
+                candidateSampler.sample(candidate) as? InstantSyncCandidateSample.Available ?: run {
+                    Timber.d(
+                        "Skipping Instant Sync candidate for pair %d after stability gate: %s",
+                        pair.id,
+                        candidate.relativePath,
+                    )
+                    return false
+                }
+            if (!stable.isEligibleFile(candidate.relativePath)) return false
+
+            val observedAtMs = System.currentTimeMillis()
+            pendingUploadRepository.upsertCandidate(
+                pairId = pair.id,
+                relativePath = candidate.relativePath,
+                documentIdHint = stable.documentId,
+                observedSizeBytes = stable.sizeBytes,
+                observedMtimeMs = stable.mtimeMs,
+                eligibleAtMs = observedAtMs,
+                observedAtMs = observedAtMs,
+            )
+            return true
         }
 
         private fun InstantSyncCandidateSample.Available.isEligibleFile(relativePath: String): Boolean {
@@ -266,7 +279,9 @@ sealed interface InstantSyncCandidateSample {
 
 class InstantSyncChangedPathResolver
     @Inject
-    constructor() {
+    constructor(
+        private val sourceProvider: LocalTreeWatchSourceProvider,
+    ) {
         @Suppress("DEPRECATION")
         private val primaryStorageRoot = Environment.getExternalStorageDirectory().absolutePath.trimEnd('/')
 
@@ -290,7 +305,12 @@ class InstantSyncChangedPathResolver
             event: LocalChangeEvent.Changed,
         ): Boolean {
             val hint = event.locationHint?.trim().orEmpty()
-            return hint.isEmpty() || hint == pair.localTreeUri
+            if (event.isCoarse || hint.isEmpty() || trimTrailingSlash(hint) == trimTrailingSlash(pair.localTreeUri)) {
+                return true
+            }
+            if (sameRootDocument(pair.localTreeUri, hint)) return true
+            val source = sourceProvider.sourceFor(pair.id) as? LocalTreeWatchSource.DirectPath
+            return source != null && trimTrailingSlash(hint) == trimTrailingSlash(source.path)
         }
 
         private fun resolveContentUriHint(
@@ -374,6 +394,20 @@ class InstantSyncChangedPathResolver
         private fun Uri.documentIdOrNull(): String? =
             runCatching { DocumentsContract.getDocumentId(this) }
                 .getOrElse { runCatching { DocumentsContract.getTreeDocumentId(this) }.getOrNull() }
+
+        private fun sameRootDocument(
+            treeUriString: String,
+            hint: String,
+        ): Boolean {
+            if (!hint.startsWith("content://")) return false
+            val treeUri = Uri.parse(treeUriString)
+            val hintUri = Uri.parse(hint)
+            val rootDocumentId = runCatching { DocumentsContract.getTreeDocumentId(treeUri) }.getOrNull()
+            val hintDocumentId = hintUri.documentIdOrNull()
+            return rootDocumentId != null && hintDocumentId == rootDocumentId
+        }
+
+        private fun trimTrailingSlash(value: String): String = value.trim().trimEnd('/')
 
         private companion object {
             const val EXTERNAL_STORAGE_AUTHORITY = "com.android.externalstorage.documents"

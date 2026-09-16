@@ -139,16 +139,15 @@ class FileObserverLocalChangeWatcher(
         }
 
         private fun watchRecursively(path: String) {
-            watchDirectory(path)
+            if (!watchDirectory(path)) return
             directoryTreeReader.subdirectories(path).forEach(::watchRecursively)
         }
 
-        private fun watchDirectory(path: String) {
-            val canonicalPath = directoryTreeReader.canonicalPath(path) ?: return
+        private fun watchDirectory(path: String): Boolean {
+            val canonicalPath = directoryTreeReader.canonicalPath(path) ?: return false
             synchronized(registrationLock) {
-                if (!isActive || canonicalPath in visitedCanonicalPaths) return
+                if (!isActive || canonicalPath in visitedCanonicalPaths) return false
                 if (handlesByPath.size >= maxWatches) throw WatchLimitExceeded()
-                visitedCanonicalPaths += canonicalPath
             }
             val handle = observerFactory.start(path) { signal -> onSignal(path, signal) }
             val stopImmediately =
@@ -157,13 +156,16 @@ class FileObserverLocalChangeWatcher(
                         true
                     } else {
                         handlesByPath[path] = handle
+                        visitedCanonicalPaths += canonicalPath
                         false
                     }
                 }
             if (stopImmediately) {
                 handle.stop()
+                return false
             } else {
                 synchronized(lock) { handles += handle }
+                return true
             }
         }
 
@@ -178,6 +180,16 @@ class FileObserverLocalChangeWatcher(
                 signal.childName != null
             ) {
                 runCatching { watchRecursively("$watchedPath/${signal.childName}") }
+                    .onFailure { failure ->
+                        if (failure is WatchLimitExceeded) {
+                            Timber.w(
+                                "FileObserverLocalChangeWatcher: watch limit reached after pair %d registration",
+                                pairId,
+                            )
+                        } else {
+                            Timber.d(failure, "FileObserverLocalChangeWatcher: cannot observe new child directory")
+                        }
+                    }
             }
             val event =
                 when (signal) {
@@ -185,15 +197,21 @@ class FileObserverLocalChangeWatcher(
                         LocalChangeEvent.Changed(
                             pairId = pairId,
                             locationHint = signal.childName?.let { "$watchedPath/$it" } ?: watchedPath,
+                            isCoarse = signal.childName == null || signal.isDirectory == true,
                         )
-                    DirectoryWatchSignal.Overflow -> LocalChangeEvent.Changed(pairId)
+                    DirectoryWatchSignal.Overflow -> LocalChangeEvent.Changed(pairId, isCoarse = true)
                     DirectoryWatchSignal.VolumeUnmounted ->
                         LocalChangeEvent.Failure(pairId, LocalChangeWatchFailure.VolumeUnavailable)
                     DirectoryWatchSignal.WatchInvalidated ->
-                        LocalChangeEvent.Failure(
-                            pairId,
-                            LocalChangeWatchFailure.Unknown("file observer watch was removed"),
-                        )
+                        if (watchedPath == rootPath) {
+                            LocalChangeEvent.Failure(
+                                pairId,
+                                LocalChangeWatchFailure.Unknown("file observer watch was removed"),
+                            )
+                        } else {
+                            forgetHandle(watchedPath)
+                            return
+                        }
                 }
             synchronized(registrationLock) {
                 if (!isActive) return
@@ -221,6 +239,17 @@ class FileObserverLocalChangeWatcher(
                 it.stop()
                 synchronized(lock) { handles.remove(it) }
             }
+        }
+
+        private fun forgetHandle(path: String) {
+            val handle =
+                synchronized(registrationLock) {
+                    val canonicalPath = directoryTreeReader.canonicalPath(path)
+                    if (canonicalPath != null) visitedCanonicalPaths.remove(canonicalPath)
+                    handlesByPath.remove(path)
+                } ?: return
+            handle.stop()
+            synchronized(lock) { handles.remove(handle) }
         }
     }
 

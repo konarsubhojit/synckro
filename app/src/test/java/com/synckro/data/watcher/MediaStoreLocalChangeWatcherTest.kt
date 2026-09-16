@@ -34,7 +34,13 @@ class MediaStoreLocalChangeWatcherTest {
 
         assertTrue(result is LocalChangeWatchRegistrationResult.Registered)
         assertEquals(setOf(MediaCollection.IMAGES, MediaCollection.VIDEO), factory.observed.single())
-        assertEquals(listOf(LocalChangeEvent.Changed(3, "DCIM/Camera/photo.jpg")), events)
+        assertEquals(
+            listOf(
+                LocalChangeEvent.Changed(3, "DCIM/Camera/photo.jpg"),
+                LocalChangeEvent.Changed(3, isCoarse = true),
+            ),
+            events,
+        )
     }
 
     @Test

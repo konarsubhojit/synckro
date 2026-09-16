@@ -77,7 +77,7 @@ object SyncEventTaxonomy {
 
     fun watchUnavailable(reason: String): String = format(WATCH_UNAVAILABLE, "reason" to reason)
 
-    fun watchRescan(): String = WATCH_RESCAN
+    fun watchRescan(candidates: Int): String = format(WATCH_RESCAN, "candidates" to candidates.toString())
 
     fun stabilityAccepted(changeCount: Int): String = format(STABILITY_ACCEPTED, "changes" to changeCount.toString())
 
@@ -140,7 +140,9 @@ object SyncEventTaxonomy {
             normalizedKey.contains("uri") ||
             normalizedKey.contains("account") ||
             normalizedKey.contains("email") ||
-            normalizedKey.contains("id")
+            normalizedKey == "id" ||
+            normalizedKey.endsWith("_id") ||
+            normalizedKey.endsWith("id")
         ) {
             return "<redacted>"
         }

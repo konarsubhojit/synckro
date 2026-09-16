@@ -318,12 +318,12 @@ object AppModule {
         )
 
     @Provides @Singleton
-    fun provideLocalChangeWatcher(
+    fun provideCompositeLocalChangeWatcher(
         sourceProvider: LocalTreeWatchSourceProvider,
         safWatcher: SafContentObserverWatcher,
         eventRepository: SyncEventRepository,
         @ApplicationContext context: Context,
-    ): LocalChangeWatcher =
+    ): CompositeLocalChangeWatcher =
         CompositeLocalChangeWatcher(
             delegates =
                 listOf(
@@ -343,7 +343,10 @@ object AppModule {
         )
 
     @Provides
-    fun provideLocalChangeWatcherRefresher(impl: SafContentObserverWatcher): LocalChangeWatcherRefresher = impl
+    fun provideLocalChangeWatcher(impl: CompositeLocalChangeWatcher): LocalChangeWatcher = impl
+
+    @Provides
+    fun provideLocalChangeWatcherRefresher(impl: CompositeLocalChangeWatcher): LocalChangeWatcherRefresher = impl
 
     @Provides @Singleton
     fun provideWatchablePairs(impl: DefaultWatchablePairs): WatchablePairs = impl

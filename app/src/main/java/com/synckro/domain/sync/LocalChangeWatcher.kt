@@ -102,11 +102,13 @@ sealed interface LocalChangeEvent {
     /**
      * [locationHint] is only a best-effort URI or path hint. It can be absent, stale,
      * non-canonical, or refer to an item that has already moved or disappeared; callers must not
-     * treat it as a stable identifier.
+     * treat it as a stable identifier. [isCoarse] marks notifications known to identify a pair or
+     * directory scope rather than a single file.
      */
     data class Changed(
         override val pairId: Long,
         val locationHint: String? = null,
+        val isCoarse: Boolean = false,
     ) : LocalChangeEvent
 
     data class Failure(
