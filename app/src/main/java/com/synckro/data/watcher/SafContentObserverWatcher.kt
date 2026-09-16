@@ -8,6 +8,10 @@ import android.os.Looper
 import com.synckro.data.local.dao.SyncPairDao
 import com.synckro.data.local.entity.SyncPairEntity
 import com.synckro.data.local.fs.LocalFolderAccessChecker
+import com.synckro.data.repository.SyncEventRepository
+import com.synckro.domain.model.SyncEventLevel
+import com.synckro.domain.model.SyncEventTag
+import com.synckro.domain.model.SyncEventTaxonomy
 import com.synckro.domain.model.allowsUpload
 import com.synckro.domain.sync.LocalChangeEvent
 import com.synckro.domain.sync.LocalChangeWatchFailure
@@ -29,6 +33,7 @@ class SafContentObserverWatcher(
     private val localFolderAccessChecker: LocalFolderAccessChecker,
     private val observerRegistry: ContentObserverRegistry,
     private val observerHandler: Handler = Handler(Looper.getMainLooper()),
+    private val eventRepository: SyncEventRepository? = null,
 ) : LocalChangeWatcher,
     LocalChangeWatcherRefresher {
     override val capability: LocalChangeWatcherCapability = LocalChangeWatcherCapability.Available
@@ -48,6 +53,7 @@ class SafContentObserverWatcher(
                 syncPairDao.getById(pairId)
             } ?: run {
                 Timber.i("instant.watch.register.failed pairId=%d reason=pair_not_found", pairId)
+                log(pairId, SyncEventTaxonomy.watchUnavailable("pair_not_found"))
                 return LocalChangeWatchRegistrationResult.Failed(
                     LocalChangeWatchFailure.Unknown("pair_not_found"),
                 )
@@ -59,11 +65,13 @@ class SafContentObserverWatcher(
                 pairId,
                 pair.watchabilityFailures().joinToString(","),
             )
+            log(pairId, SyncEventTaxonomy.watchUnavailable("pair_not_watchable"))
             return unavailableResult()
         }
 
         if (!localFolderAccessChecker.hasReadWriteAccess(pair.localTreeUri)) {
             Timber.i("instant.watch.register.unavailable pairId=%d reasons=saf_access_lost", pairId)
+            log(pairId, SyncEventTaxonomy.watchUnavailable("saf_access_lost"))
             return unavailableResult()
         }
 
@@ -91,12 +99,14 @@ class SafContentObserverWatcher(
             }
         } catch (e: SecurityException) {
             Timber.i("instant.watch.register.unavailable pairId=%d reasons=security_exception", pairId)
+            log(pairId, SyncEventTaxonomy.watchUnavailable("security_exception"))
             Timber.d(e, "instant.watch.register.security_exception pairId=%d", pairId)
             return unavailableResult()
         }
 
         var isUnregistered = false
         Timber.i("instant.watch.registered pairId=%d", pairId)
+        log(pairId, SyncEventTaxonomy.watchRegistered("saf"))
         return LocalChangeWatchRegistrationResult.Registered(
             LocalChangeWatchRegistration {
                 synchronized(lock) {
@@ -211,6 +221,15 @@ class SafContentObserverWatcher(
             registeredTreeUri != null && uri?.toString() == registeredTreeUri,
             uri?.pathSegments?.size ?: 0,
         )
+        log(
+            pairId,
+            SyncEventTaxonomy.watchCallback(
+                authority = uri?.authority ?: "none",
+                uriNull = uri == null,
+                treeRoot = registeredTreeUri != null && uri?.toString() == registeredTreeUri,
+                segmentCount = uri?.pathSegments?.size ?: 0,
+            ),
+        )
         val listenersAndEvent =
             synchronized(lock) {
                 val registration = registrationsByPairId[pairId] ?: return
@@ -239,6 +258,16 @@ class SafContentObserverWatcher(
         LocalChangeWatchRegistrationResult.Unavailable(
             LocalChangeWatcherCapability.Unavailable(LocalChangeWatcherFallback.PERIODIC_SCAN),
         )
+
+    private fun log(
+        pairId: Long,
+        message: String,
+    ) {
+        eventRepository ?: return
+        runBlocking(Dispatchers.IO) {
+            eventRepository.log(pairId, SyncEventLevel.INFO, SyncEventTag.INSTANT_WATCH, message)
+        }
+    }
 
     private fun SyncPairEntity.hasWatchableSource(): Boolean =
         watchabilityFailures().isEmpty()

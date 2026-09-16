@@ -13,10 +13,14 @@ import com.synckro.data.local.fs.TargetedSafMetadataSample
 import com.synckro.data.local.fs.TargetedSafMetadataSampler
 import com.synckro.data.repository.PendingUploadRepository
 import com.synckro.data.repository.SettingsRepository
+import com.synckro.data.repository.SyncEventRepository
 import com.synckro.data.repository.SyncPairRepository
 import com.synckro.data.scanner.DefaultDocumentChildrenQuery
 import com.synckro.data.worker.PendingDispatchResumer
 import com.synckro.data.worker.SyncScheduler
+import com.synckro.domain.model.SyncEventLevel
+import com.synckro.domain.model.SyncEventTag
+import com.synckro.domain.model.SyncEventTaxonomy
 import com.synckro.domain.model.SyncPair
 import com.synckro.domain.sync.FileCandidateDecision
 import com.synckro.domain.sync.FileCandidatePolicy
@@ -48,6 +52,8 @@ class InstantSyncCandidateIngestor
         private val pathResolver: InstantSyncChangedPathResolver,
         private val candidateSampler: SafInstantSyncCandidateSampler,
         private val stabilityDetector: FileStabilityDetector<InstantSyncCandidateTarget>,
+        private val localFsEnumerator: LocalFsEnumerator? = null,
+        private val eventRepository: SyncEventRepository? = null,
     ) {
         suspend fun onLocalChange(event: LocalChangeEvent.Changed) {
             Timber.i(
@@ -81,6 +87,29 @@ class InstantSyncCandidateIngestor
 
             val candidates = pathResolver.resolve(pair, event)
             if (candidates.isEmpty()) {
+                if (pathResolver.isCoarse(pair, event)) {
+                    eventRepository?.log(
+                        pair.id,
+                        SyncEventLevel.INFO,
+                        SyncEventTag.INSTANT_WATCH,
+                        SyncEventTaxonomy.watchRescan(),
+                    )
+                    pairSignalCoordinator.signal(pair.id) {
+                        localFsEnumerator
+                            ?.enumerate(
+                                pairId = pair.id,
+                                treeUri = Uri.parse(pair.localTreeUri),
+                                includeGlobs = pair.includeGlobs,
+                                ignoreGlobs = pair.excludeGlobs,
+                                excludeSubfolders = pair.excludeSubfolders,
+                            )
+                            ?.snapshot
+                            ?.forEach { discovered ->
+                                onLocalChange(LocalChangeEvent.Changed(pair.id, discovered.relativePath))
+                            }
+                    }
+                    return
+                }
                 // The INFO/DEBUG pair below is deliberate, not a duplicate: the INFO line stays
                 // path-free (only hintPresent) so it is safe for release-level log captures, while
                 // the DEBUG line carries the raw hint for local diagnosis only.
@@ -252,6 +281,14 @@ class InstantSyncChangedPathResolver
                 resolveVolumeRelativeHint(treeUri, hint),
                 resolvePairRelativeHint(treeUri, hint),
             ).distinctBy { it.relativePath }
+        }
+
+        fun isCoarse(
+            pair: SyncPair,
+            event: LocalChangeEvent.Changed,
+        ): Boolean {
+            val hint = event.locationHint?.trim().orEmpty()
+            return hint.isEmpty() || resolve(pair, event).isEmpty()
         }
 
         private fun resolveContentUriHint(
