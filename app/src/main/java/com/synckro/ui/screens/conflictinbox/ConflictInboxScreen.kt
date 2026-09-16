@@ -46,6 +46,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -277,7 +278,7 @@ fun ConflictInboxScreen(
                             .padding(padding),
                 )
             }
-            state.conflicts.isEmpty() -> {
+            state.conflicts.isEmpty() && !state.hasActiveFilter -> {
                 EmptyState(
                     title = stringResource(R.string.conflict_inbox_empty_title),
                     body = stringResource(R.string.conflict_inbox_empty_body),
@@ -305,6 +306,7 @@ fun ConflictInboxScreen(
                         onToggleSelection = viewModel::toggleSelection,
                         onResolved = { haptic?.success() },
                         onOpenConflict = { selectedConflictId = it },
+                        onSearchQueryChange = viewModel::setSearchQuery,
                     )
                     val selectedConflict = state.conflicts.firstOrNull { it.id == selectedConflictId }
                     if (selectedConflict != null && !state.isSelectionMode) {
@@ -351,6 +353,7 @@ fun ConflictInboxScreen(
                                             scaffoldNavigator.navigateTo(ListDetailPaneScaffoldRole.Detail, conflictId as Any)
                                         }
                                     },
+                                    onSearchQueryChange = viewModel::setSearchQuery,
                                 )
                             }
                         },
@@ -406,6 +409,7 @@ private fun ConflictListPane(
     onToggleSelection: (Long) -> Unit,
     onResolved: () -> Unit = {},
     onOpenConflict: ((Long) -> Unit)? = null,
+    onSearchQueryChange: (String) -> Unit,
 ) {
     LazyColumn(
         modifier =
@@ -418,6 +422,14 @@ private fun ConflictListPane(
         if (!state.isSelectionMode) {
             item {
                 Spacer(Modifier.height(4.dp))
+                OutlinedTextField(
+                    value = state.searchQuery,
+                    onValueChange = onSearchQueryChange,
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    placeholder = { Text(stringResource(R.string.conflict_inbox_search_placeholder)) },
+                )
+                Spacer(Modifier.height(8.dp))
                 Surface(
                     color = MaterialTheme.colorScheme.secondaryContainer,
                     shape = MaterialTheme.shapes.medium,
@@ -430,6 +442,15 @@ private fun ConflictListPane(
                         modifier = Modifier.padding(12.dp),
                     )
                 }
+            }
+        }
+        if (state.conflicts.isEmpty()) {
+            item {
+                Text(
+                    text = stringResource(R.string.conflict_inbox_no_search_results),
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.padding(vertical = 16.dp),
+                )
             }
         }
         items(state.conflicts, key = { it.id }) { conflict ->

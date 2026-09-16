@@ -376,6 +376,42 @@ class ConflictInboxViewModelTest {
         }
 
     @Test
+    fun `search query filters conflicts by filename or pair ID without affecting filtered selection`() =
+        runTest {
+            every { conflictRepository.observeUnresolved() } returns
+                MutableStateFlow(
+                    listOf(
+                        makeConflict(id = 1L, pairId = 12L).copy(relativePath = "docs/report.pdf"),
+                        makeConflict(id = 2L, pairId = 34L).copy(relativePath = "photos/sunset.jpg"),
+                    ),
+                )
+            coEvery { fileIndexDao.getForPair(any()) } returns emptyList()
+            coEvery { syncPairRepository.getById(any()) } returns null
+            coEvery { accountRepository.getAll() } returns emptyList()
+
+            val vm = createVm()
+            val collectJob = launch { vm.state.collect {} }
+            advanceUntilIdle()
+
+            vm.setSearchQuery("PHOTO")
+            advanceUntilIdle()
+            assertEquals(listOf(2L), vm.state.value.conflicts.map { it.id })
+
+            vm.enterSelectionMode(2L)
+            vm.bulkKeepLocal()
+            advanceUntilIdle()
+            coVerifyOrder {
+                conflictRepository.resolve(2L, ConflictRecord.RESOLUTION_KEEP_LOCAL)
+            }
+
+            vm.setSearchQuery("12")
+            advanceUntilIdle()
+            assertEquals(listOf(1L), vm.state.value.conflicts.map { it.id })
+
+            collectJob.cancel()
+        }
+
+    @Test
     fun `exitSelectionMode clears selection and returns to normal mode`() =
         runTest {
             every { conflictRepository.observeUnresolved() } returns

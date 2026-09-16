@@ -89,11 +89,14 @@ class ConflictInboxViewModel
             val isSelectionMode: Boolean = false,
             val selectedIds: Set<Long> = emptySet(),
             val enableHaptics: Boolean = true,
+            val searchQuery: String = "",
+            val hasActiveFilter: Boolean = false,
         ) {
             val selectedCount: Int get() = selectedIds.size
         }
 
         private val selectionState = MutableStateFlow(Pair(false, linkedSetOf<Long>()))
+        private val searchQueryFlow = MutableStateFlow("")
 
         val state: StateFlow<UiState> =
             combine(
@@ -102,13 +105,25 @@ class ConflictInboxViewModel
                     .map { projectRows(it) },
                 settingsRepository.enableHaptics,
                 selectionState,
-            ) { rows, enableHaptics, (isSelectionMode, selectedIds) ->
+                searchQueryFlow,
+            ) { rows, enableHaptics, (isSelectionMode, selectedIds), searchQuery ->
+                val query = searchQuery.trim()
                 UiState(
-                    conflicts = rows,
+                    conflicts =
+                        if (query.isEmpty()) {
+                            rows
+                        } else {
+                            rows.filter {
+                                it.relativePath.contains(query, ignoreCase = true) ||
+                                    it.pairId.toString().contains(query, ignoreCase = true)
+                            }
+                        },
                     isLoading = false,
                     isSelectionMode = isSelectionMode,
                     selectedIds = selectedIds,
                     enableHaptics = enableHaptics,
+                    searchQuery = searchQuery,
+                    hasActiveFilter = query.isNotEmpty(),
                 )
             }.catch { e ->
                 Timber.w(e, "ConflictInboxViewModel: flow error")
@@ -118,6 +133,11 @@ class ConflictInboxViewModel
                 started = SharingStarted.WhileSubscribed(5_000),
                 initialValue = UiState(),
             )
+
+        /** Updates the filename or pair-ID search query. */
+        fun setSearchQuery(query: String) {
+            searchQueryFlow.value = query
+        }
 
         /** Records the user's choice to keep the local version for the conflict with [id]. */
         fun keepLocal(id: Long) = resolve(id, ConflictRecord.RESOLUTION_KEEP_LOCAL)
