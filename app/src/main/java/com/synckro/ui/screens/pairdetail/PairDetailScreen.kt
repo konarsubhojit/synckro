@@ -65,6 +65,8 @@ import com.synckro.ui.components.SectionCard
 import com.synckro.ui.screens.home.HomeViewModel
 import com.synckro.ui.screens.home.PairSummary
 import com.synckro.ui.screens.home.buildSyncNowSnackbar
+import java.text.DateFormat
+import java.util.Date
 
 /**
  * Per-pair detail screen (Phase 5c — issue #163).
@@ -301,16 +303,16 @@ private fun StatsCard(stats: PairStats) {
         if (lastSuccessAtMs != null) {
             val dateFormatter =
                 remember {
-                    java.text.DateFormat.getDateTimeInstance(
-                        java.text.DateFormat.SHORT,
-                        java.text.DateFormat.SHORT,
+                    DateFormat.getDateTimeInstance(
+                        DateFormat.SHORT,
+                        DateFormat.SHORT,
                     )
                 }
             Text(
                 text =
                     stringResource(
                         R.string.pair_detail_stats_last_success,
-                        dateFormatter.format(java.util.Date(lastSuccessAtMs)),
+                        dateFormatter.format(Date(lastSuccessAtMs)),
                     ),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -489,15 +491,15 @@ private fun RecentEventsCard(events: List<SyncEvent>, onOpenLogs: () -> Unit) {
 
         val dateFormatter =
             remember {
-                java.text.DateFormat.getDateTimeInstance(
-                    java.text.DateFormat.SHORT,
-                    java.text.DateFormat.SHORT,
+                DateFormat.getDateTimeInstance(
+                    DateFormat.SHORT,
+                    DateFormat.SHORT,
                 )
             }
         events.forEach { event ->
             Column(modifier = Modifier.fillMaxWidth()) {
                 Text(
-                    text = dateFormatter.format(java.util.Date(event.timestampMs)) + " · ${event.level.name}",
+                    text = dateFormatter.format(Date(event.timestampMs)) + " · ${event.level.name}",
                     style = MaterialTheme.typography.labelSmall,
                     color = eventLevelColor(event.level),
                     fontWeight = FontWeight.Medium,
