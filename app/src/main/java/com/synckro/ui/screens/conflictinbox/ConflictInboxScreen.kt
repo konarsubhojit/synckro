@@ -427,6 +427,7 @@ private fun ConflictListPane(
                     onValueChange = onSearchQueryChange,
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
+                    label = { Text(stringResource(R.string.conflict_inbox_search_label)) },
                     placeholder = { Text(stringResource(R.string.conflict_inbox_search_placeholder)) },
                 )
                 Spacer(Modifier.height(8.dp))
@@ -444,7 +445,7 @@ private fun ConflictListPane(
                 }
             }
         }
-        if (state.conflicts.isEmpty()) {
+        if (state.conflicts.isEmpty() && state.hasActiveFilter) {
             item {
                 Text(
                     text = stringResource(R.string.conflict_inbox_no_search_results),

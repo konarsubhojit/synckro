@@ -115,7 +115,7 @@ class ConflictInboxViewModel
                         } else {
                             rows.filter {
                                 it.relativePath.contains(query, ignoreCase = true) ||
-                                    it.pairId.toString().contains(query, ignoreCase = true)
+                                    it.pairId.toString() == query
                             }
                         },
                     isLoading = false,
