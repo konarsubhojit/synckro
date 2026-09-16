@@ -141,8 +141,7 @@ object SyncEventTaxonomy {
             normalizedKey.contains("account") ||
             normalizedKey.contains("email") ||
             normalizedKey == "id" ||
-            normalizedKey.endsWith("_id") ||
-            normalizedKey.endsWith("id")
+            normalizedKey.endsWith("_id")
         ) {
             return "<redacted>"
         }

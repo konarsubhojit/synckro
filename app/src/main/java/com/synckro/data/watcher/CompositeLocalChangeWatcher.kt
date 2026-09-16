@@ -192,10 +192,13 @@ class CompositeLocalChangeWatcher(
             }
             when (val result = delegate.register(pairId, guardedListener)) {
                 is LocalChangeWatchRegistrationResult.Registered -> {
-                    registrations += DelegateRegistration(delegate, result.registration)
+                    registrations += DelegateRegistration(result.registration)
                     log(pairId, SyncEventTaxonomy.watchRegistered(delegateName(delegate)))
                 }
-                is LocalChangeWatchRegistrationResult.Failed -> firstFailure = firstFailure ?: result.failure
+                is LocalChangeWatchRegistrationResult.Failed -> {
+                    firstFailure = firstFailure ?: result.failure
+                    log(pairId, SyncEventTaxonomy.watchUnavailable("${delegateName(delegate)}_failed"))
+                }
                 is LocalChangeWatchRegistrationResult.Unavailable ->
                     firstUnavailable = firstUnavailable ?: result.capability
             }
@@ -243,7 +246,8 @@ class CompositeLocalChangeWatcher(
             synchronized(registrationLock) { if (!isActive) return }
             val replacement = startDelegateRegistrations(pairId, listener)
             synchronized(registrationLock) {
-                if (!isActive) {
+                val isCompositeShutdown = synchronized(lock) { isShutdown }
+                if (!isActive || isCompositeShutdown) {
                     replacement.registrations.forEach { it.registration.unregister() }
                     return
                 }
@@ -270,7 +274,6 @@ class CompositeLocalChangeWatcher(
     }
 
     private data class DelegateRegistration(
-        val delegate: LocalChangeWatcher,
         val registration: LocalChangeWatchRegistration,
     )
 

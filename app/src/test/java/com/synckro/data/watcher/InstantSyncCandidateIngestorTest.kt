@@ -1,6 +1,7 @@
 package com.synckro.data.watcher
 
 import android.content.ContentResolver
+import android.net.Uri
 import com.synckro.data.local.fs.EnumerationResult
 import com.synckro.data.local.fs.LocalFileEntry
 import com.synckro.data.local.fs.LocalFsEnumerator
@@ -315,7 +316,7 @@ class InstantSyncCandidateIngestorTest {
         pair: SyncPair,
         vararg relativePaths: String,
     ) {
-        val treeUri = android.net.Uri.parse(pair.localTreeUri)
+        val treeUri = Uri.parse(pair.localTreeUri)
         relativePaths.forEach { relativePath ->
             val target = InstantSyncCandidateTarget(treeUri, relativePath)
             every { candidateSampler.sample(target) } returns availableSample(documentId = "doc-$relativePath")

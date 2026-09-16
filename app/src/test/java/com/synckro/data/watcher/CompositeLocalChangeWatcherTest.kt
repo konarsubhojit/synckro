@@ -13,6 +13,7 @@ import com.synckro.domain.sync.LocalChangeWatcherCapability
 import com.synckro.domain.sync.LocalChangeWatcherFallback
 import io.mockk.coVerify
 import io.mockk.mockk
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -147,6 +148,26 @@ class CompositeLocalChangeWatcherTest {
     }
 
     @Test
+    fun `delegate failures are written to event repository when another delegate registers`() {
+        val eventRepository = mockk<SyncEventRepository>(relaxed = true)
+        val failing = FakeWatcher()
+        failing.result = LocalChangeWatchRegistrationResult.Failed(LocalChangeWatchFailure.PermissionDenied)
+        val composite = CompositeLocalChangeWatcher(listOf(failing, FakeWatcher()), deduper, eventRepository)
+
+        val result = composite.register(pairId = 5) {}
+
+        assertTrue(result is LocalChangeWatchRegistrationResult.Registered)
+        coVerify(timeout = 1_000) {
+            eventRepository.log(
+                5L,
+                SyncEventLevel.INFO,
+                SyncEventTag.INSTANT_WATCH,
+                SyncEventTaxonomy.watchUnavailable("other_failed"),
+            )
+        }
+    }
+
+    @Test
     fun `refresh rebuilds active delegate registrations`() {
         val watcher = FakeWatcher()
         val composite = CompositeLocalChangeWatcher(listOf(watcher), deduper)
@@ -154,7 +175,7 @@ class CompositeLocalChangeWatcherTest {
         composite.register(pairId = 5, listener = events::add)
         val firstListenerCount = watcher.listeners.size
 
-        kotlinx.coroutines.runBlocking { composite.refresh(5) }
+        runBlocking { composite.refresh(5) }
         watcher.emit(LocalChangeEvent.Changed(5, "notes.txt"))
 
         assertEquals(1, firstListenerCount)
