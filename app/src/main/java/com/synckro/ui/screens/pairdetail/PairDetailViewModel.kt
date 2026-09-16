@@ -201,7 +201,15 @@ class PairDetailViewModel
              * How many non-terminal rows we expect, on average, per terminal run —
              * used to size [STATS_EVENT_LIMIT] so the fetch scales with [STATS_WINDOW]
              * instead of being a fixed constant that silently under-fills for larger
-             * windows.
+             * windows. Chosen generously relative to observed `SyncWorker` logging:
+             * a normal periodic run logs at most one or two non-terminal rows before
+             * its terminal one (e.g. a single "Sync started …"), and even bursty
+             * Instant Sync retry/deferral chains (`SyncEventTag.INSTANT_STABILITY`)
+             * are individually rate-limited by
+             * [com.synckro.data.repository.SyncEventRepository.logRateLimited]. If a
+             * pair's non-terminal volume ever regresses past this ratio,
+             * [statsFlow]'s under-fill log line below surfaces it for retuning rather
+             * than silently reporting a smaller-than-requested window.
              */
             private const val STATS_EVENT_LIMIT_MULTIPLIER = 10
 
