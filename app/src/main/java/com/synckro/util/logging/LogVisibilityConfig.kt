@@ -41,6 +41,7 @@ object LogVisibilityConfig {
             // Instant Sync taxonomy events cover queueing, dispatch, and targeted
             // outcomes without paths or account identifiers.
             com.synckro.domain.model.SyncEventTag.INSTANT_QUEUE,
+            com.synckro.domain.model.SyncEventTag.INSTANT_WATCH,
             com.synckro.domain.model.SyncEventTag.INSTANT_DISPATCH,
             com.synckro.domain.model.SyncEventTag.INSTANT_APPLY,
             com.synckro.domain.model.SyncEventTag.INSTANT_OUTCOME,

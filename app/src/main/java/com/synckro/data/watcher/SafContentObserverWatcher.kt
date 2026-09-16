@@ -5,9 +5,14 @@ import android.database.ContentObserver
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
+import android.provider.DocumentsContract
 import com.synckro.data.local.dao.SyncPairDao
 import com.synckro.data.local.entity.SyncPairEntity
 import com.synckro.data.local.fs.LocalFolderAccessChecker
+import com.synckro.data.repository.SyncEventRepository
+import com.synckro.domain.model.SyncEventLevel
+import com.synckro.domain.model.SyncEventTag
+import com.synckro.domain.model.SyncEventTaxonomy
 import com.synckro.domain.model.allowsUpload
 import com.synckro.domain.sync.LocalChangeEvent
 import com.synckro.domain.sync.LocalChangeWatchFailure
@@ -17,7 +22,11 @@ import com.synckro.domain.sync.LocalChangeWatcher
 import com.synckro.domain.sync.LocalChangeWatcherCapability
 import com.synckro.domain.sync.LocalChangeWatcherFallback
 import com.synckro.domain.sync.LocalChangeWatcherRefresher
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import timber.log.Timber
 
@@ -29,8 +38,10 @@ class SafContentObserverWatcher(
     private val localFolderAccessChecker: LocalFolderAccessChecker,
     private val observerRegistry: ContentObserverRegistry,
     private val observerHandler: Handler = Handler(Looper.getMainLooper()),
+    private val eventRepository: SyncEventRepository? = null,
 ) : LocalChangeWatcher,
     LocalChangeWatcherRefresher {
+    private val loggingScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     override val capability: LocalChangeWatcherCapability = LocalChangeWatcherCapability.Available
 
     private val lock = Any()
@@ -48,6 +59,7 @@ class SafContentObserverWatcher(
                 syncPairDao.getById(pairId)
             } ?: run {
                 Timber.i("instant.watch.register.failed pairId=%d reason=pair_not_found", pairId)
+                log(pairId, SyncEventTaxonomy.watchUnavailable("pair_not_found"))
                 return LocalChangeWatchRegistrationResult.Failed(
                     LocalChangeWatchFailure.Unknown("pair_not_found"),
                 )
@@ -59,11 +71,13 @@ class SafContentObserverWatcher(
                 pairId,
                 pair.watchabilityFailures().joinToString(","),
             )
+            log(pairId, SyncEventTaxonomy.watchUnavailable("pair_not_watchable"))
             return unavailableResult()
         }
 
         if (!localFolderAccessChecker.hasReadWriteAccess(pair.localTreeUri)) {
             Timber.i("instant.watch.register.unavailable pairId=%d reasons=saf_access_lost", pairId)
+            log(pairId, SyncEventTaxonomy.watchUnavailable("saf_access_lost"))
             return unavailableResult()
         }
 
@@ -91,12 +105,14 @@ class SafContentObserverWatcher(
             }
         } catch (e: SecurityException) {
             Timber.i("instant.watch.register.unavailable pairId=%d reasons=security_exception", pairId)
+            log(pairId, SyncEventTaxonomy.watchUnavailable("security_exception"))
             Timber.d(e, "instant.watch.register.security_exception pairId=%d", pairId)
             return unavailableResult()
         }
 
         var isUnregistered = false
         Timber.i("instant.watch.registered pairId=%d", pairId)
+        log(pairId, SyncEventTaxonomy.watchRegistered("saf"))
         return LocalChangeWatchRegistrationResult.Registered(
             LocalChangeWatchRegistration {
                 synchronized(lock) {
@@ -170,6 +186,7 @@ class SafContentObserverWatcher(
             registrationsByPairId.values.forEach { observerRegistry.unregisterContentObserver(it.observer) }
             registrationsByPairId.clear()
         }
+        loggingScope.cancel()
     }
 
     private fun createRegistration(
@@ -211,6 +228,15 @@ class SafContentObserverWatcher(
             registeredTreeUri != null && uri?.toString() == registeredTreeUri,
             uri?.pathSegments?.size ?: 0,
         )
+        log(
+            pairId,
+            SyncEventTaxonomy.watchCallback(
+                authority = uri?.authority ?: "none",
+                uriNull = uri == null,
+                treeRoot = registeredTreeUri != null && uri?.toString() == registeredTreeUri,
+                segmentCount = uri?.pathSegments?.size ?: 0,
+            ),
+        )
         val listenersAndEvent =
             synchronized(lock) {
                 val registration = registrationsByPairId[pairId] ?: return
@@ -225,10 +251,15 @@ class SafContentObserverWatcher(
                         )
                 }
 
+                val isCoarse =
+                    uri == null ||
+                        uri.toString() == registration.treeUriString ||
+                        uri.hasTreeRootDocumentId(registration.treeUriString)
                 registration.listeners.toList() to
                     LocalChangeEvent.Changed(
                         pairId = pairId,
                         locationHint = uri?.toString()?.takeIf { it.isNotBlank() },
+                        isCoarse = isCoarse,
                     )
             }
 
@@ -239,6 +270,26 @@ class SafContentObserverWatcher(
         LocalChangeWatchRegistrationResult.Unavailable(
             LocalChangeWatcherCapability.Unavailable(LocalChangeWatcherFallback.PERIODIC_SCAN),
         )
+
+    private fun log(
+        pairId: Long,
+        message: String,
+    ) {
+        eventRepository ?: return
+        loggingScope.launch {
+            eventRepository.log(pairId, SyncEventLevel.INFO, SyncEventTag.INSTANT_WATCH, message)
+        }
+    }
+
+    private fun Uri?.hasTreeRootDocumentId(treeUriString: String): Boolean {
+        this ?: return false
+        val treeRootDocumentId =
+            runCatching { DocumentsContract.getTreeDocumentId(Uri.parse(treeUriString)) }.getOrNull()
+        val callbackDocumentId =
+            runCatching { DocumentsContract.getDocumentId(this) }
+                .getOrElse { runCatching { DocumentsContract.getTreeDocumentId(this) }.getOrNull() }
+        return treeRootDocumentId != null && callbackDocumentId == treeRootDocumentId
+    }
 
     private fun SyncPairEntity.hasWatchableSource(): Boolean =
         watchabilityFailures().isEmpty()

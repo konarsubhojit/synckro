@@ -18,6 +18,7 @@ object SyncEventTag {
     const val REMOTE_ENUM = "RemoteEnum"
     const val OP_APPLIER = "OpApplier"
     const val INSTANT_WATCHER = "InstantWatcher"
+    const val INSTANT_WATCH = "InstantWatch"
     const val INSTANT_STABILITY = "InstantStability"
     const val INSTANT_QUEUE = "InstantQueue"
     const val INSTANT_DISPATCH = "InstantDispatch"
@@ -38,6 +39,11 @@ object SyncEventTag {
 object SyncEventTaxonomy {
     const val WATCHER_REGISTERED = "instant.watcher.registered"
     const val WATCHER_FALLBACK = "instant.watcher.fallback"
+    const val WATCH_REGISTERED = "instant.watch.registered"
+    const val WATCH_CALLBACK = "instant.watch.callback"
+    const val WATCH_UNAVAILABLE = "instant.watch.unavailable"
+    const val WATCH_DELEGATE_FAILED = "instant.watch.delegate_failed"
+    const val WATCH_RESCAN = "instant.watch.rescan"
     const val STABILITY_ACCEPTED = "instant.stability.accepted"
     const val STABILITY_DEFERRED = "instant.stability.deferred"
     const val QUEUE_ENQUEUED = "instant.queue.enqueued"
@@ -53,6 +59,31 @@ object SyncEventTaxonomy {
     fun watcherRegistered(source: String): String = format(WATCHER_REGISTERED, "source" to source)
 
     fun watcherFallback(reason: String): String = format(WATCHER_FALLBACK, "reason" to reason)
+
+    fun watchRegistered(delegate: String): String = format(WATCH_REGISTERED, "delegate" to delegate)
+
+    fun watchCallback(
+        authority: String,
+        uriNull: Boolean,
+        treeRoot: Boolean,
+        segmentCount: Int,
+    ): String =
+        format(
+            WATCH_CALLBACK,
+            "authority" to authority,
+            "uriNull" to uriNull.toString(),
+            "treeRoot" to treeRoot.toString(),
+            "segments" to segmentCount.toString(),
+        )
+
+    fun watchUnavailable(reason: String): String = format(WATCH_UNAVAILABLE, "reason" to reason)
+
+    fun watchDelegateFailed(
+        delegate: String,
+        failure: String,
+    ): String = format(WATCH_DELEGATE_FAILED, "delegate" to delegate, "failure" to failure)
+
+    fun watchRescan(candidates: Int): String = format(WATCH_RESCAN, "candidates" to candidates.toString())
 
     fun stabilityAccepted(changeCount: Int): String = format(STABILITY_ACCEPTED, "changes" to changeCount.toString())
 
@@ -115,7 +146,8 @@ object SyncEventTaxonomy {
             normalizedKey.contains("uri") ||
             normalizedKey.contains("account") ||
             normalizedKey.contains("email") ||
-            normalizedKey.contains("id")
+            normalizedKey == "id" ||
+            normalizedKey.endsWith("_id")
         ) {
             return "<redacted>"
         }

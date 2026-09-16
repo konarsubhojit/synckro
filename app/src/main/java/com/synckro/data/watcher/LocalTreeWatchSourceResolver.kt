@@ -55,6 +55,9 @@ fun interface DirectPathValidator {
  */
 fun interface LocalTreeWatchSourceProvider {
     fun sourceFor(pairId: Long): LocalTreeWatchSource
+
+    /** Whether recursive directory watches are disabled for this pair. */
+    fun excludeSubfolders(pairId: Long): Boolean = false
 }
 
 /**

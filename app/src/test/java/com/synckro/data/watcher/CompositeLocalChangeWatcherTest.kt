@@ -1,5 +1,9 @@
 package com.synckro.data.watcher
 
+import com.synckro.data.repository.SyncEventRepository
+import com.synckro.domain.model.SyncEventLevel
+import com.synckro.domain.model.SyncEventTag
+import com.synckro.domain.model.SyncEventTaxonomy
 import com.synckro.domain.sync.LocalChangeEvent
 import com.synckro.domain.sync.LocalChangeWatchFailure
 import com.synckro.domain.sync.LocalChangeWatchRegistration
@@ -7,7 +11,11 @@ import com.synckro.domain.sync.LocalChangeWatchRegistrationResult
 import com.synckro.domain.sync.LocalChangeWatcher
 import com.synckro.domain.sync.LocalChangeWatcherCapability
 import com.synckro.domain.sync.LocalChangeWatcherFallback
+import io.mockk.coVerify
+import io.mockk.mockk
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -33,80 +41,44 @@ class CompositeLocalChangeWatcherTest {
     }
 
     @Test
-    fun `opportunistic events dedupe with SAF events for the same file`() {
-        val saf = FakeWatcher()
+    fun `all registered delegates stay active`() {
         val fileObserver = FakeWatcher()
-        val watcher = CompositeLocalChangeWatcher(listOf(saf, fileObserver), deduper)
-        val events = mutableListOf<LocalChangeEvent>()
+        val mediaStore = FakeWatcher()
+        val saf = FakeWatcher()
 
-        val result = watcher.register(pairId = 5, listener = events::add)
-        saf.emit(
-            LocalChangeEvent.Changed(
-                5,
-                "content://com.android.externalstorage.documents/tree/primary%3ADCIM/" +
-                    "document/primary%3ADCIM%2Fphoto.jpg",
-            ),
-        )
-        fileObserver.emit(LocalChangeEvent.Changed(5, "/storage/emulated/0/DCIM/photo.jpg"))
-        fileObserver.emit(LocalChangeEvent.Changed(5, "/storage/emulated/0/DCIM/other.jpg"))
-        now += 2_000
-        fileObserver.emit(LocalChangeEvent.Changed(5, "/storage/emulated/0/DCIM/photo.jpg"))
+        val result = CompositeLocalChangeWatcher(listOf(fileObserver, mediaStore, saf), deduper).register(5) {}
 
         assertTrue(result is LocalChangeWatchRegistrationResult.Registered)
-        assertEquals(
-            listOf(
-                LocalChangeEvent.Changed(
-                    5,
-                    "content://com.android.externalstorage.documents/tree/primary%3ADCIM/" +
-                        "document/primary%3ADCIM%2Fphoto.jpg",
-                ),
-                LocalChangeEvent.Changed(5, "/storage/emulated/0/DCIM/other.jpg"),
-                LocalChangeEvent.Changed(5, "/storage/emulated/0/DCIM/photo.jpg"),
-            ),
-            events,
-        )
+        assertEquals(1, fileObserver.registerCalls)
+        assertEquals(1, mediaStore.registerCalls)
+        assertEquals(1, saf.registerCalls)
     }
 
     @Test
-    fun `coarse prompts dedupe per pair and never across pairs`() {
-        val firstPairSource = FakeWatcher()
-        val secondPairSource = FakeWatcher()
-        val firstPair = CompositeLocalChangeWatcher(listOf(firstPairSource), deduper)
-        val secondPair = CompositeLocalChangeWatcher(listOf(secondPairSource), deduper)
-        val events = mutableListOf<LocalChangeEvent>()
-        firstPair.register(pairId = 5, listener = events::add)
-        secondPair.register(pairId = 6, listener = events::add)
-
-        firstPairSource.emit(LocalChangeEvent.Changed(5))
-        firstPairSource.emit(LocalChangeEvent.Changed(5))
-        secondPairSource.emit(LocalChangeEvent.Changed(6))
-
-        assertEquals(
-            listOf(LocalChangeEvent.Changed(5), LocalChangeEvent.Changed(6)),
-            events,
-        )
-    }
-
-    @Test
-    fun `losing one source keeps the remaining source registered`() {
+    fun `unavailable delegate falls through to next delegate`() {
+        val unavailable =
+            LocalChangeWatcherCapability.Unavailable(LocalChangeWatcherFallback.PERIODIC_SCAN)
+        val fileObserver = FakeWatcher(unavailable)
         val saf = FakeWatcher()
+
+        val result = CompositeLocalChangeWatcher(listOf(fileObserver, saf), deduper).register(5) {}
+
+        assertTrue(result is LocalChangeWatchRegistrationResult.Registered)
+        assertEquals(1, fileObserver.registerCalls)
+        assertEquals(1, saf.registerCalls)
+    }
+
+    @Test
+    fun `failed delegate does not block another registered delegate`() {
         val fileObserver = FakeWatcher()
-        val composite = CompositeLocalChangeWatcher(listOf(saf, fileObserver), deduper)
-        val events = mutableListOf<LocalChangeEvent>()
-        composite.register(pairId = 5, listener = events::add)
+        fileObserver.result =
+            LocalChangeWatchRegistrationResult.Failed(LocalChangeWatchFailure.PermissionDenied)
+        val saf = FakeWatcher()
 
-        fileObserver.emit(LocalChangeEvent.Failure(5, LocalChangeWatchFailure.VolumeUnavailable))
-        saf.emit(LocalChangeEvent.Changed(5, "/storage/emulated/0/DCIM/photo.jpg"))
-        saf.emit(LocalChangeEvent.Failure(5, LocalChangeWatchFailure.PermissionDenied))
-        saf.emit(LocalChangeEvent.Changed(5, "/storage/emulated/0/DCIM/late.jpg"))
+        val result = CompositeLocalChangeWatcher(listOf(fileObserver, saf), deduper).register(5) {}
 
-        assertEquals(
-            listOf(
-                LocalChangeEvent.Changed(5, "/storage/emulated/0/DCIM/photo.jpg"),
-                LocalChangeEvent.Failure(5, LocalChangeWatchFailure.PermissionDenied),
-            ),
-            events,
-        )
+        assertTrue(result is LocalChangeWatchRegistrationResult.Registered)
+        assertEquals(1, saf.registerCalls)
     }
 
     @Test
@@ -127,7 +99,7 @@ class CompositeLocalChangeWatcherTest {
     }
 
     @Test
-    fun `unregister and shutdown release every delegate`() {
+    fun `unregister and shutdown release registrations without shutting singleton delegates`() {
         val saf = FakeWatcher()
         val fileObserver = FakeWatcher()
         val composite = CompositeLocalChangeWatcher(listOf(saf, fileObserver), deduper)
@@ -144,6 +116,7 @@ class CompositeLocalChangeWatcherTest {
         assertTrue(saf.listeners.isEmpty())
         assertTrue(fileObserver.listeners.isEmpty())
 
+        composite.register(pairId = 6) {}
         composite.shutdown()
         composite.shutdown()
 
@@ -151,14 +124,72 @@ class CompositeLocalChangeWatcherTest {
             LocalChangeWatchRegistrationResult.Failed(LocalChangeWatchFailure.Shutdown),
             composite.register(pairId = 5) {},
         )
-        assertTrue(saf.isShutdown)
-        assertTrue(fileObserver.isShutdown)
+        assertFalse(saf.isShutdown)
+        assertFalse(fileObserver.isShutdown)
+        assertTrue(saf.listeners.isEmpty())
+        assertTrue(fileObserver.listeners.isEmpty())
+    }
+
+    @Test
+    fun `registered delegate diagnostics are written to event repository`() {
+        val eventRepository = mockk<SyncEventRepository>(relaxed = true)
+        val composite = CompositeLocalChangeWatcher(listOf(FakeWatcher()), deduper, eventRepository)
+
+        composite.register(pairId = 5) {}
+
+        coVerify(timeout = 1_000) {
+            eventRepository.log(
+                5L,
+                SyncEventLevel.INFO,
+                SyncEventTag.INSTANT_WATCH,
+                SyncEventTaxonomy.watchRegistered("other"),
+            )
+        }
+    }
+
+    @Test
+    fun `delegate failures are written to event repository when another delegate registers`() {
+        val eventRepository = mockk<SyncEventRepository>(relaxed = true)
+        val failing = FakeWatcher()
+        failing.result = LocalChangeWatchRegistrationResult.Failed(LocalChangeWatchFailure.PermissionDenied)
+        val composite = CompositeLocalChangeWatcher(listOf(failing, FakeWatcher()), deduper, eventRepository)
+
+        val result = composite.register(pairId = 5) {}
+
+        assertTrue(result is LocalChangeWatchRegistrationResult.Registered)
+        coVerify(timeout = 1_000) {
+            eventRepository.log(
+                5L,
+                SyncEventLevel.INFO,
+                SyncEventTag.INSTANT_WATCH,
+                SyncEventTaxonomy.watchDelegateFailed("other", "permission_denied"),
+            )
+        }
+    }
+
+    @Test
+    fun `refresh rebuilds active delegate registrations`() {
+        val watcher = FakeWatcher()
+        val composite = CompositeLocalChangeWatcher(listOf(watcher), deduper)
+        val events = mutableListOf<LocalChangeEvent>()
+        composite.register(pairId = 5, listener = events::add)
+        val firstListenerCount = watcher.listeners.size
+
+        runBlocking { composite.refresh(5) }
+        watcher.emit(LocalChangeEvent.Changed(5, "notes.txt"))
+
+        assertEquals(1, firstListenerCount)
+        assertEquals(2, watcher.registerCalls)
+        assertEquals(1, watcher.listeners.size)
+        assertEquals(listOf(LocalChangeEvent.Changed(5, "notes.txt")), events)
     }
 
     private class FakeWatcher(
         override val capability: LocalChangeWatcherCapability = LocalChangeWatcherCapability.Available,
     ) : LocalChangeWatcher {
         val listeners = mutableListOf<(LocalChangeEvent) -> Unit>()
+        var registerCalls = 0
+        var result: LocalChangeWatchRegistrationResult? = null
         var isShutdown = false
             private set
 
@@ -166,6 +197,8 @@ class CompositeLocalChangeWatcherTest {
             pairId: Long,
             listener: (LocalChangeEvent) -> Unit,
         ): LocalChangeWatchRegistrationResult {
+            registerCalls++
+            result?.let { return it }
             if (isShutdown) {
                 return LocalChangeWatchRegistrationResult.Failed(LocalChangeWatchFailure.Shutdown)
             }

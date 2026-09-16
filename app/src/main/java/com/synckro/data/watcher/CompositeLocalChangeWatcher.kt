@@ -1,5 +1,9 @@
 package com.synckro.data.watcher
 
+import com.synckro.data.repository.SyncEventRepository
+import com.synckro.domain.model.SyncEventLevel
+import com.synckro.domain.model.SyncEventTag
+import com.synckro.domain.model.SyncEventTaxonomy
 import com.synckro.domain.sync.LocalChangeEvent
 import com.synckro.domain.sync.LocalChangeWatchFailure
 import com.synckro.domain.sync.LocalChangeWatchRegistration
@@ -7,6 +11,12 @@ import com.synckro.domain.sync.LocalChangeWatchRegistrationResult
 import com.synckro.domain.sync.LocalChangeWatcher
 import com.synckro.domain.sync.LocalChangeWatcherCapability
 import com.synckro.domain.sync.LocalChangeWatcherFallback
+import com.synckro.domain.sync.LocalChangeWatcherRefresher
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 
 /**
  * Normalizes best-effort location hints so hints describing the same file compare equal.
@@ -88,20 +98,21 @@ class LocalChangeEventDeduper(
 }
 
 /**
- * Fans registrations out to several [LocalChangeWatcher]s and delivers de-duplicated events.
+ * Registers every available [LocalChangeWatcher] and delivers de-duplicated events.
  *
- * This is how the opportunistic `FileObserver` and MediaStore watchers combine with the SAF
- * observer: whichever source notices a write first wins, and the redundant notifications from the
- * other sources are suppressed by [LocalChangeEventDeduper].
- *
- * A delegate failure only ends the composite registration when no other delegate is still
- * observing the pair, so losing an opportunistic source does not disable the remaining ones.
+ * Delegates are ordered for diagnostics, but all usable sources remain active so a silently dead
+ * opportunistic watcher does not prevent another source from delivering callbacks. Unavailable
+ * delegates are skipped, and the deduper suppresses duplicate notifications across sources.
  */
 class CompositeLocalChangeWatcher(
     private val delegates: List<LocalChangeWatcher>,
     private val deduper: LocalChangeEventDeduper,
-) : LocalChangeWatcher {
+    private val eventRepository: SyncEventRepository? = null,
+) : LocalChangeWatcher,
+    LocalChangeWatcherRefresher {
+    private val loggingScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val lock = Any()
+    private val registrationsByPairId = mutableMapOf<Long, MutableSet<CompositeRegistration>>()
     private var isShutdown = false
 
     override val capability: LocalChangeWatcherCapability
@@ -124,99 +135,175 @@ class CompositeLocalChangeWatcher(
             }
         }
 
-        val fanOut = FanOutRegistration(pairId, listener)
-        var firstFailure: LocalChangeWatchFailure? = null
-        var unavailable: LocalChangeWatcherCapability.Unavailable? = null
-        delegates.forEach { delegate ->
-            when (val result = delegate.register(pairId, fanOut::onEvent)) {
-                is LocalChangeWatchRegistrationResult.Registered -> fanOut.add(result.registration)
-                is LocalChangeWatchRegistrationResult.Failed ->
-                    firstFailure = firstFailure ?: result.failure
-                is LocalChangeWatchRegistrationResult.Unavailable ->
-                    unavailable = unavailable ?: result.capability
-            }
+        val started = startDelegateRegistrations(pairId, listener)
+        if (started.registrations.isEmpty()) {
+            log(pairId, SyncEventTaxonomy.watchUnavailable("no_delegate_available"))
+            return started.firstFailure?.let(LocalChangeWatchRegistrationResult::Failed)
+                ?: LocalChangeWatchRegistrationResult.Unavailable(
+                    started.firstUnavailable
+                        ?: LocalChangeWatcherCapability.Unavailable(LocalChangeWatcherFallback.PERIODIC_SCAN),
+                )
         }
 
-        if (!fanOut.hasDelegates()) {
-            val failure = firstFailure
-            return when {
-                failure != null -> LocalChangeWatchRegistrationResult.Failed(failure)
-                else ->
-                    LocalChangeWatchRegistrationResult.Unavailable(
-                        unavailable
-                            ?: LocalChangeWatcherCapability.Unavailable(
-                                LocalChangeWatcherFallback.PERIODIC_SCAN,
-                            ),
-                    )
+        val registration = CompositeRegistration(pairId, listener, started.registrations)
+        val shouldUndo =
+            synchronized(lock) {
+                if (isShutdown) {
+                    true
+                } else {
+                    registrationsByPairId.getOrPut(pairId) { mutableSetOf() } += registration
+                    false
+                }
             }
+        if (shouldUndo) {
+            registration.unregister()
+            return LocalChangeWatchRegistrationResult.Failed(LocalChangeWatchFailure.Shutdown)
         }
+        return LocalChangeWatchRegistrationResult.Registered(registration)
+    }
 
-        synchronized(lock) {
-            if (isShutdown) {
-                fanOut.unregister()
-                return LocalChangeWatchRegistrationResult.Failed(LocalChangeWatchFailure.Shutdown)
-            }
-        }
-        return LocalChangeWatchRegistrationResult.Registered(fanOut)
+    override suspend fun refresh(pairId: Long) {
+        val registrations = synchronized(lock) { registrationsByPairId[pairId]?.toList().orEmpty() }
+        registrations.forEach { it.refresh() }
     }
 
     override fun shutdown() {
-        synchronized(lock) {
-            if (isShutdown) return
-            isShutdown = true
-        }
-        delegates.forEach { it.shutdown() }
+        val registrations =
+            synchronized(lock) {
+                if (isShutdown) return
+                isShutdown = true
+                registrationsByPairId.values.flatten().also { registrationsByPairId.clear() }
+            }
+        registrations.forEach { it.unregister() }
+        loggingScope.cancel()
     }
 
-    private inner class FanOutRegistration(
-        private val pairId: Long,
-        private val listener: (LocalChangeEvent) -> Unit,
-    ) : LocalChangeWatchRegistration {
-        private val registrationLock = Any()
-        private val registrations = mutableListOf<LocalChangeWatchRegistration>()
-        private var activeDelegates = 0
-        private var isActive = true
-
-        fun add(registration: LocalChangeWatchRegistration) {
-            val stopImmediately =
-                synchronized(registrationLock) {
-                    registrations += registration
-                    activeDelegates++
-                    !isActive
+    private fun startDelegateRegistrations(
+        pairId: Long,
+        listener: (LocalChangeEvent) -> Unit,
+    ): RegistrationStart {
+        val registrations = mutableListOf<LocalChangeWatchRegistration>()
+        var firstUnavailable: LocalChangeWatcherCapability.Unavailable? = null
+        var firstFailure: LocalChangeWatchFailure? = null
+        delegates.forEach { delegate ->
+            val guardedListener: (LocalChangeEvent) -> Unit = { event ->
+                if (event is LocalChangeEvent.Failure) deduper.forget(pairId)
+                if (deduper.shouldDeliver(event)) listener(event)
+            }
+            when (val result = delegate.register(pairId, guardedListener)) {
+                is LocalChangeWatchRegistrationResult.Registered -> {
+                    registrations += result.registration
+                    log(pairId, SyncEventTaxonomy.watchRegistered(delegateName(delegate)))
                 }
-            if (stopImmediately) registration.unregister()
+                is LocalChangeWatchRegistrationResult.Failed -> {
+                    firstFailure = firstFailure ?: result.failure
+                    log(
+                        pairId,
+                        SyncEventTaxonomy.watchDelegateFailed(
+                            delegate = delegateName(delegate),
+                            failure = failureName(result.failure),
+                        ),
+                    )
+                }
+                is LocalChangeWatchRegistrationResult.Unavailable ->
+                    firstUnavailable = firstUnavailable ?: result.capability
+            }
+        }
+        return RegistrationStart(registrations, firstUnavailable, firstFailure)
+    }
+
+    private fun forget(registration: CompositeRegistration) {
+        synchronized(lock) {
+            val registrations = registrationsByPairId[registration.pairId] ?: return@synchronized
+            registrations.remove(registration)
+            if (registrations.isEmpty()) registrationsByPairId.remove(registration.pairId)
+        }
+        deduper.forget(registration.pairId)
+    }
+
+    private fun delegateName(delegate: LocalChangeWatcher): String =
+        when (delegate) {
+            is FileObserverLocalChangeWatcher -> "file_observer"
+            is MediaStoreLocalChangeWatcher -> "media_store"
+            is SafContentObserverWatcher -> "saf"
+            else -> "other"
         }
 
-        fun hasDelegates(): Boolean = synchronized(registrationLock) { registrations.isNotEmpty() }
+    private fun failureName(failure: LocalChangeWatchFailure): String =
+        when (failure) {
+            LocalChangeWatchFailure.PermissionDenied -> "permission_denied"
+            LocalChangeWatchFailure.Shutdown -> "shutdown"
+            LocalChangeWatchFailure.VolumeUnavailable -> "volume_unavailable"
+            is LocalChangeWatchFailure.Unknown -> "unknown"
+        }
 
-        fun onEvent(event: LocalChangeEvent) {
-            if (event is LocalChangeEvent.Failure) {
-                val ended =
-                    synchronized(registrationLock) {
-                        if (!isActive) return
-                        activeDelegates = (activeDelegates - 1).coerceAtLeast(0)
-                        if (activeDelegates == 0) isActive = false
-                        activeDelegates == 0
-                    }
-                if (!ended) return
-                deduper.forget(pairId)
-                listener(event)
+    private fun log(
+        pairId: Long,
+        message: String,
+    ) {
+        eventRepository ?: return
+        loggingScope.launch {
+            eventRepository.log(pairId, SyncEventLevel.INFO, SyncEventTag.INSTANT_WATCH, message)
+        }
+    }
+
+    private inner class CompositeRegistration(
+        val pairId: Long,
+        private val listener: (LocalChangeEvent) -> Unit,
+        registrations: List<LocalChangeWatchRegistration>,
+    ) : LocalChangeWatchRegistration {
+        private val registrationLock = Any()
+        private var delegateRegistrations = registrations
+        private var isActive = true
+
+        fun refresh() {
+            val previous =
+                synchronized(registrationLock) {
+                    if (!isActive) return
+                    delegateRegistrations.also { delegateRegistrations = emptyList() }
+                }
+            previous.forEach { it.unregister() }
+            if (synchronized(lock) { isShutdown }) {
+                synchronized(registrationLock) { isActive = false }
+                forget(this)
                 return
             }
-
-            synchronized(registrationLock) { if (!isActive) return }
-            if (deduper.shouldDeliver(event)) listener(event)
+            val replacement = startDelegateRegistrations(pairId, listener)
+            var shouldForget = false
+            synchronized(registrationLock) {
+                val isCompositeShutdown = synchronized(lock) { isShutdown }
+                if (!isActive || isCompositeShutdown) {
+                    replacement.registrations.forEach { it.unregister() }
+                    if (isCompositeShutdown && isActive) {
+                        isActive = false
+                        shouldForget = true
+                    }
+                    return@synchronized
+                }
+                delegateRegistrations = replacement.registrations
+                if (delegateRegistrations.isEmpty()) {
+                    isActive = false
+                    shouldForget = true
+                }
+            }
+            if (shouldForget) forget(this)
         }
 
         override fun unregister() {
-            val pending =
+            val registrations =
                 synchronized(registrationLock) {
                     if (!isActive) return
                     isActive = false
-                    registrations.toList().also { registrations.clear() }
+                    delegateRegistrations.also { delegateRegistrations = emptyList() }
                 }
-            pending.forEach { it.unregister() }
-            deduper.forget(pairId)
+            registrations.forEach { it.unregister() }
+            forget(this)
         }
     }
+
+    private data class RegistrationStart(
+        val registrations: List<LocalChangeWatchRegistration>,
+        val firstUnavailable: LocalChangeWatcherCapability.Unavailable?,
+        val firstFailure: LocalChangeWatchFailure?,
+    )
 }
