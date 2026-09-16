@@ -73,6 +73,8 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
@@ -465,7 +467,10 @@ private fun ConflictListPane(
                 Text(
                     text = stringResource(R.string.conflict_inbox_no_search_results),
                     style = MaterialTheme.typography.bodyLarge,
-                    modifier = Modifier.padding(vertical = 16.dp),
+                    modifier =
+                        Modifier
+                            .semantics { liveRegion = LiveRegionMode.Polite }
+                            .padding(vertical = 16.dp),
                 )
             }
         }
