@@ -83,7 +83,7 @@ class EnumConverters {
 
 @Database(
     entities = [AccountEntity::class, SyncPairEntity::class, FileIndexEntity::class, SyncEventEntity::class, ConflictRecordEntity::class, LocalIndexEntity::class, PendingUploadEntity::class, PairRunLeaseEntity::class],
-    version = 17,
+    version = 18,
     exportSchema = true,
 )
 @TypeConverters(EnumConverters::class)
@@ -471,6 +471,18 @@ abstract class SynckroDatabase : RoomDatabase() {
                         "CREATE INDEX IF NOT EXISTS `index_pair_run_lease_heartbeatAtMs` " +
                             "ON `pair_run_lease` (`heartbeatAtMs`)",
                     )
+                }
+            }
+
+        /**
+         * Adds a separate remote content-hash column to `local_index` so provider
+         * version tags (for example OneDrive eTag) are no longer conflated with
+         * content hashes (for example OneDrive quickXorHash).
+         */
+        val MIGRATION_17_18 =
+            object : Migration(17, 18) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL("ALTER TABLE `local_index` ADD COLUMN `remoteContentHash` TEXT")
                 }
             }
     }

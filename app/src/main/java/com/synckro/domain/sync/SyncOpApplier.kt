@@ -781,7 +781,8 @@ class SyncOpApplier(
                 remoteId = remote.id,
                 remoteSizeBytes = remote.size,
                 remoteMtimeMs = remote.lastModifiedMs,
-                remoteEtag = remote.contentHash ?: remote.eTag,
+                remoteEtag = remote.eTag,
+                remoteContentHash = remote.contentHash,
             )
         persistUploadedRemoteState(
             pair = pair,
@@ -827,7 +828,8 @@ class SyncOpApplier(
                 remoteId = remote.id,
                 remoteSizeBytes = remote.size,
                 remoteMtimeMs = remote.lastModifiedMs,
-                remoteEtag = remote.contentHash ?: remote.eTag,
+                remoteEtag = remote.eTag,
+                remoteContentHash = remote.contentHash,
             ),
         )
     }
@@ -878,7 +880,8 @@ class SyncOpApplier(
                     remoteId = remote.id,
                     remoteSizeBytes = remote.size,
                     remoteMtimeMs = remote.lastModifiedMs,
-                    remoteEtag = remote.contentHash ?: remote.eTag,
+                    remoteEtag = remote.eTag,
+                    remoteContentHash = remote.contentHash,
                 ),
             cleanupMutation = { invalidateOverwrittenRemote(index, remote) },
         )
@@ -918,7 +921,8 @@ class SyncOpApplier(
                 remoteId = remote.id,
                 remoteSizeBytes = remote.size,
                 remoteMtimeMs = remote.lastModifiedMs,
-                remoteEtag = remote.contentHash ?: remote.eTag,
+                remoteEtag = remote.eTag,
+                remoteContentHash = remote.contentHash,
             ),
         )
     }
@@ -1036,7 +1040,8 @@ class SyncOpApplier(
                                 remoteId = updatedRemote.id,
                                 remoteSizeBytes = updatedRemote.size,
                                 remoteMtimeMs = updatedRemote.lastModifiedMs,
-                                remoteEtag = updatedRemote.contentHash ?: updatedRemote.eTag,
+                                remoteEtag = updatedRemote.eTag,
+                                remoteContentHash = updatedRemote.contentHash,
                             ),
                         cleanupMutation = { invalidateOverwrittenRemote(index, updatedRemote) },
                     )
@@ -1100,7 +1105,8 @@ class SyncOpApplier(
                             remoteId = remote.id,
                             remoteSizeBytes = remote.size,
                             remoteMtimeMs = remote.lastModifiedMs,
-                            remoteEtag = remote.contentHash ?: remote.eTag,
+                            remoteEtag = remote.eTag,
+                            remoteContentHash = remote.contentHash,
                         ),
                     )
                 } else {
@@ -1241,6 +1247,7 @@ class SyncOpApplier(
                 remoteSizeBytes = remote.size,
                 remoteMtimeMs = remote.lastModifiedMs,
                 remoteEtag = remote.eTag,
+                remoteContentHash = remote.contentHash,
             ),
         )
     }

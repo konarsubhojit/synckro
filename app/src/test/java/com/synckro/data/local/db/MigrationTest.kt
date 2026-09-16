@@ -126,6 +126,21 @@ class MigrationTest {
     }
 
     // -------------------------------------------------------------------------
+    // MIGRATION_17_18 – remote content hashes
+    // -------------------------------------------------------------------------
+
+    @Test
+    fun `MIGRATION_17_18 adds nullable remoteContentHash to local_index`() {
+        migrateV6To15(db)
+        SynckroDatabase.MIGRATION_15_16.migrate(db)
+        SynckroDatabase.MIGRATION_16_17.migrate(db)
+
+        SynckroDatabase.MIGRATION_17_18.migrate(db)
+
+        assertTrue("remoteContentHash" in columnNames(db, "local_index"))
+    }
+
+    // -------------------------------------------------------------------------
     // MIGRATION_6_7 – sync_pair changes
     // -------------------------------------------------------------------------
 

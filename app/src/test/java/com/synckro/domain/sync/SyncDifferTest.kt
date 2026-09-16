@@ -24,6 +24,7 @@ class SyncDifferTest {
         remoteSize: Long? = size,
         remoteMtime: Long? = mtime,
         remoteId: String? = null,
+        remoteContentHash: String? = hash,
     ) = FileIndexEntry(
         pairId = 1,
         relativePath = path,
@@ -31,6 +32,7 @@ class SyncDifferTest {
         localLastModifiedMs = mtime,
         localHash = hash,
         remoteETag = hash,
+        remoteContentHash = remoteContentHash,
         remoteSize = remoteSize,
         remoteLastModifiedMs = remoteMtime,
         remoteId = remoteId,

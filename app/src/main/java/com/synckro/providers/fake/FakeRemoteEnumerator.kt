@@ -51,6 +51,7 @@ class FakeRemoteEnumerator
                                 sizeBytes = c.file.size,
                                 mtimeMs = c.file.lastModifiedMs,
                                 etag = c.file.eTag,
+                                contentHash = c.file.contentHash,
                                 isFolder = c.file.isFolder,
                             )
                         else -> null
@@ -91,6 +92,7 @@ class FakeRemoteEnumerator
                             sizeBytes = item.size,
                             mtimeMs = item.lastModifiedMs,
                             etag = item.eTag,
+                            contentHash = item.contentHash,
                         ),
                     )
                 }
