@@ -128,6 +128,72 @@ class FileObserverLocalChangeWatcherTest {
         )
     }
 
+    @Test
+    fun `recursive registration observes nested and newly created directories`() {
+        val treeReader =
+            FakeDirectoryTreeReader(
+                mapOf(
+                    "/root" to listOf("/root/existing"),
+                    "/root/existing" to emptyList(),
+                    "/root/new" to listOf("/root/new/deep"),
+                    "/root/new/deep" to emptyList(),
+                ),
+            )
+        val watcher =
+            FileObserverLocalChangeWatcher(
+                { LocalTreeWatchSource.DirectPath("/root") },
+                factory,
+                treeReader,
+            )
+        val events = mutableListOf<LocalChangeEvent>()
+        watcher.register(7, events::add)
+
+        factory.signal("/root/existing", DirectoryWatchSignal.ContentChanged("nested.txt"))
+        factory.signal("/root", DirectoryWatchSignal.ContentChanged("new", isDirectory = true))
+
+        assertEquals(
+            listOf("/root", "/root/existing", "/root/new", "/root/new/deep"),
+            factory.startedPaths,
+        )
+        assertEquals(LocalChangeEvent.Changed(7, "/root/existing/nested.txt"), events.first())
+    }
+
+    @Test
+    fun `exclude subfolders observes only the root directory`() {
+        val sourceProvider =
+            object : LocalTreeWatchSourceProvider {
+                override fun sourceFor(pairId: Long) = LocalTreeWatchSource.DirectPath("/root")
+
+                override fun excludeSubfolders(pairId: Long) = true
+            }
+        val watcher =
+            FileObserverLocalChangeWatcher(
+                sourceProvider,
+                factory,
+                FakeDirectoryTreeReader(mapOf("/root" to listOf("/root/child"))),
+            )
+
+        watcher.register(7) {}
+
+        assertEquals(listOf("/root"), factory.startedPaths)
+    }
+
+    @Test
+    fun `watch limit falls through as unavailable`() {
+        val watcher =
+            FileObserverLocalChangeWatcher(
+                { LocalTreeWatchSource.DirectPath("/root") },
+                factory,
+                FakeDirectoryTreeReader(mapOf("/root" to listOf("/root/child"))),
+                maxWatches = 1,
+            )
+
+        val result = watcher.register(7) {}
+
+        assertTrue(result is LocalChangeWatchRegistrationResult.Unavailable)
+        assertTrue(factory.handles.single().isStopped)
+    }
+
     private fun watcher(pairSource: LocalTreeWatchSource) =
         FileObserverLocalChangeWatcher({ pairSource }, factory)
 
@@ -145,6 +211,16 @@ class FileObserverLocalChangeWatcherTest {
             return FakeHandle().also { handles += it }
         }
 
+        fun signal(
+            path: String,
+            signal: DirectoryWatchSignal,
+        ) {
+            startedPaths
+                .withIndex()
+                .filter { it.value == path }
+                .forEach { listeners[it.index](signal) }
+        }
+
         fun signal(signal: DirectoryWatchSignal) = listeners.toList().forEach { it(signal) }
 
         class FakeHandle : DirectoryWatchHandle {
@@ -155,5 +231,13 @@ class FileObserverLocalChangeWatcherTest {
                 isStopped = true
             }
         }
+    }
+
+    private class FakeDirectoryTreeReader(
+        private val children: Map<String, List<String>>,
+    ) : DirectoryTreeReader {
+        override fun subdirectories(path: String): List<String> = children[path].orEmpty()
+
+        override fun canonicalPath(path: String): String? = path
     }
 }

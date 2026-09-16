@@ -25,10 +25,21 @@ import com.synckro.data.local.fs.SafLocalFileAccess
 import com.synckro.data.repository.ConflictRepository
 import com.synckro.data.repository.SyncEventRepository
 import com.synckro.data.scanner.LocalFolderScannerImpl
+import com.synckro.data.watcher.CompositeLocalChangeWatcher
 import com.synckro.data.watcher.ContentResolverContentObserverRegistry
+import com.synckro.data.watcher.ContentResolverMediaCollectionObserverFactory
+import com.synckro.data.watcher.ContentResolverMediaItemMetadataReader
 import com.synckro.data.watcher.ContextWatcherServiceStarter
+import com.synckro.data.watcher.DefaultLocalTreeWatchSourceProvider
 import com.synckro.data.watcher.DefaultWatchablePairs
+import com.synckro.data.watcher.FileObserverLocalChangeWatcher
+import com.synckro.data.watcher.FileSystemDirectPathValidator
 import com.synckro.data.watcher.InstantSyncCandidateTarget
+import com.synckro.data.watcher.LocalChangeEventDeduper
+import com.synckro.data.watcher.LocalChangeHintNormalizer
+import com.synckro.data.watcher.LocalTreeWatchSourceProvider
+import com.synckro.data.watcher.LocalTreeWatchSourceResolver
+import com.synckro.data.watcher.MediaStoreLocalChangeWatcher
 import com.synckro.data.watcher.SafContentObserverWatcher
 import com.synckro.data.watcher.SafInstantSyncCandidateSampler
 import com.synckro.data.watcher.WatchablePairs
@@ -287,15 +298,49 @@ object AppModule {
         @ApplicationContext context: Context,
         syncPairDao: SyncPairDao,
         localFolderAccessChecker: LocalFolderAccessChecker,
+        eventRepository: SyncEventRepository,
     ): SafContentObserverWatcher =
         SafContentObserverWatcher(
             syncPairDao = syncPairDao,
             localFolderAccessChecker = localFolderAccessChecker,
             observerRegistry = ContentResolverContentObserverRegistry(context.contentResolver),
+            eventRepository = eventRepository,
         )
 
-    @Provides
-    fun provideLocalChangeWatcher(impl: SafContentObserverWatcher): LocalChangeWatcher = impl
+    @Provides @Singleton
+    fun provideLocalTreeWatchSourceProvider(syncPairDao: SyncPairDao): LocalTreeWatchSourceProvider =
+        DefaultLocalTreeWatchSourceProvider(
+            syncPairDao,
+            LocalTreeWatchSourceResolver(
+                android.os.Environment.getExternalStorageDirectory().absolutePath,
+                FileSystemDirectPathValidator,
+            ),
+        )
+
+    @Provides @Singleton
+    fun provideLocalChangeWatcher(
+        sourceProvider: LocalTreeWatchSourceProvider,
+        safWatcher: SafContentObserverWatcher,
+        eventRepository: SyncEventRepository,
+        @ApplicationContext context: Context,
+    ): LocalChangeWatcher =
+        CompositeLocalChangeWatcher(
+            delegates =
+                listOf(
+                    FileObserverLocalChangeWatcher(sourceProvider),
+                    MediaStoreLocalChangeWatcher(
+                        sourceProvider,
+                        ContentResolverMediaCollectionObserverFactory(context.contentResolver),
+                        ContentResolverMediaItemMetadataReader(context.contentResolver),
+                    ),
+                    safWatcher,
+                ),
+            deduper =
+                LocalChangeEventDeduper(
+                    LocalChangeHintNormalizer(android.os.Environment.getExternalStorageDirectory().absolutePath),
+                ),
+            eventRepository = eventRepository,
+        )
 
     @Provides
     fun provideLocalChangeWatcherRefresher(impl: SafContentObserverWatcher): LocalChangeWatcherRefresher = impl

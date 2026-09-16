@@ -11,4 +11,13 @@ class SyncEventTaxonomyTest {
         assertEquals("instant.apply.started", SyncEventTaxonomy.applyStarted())
         assertTrue(SyncEventTag.INSTANT_APPLY in LogVisibilityConfig.userFacingTags)
     }
+
+    @Test
+    fun `instant watch events are user facing and privacy safe`() {
+        val callback = SyncEventTaxonomy.watchCallback("authority", false, true, 3)
+
+        assertTrue(SyncEventTag.INSTANT_WATCH in LogVisibilityConfig.userFacingTags)
+        assertTrue(callback.contains(SyncEventTaxonomy.WATCH_CALLBACK))
+        assertTrue('/' !in callback)
+    }
 }
