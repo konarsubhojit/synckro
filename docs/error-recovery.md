@@ -184,6 +184,14 @@ Log retention is configurable under **Settings → Sync → Log retention period
 (default: 30 days). Entries older than the retention period are pruned
 automatically.
 
+**What the sync log never contains:** raw OAuth access/refresh tokens,
+`Authorization` header values, or OAuth response bodies are never written to
+`sync_event` rows, exported log bundles, or `Timber`/Crashlytics output. Only
+file paths and account identifiers (both optionally redacted above) ever
+appear. This is enforced by `TelemetrySanitizer` for Crashlytics/Analytics
+telemetry and confirmed by manual code audit for the on-device sync log and
+provider (`onedrive`/`gdrive`) log call sites.
+
 ---
 
 ## 7. Instant Sync interruption and reconciliation
