@@ -455,7 +455,10 @@ androidComponents {
 
 tasks.register<JacocoCoverageVerification>("verifyDebugUnitTestCoverage") {
     group = "verification"
-    description = "Verifies debug unit-test line coverage is at least 23%."
+    // The platform-free sync domain (SyncDiffer, SyncPathScope, FileCandidatePolicy,
+    // domain model/provider contracts) now lives in :core:domain and is verified by
+    // :core:domain:verifyUnitTestCoverage, so it no longer counts towards this bundle.
+    description = "Verifies debug unit-test line coverage is at least 22%."
     dependsOn("createDebugUnitTestCoverageReport")
 
     executionData.from(
@@ -475,7 +478,7 @@ tasks.register<JacocoCoverageVerification>("verifyDebugUnitTestCoverage") {
             limit {
                 counter = "LINE"
                 value = "COVEREDRATIO"
-                minimum = "0.23".toBigDecimal()
+                minimum = "0.22".toBigDecimal()
             }
         }
     }

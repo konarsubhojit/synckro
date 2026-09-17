@@ -143,6 +143,6 @@ Each action applies the selected resolution across all unresolved rows in curren
 | `app/src/main/java/com/synckro/ui/screens/conflictinbox/ConflictInboxScreen.kt` | Compose screen: selection mode UI, contextual app bar, `BackHandler` |
 | `app/src/main/java/com/synckro/ui/screens/conflictinbox/ConflictInboxViewModel.kt` | State holder: selection mode transitions, bulk resolution |
 | `app/src/main/java/com/synckro/data/repository/ConflictRepository.kt` | Persists resolutions via `resolve(id, resolution)` |
-| `app/src/main/java/com/synckro/domain/model/ConflictRecord.kt` | Domain model + resolution constants |
+| `core/domain/src/main/java/com/synckro/domain/model/ConflictRecord.kt` | Domain model + resolution constants |
 | `app/src/main/res/values/strings.xml` | Localised strings for selection mode UI |
 | `app/src/test/java/com/synckro/ui/screens/conflictinbox/ConflictInboxViewModelTest.kt` | Unit tests for selection-mode state transitions and bulk apply |
