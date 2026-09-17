@@ -66,7 +66,7 @@ class PairStatsTest {
     fun `window size limits transferred byte accumulation`() {
         val events =
             listOf(
-                event(SyncEventLevel.INFO, "Sync succeeded: 1 applied, 0 conflicts", t = 300L, bytes = 0L),
+                event(SyncEventLevel.INFO, "Sync succeeded: 1 applied, 0 conflicts", t = 300L, bytes = 1_024L),
                 event(SyncEventLevel.ERROR, "Sync failed after 5 attempt(s), giving up: x", t = 200L),
                 event(SyncEventLevel.INFO, "Sync succeeded: 1 applied, 0 conflicts", t = 100L, bytes = 4_096L),
             )
@@ -74,7 +74,7 @@ class PairStatsTest {
         val stats = aggregatePairStats(events, windowSize = 2)
 
         assertEquals(2, stats.runsConsidered)
-        assertEquals(0L, stats.totalBytesTransferred)
+        assertEquals(1_024L, stats.totalBytesTransferred)
     }
 
     @Test

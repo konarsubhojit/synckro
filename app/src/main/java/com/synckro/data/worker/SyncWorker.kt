@@ -393,6 +393,8 @@ class SyncWorker
                 //  1. Publishing live progress to WorkManager's WorkInfo.progress Data.
                 //  2. Early foreground promotion for large transfers (≥ LARGE_TRANSFER_THRESHOLD_BYTES).
                 //  3. Updating the progress notification once the worker is in foreground.
+                // TransferProgress reports a cumulative run total, so retain the greatest
+                // observation in case a later callback is stale.
                 val onSyncProgress: suspend (TransferProgress) -> Unit = { progress ->
                     transferredBytes.updateAndGet { maxOf(it, progress.bytesTransferred) }
                     setProgress(
