@@ -529,10 +529,11 @@ class SyncDifferTest {
     // -------------------------------------------------------------------------
 
     @Test
-    fun `local rename via delete-old add-new with same hash emits delete-remote and upload-new`() {
+    fun `local rename via delete-old add-new with same hash emits move-remote`() {
         // A file was renamed locally: "old.txt" → "new.txt" (same content hash).
-        // SyncDiffer handles each path independently, so a rename surfaces as two
-        // independent ops: DeleteRemote for the old path and UploadNew for the new path.
+        // Content-hash matching against the last-known index lets SyncDiffer
+        // recognize this as a single rename instead of an unrelated
+        // delete-remote + upload-new pair.
         val ops =
             SyncDiffer.diff(
                 local = listOf(snap("new.txt", size = 10, mtime = 2_000, hash = "same-hash")),
@@ -543,11 +544,13 @@ class SyncDifferTest {
             )
 
         assertEquals(
-            setOf<SyncOp>(
-                SyncOp.DeleteRemote("old.txt"),
-                SyncOp.UploadNew("new.txt"),
+            listOf<SyncOp>(
+                SyncOp.MoveRemote(
+                    fromRelativePath = "old.txt",
+                    relativePath = "new.txt",
+                ),
             ),
-            ops.toSet(),
+            ops,
         )
     }
 
@@ -614,6 +617,131 @@ class SyncDifferTest {
             ),
             ops,
         )
+    }
+
+    // -------------------------------------------------------------------------
+    // Local-initiated renames (content-hash-matched, no stable local file id)
+    // -------------------------------------------------------------------------
+
+    @Test
+    fun `local rename with unchanged content emits move-remote`() {
+        val ops =
+            SyncDiffer.diff(
+                local = listOf(snap("renamed.txt", size = 10, mtime = 2_000, hash = "same")),
+                remote = listOf(snap("old.txt", size = 10, mtime = 1_000, hash = "same")),
+                lastIndex = listOf(idx("old.txt", size = 10, mtime = 1_000, hash = "same", remoteId = "remote-1")),
+                direction = SyncDirection.BIDIRECTIONAL,
+                conflictPolicy = ConflictPolicy.NEWEST_WINS,
+            )
+
+        assertEquals(
+            listOf<SyncOp>(
+                SyncOp.MoveRemote(
+                    fromRelativePath = "old.txt",
+                    relativePath = "renamed.txt",
+                ),
+            ),
+            ops,
+        )
+    }
+
+    @Test
+    fun `local move across folders with unchanged content emits move-remote`() {
+        val ops =
+            SyncDiffer.diff(
+                local = listOf(snap("archive/report.txt", size = 10, mtime = 2_000, hash = "same")),
+                remote = listOf(snap("docs/report.txt", size = 10, mtime = 1_000, hash = "same")),
+                lastIndex = listOf(idx("docs/report.txt", size = 10, mtime = 1_000, hash = "same", remoteId = "remote-2")),
+                direction = SyncDirection.BIDIRECTIONAL,
+                conflictPolicy = ConflictPolicy.NEWEST_WINS,
+            )
+
+        assertEquals(
+            listOf<SyncOp>(
+                SyncOp.MoveRemote(
+                    fromRelativePath = "docs/report.txt",
+                    relativePath = "archive/report.txt",
+                ),
+            ),
+            ops,
+        )
+    }
+
+    @Test
+    fun `local rename with edited content is not treated as a pure move`() {
+        // The file was both renamed and edited locally: the content hash no
+        // longer matches the index entry for the old path, so there is no safe
+        // way to distinguish this from an unrelated delete+create. It must
+        // fall back to today's delete-remote + upload-new behaviour.
+        val ops =
+            SyncDiffer.diff(
+                local = listOf(snap("renamed.txt", size = 20, mtime = 2_000, hash = "edited")),
+                remote = listOf(snap("old.txt", size = 10, mtime = 1_000, hash = "same")),
+                lastIndex = listOf(idx("old.txt", size = 10, mtime = 1_000, hash = "same", remoteId = "remote-1")),
+                direction = SyncDirection.BIDIRECTIONAL,
+                conflictPolicy = ConflictPolicy.NEWEST_WINS,
+            )
+
+        assertEquals(
+            setOf<SyncOp>(
+                SyncOp.DeleteRemote("old.txt"),
+                SyncOp.UploadNew("renamed.txt"),
+            ),
+            ops.toSet(),
+        )
+    }
+
+    @Test
+    fun `ambiguous duplicate-content local rename falls back to delete and upload`() {
+        // Two files previously shared identical content and both vanished from
+        // their old local paths, while two new local paths appeared with that
+        // same content. With no stable local id, the differ cannot tell which
+        // old path maps to which new path, so it must not guess and instead
+        // falls back to the safe delete+upload behaviour for every candidate.
+        val ops =
+            SyncDiffer.diff(
+                local =
+                    listOf(
+                        snap("new1.txt", size = 10, mtime = 2_000, hash = "dup"),
+                        snap("new2.txt", size = 10, mtime = 2_000, hash = "dup"),
+                    ),
+                remote =
+                    listOf(
+                        snap("old1.txt", size = 10, mtime = 1_000, hash = "dup"),
+                        snap("old2.txt", size = 10, mtime = 1_000, hash = "dup"),
+                    ),
+                lastIndex =
+                    listOf(
+                        idx("old1.txt", size = 10, mtime = 1_000, hash = "dup", remoteId = "remote-1"),
+                        idx("old2.txt", size = 10, mtime = 1_000, hash = "dup", remoteId = "remote-2"),
+                    ),
+                direction = SyncDirection.BIDIRECTIONAL,
+                conflictPolicy = ConflictPolicy.NEWEST_WINS,
+            )
+
+        assertEquals(
+            setOf<SyncOp>(
+                SyncOp.DeleteRemote("old1.txt"),
+                SyncOp.DeleteRemote("old2.txt"),
+                SyncOp.UploadNew("new1.txt"),
+                SyncOp.UploadNew("new2.txt"),
+            ),
+            ops.toSet(),
+        )
+    }
+
+    @Test
+    fun `local rename is not detected as move when direction disallows upload`() {
+        val ops =
+            SyncDiffer.diff(
+                local = listOf(snap("renamed.txt", size = 10, mtime = 2_000, hash = "same")),
+                remote = listOf(snap("old.txt", size = 10, mtime = 1_000, hash = "same")),
+                lastIndex = listOf(idx("old.txt", size = 10, mtime = 1_000, hash = "same", remoteId = "remote-1")),
+                direction = SyncDirection.REMOTE_TO_LOCAL,
+                conflictPolicy = ConflictPolicy.NEWEST_WINS,
+            )
+
+        assertTrue(ops.none { it is SyncOp.MoveRemote })
     }
 
     // -------------------------------------------------------------------------
