@@ -125,7 +125,7 @@ class SyncPathScope internal constructor(
          * Normalizes every entry in [excludedRelativePaths] (see
          * [normalizeExcludedFolder]), dropping blank entries. Callers that check many
          * paths against the same exclusion set (e.g. [compile] or
-         * [SyncEngine.scopeFiltersFor]) should normalize once and reuse the result via
+         * `SyncEngine.scopeFiltersFor` in `:app`) should normalize once and reuse the result via
          * [isExcludedByFolder] rather than re-normalizing per path.
          */
         fun normalizeExcludedFolders(excludedRelativePaths: List<String>): List<String> =
@@ -155,7 +155,7 @@ class SyncPathScope internal constructor(
          * Converts a set of excluded folder paths (as persisted on
          * [com.synckro.domain.model.SyncPair.excludedRelativePaths]) into ignore-glob
          * patterns matching every file nested under each folder. Useful for callers
-         * (such as [com.synckro.data.local.fs.LocalFsEnumerator]) that only understand
+         * (such as `LocalFsEnumerator` in `:app`) that only understand
          * glob-based ignore lists rather than [SyncPathScope]'s folder-prefix check.
          */
         fun excludedFolderIgnoreGlobs(excludedRelativePaths: List<String>): List<String> =
