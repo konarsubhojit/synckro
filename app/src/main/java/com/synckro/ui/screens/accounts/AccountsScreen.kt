@@ -22,6 +22,7 @@ import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -65,6 +66,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -72,6 +75,8 @@ import com.synckro.R
 import com.synckro.domain.auth.Account
 import com.synckro.domain.model.CloudProviderType
 import com.synckro.domain.provider.StorageQuota
+import com.synckro.providers.webdav.WebDavAuthManager
+import com.synckro.providers.webdav.WebDavCredentialInput
 import com.synckro.ui.auth.ActivityAuthUiHost
 import com.synckro.ui.components.ErrorState
 import com.synckro.ui.components.LoadingState
@@ -114,6 +119,21 @@ fun AccountsScreen(
             onCancel = { viewModel.cancelDisconnect() },
             onDelete = { viewModel.confirmDisconnectDelete() },
             onReassign = { toAccountId -> viewModel.confirmDisconnectReassign(toAccountId) },
+        )
+    }
+
+    // WebDAV has no interactive OAuth flow: the server URL, username and app
+    // password are collected in-app and handed to WebDavAuthManager.linkAccount.
+    var webDavDialogVisible by remember { mutableStateOf(false) }
+    if (webDavDialogVisible) {
+        WebDavCredentialDialog(
+            onCancel = { webDavDialogVisible = false },
+            onConfirm = { input ->
+                webDavDialogVisible = false
+                viewModel.connect(CloudProviderType.WEBDAV.name) { manager ->
+                    (manager as WebDavAuthManager).linkAccount(input)
+                }
+            },
         )
     }
 
@@ -203,7 +223,11 @@ fun AccountsScreen(
                             row = row,
                             highlightedAccountId = state.highlightedAccountId,
                             onConnect = {
-                                viewModel.connect(row.providerKey) { manager -> manager.signIn(host) }
+                                if (row.providerKey == CloudProviderType.WEBDAV.name) {
+                                    webDavDialogVisible = true
+                                } else {
+                                    viewModel.connect(row.providerKey) { manager -> manager.signIn(host) }
+                                }
                             },
                             onSignOut = { viewModel.disconnect(it) },
                             onRename = { viewModel.startRename(it) },
@@ -347,6 +371,7 @@ private fun ProviderIcon(
         when (providerKey) {
             CloudProviderType.ONEDRIVE.name -> Icons.Default.Cloud
             CloudProviderType.GOOGLE_DRIVE.name -> Icons.Default.Cloud
+            CloudProviderType.WEBDAV.name -> Icons.Default.Cloud
             else -> Icons.Default.Cloud
         }
     Icon(
@@ -703,6 +728,85 @@ private fun RenameDialog(
         dismissButton = {
             TextButton(onClick = onCancel) {
                 Text(stringResource(R.string.accounts_rename_dialog_cancel))
+            }
+        },
+    )
+}
+
+// ---------------------------------------------------------------------------
+// WebDAV credential dialog
+// ---------------------------------------------------------------------------
+
+/**
+ * Collects the server URL, username and app password needed to link a WebDAV /
+ * Nextcloud account. Unlike the OAuth providers there is no browser tab to
+ * launch, so these values are typed by the user; see
+ * `docs/webdav-nextcloud-setup.md`.
+ */
+@Composable
+private fun WebDavCredentialDialog(
+    onCancel: () -> Unit,
+    onConfirm: (WebDavCredentialInput) -> Unit,
+) {
+    var serverUrl by remember { mutableStateOf("") }
+    var username by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+    val canSubmit =
+        serverUrl.trim().isNotEmpty() && username.trim().isNotEmpty() && password.isNotEmpty()
+
+    AlertDialog(
+        onDismissRequest = onCancel,
+        title = { Text(stringResource(R.string.accounts_webdav_dialog_title)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = stringResource(R.string.accounts_webdav_dialog_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                OutlinedTextField(
+                    value = serverUrl,
+                    onValueChange = { serverUrl = it },
+                    label = { Text(stringResource(R.string.accounts_webdav_dialog_server_url)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = username,
+                    onValueChange = { username = it },
+                    label = { Text(stringResource(R.string.accounts_webdav_dialog_username)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = password,
+                    onValueChange = { password = it },
+                    label = { Text(stringResource(R.string.accounts_webdav_dialog_password)) },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    onConfirm(
+                        WebDavCredentialInput(
+                            serverUrl = serverUrl.trim(),
+                            username = username.trim(),
+                            password = password,
+                        ),
+                    )
+                },
+                enabled = canSubmit,
+            ) {
+                Text(stringResource(R.string.accounts_webdav_dialog_confirm))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onCancel) {
+                Text(stringResource(R.string.accounts_webdav_dialog_cancel))
             }
         },
     )

@@ -90,4 +90,7 @@ enum class CloudProviderType {
     FAKE,
     ONEDRIVE,
     GOOGLE_DRIVE,
+
+    /** Self-hosted WebDAV endpoint (RFC 4918), including Nextcloud and ownCloud. */
+    WEBDAV,
 }

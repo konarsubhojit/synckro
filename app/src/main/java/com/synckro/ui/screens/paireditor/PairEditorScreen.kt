@@ -1220,6 +1220,7 @@ private fun providerLabel(provider: CloudProviderType): String =
         CloudProviderType.FAKE -> stringResource(R.string.provider_label_fake)
         CloudProviderType.ONEDRIVE -> stringResource(R.string.provider_label_onedrive)
         CloudProviderType.GOOGLE_DRIVE -> stringResource(R.string.provider_label_google_drive)
+        CloudProviderType.WEBDAV -> stringResource(R.string.provider_label_webdav)
     }
 
 @Composable

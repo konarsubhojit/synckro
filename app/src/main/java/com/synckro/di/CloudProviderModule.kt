@@ -5,6 +5,7 @@ import com.synckro.domain.provider.CloudProviderFactory
 import com.synckro.providers.fake.FakeCloudProvider
 import com.synckro.providers.gdrive.GoogleDriveProviderFactory
 import com.synckro.providers.onedrive.OneDriveProviderFactory
+import com.synckro.providers.webdav.WebDavProviderFactory
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -37,4 +38,9 @@ object CloudProviderModule {
     @CloudProviderKey(CloudProviderType.ONEDRIVE)
     @Singleton
     fun provideOneDriveProviderFactory(impl: OneDriveProviderFactory): CloudProviderFactory = impl
+
+    @Provides @IntoMap
+    @CloudProviderKey(CloudProviderType.WEBDAV)
+    @Singleton
+    fun provideWebDavProviderFactory(impl: WebDavProviderFactory): CloudProviderFactory = impl
 }
