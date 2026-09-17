@@ -70,10 +70,10 @@ boot there would make the main build lane slower. Instead,
 `.github/workflows/android-instrumented-tests.yml` runs
 `connectedDebugAndroidTest` (scoped to the migration test class via
 `-Pandroid.testInstrumentationRunnerArguments.class=...`) as a separate CI
-workflow on pushes, pull requests, a nightly schedule, and `workflow_dispatch`,
-across API 26 (`minSdk`) and API 34 (`compileSdk`/`targetSdk`) emulator images.
-This keeps the main build job focused while still requiring the real-database
-migration path to pass in CI.
+workflow on database/migration-related pushes and pull requests, a nightly
+schedule, and `workflow_dispatch`, across API 26 (`minSdk`) and API 34
+(`compileSdk`/`targetSdk`) emulator images. This keeps the main build job
+focused while still requiring the real-database migration path to pass in CI.
 
 ## Operations
 

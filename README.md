@@ -135,7 +135,8 @@ on every push, on pull requests, and on manual dispatch. Each run uploads:
 
 The release artifact is for internal/dev testing only. It reuses the same
 `GOOGLE_WEB_CLIENT_ID`, `MS_CLIENT_ID`, `MSAL_REDIRECT_URI`, and
-`DEBUG_KEYSTORE_*` values already used by debug builds.
+`DEBUG_KEYSTORE_*` values already used by debug builds, and the CI workflow
+explicitly opts in to using that debug key for the testing release APK.
 
 Version tags matching `v*` run the **Android signed release** workflow, which
 requires `RELEASE_KEYSTORE_*` secrets, builds a signed release AAB with
@@ -151,8 +152,8 @@ Room database migrations also have an on-device instrumented test
 (`Migration11To12InstrumentedTest`, using `MigrationTestHelper`) that cannot
 run under `testDebugUnitTest`. A separate **Android instrumented tests**
 workflow (`.github/workflows/android-instrumented-tests.yml`) boots a
-GitHub-hosted emulator to run it on every push/PR, nightly, and on manual
-dispatch — see
+GitHub-hosted emulator for push/PR changes that can affect Room migrations,
+nightly, and on manual dispatch — see
 **[docs/ci-self-hosted-runner.md](docs/ci-self-hosted-runner.md#instrumented-android-tests)**
 for details.
 

@@ -153,6 +153,7 @@ jobs:
           DEBUG_KEYSTORE_PASSWORD: ${{ secrets.DEBUG_KEYSTORE_PASSWORD }}
           DEBUG_KEY_ALIAS: ${{ secrets.DEBUG_KEY_ALIAS }}
           DEBUG_KEY_PASSWORD: ${{ secrets.DEBUG_KEY_PASSWORD }}
+          ALLOW_DEBUG_KEYSTORE_FOR_RELEASE: 'true'
         run: ./gradlew assembleRelease
 
       - name: Upload debug APK artifact

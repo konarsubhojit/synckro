@@ -2,16 +2,27 @@ name: Android instrumented tests
 
 # Room migrations need a real SQLite implementation via MigrationTestHelper.
 # Keep this emulator lane separate from the main Android CI job, but run it for
-# push/PR events so migration regressions block CI before merge.
+# push/PR changes that can affect Room migrations so migration regressions block
+# CI before merge without booting an emulator for unrelated commits.
 on:
   push:
     branches:
       - master
-    paths-ignore:
-      - '**/*.md'
+    paths:
+      - '.github/workflows/android-instrumented-tests.yml'
+      - 'app/build.gradle.kts'
+      - 'app/schemas/**'
+      - 'app/src/androidTest/**'
+      - 'app/src/main/java/com/synckro/data/local/**'
+      - 'gradle/libs.versions.toml'
   pull_request:
-    paths-ignore:
-      - '**/*.md'
+    paths:
+      - '.github/workflows/android-instrumented-tests.yml'
+      - 'app/build.gradle.kts'
+      - 'app/schemas/**'
+      - 'app/src/androidTest/**'
+      - 'app/src/main/java/com/synckro/data/local/**'
+      - 'gradle/libs.versions.toml'
   schedule:
     - cron: '17 3 * * *'
   workflow_dispatch:
