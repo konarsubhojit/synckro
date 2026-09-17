@@ -1052,7 +1052,10 @@ private fun FolderTreeRowItem(
         modifier = Modifier.fillMaxWidth().padding(start = (row.depth * 16).dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        IconButton(onClick = onExpandToggle) {
+        IconButton(
+            onClick = onExpandToggle,
+            modifier = Modifier.semantics { contentDescription = expandLabel },
+        ) {
             if (row.loading) {
                 CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
             } else {

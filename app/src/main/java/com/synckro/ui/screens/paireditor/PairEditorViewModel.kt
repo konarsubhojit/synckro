@@ -601,6 +601,9 @@ class PairEditorViewModel
          */
         private var initialFingerprint: FormFingerprint? = null
 
+        /** Endpoints the folder tree was last listed for; see [refreshFolderTree]. */
+        private var lastBrowsedTarget: FolderTreeTarget? = null
+
         /** True when [pairId] is zero, i.e. the editor was opened to create a new pair. */
         val isCreateMode: Boolean get() = pairId == 0L
 
@@ -947,6 +950,12 @@ class PairEditorViewModel
          * folder re-picked, account or remote folder changed).
          */
         fun refreshFolderTree() {
+            val current = folderTreeTarget(_state.value)
+            // Re-listing is driven by a keyed effect on the editor screen, which also
+            // restarts on configuration changes / re-navigation. Keep the already
+            // browsed tree (and the user's expansions) when the endpoints are unchanged.
+            if (current == lastBrowsedTarget && _state.value.folderTreeChildren.isNotEmpty()) return
+            lastBrowsedTarget = current
             _state.update {
                 it.copy(
                     folderTreeChildren = emptyMap(),
@@ -988,6 +997,9 @@ class PairEditorViewModel
                 val updated =
                     if (included) {
                         s.excludedRelativePaths - normalized
+                    } else if (SyncPathScope.isExcludedByFolder(normalized, s.excludedRelativePaths.toList())) {
+                        // Already covered by an ancestor exclusion: adding it would be redundant.
+                        s.excludedRelativePaths
                     } else {
                         s.excludedRelativePaths
                             .filterNot { SyncPathScope.isExcludedByFolder(it, listOf(normalized)) }
@@ -996,6 +1008,14 @@ class PairEditorViewModel
                 s.copy(excludedRelativePaths = updated)
             }
         }
+
+        private fun folderTreeTarget(s: UiState): FolderTreeTarget =
+            FolderTreeTarget(
+                localTreeUri = s.localTreeUri,
+                provider = s.provider,
+                accountId = s.accountId,
+                remoteFolderId = s.remoteFolderId.takeIf { it.isNotBlank() },
+            )
 
         /**
          * Lists the direct sub-folders of [relativePath] unless they are already
@@ -1010,13 +1030,7 @@ class PairEditorViewModel
             if (s.folderTreeUnavailable) return
             if (!force && s.folderTreeChildren.containsKey(relativePath)) return
             if (relativePath in s.loadingFolderPaths) return
-            val target =
-                FolderTreeTarget(
-                    localTreeUri = s.localTreeUri,
-                    provider = s.provider,
-                    accountId = s.accountId,
-                    remoteFolderId = s.remoteFolderId.takeIf { it.isNotBlank() },
-                )
+            val target = folderTreeTarget(s)
             _state.update { it.copy(loadingFolderPaths = it.loadingFolderPaths + relativePath) }
             viewModelScope.launch {
                 val children =
