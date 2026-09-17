@@ -157,7 +157,7 @@ class SyncEngine(
         if (pair.provider == CloudProviderType.FAKE) {
             return runFake(pair, provider as FakeCloudProvider)
         }
-        return runReal(pair, provider, onProgress, maxConcurrent)
+        return runReal(pair, provider, onProgress, maxConcurrent).result
     }
 
     /**
@@ -181,6 +181,67 @@ class SyncEngine(
                 )
         return ProviderResolution.Resolved(providerFactory.providerFor(accountId))
     }
+
+    // -------------------------------------------------------------------------
+    // previewOnce — dry run: compute the plan without applying it
+    // -------------------------------------------------------------------------
+
+    /**
+     * Outcome of a [previewOnce] dry run.
+     */
+    sealed interface PreviewResult {
+        /** The plan the next sync run would apply, in [SyncDiffer] order. */
+        data class Success(
+            val ops: List<SyncOp>,
+        ) : PreviewResult
+
+        /**
+         * The plan could not be computed. [reason] mirrors the text a real run
+         * would have produced; [needsReauth] / [needsReLink] mirror
+         * [Result.Terminal] so callers can surface the same CTAs.
+         */
+        data class Failure(
+            val reason: String,
+            val needsReauth: Boolean = false,
+            val needsReLink: Boolean = false,
+        ) : PreviewResult
+    }
+
+    /**
+     * Computes — but does not apply — the [SyncOp] plan for the next sync run of [pair].
+     *
+     * This walks the same pipeline as [runOnce] up to and including the [SyncDiffer.diff]
+     * step (local enumeration, remote enumeration, synthetic-remote construction), then
+     * returns the resulting ops instead of handing them to [SyncOpApplier]. Every write
+     * the pipeline would normally perform is suppressed, so a preview never mutates
+     * `local_index`, `file_index`, the delta token, or the structured event log, and a
+     * subsequent real run behaves exactly as if the preview had not happened.
+     *
+     * Unlike [runOnce], [CloudProviderType.FAKE] pairs also use the real pipeline so a
+     * debug pair backed by [FakeCloudProvider] can be previewed.
+     */
+    suspend fun previewOnce(pair: SyncPair): PreviewResult {
+        val provider =
+            when (val resolution = resolveProvider(pair)) {
+                is ProviderResolution.Failed -> return resolution.result.toPreviewFailure()
+                is ProviderResolution.Resolved -> resolution.provider
+            }
+        return runReal(pair, provider, onProgress = {}, maxConcurrent = 1, previewOnly = true).toPreviewResult()
+    }
+
+    private fun Result.toPreviewFailure(): PreviewResult.Failure =
+        when (this) {
+            is Result.Terminal -> PreviewResult.Failure(reason, needsReauth = needsReauth, needsReLink = needsReLink)
+            is Result.Retriable -> PreviewResult.Failure(reason)
+            is Result.PartialFailure -> PreviewResult.Failure(errors.joinToString("; "))
+            is Result.Success -> PreviewResult.Failure("Unknown preview failure")
+        }
+
+    private fun RealRunOutcome.toPreviewResult(): PreviewResult =
+        when (result) {
+            is Result.Success -> PreviewResult.Success(plannedOps)
+            else -> result.toPreviewFailure()
+        }
 
     // -------------------------------------------------------------------------
     // runTargetedUploads — upload-only pass for an explicitly named set of paths
@@ -372,39 +433,57 @@ class SyncEngine(
      *
      * Auth exceptions are converted to [Result.Terminal]; network/rate-limit
      * errors to [Result.Retriable]; [CancellationException] always propagates.
+     *
+     * When [previewOnly] is `true` the pipeline stops after step 4 and returns the
+     * computed plan in [RealRunOutcome.plannedOps]; steps 5-8 and every persistence
+     * side effect (local-index reconciliation, cold-start seeding, delta-token
+     * advancement, structured event logging) are skipped.
      */
     private suspend fun runReal(
         pair: SyncPair,
         provider: CloudProvider,
         onProgress: suspend (TransferProgress) -> Unit,
         maxConcurrent: Int,
-    ): Result {
+        previewOnly: Boolean = false,
+    ): RealRunOutcome {
         val fsEnumerator =
             localFsEnumerator
-                ?: return Result.Terminal("SyncEngine: LocalFsEnumerator not configured for ${pair.provider}")
+                ?: return RealRunOutcome(Result.Terminal("SyncEngine: LocalFsEnumerator not configured for ${pair.provider}"))
         val remoteEnumerator =
             remoteEnumerators[pair.provider]
-                ?: return Result.Terminal("SyncEngine: no RemoteEnumerator registered for ${pair.provider}")
+                ?: return RealRunOutcome(Result.Terminal("SyncEngine: no RemoteEnumerator registered for ${pair.provider}"))
         val pairDao =
             syncPairDao
-                ?: return Result.Terminal("SyncEngine: SyncPairDao not configured")
+                ?: return RealRunOutcome(Result.Terminal("SyncEngine: SyncPairDao not configured"))
         val indexDao =
             localIndexDao
-                ?: return Result.Terminal("SyncEngine: LocalIndexDao not configured")
+                ?: return RealRunOutcome(Result.Terminal("SyncEngine: LocalIndexDao not configured"))
         val evtRepo =
             eventRepository
-                ?: return Result.Terminal("SyncEngine: SyncEventRepository not configured")
+                ?: return RealRunOutcome(Result.Terminal("SyncEngine: SyncEventRepository not configured"))
         val fileAccessFactory =
             localFileAccess
-                ?: return Result.Terminal("SyncEngine: LocalFileAccess not configured")
+                ?: return RealRunOutcome(Result.Terminal("SyncEngine: LocalFileAccess not configured"))
 
         return try {
-            runRealImpl(pair, provider, fsEnumerator, remoteEnumerator, pairDao, indexDao, evtRepo, fileAccessFactory, onProgress, maxConcurrent)
+            runRealImpl(
+                pair,
+                provider,
+                fsEnumerator,
+                remoteEnumerator,
+                pairDao,
+                indexDao,
+                evtRepo,
+                fileAccessFactory,
+                onProgress,
+                maxConcurrent,
+                previewOnly,
+            )
         } catch (c: CancellationException) {
             // Cooperative cancellation: do NOT write partial state; just rethrow.
             throw c
         } catch (t: Throwable) {
-            CloudExceptionMapper.toResult(t)
+            RealRunOutcome(CloudExceptionMapper.toResult(t))
         }
     }
 
@@ -493,8 +572,17 @@ class SyncEngine(
         fileAccessFactory: (Uri) -> LocalFileAccess,
         onProgress: suspend (TransferProgress) -> Unit,
         maxConcurrent: Int,
-    ): Result {
+        previewOnly: Boolean,
+    ): RealRunOutcome {
+        // A dry run must leave no trace: suppress every structured event a real run
+        // would have written (they are DB rows surfaced to the user in Logs).
+        suspend fun logEvent(level: SyncEventLevel, tag: String, message: String) {
+            if (previewOnly) return
+            evtRepo.log(pair.id, level, tag, message)
+        }
+
         suspend fun logStep(stepNumber: Int, message: String) {
+            if (previewOnly) return
             evtRepo.log(
                 pair.id,
                 SyncEventLevel.INFO,
@@ -562,6 +650,7 @@ class SyncEngine(
                 includeGlobs = pair.includeGlobs,
                 ignoreGlobs = scopeFiltersFor(pair).localIgnoreGlobs,
                 excludeSubfolders = pair.excludeSubfolders,
+                persist = !previewOnly,
             )
 
         // -----------------------------------------------------------------
@@ -586,8 +675,7 @@ class SyncEngine(
                 enumerateRemoteIncremental(remoteEnumerator, pair)
             }
         if (forcePeriodicFullEnumeration) {
-            evtRepo.log(
-                pair.id,
+            logEvent(
                 SyncEventLevel.INFO,
                 SyncEventTag.REMOTE_ENUM,
                 "Periodic remote full re-enumeration executed to validate incremental sync state.",
@@ -610,8 +698,7 @@ class SyncEngine(
                 rawRemoteSnapshot
             }
         if (remoteSnapshot.isDeltaTokenReset) {
-            evtRepo.log(
-                pair.id,
+            logEvent(
                 SyncEventLevel.WARN,
                 SyncEventTag.REMOTE_ENUM,
                 "$DELTA_TOKEN_RESET_EVENT_PREFIX; incremental state reset to fresh baseline token.",
@@ -768,7 +855,7 @@ class SyncEngine(
             } else {
                 ColdStartReconciliation()
             }
-        if (coldStartReconciliation.seededEntries.isNotEmpty()) {
+        if (coldStartReconciliation.seededEntries.isNotEmpty() && !previewOnly) {
             indexDao.upsertAll(coldStartReconciliation.seededEntries)
             coldStartReconciliation.seededEntries.forEach { entry ->
                 evtRepo.log(
@@ -806,12 +893,20 @@ class SyncEngine(
                 conflictPolicy = pair.conflictPolicy,
                 retentionDays = pair.retentionDays,
             )
-        evtRepo.log(
-            pair.id,
+        logEvent(
             SyncEventLevel.INFO,
             SyncEventTag.INSTANT_STABILITY,
             SyncEventTaxonomy.stabilityAccepted(ops.size),
         )
+
+        // A preview stops here: the plan is exactly what the diff step produced, and
+        // nothing past this point (conflict resolution, applier, checkpointing) runs.
+        if (previewOnly) {
+            return RealRunOutcome(
+                result = Result.Success(applied = 0, conflicts = ops.count { it is SyncOp.Conflict }),
+                plannedOps = ops,
+            )
+        }
 
         // -----------------------------------------------------------------
         // Step 5 – Apply previously-resolved ConflictRecords (same pattern
@@ -945,15 +1040,17 @@ class SyncEngine(
         logStep(8, "finalizing sync result")
         val totalApplied = appliedResolutions + applyResult.applied
         val allErrors = resolutionErrors + applyResult.errors
-        return if (allErrors.isEmpty()) {
-            Result.Success(applied = totalApplied, conflicts = applyResult.conflicts)
-        } else {
-            Result.PartialFailure(
-                applied = totalApplied,
-                conflicts = applyResult.conflicts,
-                errors = allErrors,
-            )
-        }
+        val result =
+            if (allErrors.isEmpty()) {
+                Result.Success(applied = totalApplied, conflicts = applyResult.conflicts)
+            } else {
+                Result.PartialFailure(
+                    applied = totalApplied,
+                    conflicts = applyResult.conflicts,
+                    errors = allErrors,
+                )
+            }
+        return RealRunOutcome(result = result, plannedOps = opsToApply)
     }
 
     /**
@@ -1209,6 +1306,15 @@ class SyncEngine(
 
     companion object {
         private const val FAKE_ACCOUNT_KEY = "__fake__"
+
+        /**
+         * Internal outcome of the [runReal] pipeline: the engine-level [Result] plus the
+         * plan that was (or, for a dry run, would have been) applied.
+         */
+        private data class RealRunOutcome(
+            val result: Result,
+            val plannedOps: List<SyncOp> = emptyList(),
+        )
 
         private sealed interface ProviderResolution {
             data class Resolved(
