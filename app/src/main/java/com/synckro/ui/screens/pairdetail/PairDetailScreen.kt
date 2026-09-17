@@ -278,6 +278,11 @@ fun PairDetailScreen(
 
 @Composable
 private fun StatsCard(stats: PairStats) {
+    val context = LocalContext.current
+    val formattedTransferredBytes =
+        remember(context, stats.totalBytesTransferred) {
+            Formatter.formatFileSize(context, stats.totalBytesTransferred)
+        }
     SectionCard(modifier = Modifier.fillMaxWidth()) {
         Text(
             text = stringResource(R.string.pair_detail_stats_title),
@@ -298,7 +303,7 @@ private fun StatsCard(stats: PairStats) {
             text =
                 stringResource(
                     R.string.pair_detail_stats_bytes_transferred_format,
-                    Formatter.formatFileSize(LocalContext.current, stats.totalBytesTransferred),
+                    formattedTransferredBytes,
                     stats.runsConsidered,
                 ),
             style = MaterialTheme.typography.bodyMedium,
