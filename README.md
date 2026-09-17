@@ -140,6 +140,15 @@ pull requests deliberately use GitHub-hosted runners. See
 **[docs/ci-self-hosted-runner.md](docs/ci-self-hosted-runner.md)** for runner
 provisioning, operations, and the security rationale.
 
+Room database migrations also have an on-device instrumented test
+(`Migration11To12InstrumentedTest`, using `MigrationTestHelper`) that cannot
+run under `testDebugUnitTest`. A separate **Android instrumented tests**
+workflow (`.github/workflows/android-instrumented-tests.yml`) boots a
+GitHub-hosted emulator to run it nightly and on manual dispatch rather than on
+every push/PR — see
+**[docs/ci-self-hosted-runner.md](docs/ci-self-hosted-runner.md#instrumented-android-tests)**
+for the cost tradeoff.
+
 ## Roadmap
 
 Completed work (current release):

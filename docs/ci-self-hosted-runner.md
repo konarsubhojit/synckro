@@ -53,6 +53,29 @@ requests deliberately remain on GitHub-hosted `ubuntu-latest` runners. Also
 enable **Settings → Actions → General → Fork pull request workflows → Require
 approval for all external contributors**.
 
+## Instrumented Android tests
+
+Room migrations are covered by both a JVM test (`MigrationTest.kt`, runs under
+`testDebugUnitTest` on every push/PR) and an on-device instrumented test
+(`Migration11To12InstrumentedTest`, using `androidx.room.testing
+.MigrationTestHelper` against a real `SupportSQLiteDatabase`). The
+instrumented variant needs an Android device or emulator and cannot execute
+under Robolectric/JVM unit tests.
+
+Booting an emulator (even a GitHub-hosted one via
+[`reactivecircus/android-emulator-runner`](https://github.com/ReactiveCircus/android-emulator-runner))
+adds several minutes per job and is billed as extra GitHub Actions minutes.
+Since `android-ci.yml` already runs on every push and PR, adding an emulator
+boot there would multiply that cost across every commit. Instead,
+`.github/workflows/android-instrumented-tests.yml` runs
+`connectedDebugAndroidTest` (scoped to the migration test class via
+`-Pandroid.testInstrumentationRunnerArguments.class=...`) on a schedule
+(nightly) and on `workflow_dispatch`, across API 26 (`minSdk`) and API 34
+(`compileSdk`/`targetSdk`) emulator images. This keeps the fast unit-test
+feedback loop on every push while still exercising the real-database
+migration path regularly, without slowing down or adding emulator cost to
+every PR.
+
 ## Operations
 
 From the runner installation directory, manage the service with:
