@@ -33,6 +33,7 @@ Each sync pair carries its own schedule configuration:
 | **Auto sync enabled** | `true` | Whether periodic background sync is active for this pair. When disabled, only manual "Sync now" triggers a run. |
 | **Schedule interval** | 60 min | How often WorkManager enqueues a new sync run for this pair. Subject to WorkManager's 15-minute minimum. |
 | **Wi-Fi only** | `true` | Sync only when the device is connected to an unmetered (non-cellular) network. |
+| **Avoid metered networks** | `false` | Sync only on an unmetered connection, independent of the Wi-Fi-only toggle above. Always effectively on when **Wi-Fi only** is enabled (shown as implied/disabled in that case); lets you protect mobile data even for a pair that isn't restricted to Wi-Fi specifically (e.g. a metered Wi-Fi hotspot). |
 | **Requires charging** | `false` | Sync only when the device is charging. |
 
 When you tap **Save** in the Pair Editor, the existing WorkManager periodic job
@@ -62,15 +63,26 @@ The Pair Editor offers named presets to simplify common choices:
 
 ## 3. Network and power constraints
 
-WorkManager passes the pair's `wifiOnly` and `requiresCharging` flags as
-`Constraints` when building the `PeriodicWorkRequest`:
+WorkManager passes the pair's `wifiOnly`, `avoidMeteredNetworks`, and
+`requiresCharging` flags as `Constraints` when building the
+`PeriodicWorkRequest` (and the same constraints back the one-shot manual and
+instant-sync requests, so the network policy never drifts between paths):
 
 ```kotlin
 Constraints.Builder()
-    .setRequiredNetworkType(if (pair.wifiOnly) NetworkType.UNMETERED else NetworkType.CONNECTED)
+    .setRequiredNetworkType(
+        if (pair.wifiOnly || pair.avoidMeteredNetworks) NetworkType.UNMETERED else NetworkType.CONNECTED,
+    )
     .setRequiresCharging(pair.requiresCharging)
     .build()
 ```
+
+**Avoid metered networks** is independent of **Wi-Fi only**: it also blocks
+sync on a metered Wi-Fi hotspot, and can be enabled on its own for a pair that
+should still be able to sync over a plain (unmetered) mobile connection while
+still refusing to burn metered mobile/hotspot data. Enabling **Wi-Fi only**
+already implies this behaviour, so the toggle is shown as on-but-disabled in
+that case.
 
 When a constraint is not satisfied at the nominal run time, WorkManager keeps
 the job eligible and may run it after the constraint is met. Doze, App Standby,
@@ -79,6 +91,9 @@ OEM battery controls, and system load may add further delay.
 **Recommended defaults:**
 
 - Keep **Wi-Fi only** enabled to avoid using mobile data for large transfers.
+- Enable **Avoid metered networks** instead of **Wi-Fi only** if you want a
+  pair to also sync over an unmetered non-Wi-Fi connection (e.g. unlimited
+  tethering) while still refusing metered mobile data or a metered hotspot.
 - Enable **Charging only** for pairs that sync large folders (photos, videos) so
   background transfers don't drain the battery.
 
@@ -155,9 +170,16 @@ The manual request uses a `OneTimeWorkRequest` with the same constraints as
 the periodic job **plus** exponential backoff (initial delay 30 s), allowing a
 transient failure to be retried. The periodic schedule is unaffected.
 
-The **Sync now** button is disabled while a sync for that pair is already
-running. If the button is blocked for another reason (account needs sign-in,
-SAF permission lost), the Home screen shows a descriptive snackbar.
+While a sync for that pair is already running or queued, **Sync now** is
+replaced by a **Cancel sync** action (Home screen and Pair Detail screen) that
+cancels the pair's manual, instant, and periodic WorkManager requests via
+`WorkManager.cancelUniqueWork`. Cancelling stops the run promptly without
+corrupting the local/file index or the durable pending-upload queue — a
+subsequent run resumes correctly — and, if auto-sync is still enabled for the
+pair, immediately re-schedules its periodic job so cancelling one run does not
+disable the recurring schedule. If **Sync now** is blocked for another reason
+(account needs sign-in, SAF permission lost), the Home screen shows a
+descriptive snackbar instead.
 
 ---
 
