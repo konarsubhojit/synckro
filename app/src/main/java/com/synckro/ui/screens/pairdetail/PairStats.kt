@@ -13,6 +13,8 @@ import com.synckro.ui.screens.home.parsePairSummary
  * @param failureCount          Runs whose outcome was anything else (partial
  *   failure, failure, needs-reauth, needs-relink).
  * @param totalBytesTransferred Sum of upload and download bytes across the window.
+ *   Events written before byte tracking, and outcomes without transfer data,
+ *   contribute zero.
  * @param lastSuccessAtMs       Timestamp (epoch ms) of the most recent successful
  *   run within the window, or `null` when no success is present.
  */
