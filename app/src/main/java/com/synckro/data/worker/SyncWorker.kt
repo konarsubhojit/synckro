@@ -33,7 +33,9 @@ import com.synckro.data.local.dao.PendingUploadDao
 import com.synckro.data.local.dao.SyncPairDao
 import com.synckro.data.local.entity.PendingUploadEntity
 import com.synckro.data.local.entity.toDomain
+import com.synckro.data.local.fs.LocalFolderAccessChecker
 import com.synckro.data.local.fs.LocalFsEnumerator
+import com.synckro.data.local.fs.LocalStorageException
 import com.synckro.data.local.fs.TargetedLocalFileResolution
 import com.synckro.data.local.fs.TargetedLocalFileResolver
 import com.synckro.data.repository.SettingsRepository
@@ -109,6 +111,7 @@ class SyncWorker
         private val pendingUploadDao: PendingUploadDao,
         private val instantCandidateResolver: InstantCandidateResolver,
         private val pairRunLeaseDao: PairRunLeaseDao,
+        private val localFolderAccessChecker: LocalFolderAccessChecker,
         private val localIndexDao: LocalIndexDao? = null,
         private val telemetry: Telemetry = NoOpTelemetry(),
     ) : CoroutineWorker(appContext, params) {
@@ -299,8 +302,9 @@ class SyncWorker
             isPeriodicRun: Boolean,
             isInstantRun: Boolean,
         ): Result {
+            val preflightResult = runPreflightChecks(pair)
             val instantBatch =
-                if (isInstantRun) {
+                if (preflightResult == null && isInstantRun) {
                     prepareInstantBatch(pair) ?: return Result.success()
                 } else {
                     null
@@ -457,14 +461,15 @@ class SyncWorker
                             }
                         }
                         val engineResult =
-                            targetedResult?.result
-                                ?.let { result ->
-                                    if (instantBatch?.hasDeferred == true && result is SyncEngine.Result.Success) {
-                                        SyncEngine.Result.Retriable("Some instant candidates are temporarily unavailable")
-                                    } else {
-                                        result
+                            preflightResult
+                                ?: targetedResult?.result
+                                    ?.let { result ->
+                                        if (instantBatch?.hasDeferred == true && result is SyncEngine.Result.Success) {
+                                            SyncEngine.Result.Retriable("Some instant candidates are temporarily unavailable")
+                                        } else {
+                                            result
+                                        }
                                     }
-                                }
                                 ?: engine.runOnce(pair, onSyncProgress, maxConcurrent)
                         when (val r = engineResult) {
                             is SyncEngine.Result.Success -> {
@@ -713,6 +718,37 @@ class SyncWorker
                     }
 
                 workerResult
+            }
+        }
+
+        /**
+         * Validates both configured endpoints before the engine enumerates or mutates either side.
+         * Returns a mapped failure, or `null` when the sync can proceed.
+         */
+        private suspend fun runPreflightChecks(pair: SyncPair): SyncEngine.Result? {
+            if (pair.provider == CloudProviderType.FAKE) return null
+            return try {
+                if (!localFolderAccessChecker.hasReadWriteAccess(pair.localTreeUri)) {
+                    throw LocalStorageException("Local folder permission is no longer available.")
+                }
+                val accountId =
+                    pair.accountId
+                        ?: throw CloudProviderException.AuthenticationRequired(
+                            "Sync pair is no longer linked to an account.",
+                        )
+                val provider =
+                    providerFactories[pair.provider]
+                        ?.providerFor(accountId)
+                        ?: return SyncEngine.Result.Terminal("Unsupported provider: ${pair.provider}")
+                if (!provider.ensureAuthenticated()) {
+                    throw CloudProviderException.AuthenticationFailed(
+                        "${provider.displayName} authentication check failed.",
+                    )
+                }
+                provider.getMetadata(pair.remoteFolderId)
+                null
+            } catch (t: Throwable) {
+                CloudExceptionMapper.toResult(t)
             }
         }
 

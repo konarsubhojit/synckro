@@ -7,6 +7,7 @@ import androidx.work.WorkManager
 import com.synckro.data.local.dao.PairRunLeaseDao
 import com.synckro.data.local.dao.PendingUploadDao
 import com.synckro.data.local.dao.SyncPairDao
+import com.synckro.data.local.fs.LocalFolderAccessChecker
 import com.synckro.data.repository.SettingsRepository
 import com.synckro.data.repository.SyncEventRepository
 import com.synckro.domain.model.CloudProviderType
@@ -158,6 +159,7 @@ class SyncWorkerRetryCapTest {
                     pendingUploadDao = mockk<PendingUploadDao>(relaxed = true),
                     instantCandidateResolver = mockk<InstantCandidateResolver>(relaxed = true),
                     pairRunLeaseDao = mockk<PairRunLeaseDao>(relaxed = true),
+                    localFolderAccessChecker = mockk<LocalFolderAccessChecker>(relaxed = true),
                 )
 
             coEvery { syncStatusNotifier.notifyFailure(pair, "boom") } returns Unit

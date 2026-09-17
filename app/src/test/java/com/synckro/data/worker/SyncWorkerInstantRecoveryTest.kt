@@ -22,6 +22,7 @@ import com.synckro.data.local.entity.PendingUploadEntity
 import com.synckro.data.local.entity.PendingUploadState
 import com.synckro.data.local.entity.SyncPairEntity
 import com.synckro.data.local.fs.LocalFileEntry
+import com.synckro.data.local.fs.LocalFolderAccessChecker
 import com.synckro.data.local.fs.LocalFsEnumerator
 import com.synckro.data.local.fs.TargetedLocalFileResolution
 import com.synckro.data.repository.ConflictRepository
@@ -34,6 +35,7 @@ import com.synckro.domain.model.ConflictPolicy
 import com.synckro.domain.model.SyncDirection
 import com.synckro.domain.provider.CloudProvider
 import com.synckro.domain.provider.CloudProviderFactory
+import com.synckro.domain.provider.RemoteFile
 import com.synckro.domain.sync.LocalFileAccess
 import com.synckro.domain.sync.LocalFileStat
 import com.synckro.domain.sync.RemoteEnumerator
@@ -44,6 +46,7 @@ import com.synckro.util.notification.SyncStatusNotifier
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.spyk
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -179,7 +182,18 @@ class SyncWorkerInstantRecoveryTest {
         pairRunLeaseDao = db.pairRunLeaseDao()
         localIndexDao = db.localIndexDao()
 
-        fakeProvider = FakeCloudProvider()
+        fakeProvider = spyk(FakeCloudProvider())
+        coEvery { fakeProvider.getMetadata(REMOTE_FOLDER_ID) } returns
+            RemoteFile(
+                id = REMOTE_FOLDER_ID,
+                name = "Remote root",
+                parentId = null,
+                isFolder = true,
+                size = null,
+                lastModifiedMs = 0L,
+                eTag = null,
+                mimeType = null,
+            )
         localFileAccess = InMemoryLocalFileAccess()
         childrenQuery = RecordingChildrenQuery()
         remoteEnumerator = RecordingRemoteEnumerator()
@@ -439,6 +453,10 @@ class SyncWorkerInstantRecoveryTest {
             pendingUploadDao = pendingUploadDao,
             instantCandidateResolver = instantCandidateResolver,
             pairRunLeaseDao = pairRunLeaseDao,
+            localFolderAccessChecker =
+                mockk<LocalFolderAccessChecker> {
+                    every { hasReadWriteAccess(any()) } returns true
+                },
         )
     }
 
