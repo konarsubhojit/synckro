@@ -394,7 +394,7 @@ class SyncWorker
                 //  2. Early foreground promotion for large transfers (≥ LARGE_TRANSFER_THRESHOLD_BYTES).
                 //  3. Updating the progress notification once the worker is in foreground.
                 val onSyncProgress: suspend (TransferProgress) -> Unit = { progress ->
-                    transferredBytes.set(progress.bytesTransferred)
+                    transferredBytes.updateAndGet { maxOf(it, progress.bytesTransferred) }
                     setProgress(
                         workDataOf(
                             PROGRESS_FILES_COMPLETED to progress.filesCompleted,

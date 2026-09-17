@@ -44,7 +44,8 @@ class SyncEventRepository
          * @param level     Severity level.
          * @param tag       Short source label.
          * @param message   Human-readable description.
-         * @param bytesTransferred Total transfer bytes for a completed sync run.
+         * @param bytesTransferred Total transfer bytes for a completed sync run, or `null`
+         *   when the event is not a completed sync run.
          */
         suspend fun log(
             pairId: Long?,
