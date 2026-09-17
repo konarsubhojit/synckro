@@ -72,7 +72,26 @@ class PickRemoteFolderViewModel
                 resolved ?: CloudProviderType.GOOGLE_DRIVE
             }
 
-        private val requestedAccountId: String? = savedStateHandle.get<String>(ARG_ACCOUNT_ID)
+        private val requestedAccountId: String? =
+            savedStateHandle.get<String>(ARG_ACCOUNT_ID)?.takeIf { it.isNotBlank() }
+
+        /**
+         * Id of the account produced by the most recent interactive sign-in. Preferred
+         * over [requestedAccountId] because reconnecting an account (sign out → sign in)
+         * can yield a different provider-side id; without this the screen would keep
+         * retrying with an id that is no longer signed in.
+         */
+        @Volatile
+        private var signedInAccountId: String? = null
+
+        /**
+         * True once a non-terminal [CloudProviderException.AuthenticationFailed] has
+         * already triggered an interactive sign-in for the current folder. Providers
+         * report the first silent-refresh failure as "transient, will retry" for the
+         * benefit of the background worker; in this screen there is nobody to retry,
+         * so we offer sign-in once and then surface the error.
+         */
+        private var transientAuthReauthAttempted = false
 
         private val _state = MutableStateFlow(UiState())
         val state: StateFlow<UiState> = _state.asStateFlow()
@@ -205,6 +224,10 @@ class PickRemoteFolderViewModel
                 when (result) {
                     is AuthResult.Success -> {
                         Timber.i("PickRemoteFolderViewModel.signInAndRetry: sign-in succeeded, retrying folder load")
+                        // Reconnecting an account can change its provider-side id, so browse
+                        // the account that was actually signed in rather than the one this
+                        // screen was launched with.
+                        signedInAccountId = result.value.id.takeIf { it.isNotBlank() }
                         _state.update { it.copy(isReauthenticating = false) }
                         loadFolder(_state.value.currentFolderId)
                     }
@@ -249,6 +272,7 @@ class PickRemoteFolderViewModel
                         .filter { it.isFolder }
                         .sortedBy { it.name.lowercase() }
                 }.onSuccess { folders ->
+                    transientAuthReauthAttempted = false
                     _state.update {
                         it.copy(
                             isLoading = false,
@@ -259,7 +283,19 @@ class PickRemoteFolderViewModel
                     }
                 }.onFailure { t ->
                     Timber.e(t, "PickRemoteFolderViewModel: failed to list folder %s", folderId)
-                    if (t is CloudProviderException.AuthenticationRequired) {
+                    val needsInteractiveSignIn =
+                        when {
+                            t is CloudProviderException.AuthenticationRequired -> true
+                            // A silent refresh that failed once is reported as retriable by the
+                            // providers, but this screen has no retry loop — prompt the user
+                            // instead of dead-ending on an error the user cannot act on.
+                            t is CloudProviderException.AuthenticationFailed && !transientAuthReauthAttempted -> {
+                                transientAuthReauthAttempted = true
+                                true
+                            }
+                            else -> false
+                        }
+                    if (needsInteractiveSignIn) {
                         // Keep isLoading = true while the screen processes the reauth event;
                         // the isReauthenticating flag lets the screen show a "Signing in…" message.
                         Timber.i("PickRemoteFolderViewModel: auth required — emitting reauthEvent")
@@ -267,13 +303,26 @@ class PickRemoteFolderViewModel
                         _reauthEvent.tryEmit(Unit)
                     } else {
                         _state.update {
-                            it.copy(isLoading = false, error = t.message ?: "Failed to load folders")
+                            it.copy(
+                                isLoading = false,
+                                isReauthenticating = false,
+                                error = t.message ?: "Failed to load folders",
+                            )
                         }
                     }
                 }
             }
         }
 
+        /**
+         * Resolves the [CloudProvider] for the account this screen should browse.
+         *
+         * The requested account id (navigation argument, or the account from the last
+         * interactive sign-in) is validated against the provider's currently signed-in
+         * accounts. When it is no longer present — e.g. because the account was
+         * disconnected and reconnected — the first available account is used instead so
+         * the screen recovers rather than retrying forever with a stale id.
+         */
         private suspend fun resolveProvider(): CloudProvider {
             val factory =
                 providerFactories[providerType]
@@ -281,13 +330,32 @@ class PickRemoteFolderViewModel
             if (providerType == CloudProviderType.FAKE) return factory.providerFor("__fake__")
 
             val manager = authRegistry.find(providerType)
+            val preferredAccountId = signedInAccountId ?: requestedAccountId
+            val accounts = manager?.currentAccounts().orEmpty()
             val accountId =
                 when {
-                    !requestedAccountId.isNullOrBlank() -> requestedAccountId
-                    manager == null -> error("No AuthManager registered for provider: $providerType")
-                    else -> manager.currentAccounts().firstOrNull()?.id
+                    // Nothing to validate against (no auth manager, or the manager could not
+                    // enumerate its accounts) — let the provider decide whether the id works.
+                    preferredAccountId != null && accounts.isEmpty() -> preferredAccountId
+                    preferredAccountId != null && accounts.any { it.id == preferredAccountId } -> preferredAccountId
+                    accounts.isNotEmpty() -> {
+                        val fallback = accounts.first().id
+                        if (preferredAccountId != null) {
+                            Timber.w(
+                                "PickRemoteFolderViewModel: account %s is no longer signed in for %s; " +
+                                    "falling back to the first available account",
+                                preferredAccountId,
+                                providerType,
+                            )
+                        }
+                        fallback
+                    }
+                    else ->
+                        throw CloudProviderException.AuthenticationRequired(
+                            "No signed-in account available for provider: $providerType",
+                        )
                 }
-            return factory.providerFor(accountId ?: error("No signed-in account available for provider: $providerType"))
+            return factory.providerFor(accountId)
         }
 
         companion object {
