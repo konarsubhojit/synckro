@@ -23,8 +23,10 @@ a folder on **OneDrive** or **Google Drive**.
   retention-based deletion.
 - Periodic background sync (WorkManager) with per-pair schedule presets
   (15 min / 30 min / 1 h / 24 h / custom interval) and constraints
-  (Wi-Fi only, charging-only). See **[docs/scheduling.md](docs/scheduling.md)**.
-- Manual "Sync now" from the Home screen or Pair Detail screen.
+  (Wi-Fi only, avoid metered networks, charging-only). See
+  **[docs/scheduling.md](docs/scheduling.md)**.
+- Manual "Sync now" from the Home screen or Pair Detail screen, with a
+  "Cancel sync" action to stop a running or queued run for a pair.
 - **Conflict inbox** with per-conflict and bulk resolution (Keep local / Keep
   remote / Keep both) — long-press any row to enter selection mode and resolve
   many conflicts at once. See **[docs/conflict-inbox.md](docs/conflict-inbox.md)**.
