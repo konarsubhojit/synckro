@@ -121,7 +121,7 @@ class PairSignalCoordinator(
     }
 
     companion object {
-        internal const val DEFAULT_DEBOUNCE_MS = 5_000L
-        internal const val DEFAULT_MIN_DISPATCH_INTERVAL_MS = 60_000L
+        const val DEFAULT_DEBOUNCE_MS = 5_000L
+        const val DEFAULT_MIN_DISPATCH_INTERVAL_MS = 60_000L
     }
 }

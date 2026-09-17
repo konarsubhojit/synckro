@@ -61,7 +61,12 @@ core/domain/src/main/java/com/synckro/
 └── domain/
     ├── model/                          # SyncPair, FileIndexEntry, enums
     ├── provider/CloudProvider.kt       # Provider interface + models
-    └── sync/                           # SyncDiffer, SyncPathScope, FileCandidatePolicy
+    └── sync/                           # SyncDiffer, SyncPathScope, FileCandidatePolicy,
+                                         # FileStabilityDetector, InstantSyncEligibilityPolicy,
+                                         # LocalChangeWatcher, PairDispatchHistory,
+                                         # PairSignalCoordinator, RetryPolicy,
+                                         # WatcherLifecyclePolicy, RemoteEnumerator,
+                                         # AccountAwareRemoteEnumerator, TransferProgress
 
 app/src/main/java/com/synckro/
 ├── SynckroApp.kt                       # Hilt Application
