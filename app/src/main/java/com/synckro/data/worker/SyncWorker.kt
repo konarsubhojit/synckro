@@ -80,6 +80,7 @@ import java.net.URLDecoder
 import java.net.URLEncoder
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 import kotlin.jvm.JvmSuppressWildcards
 
@@ -341,6 +342,7 @@ class SyncWorker
             return coroutineScope {
                 val promotedToForeground = AtomicBoolean(false)
                 val foregroundPromotionInFlight = AtomicBoolean(false)
+                val transferredBytes = AtomicLong(0L)
 
                 suspend fun tryPromoteToForeground(
                     progress: TransferProgress? = null,
@@ -391,7 +393,10 @@ class SyncWorker
                 //  1. Publishing live progress to WorkManager's WorkInfo.progress Data.
                 //  2. Early foreground promotion for large transfers (≥ LARGE_TRANSFER_THRESHOLD_BYTES).
                 //  3. Updating the progress notification once the worker is in foreground.
+                // TransferProgress reports a cumulative run total, so retain the greatest
+                // observation in case a later callback is stale.
                 val onSyncProgress: suspend (TransferProgress) -> Unit = { progress ->
+                    transferredBytes.updateAndGet { maxOf(it, progress.bytesTransferred) }
                     setProgress(
                         workDataOf(
                             PROGRESS_FILES_COMPLETED to progress.filesCompleted,
@@ -479,6 +484,7 @@ class SyncWorker
                                     SyncEventLevel.INFO,
                                     LOG_TAG,
                                     "Sync succeeded: ${r.applied} applied, ${r.conflicts} conflicts",
+                                    bytesTransferred = transferredBytes.get(),
                                 )
                                 Timber.i("SyncWorker.doWork: success pairId=%d applied=%d conflicts=%d", pairId, r.applied, r.conflicts)
                                 telemetry.log("sync_apply_complete pairId=$pairId applied=${r.applied} conflicts=${r.conflicts}")
@@ -507,6 +513,7 @@ class SyncWorker
                                     SyncEventLevel.WARN,
                                     LOG_TAG,
                                     "Sync partial failure: ${r.applied} applied, ${r.errors.size} errors — $errorSummary",
+                                    bytesTransferred = transferredBytes.get(),
                                 )
                                 if (isInstantRun) {
                                     if (runAttemptCount + 1 >= MAX_RETRY_ATTEMPTS) {

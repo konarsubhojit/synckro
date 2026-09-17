@@ -102,6 +102,21 @@ class SyncEventDaoTest {
         }
 
     @Test
+    fun `repository preserves completed run transfer bytes`() =
+        runTest {
+            syncPairDao.insert(buildSyncPair())
+            repository.log(
+                pairId = 1L,
+                level = SyncEventLevel.INFO,
+                tag = SyncEventTag.SYNC_WORKER,
+                message = "Sync succeeded: 1 applied, 0 conflicts",
+                bytesTransferred = 4_096L,
+            )
+
+            assertEquals(4_096L, repository.getAll(limit = 1).single().bytesTransferred)
+        }
+
+    @Test
     fun `observeForPair returns only matching pairId rows`() =
         runTest {
             syncPairDao.insert(buildSyncPair(1L))

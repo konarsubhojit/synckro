@@ -83,7 +83,7 @@ class EnumConverters {
 
 @Database(
     entities = [AccountEntity::class, SyncPairEntity::class, FileIndexEntity::class, SyncEventEntity::class, ConflictRecordEntity::class, LocalIndexEntity::class, PendingUploadEntity::class, PairRunLeaseEntity::class],
-    version = 19,
+    version = 20,
     exportSchema = true,
 )
 @TypeConverters(EnumConverters::class)
@@ -532,6 +532,14 @@ abstract class SynckroDatabase : RoomDatabase() {
                             )
                         }
                     }
+                }
+            }
+
+        /** Adds an optional byte total to completed sync events for per-pair transfer stats. */
+        val MIGRATION_19_20 =
+            object : Migration(19, 20) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL("ALTER TABLE `sync_event` ADD COLUMN `bytesTransferred` INTEGER")
                 }
             }
     }

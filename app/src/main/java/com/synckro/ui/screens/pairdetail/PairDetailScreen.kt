@@ -1,5 +1,6 @@
 package com.synckro.ui.screens.pairdetail
 
+import android.text.format.Formatter
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -45,6 +46,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -277,6 +279,13 @@ fun PairDetailScreen(
 
 @Composable
 private fun StatsCard(stats: PairStats) {
+    val context = LocalContext.current
+    val configuration = LocalConfiguration.current
+    val formattedTransferredBytes =
+        // Reformat when the locale or other display configuration changes.
+        remember(context, configuration, stats.totalBytesTransferred) {
+            Formatter.formatFileSize(context, stats.totalBytesTransferred)
+        }
     SectionCard(modifier = Modifier.fillMaxWidth()) {
         Text(
             text = stringResource(R.string.pair_detail_stats_title),
@@ -296,8 +305,8 @@ private fun StatsCard(stats: PairStats) {
         Text(
             text =
                 stringResource(
-                    R.string.pair_detail_stats_files_transferred_format,
-                    stats.totalFilesTransferred,
+                    R.string.pair_detail_stats_bytes_transferred_format,
+                    formattedTransferredBytes,
                     stats.runsConsidered,
                 ),
             style = MaterialTheme.typography.bodyMedium,

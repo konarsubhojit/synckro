@@ -173,7 +173,13 @@ class PairDetailViewModelProgressTest {
             } returns
                 flowOf(
                     listOf(
-                        syncEvent(pair.id, SyncEventLevel.INFO, "Sync succeeded: 4 applied, 0 conflicts", t = 200L),
+                        syncEvent(
+                            pair.id,
+                            SyncEventLevel.INFO,
+                            "Sync succeeded: 4 applied, 0 conflicts",
+                            t = 200L,
+                            bytesTransferred = 4_096L,
+                        ),
                         syncEvent(pair.id, SyncEventLevel.ERROR, "Sync failed after 5 attempt(s), giving up: timeout", t = 100L),
                     ),
                 )
@@ -186,7 +192,7 @@ class PairDetailViewModelProgressTest {
             assertEquals(2, stats.runsConsidered)
             assertEquals(1, stats.successCount)
             assertEquals(1, stats.failureCount)
-            assertEquals(4, stats.totalFilesTransferred)
+            assertEquals(4_096L, stats.totalBytesTransferred)
             assertEquals(200L, stats.lastSuccessAtMs)
             collectJob.cancel()
         }
@@ -259,5 +265,13 @@ class PairDetailViewModelProgressTest {
         level: SyncEventLevel,
         message: String,
         t: Long,
-    ) = SyncEvent(pairId = pairId, timestampMs = t, level = level, tag = SyncEventTag.SYNC_WORKER, message = message)
+        bytesTransferred: Long? = null,
+    ) = SyncEvent(
+        pairId = pairId,
+        timestampMs = t,
+        level = level,
+        tag = SyncEventTag.SYNC_WORKER,
+        message = message,
+        bytesTransferred = bytesTransferred,
+    )
 }

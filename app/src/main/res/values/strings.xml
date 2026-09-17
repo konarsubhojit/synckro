@@ -106,7 +106,7 @@
     <string name="pair_detail_resolve_relink">Re-link folder</string>
     <string name="pair_detail_stats_title">Stats</string>
     <string name="pair_detail_stats_no_runs">No sync runs recorded yet for this pair.</string>
-    <string name="pair_detail_stats_files_transferred_format">%1$d files transferred (last %2$d runs)</string>
+    <string name="pair_detail_stats_bytes_transferred_format">%1$s transferred (last %2$d runs)</string>
     <string name="pair_detail_stats_success_rate_format">%1$d/%2$d runs succeeded</string>
     <string name="pair_detail_stats_last_success">Last successful sync: %1$s</string>
     <string name="pair_detail_stats_last_success_none">No successful sync in this window yet</string>

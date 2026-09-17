@@ -43,7 +43,7 @@ import javax.inject.Inject
  *  - live WorkManager-backed sync progress for periodic and "sync now" runs
  *  - aggregated per-pair transfer [PairStats] over the last [STATS_WINDOW] terminal
  *    runs, computed by [aggregatePairStats] purely in-memory from `sync_event` rows
- *    (issue #375 — no new Room entity/migration needed)
+ *    (issue #375)
  *
  * `pairId` is read from [SavedStateHandle] using the [KEY_PAIR_ID] key so the
  * NavHost can pass it via a path arg without an explicit lambda.

@@ -6,26 +6,15 @@ import com.synckro.ui.screens.home.parsePairSummary
 
 /**
  * Aggregate per-pair transfer stats (issue #375 / E6.S2), derived entirely from
- * existing `sync_event` rows — no new Room entity or migration is introduced.
- *
- * [SyncEventEntity][com.synckro.data.local.entity.SyncEventEntity] does not carry a
- * byte-count column: `SyncWorker` only logs the number of *applied* operations
- * (uploads + downloads + deletes) in its terminal "Sync succeeded …" / "Sync
- * partial failure …" messages, the same text [parsePairSummary] already parses
- * for the Home/Pair-detail "last result" cards. Rather than add a new column
- * purely to rename that count as "bytes", this aggregator reports
- * [totalFilesTransferred] (sum of [PairSummary.applied] across the window) as the
- * transfer-volume signal. If true byte totals become necessary, `SyncWorker`
- * would need to persist [com.synckro.domain.sync.TransferProgress.bytesTransferred]
- * into a new `sync_event` column (or a dedicated stats table) in a follow-up
- * migration — out of scope for this story per its "no new entity unless
- * genuinely required" acceptance criterion.
+ * existing `sync_event` rows.
  *
  * @param runsConsidered        Number of terminal runs found within the window.
  * @param successCount          Runs whose outcome was [PairSummary.Outcome.SUCCESS].
  * @param failureCount          Runs whose outcome was anything else (partial
  *   failure, failure, needs-reauth, needs-relink).
- * @param totalFilesTransferred Sum of applied file operations across the window.
+ * @param totalBytesTransferred Sum of upload and download bytes across the window.
+ *   Events written before byte tracking, and outcomes without transfer data,
+ *   contribute zero. Hard-failure events do not have a completed transfer total.
  * @param lastSuccessAtMs       Timestamp (epoch ms) of the most recent successful
  *   run within the window, or `null` when no success is present.
  */
@@ -33,7 +22,7 @@ data class PairStats(
     val runsConsidered: Int = 0,
     val successCount: Int = 0,
     val failureCount: Int = 0,
-    val totalFilesTransferred: Int = 0,
+    val totalBytesTransferred: Long = 0,
     val lastSuccessAtMs: Long? = null,
 ) {
     /** Fraction of considered runs that succeeded, in `[0f, 1f]`; `0f` when no runs. */
@@ -61,14 +50,14 @@ fun aggregatePairStats(
     var runsConsidered = 0
     var successCount = 0
     var failureCount = 0
-    var totalFilesTransferred = 0
+    var totalBytesTransferred = 0L
     var lastSuccessAtMs: Long? = null
 
     for (event in events) {
         if (runsConsidered >= windowSize) break
         val summary = parsePairSummary(event) ?: continue
         runsConsidered++
-        totalFilesTransferred += summary.applied
+        totalBytesTransferred += event.bytesTransferred ?: 0L
         if (summary.outcome == PairSummary.Outcome.SUCCESS) {
             successCount++
             if (lastSuccessAtMs == null) {
@@ -83,7 +72,7 @@ fun aggregatePairStats(
         runsConsidered = runsConsidered,
         successCount = successCount,
         failureCount = failureCount,
-        totalFilesTransferred = totalFilesTransferred,
+        totalBytesTransferred = totalBytesTransferred,
         lastSuccessAtMs = lastSuccessAtMs,
     )
 }
