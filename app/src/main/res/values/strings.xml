@@ -116,10 +116,32 @@
     <string name="pair_detail_stats_success_rate_format">%1$d/%2$d runs succeeded</string>
     <string name="pair_detail_stats_last_success">Last successful sync: %1$s</string>
     <string name="pair_detail_stats_last_success_none">No successful sync in this window yet</string>
+    <string name="pair_detail_preview">Preview next sync</string>
     <string name="home_delete_title">Delete sync pair?</string>
     <string name="home_delete_body_format">"%1$s" will be removed. This cannot be undone.</string>
     <string name="home_delete_confirm">Delete</string>
     <string name="home_delete_cancel">Cancel</string>
+
+    <!-- Sync preview (dry run) -->
+    <string name="sync_preview_title">Sync preview</string>
+    <string name="sync_preview_intro">See what the next sync run would do. Nothing is uploaded, downloaded or deleted.</string>
+    <string name="sync_preview_run">Compute preview</string>
+    <string name="sync_preview_refresh">Recompute</string>
+    <string name="sync_preview_loading">Computing sync preview…</string>
+    <string name="sync_preview_missing_pair">This sync pair is no longer available.</string>
+    <string name="sync_preview_error_title">Couldn\'t compute the preview</string>
+    <string name="sync_preview_empty_title">Nothing to do</string>
+    <string name="sync_preview_empty_body">Local and cloud folders are already in sync.</string>
+    <string name="sync_preview_start_title">No preview yet</string>
+    <string name="sync_preview_total_format">%1$d planned operation(s)</string>
+    <string name="sync_preview_group_upload">Upload to cloud</string>
+    <string name="sync_preview_group_download">Download to device</string>
+    <string name="sync_preview_group_update_remote">Update on cloud</string>
+    <string name="sync_preview_group_update_local">Update on device</string>
+    <string name="sync_preview_group_delete_remote">Delete from cloud</string>
+    <string name="sync_preview_group_delete_local">Delete from device</string>
+    <string name="sync_preview_group_move">Move or rename</string>
+    <string name="sync_preview_group_conflict">Needs conflict resolution</string>
 
     <!-- Accounts -->
     <string name="accounts_title">Cloud accounts</string>

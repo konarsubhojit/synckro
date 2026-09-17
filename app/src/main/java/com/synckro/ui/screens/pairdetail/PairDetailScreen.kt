@@ -22,6 +22,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.FolderOff
 import androidx.compose.material.icons.filled.Inbox
+import androidx.compose.material.icons.filled.Preview
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -88,6 +89,7 @@ fun PairDetailScreen(
     onDelete: (Long) -> Unit,
     onOpenConflicts: () -> Unit,
     onOpenLogs: (Long) -> Unit,
+    onOpenPreview: (Long) -> Unit = {},
     viewModel: PairDetailViewModel = hiltViewModel(),
     homeViewModel: HomeViewModel = hiltViewModel(),
 ) {
@@ -268,6 +270,15 @@ fun PairDetailScreen(
                         },
                     )
                 }
+            }
+
+            OutlinedButton(
+                onClick = { onOpenPreview(pair.id) },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Icon(Icons.Default.Preview, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.size(8.dp))
+                Text(stringResource(R.string.pair_detail_preview))
             }
 
             StatsCard(stats = state.stats)
