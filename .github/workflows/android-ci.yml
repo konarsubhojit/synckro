@@ -136,14 +136,14 @@ jobs:
       - name: Run ktlintCheck
         run: ./gradlew ktlintCheck --no-daemon --console=plain
 
-      - name: Run unit tests, lint, and assemble debug APK
+      - name: Verify unit-test coverage, lint, and assemble debug APK
         env:
           GOOGLE_WEB_CLIENT_ID: ${{ secrets.GOOGLE_WEB_CLIENT_ID }}
           DEBUG_KEYSTORE_PATH: ${{ github.workspace }}/debug.keystore
           DEBUG_KEYSTORE_PASSWORD: ${{ secrets.DEBUG_KEYSTORE_PASSWORD }}
           DEBUG_KEY_ALIAS: ${{ secrets.DEBUG_KEY_ALIAS }}
           DEBUG_KEY_PASSWORD: ${{ secrets.DEBUG_KEY_PASSWORD }}
-        run: ./gradlew testDebugUnitTest lintDebug assembleDebug
+        run: ./gradlew verifyDebugUnitTestCoverage lintDebug assembleDebug --no-daemon --console=plain
 
       - name: Assemble testing release APK
         if: github.event_name != 'pull_request'

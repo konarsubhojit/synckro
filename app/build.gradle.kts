@@ -1,3 +1,4 @@
+import org.gradle.testing.jacoco.tasks.JacocoCoverageVerification
 import java.util.Properties
 
 val localProps =
@@ -33,6 +34,7 @@ plugins {
     alias(libs.plugins.ksp)
     alias(libs.plugins.hilt)
     alias(libs.plugins.ktlint)
+    jacoco
 }
 
 if (googleServicesJsonPresent) {
@@ -419,6 +421,34 @@ androidComponents {
             generateOssLicensesForVariant,
             GenerateOssLicensesTask::outputDir,
         )
+    }
+}
+
+tasks.register<JacocoCoverageVerification>("verifyDebugUnitTestCoverage") {
+    group = "verification"
+    description = "Verifies debug unit-test line coverage is at least 23%."
+    dependsOn("createDebugUnitTestCoverageReport")
+
+    executionData.from(
+        layout.buildDirectory.file(
+            "outputs/unit_test_code_coverage/debugUnitTest/testDebugUnitTest.exec",
+        ),
+    )
+    classDirectories.from(
+        layout.buildDirectory.dir(
+            "intermediates/classes/debug/transformDebugClassesWithAsm/dirs",
+        ),
+    )
+    sourceDirectories.from(files("src/main/java", "src/main/kotlin"))
+
+    violationRules {
+        rule {
+            limit {
+                counter = "LINE"
+                value = "COVEREDRATIO"
+                minimum = "0.23".toBigDecimal()
+            }
+        }
     }
 }
 
