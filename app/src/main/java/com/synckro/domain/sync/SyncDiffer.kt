@@ -59,6 +59,22 @@ sealed interface SyncOp {
     ) : SyncOp
 
     /**
+     * Move or rename the existing remote file from [fromRelativePath] to
+     * [relativePath], mirroring [MoveLocal] for local-initiated renames.
+     *
+     * Unlike [MoveLocal] (detected via a stable remote id), there is no
+     * stable local file identifier to key off, so this is only ever
+     * produced when unambiguous content-hash matching confirms the local
+     * file at [relativePath] is the same content that used to live at
+     * [fromRelativePath]. See [SyncDiffer]'s `localMovesBySourcePath` for
+     * the exact safety conditions.
+     */
+    data class MoveRemote(
+        val fromRelativePath: String,
+        override val relativePath: String,
+    ) : SyncOp
+
+    /**
      * Both sides changed since the last sync. The sync engine will further
      * reduce this to a concrete op using the pair's [ConflictPolicy].
      */
@@ -164,6 +180,63 @@ object SyncDiffer {
             }
         val remoteMoveDestinations = remoteMovesBySourcePath.values.mapTo(mutableSetOf()) { it.relativePath }
 
+        // Local-initiated rename detection, mirroring remoteMovesBySourcePath above.
+        // There is no persisted stable local file id to match against (only
+        // relativePath), so the sole safety signal here is content-hash
+        // equality: an index entry whose old path is now missing locally,
+        // paired with a "new" local path (absent from the index) carrying the
+        // exact same content hash. Any ambiguity — more than one possible
+        // source or destination sharing that hash — is left alone and falls
+        // back to today's delete+upload behaviour rather than guessing.
+        val missingIndexEntriesByHash =
+            lastIndex
+                .asSequence()
+                .filter { it.localHash != null && it.relativePath !in localByPath }
+                .groupBy { it.localHash!! }
+        val newLocalSnapshotsByHash =
+            local
+                .asSequence()
+                .filter { it.hash != null && it.relativePath !in indexByPath }
+                .groupBy { it.hash!! }
+        val localMovesBySourcePath =
+            buildMap<String, SyncOp.MoveRemote> {
+                if (!direction.allowsUpload) return@buildMap
+                for ((hash, sources) in missingIndexEntriesByHash) {
+                    val destinations = newLocalSnapshotsByHash[hash] ?: continue
+                    // Ambiguous: more than one candidate source or destination
+                    // for this content hash. Don't guess which pairing is
+                    // correct — fall back to delete+upload for all of them.
+                    if (sources.size != 1 || destinations.size != 1) continue
+                    val indexEntry = sources.single()
+                    val localDest = destinations.single()
+                    val sourcePath = indexEntry.relativePath
+                    val destinationPath = localDest.relativePath
+                    if (sourcePath == destinationPath) continue
+                    // A pure case change (e.g. "File.txt" -> "file.txt") is
+                    // intentionally NOT treated as a move: case-sensitive
+                    // filesystems and providers can disagree on whether these
+                    // are "the same" path, so SyncDiffer always treats
+                    // case-only variants as distinct files regardless of
+                    // content hash (mirrors the case-only handling elsewhere
+                    // in this file).
+                    if (sourcePath.equals(destinationPath, ignoreCase = true)) continue
+                    // The remote side must still hold the file at its old
+                    // path, unchanged since the index, for this to be a pure
+                    // local-only rename rather than a remote-side change too.
+                    val remoteSource = remoteByPath[sourcePath] ?: continue
+                    if (destinationPath in remoteByPath) continue
+                    if (changedRemote(remoteSource, indexEntry)) continue
+                    put(
+                        sourcePath,
+                        SyncOp.MoveRemote(
+                            fromRelativePath = sourcePath,
+                            relativePath = destinationPath,
+                        ),
+                    )
+                }
+            }
+        val localMoveDestinations = localMovesBySourcePath.values.mapTo(mutableSetOf()) { it.relativePath }
+
         val allPaths =
             buildSet {
                 addAll(localByPath.keys)
@@ -180,6 +253,13 @@ object SyncDiffer {
                 continue
             }
             if (path in remoteMoveDestinations) continue
+
+            val localMove = localMovesBySourcePath[path]
+            if (localMove != null) {
+                ops += localMove
+                continue
+            }
+            if (path in localMoveDestinations) continue
 
             val l = localByPath[path]
             val r = remoteByPath[path]

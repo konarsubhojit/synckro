@@ -650,6 +650,89 @@ class SyncOpApplierTest {
         }
 
     // =========================================================================
+    // MoveRemote
+    // =========================================================================
+
+    @Test
+    fun `MoveRemote uploads content under the new name and deletes the old remote item`() =
+        runTest {
+            val content = "renamed content".toByteArray()
+            val oldRemote = seedRemote("old.txt", content)
+            localFs.put("new.txt", content)
+
+            val result =
+                buildApplier().apply(
+                    ops = listOf(SyncOp.MoveRemote(fromRelativePath = "old.txt", relativePath = "new.txt")),
+                    pair = pair(),
+                    remoteFilesByPath = emptyMap(),
+                    localIndexByPath = mapOf("old.txt" to indexEntry("old.txt", remoteId = oldRemote.id)),
+                )
+
+            assertEquals(1, result.applied)
+            assertEquals(0, result.errors.size)
+
+            val rootChildren = fakeProvider.list("root")
+            assertEquals(1, rootChildren.size)
+            assertEquals("new.txt", rootChildren.single().name)
+        }
+
+    @Test
+    fun `MoveRemote upserts local_index at the new path and removes the old row`() =
+        runTest {
+            val content = "renamed content".toByteArray()
+            val oldRemote = seedRemote("old.txt", content)
+            localFs.put("new.txt", content)
+
+            buildApplier().apply(
+                ops = listOf(SyncOp.MoveRemote(fromRelativePath = "old.txt", relativePath = "new.txt")),
+                pair = pair(),
+                remoteFilesByPath = emptyMap(),
+                localIndexByPath = mapOf("old.txt" to indexEntry("old.txt", remoteId = oldRemote.id)),
+            )
+
+            val slot = slot<LocalIndexEntity>()
+            coVerify { localIndexDao.upsertSyncedRemoteState(capture(slot)) }
+            assertEquals("new.txt", slot.captured.relativePath)
+            assertNotNull(slot.captured.remoteId)
+            assertTrue(slot.captured.remoteId != oldRemote.id)
+            coVerify { localIndexDao.delete(1L, "old.txt") }
+        }
+
+    @Test
+    fun `MoveRemote records error when local file missing at destination`() =
+        runTest {
+            val oldRemote = seedRemote("old.txt", "data".toByteArray())
+
+            val result =
+                buildApplier().apply(
+                    ops = listOf(SyncOp.MoveRemote(fromRelativePath = "old.txt", relativePath = "missing-new.txt")),
+                    pair = pair(),
+                    remoteFilesByPath = emptyMap(),
+                    localIndexByPath = mapOf("old.txt" to indexEntry("old.txt", remoteId = oldRemote.id)),
+                )
+
+            assertEquals(0, result.applied)
+            assertEquals(1, result.errors.size)
+        }
+
+    @Test
+    fun `MoveRemote records error when no index entry for source path`() =
+        runTest {
+            localFs.put("new.txt", "data".toByteArray())
+
+            val result =
+                buildApplier().apply(
+                    ops = listOf(SyncOp.MoveRemote(fromRelativePath = "old.txt", relativePath = "new.txt")),
+                    pair = pair(),
+                    remoteFilesByPath = emptyMap(),
+                    localIndexByPath = emptyMap(),
+                )
+
+            assertEquals(0, result.applied)
+            assertEquals(1, result.errors.size)
+        }
+
+    // =========================================================================
     // Conflict — KEEP_BOTH
     // =========================================================================
 

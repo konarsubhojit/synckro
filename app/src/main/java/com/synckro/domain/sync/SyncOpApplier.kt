@@ -383,6 +383,20 @@ class SyncOpApplier(
                                 )
                             }
 
+                            is SyncOp.MoveRemote -> {
+                                val index =
+                                    localIndexByPath[op.fromRelativePath]
+                                        ?: error("No index entry for MoveRemote source: ${op.fromRelativePath}")
+                                applyMoveRemote(op, pair, index, onTransferBytes)
+                                markApplied(op)
+                                eventRepository.log(
+                                    pair.id,
+                                    SyncEventLevel.INFO,
+                                    SyncEventTag.INSTANT_OUTCOME,
+                                    SyncEventTaxonomy.outcomeApplied(opKind(op)),
+                                )
+                            }
+
                             is SyncOp.DeleteLocalRetention -> {
                                 val index = localIndexByPath[op.relativePath]
                                 if (index?.remoteId == null) {
@@ -614,6 +628,20 @@ class SyncOpApplier(
                                                 localIndexByPath[op.fromRelativePath]
                                                     ?: error("No index entry for MoveLocal source: ${op.fromRelativePath}")
                                             applyMoveLocal(op, pair, index)
+                                            markApplied(op)
+                                            eventRepository.log(
+                                                pair.id,
+                                                SyncEventLevel.INFO,
+                                                SyncEventTag.INSTANT_OUTCOME,
+                                                SyncEventTaxonomy.outcomeApplied(opKind(op)),
+                                            )
+                                        }
+
+                                        is SyncOp.MoveRemote -> {
+                                            val index =
+                                                localIndexByPath[op.fromRelativePath]
+                                                    ?: error("No index entry for MoveRemote source: ${op.fromRelativePath}")
+                                            applyMoveRemote(op, pair, index, onTransferBytes)
                                             markApplied(op)
                                             eventRepository.log(
                                                 pair.id,
@@ -976,6 +1004,97 @@ class SyncOpApplier(
         )
     }
 
+    /**
+     * Applies a local-initiated rename to the remote side.
+     *
+     * The [CloudProvider] abstraction has no rename/move API, so unlike
+     * [applyMoveLocal] this cannot avoid a content transfer: it uploads the
+     * unchanged local content under the new name/location and then deletes
+     * the stale remote item. Even so, packaging this as a single op (rather
+     * than the separate [SyncOp.DeleteRemote] + [SyncOp.UploadNew] pair the
+     * differ would otherwise emit) avoids a transient window where the old
+     * remote item is gone before the new one exists, and keeps the sync log
+     * and index update atomic and easy to reason about.
+     */
+    private suspend fun applyMoveRemote(
+        op: SyncOp.MoveRemote,
+        pair: SyncPair,
+        sourceIndex: LocalIndexEntity,
+        onBytesTransferred: (Long) -> Unit = {},
+    ) {
+        val stat =
+            localFileAccess.stat(op.relativePath)
+                ?: error("Local file not found for MoveRemote: ${op.relativePath}")
+
+        val pathSegments = op.relativePath.split('/')
+        val parentSegments = pathSegments.dropLast(1)
+        val fileName = pathSegments.last()
+        val parentId = ensureRemoteFolderPath(pair.remoteFolderId, parentSegments)
+
+        var retried = false
+        val remote =
+            withRetry(onRetry = { _, _ -> retried = true }) {
+                val stream =
+                    localFileAccess.openRead(op.relativePath)
+                        ?: error("Cannot read local file for MoveRemote: ${op.relativePath}")
+                provider.uploadNew(
+                    parentId = parentId,
+                    name = fileName,
+                    content = ProgressInputStream(stream, onBytesTransferred),
+                    size = stat.sizeBytes,
+                    mimeType = stat.mimeType,
+                )
+            }
+        if (retried) {
+            eventRepository.log(
+                pair.id,
+                SyncEventLevel.WARN,
+                SyncEventTag.INSTANT_DISPATCH,
+                SyncEventTaxonomy.dispatchQuotaFallback("move_remote_retry"),
+            )
+        }
+        val movedEntry =
+            LocalIndexEntity(
+                pairId = pair.id,
+                relativePath = op.relativePath,
+                sizeBytes = stat.sizeBytes,
+                mtimeMs = stat.mtimeMs,
+                contentHash = null,
+                remoteId = remote.id,
+                remoteSizeBytes = remote.size,
+                remoteMtimeMs = remote.lastModifiedMs,
+                remoteEtag = remote.eTag,
+                remoteContentHash = remote.contentHash,
+            )
+        persistUploadedRemoteState(
+            pair = pair,
+            relativePath = op.relativePath,
+            uploadedStat = stat,
+            remote = remote,
+            entry = movedEntry,
+            cleanupMutation = { discardUploadedRemote(remote.id, movedEntry) },
+        )
+        localIndexDao.delete(pair.id, op.fromRelativePath)
+        val oldRemoteId = sourceIndex.remoteId
+        if (oldRemoteId != null) {
+            try {
+                provider.delete(oldRemoteId)
+            } catch (c: CancellationException) {
+                throw c
+            } catch (t: Throwable) {
+                // Best-effort: the move already succeeded (new remote item is
+                // live and indexed); failing to clean up the stale item is
+                // logged but must not fail the whole op.
+                eventRepository.log(
+                    pair.id,
+                    SyncEventLevel.WARN,
+                    SyncEventTag.INSTANT_OUTCOME,
+                    SyncEventTaxonomy.outcomeFailed("move_remote_cleanup", t.message ?: "unknown"),
+                )
+            }
+        }
+    }
+
     private suspend fun applyConflict(
         op: SyncOp.Conflict,
         pair: SyncPair,
@@ -1330,6 +1449,7 @@ class SyncOpApplier(
             is SyncOp.DeleteRemote -> "delete_remote"
             is SyncOp.DeleteLocal -> "delete_local"
             is SyncOp.MoveLocal -> "move_local"
+            is SyncOp.MoveRemote -> "move_remote"
             is SyncOp.DeleteLocalRetention -> "delete_local_retention"
             is SyncOp.DeleteRemoteRetention -> "delete_remote_retention"
             is SyncOp.Conflict -> "conflict"
@@ -1337,7 +1457,7 @@ class SyncOpApplier(
 
     private fun opTransferDirection(op: SyncOp): TransferDirection? =
         when (op) {
-            is SyncOp.UploadNew, is SyncOp.UpdateRemote -> TransferDirection.UPLOAD
+            is SyncOp.UploadNew, is SyncOp.UpdateRemote, is SyncOp.MoveRemote -> TransferDirection.UPLOAD
             is SyncOp.DownloadNew, is SyncOp.UpdateLocal -> TransferDirection.DOWNLOAD
             is SyncOp.DeleteRemote, is SyncOp.DeleteLocal, is SyncOp.MoveLocal -> null
             is SyncOp.DeleteLocalRetention, is SyncOp.DeleteRemoteRetention -> null
@@ -1362,6 +1482,7 @@ class SyncOpApplier(
             is SyncOp.UpdateLocal -> remoteFilesByPath[op.relativePath]?.size ?: 0L
             is SyncOp.UploadNew -> localIndexByPath[op.relativePath]?.sizeBytes ?: 0L
             is SyncOp.UpdateRemote -> localIndexByPath[op.relativePath]?.sizeBytes ?: 0L
+            is SyncOp.MoveRemote -> localIndexByPath[op.fromRelativePath]?.sizeBytes ?: 0L
             is SyncOp.Conflict -> conflictTransferBytes(op, pair, remoteFilesByPath, localIndexByPath)
             is SyncOp.DeleteRemote, is SyncOp.DeleteLocal, is SyncOp.MoveLocal -> 0L
             is SyncOp.DeleteLocalRetention, is SyncOp.DeleteRemoteRetention -> 0L
