@@ -122,6 +122,23 @@
                 android:resource="@xml/debug_log_file_paths" />
         </provider>
 
+        <!-- Home-screen widget: pair list with last-sync timestamps and a per-pair
+             "Sync now" action. Must be exported so the launcher (a different app)
+             can deliver APPWIDGET_UPDATE broadcasts; the "Sync now" action is only
+             ever sent by this app via a PendingIntent it created itself. -->
+        <receiver
+            android:name=".ui.widget.SyncWidgetProvider"
+            android:exported="true"
+            android:label="@string/widget_title">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="com.synckro.widget.ACTION_SYNC_NOW" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_sync_info" />
+        </receiver>
+
     </application>
 
 </manifest>
