@@ -25,6 +25,7 @@ import com.synckro.data.local.fs.LocalFsEnumerator
 import com.synckro.data.local.fs.SafLocalFileAccess
 import com.synckro.data.repository.ConflictRepository
 import com.synckro.data.repository.SyncEventRepository
+import com.synckro.data.scanner.FolderTreeBrowserImpl
 import com.synckro.data.scanner.LocalFolderScannerImpl
 import com.synckro.data.watcher.CompositeLocalChangeWatcher
 import com.synckro.data.watcher.ContentResolverContentObserverRegistry
@@ -49,6 +50,7 @@ import com.synckro.data.worker.SyncScheduler
 import com.synckro.domain.auth.AuthManager
 import com.synckro.domain.model.CloudProviderType
 import com.synckro.domain.provider.CloudProviderFactory
+import com.synckro.domain.scan.FolderTreeBrowser
 import com.synckro.domain.scan.LocalFolderScanner
 import com.synckro.domain.sync.FileStabilityDetector
 import com.synckro.domain.sync.InstantSyncEligibilityPolicy
@@ -393,4 +395,14 @@ object AppModule {
      */
     @Provides @Singleton
     fun provideLocalFolderScanner(impl: LocalFolderScannerImpl): LocalFolderScanner = impl
+
+    /**
+     * Provides the [FolderTreeBrowser] backing the pair editor's selective-sync
+     * folder tree.
+     *
+     * @return A [FolderTreeBrowserImpl] mirroring SAF folders against the
+     *   account's remote folder listing.
+     */
+    @Provides @Singleton
+    fun provideFolderTreeBrowser(impl: FolderTreeBrowserImpl): FolderTreeBrowser = impl
 }

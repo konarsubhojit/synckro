@@ -20,7 +20,11 @@ import com.synckro.domain.model.SyncEventTag
 import com.synckro.domain.model.SyncPair
 import com.synckro.domain.model.allowsUpload
 import com.synckro.domain.model.isDestructive
+import com.synckro.domain.scan.FolderTreeBrowser
+import com.synckro.domain.scan.FolderTreeNode
+import com.synckro.domain.scan.FolderTreeTarget
 import com.synckro.domain.sync.LocalChangeWatcherRefresher
+import com.synckro.domain.sync.SyncPathScope
 import com.synckro.domain.telemetry.NoOpTelemetry
 import com.synckro.domain.telemetry.Telemetry
 import com.synckro.domain.telemetry.TelemetryEvents
@@ -189,6 +193,71 @@ internal fun buildSelectiveExcludeGlobsText(
     }.joinToString("\n")
 
 /**
+ * A single visible row of the selective-sync folder tree.
+ *
+ * @param node The folder this row represents, mirrored across both endpoints.
+ * @param depth Nesting depth relative to the sync root (root children are `0`).
+ * @param expanded Whether this folder's children are currently shown.
+ * @param loading Whether this folder's children are being listed.
+ * @param excluded Effective exclusion, i.e. this folder or one of its ancestors
+ *   is in the persisted exclusion set.
+ * @param excludedByAncestor True when the exclusion comes from an ancestor, in
+ *   which case the row's own toggle is not actionable.
+ */
+data class FolderTreeRow(
+    val node: FolderTreeNode,
+    val depth: Int,
+    val expanded: Boolean,
+    val loading: Boolean,
+    val excluded: Boolean,
+    val excludedByAncestor: Boolean,
+)
+
+/**
+ * Flattens the lazily-listed folder tree into the ordered list of rows that are
+ * currently visible: the sync root's children, plus the children of every
+ * expanded folder, depth-first.
+ *
+ * @param childrenByParent Children keyed by parent relative path; the sync root
+ *   is keyed by the empty string.
+ */
+internal fun buildFolderTreeRows(
+    childrenByParent: Map<String, List<FolderTreeNode>>,
+    expandedPaths: Set<String>,
+    loadingPaths: Set<String>,
+    excludedPaths: Set<String>,
+): List<FolderTreeRow> {
+    val rows = mutableListOf<FolderTreeRow>()
+
+    fun appendChildren(
+        parentRelativePath: String,
+        depth: Int,
+        ancestorExcluded: Boolean,
+    ) {
+        val children = childrenByParent[parentRelativePath] ?: return
+        children.forEach { child ->
+            val selfExcluded = child.relativePath in excludedPaths
+            val expanded = child.relativePath in expandedPaths
+            rows +=
+                FolderTreeRow(
+                    node = child,
+                    depth = depth,
+                    expanded = expanded,
+                    loading = child.relativePath in loadingPaths,
+                    excluded = ancestorExcluded || selfExcluded,
+                    excludedByAncestor = ancestorExcluded,
+                )
+            if (expanded) {
+                appendChildren(child.relativePath, depth + 1, ancestorExcluded || selfExcluded)
+            }
+        }
+    }
+
+    appendChildren("", 0, false)
+    return rows
+}
+
+/**
  * ViewModel for [PairEditorScreen]. Supports both create (pairId == 0) and edit
  * (pairId > 0) modes. The local folder URI result from [PickLocalFolderScreen] is
  * delivered by the navigation layer (which observes the back-stack entry's own
@@ -215,6 +284,7 @@ class PairEditorViewModel
         private val settingsRepository: SettingsRepository,
         private val localFolderAccessChecker: LocalFolderAccessChecker,
         private val localChangeWatcherRefresher: LocalChangeWatcherRefresher,
+        private val folderTreeBrowser: FolderTreeBrowser,
         private val telemetry: Telemetry = NoOpTelemetry(),
     ) : ViewModel() {
         private val pairId: Long = savedStateHandle.get<Long>("pairId") ?: 0L
@@ -263,6 +333,23 @@ class PairEditorViewModel
             val excludeSubfolders: Boolean = false,
             /** When true, empty directories are excluded from the sync scope. */
             val excludeEmptyFolders: Boolean = false,
+            /**
+             * Persisted selective-sync folder exclusions for this pair, as
+             * normalized relative paths (see [SyncPair.excludedRelativePaths]).
+             * Each entry excludes that folder and everything nested under it, in
+             * both sync directions, in addition to the glob filters.
+             */
+            val excludedRelativePaths: Set<String> = emptySet(),
+            /**
+             * Lazily listed folder-tree children keyed by parent relative path;
+             * the sync root is keyed by the empty string. Populated on demand by
+             * [refreshFolderTree] and [onFolderExpandToggle].
+             */
+            val folderTreeChildren: Map<String, List<FolderTreeNode>> = emptyMap(),
+            /** Relative paths whose children are currently shown in the tree. */
+            val expandedFolderPaths: Set<String> = emptySet(),
+            /** Relative paths whose children are currently being listed. */
+            val loadingFolderPaths: Set<String> = emptySet(),
             /**
              * Text representation of the retention period in days. Only meaningful
              * when [direction] is [SyncDirection.UPLOAD_AND_DELETE_LOCAL_AFTER_N_DAYS]
@@ -346,6 +433,23 @@ class PairEditorViewModel
             val effectiveAvoidMeteredNetworks: Boolean
                 get() = wifiOnly || avoidMeteredNetworks
 
+            /**
+             * Visible rows of the selective-sync folder tree, derived from the
+             * lazily listed [folderTreeChildren] and the current expansion and
+             * exclusion state.
+             */
+            val folderTreeRows: List<FolderTreeRow>
+                get() =
+                    buildFolderTreeRows(
+                        childrenByParent = folderTreeChildren,
+                        expandedPaths = expandedFolderPaths,
+                        loadingPaths = loadingFolderPaths,
+                        excludedPaths = excludedRelativePaths,
+                    )
+
+            /** True when the tree has no browsable endpoint configured yet. */
+            val folderTreeUnavailable: Boolean
+                get() = localTreeUri.isBlank() && (accountId == null || remoteFolderId.isBlank())
             val canEditAvoidMeteredNetworks: Boolean
                 get() = !wifiOnly
 
@@ -634,6 +738,8 @@ class PairEditorViewModel
                             excludeGlobsText = entity.excludeGlobs.joinToString("\n"),
                             excludeSubfolders = entity.excludeSubfolders,
                             excludeEmptyFolders = entity.excludeEmptyFolders,
+                            excludedRelativePaths =
+                                SyncPathScope.normalizeExcludedFolders(entity.excludedRelativePaths).toSet(),
                             retentionDaysText = entity.retentionDays?.toString() ?: "",
                             storageLimitEnabled = entity.localStorageLimitBytes != null,
                             storageLimitValueText =
@@ -834,6 +940,103 @@ class PairEditorViewModel
 
         fun onExcludeEmptyFoldersChange(value: Boolean) = _state.update { it.copy(excludeEmptyFolders = value) }
 
+        /**
+         * Re-lists the sync root of the selective-sync folder tree, discarding any
+         * previously listed children and collapsing every expanded folder. Called
+         * by the editor screen whenever the browsable endpoints change (local
+         * folder re-picked, account or remote folder changed).
+         */
+        fun refreshFolderTree() {
+            _state.update {
+                it.copy(
+                    folderTreeChildren = emptyMap(),
+                    expandedFolderPaths = emptySet(),
+                    loadingFolderPaths = emptySet(),
+                )
+            }
+            loadFolderChildren(ROOT_FOLDER_PATH, force = true)
+        }
+
+        /**
+         * Expands or collapses [relativePath] in the folder tree, listing its
+         * children the first time it is expanded.
+         */
+        fun onFolderExpandToggle(relativePath: String) {
+            if (relativePath in _state.value.expandedFolderPaths) {
+                _state.update { it.copy(expandedFolderPaths = it.expandedFolderPaths - relativePath) }
+                return
+            }
+            _state.update { it.copy(expandedFolderPaths = it.expandedFolderPaths + relativePath) }
+            loadFolderChildren(relativePath)
+        }
+
+        /**
+         * Includes or excludes [relativePath] (and everything nested under it)
+         * from the pair's sync scope. Excluding a folder drops any now-redundant
+         * exclusions of its descendants so the persisted set stays minimal.
+         *
+         * A folder already excluded through an ancestor cannot be re-included on
+         * its own; the editor disables those rows.
+         */
+        fun onFolderIncludedChange(
+            relativePath: String,
+            included: Boolean,
+        ) {
+            val normalized =
+                SyncPathScope.normalizeExcludedFolders(listOf(relativePath)).firstOrNull() ?: return
+            _state.update { s ->
+                val updated =
+                    if (included) {
+                        s.excludedRelativePaths - normalized
+                    } else {
+                        s.excludedRelativePaths
+                            .filterNot { SyncPathScope.isExcludedByFolder(it, listOf(normalized)) }
+                            .toSet() + normalized
+                    }
+                s.copy(excludedRelativePaths = updated)
+            }
+        }
+
+        /**
+         * Lists the direct sub-folders of [relativePath] unless they are already
+         * loaded (or [force]d) and stores them on the state. Listing failures are
+         * logged and surface as "no sub-folders" rather than blocking the editor.
+         */
+        private fun loadFolderChildren(
+            relativePath: String,
+            force: Boolean = false,
+        ) {
+            val s = _state.value
+            if (s.folderTreeUnavailable) return
+            if (!force && s.folderTreeChildren.containsKey(relativePath)) return
+            if (relativePath in s.loadingFolderPaths) return
+            val target =
+                FolderTreeTarget(
+                    localTreeUri = s.localTreeUri,
+                    provider = s.provider,
+                    accountId = s.accountId,
+                    remoteFolderId = s.remoteFolderId.takeIf { it.isNotBlank() },
+                )
+            _state.update { it.copy(loadingFolderPaths = it.loadingFolderPaths + relativePath) }
+            viewModelScope.launch {
+                val children =
+                    try {
+                        folderTreeBrowser.listChildFolders(target, relativePath)
+                    } catch (c: CancellationException) {
+                        throw c
+                    } catch (t: Throwable) {
+                        Timber.w(t, "PairEditorViewModel: folder tree listing failed for '%s'", relativePath)
+                        emptyList()
+                    }
+                _state.update {
+                    it.copy(
+                        folderTreeChildren = it.folderTreeChildren + (relativePath to children),
+                        loadingFolderPaths = it.loadingFolderPaths - relativePath,
+                    )
+                }
+            }
+        }
+
         fun onRetentionDaysChange(value: String) = _state.update { it.copy(retentionDaysText = value.filter { ch -> ch.isDigit() }) }
 
         fun onStorageLimitEnabledChange(value: Boolean) = _state.update { it.copy(storageLimitEnabled = value) }
@@ -946,6 +1149,7 @@ class PairEditorViewModel
                                     .filter { it.isNotBlank() },
                             excludeSubfolders = s.excludeSubfolders,
                             excludeEmptyFolders = s.excludeEmptyFolders,
+                            excludedRelativePaths = s.excludedRelativePaths.sorted(),
                             retentionDays = retentionDays,
                             localStorageLimitBytes = s.resolvedStorageLimitBytes,
                         )
@@ -1055,6 +1259,9 @@ class PairEditorViewModel
 
             /** Number of wizard steps when creating a new pair. */
             const val TOTAL_STEPS = 3
+
+            /** Relative path used to key the sync root in the folder tree. */
+            const val ROOT_FOLDER_PATH = ""
         }
 
         /**
@@ -1082,6 +1289,7 @@ class PairEditorViewModel
             val excludeGlobsText: String,
             val excludeSubfolders: Boolean,
             val excludeEmptyFolders: Boolean,
+            val excludedRelativePaths: Set<String>,
             val retentionDaysText: String,
             val storageLimitEnabled: Boolean,
             val storageLimitValueText: String,
@@ -1108,6 +1316,7 @@ class PairEditorViewModel
                         excludeGlobsText = s.excludeGlobsText,
                         excludeSubfolders = s.excludeSubfolders,
                         excludeEmptyFolders = s.excludeEmptyFolders,
+                        excludedRelativePaths = s.excludedRelativePaths,
                         retentionDaysText = s.retentionDaysText,
                         storageLimitEnabled = s.storageLimitEnabled,
                         storageLimitValueText = s.storageLimitValueText,

@@ -12,6 +12,9 @@ import com.synckro.domain.model.CloudProviderType
 import com.synckro.domain.model.ConflictPolicy
 import com.synckro.domain.model.SyncDirection
 import com.synckro.domain.model.SyncPair
+import com.synckro.domain.scan.FolderTreeBrowser
+import com.synckro.domain.scan.FolderTreeNode
+import com.synckro.domain.scan.FolderTreeTarget
 import com.synckro.domain.sync.LocalChangeWatcherRefresher
 import com.synckro.util.StringProvider
 import io.mockk.coEvery
@@ -47,6 +50,7 @@ class PairEditorViewModelTest {
     private lateinit var mockSettingsRepository: SettingsRepository
     private lateinit var mockAccessChecker: LocalFolderAccessChecker
     private lateinit var mockLocalChangeWatcherRefresher: LocalChangeWatcherRefresher
+    private lateinit var fakeFolderTreeBrowser: FakeFolderTreeBrowser
 
     @Before
     fun setUp() {
@@ -92,6 +96,7 @@ class PairEditorViewModelTest {
                 every { hasReadWriteAccess(any()) } returns true
             }
         mockLocalChangeWatcherRefresher = mockk(relaxed = true)
+        fakeFolderTreeBrowser = FakeFolderTreeBrowser()
     }
 
     @After
@@ -110,6 +115,7 @@ class PairEditorViewModelTest {
             settingsRepository = mockSettingsRepository,
             localFolderAccessChecker = mockAccessChecker,
             localChangeWatcherRefresher = mockLocalChangeWatcherRefresher,
+            folderTreeBrowser = fakeFolderTreeBrowser,
         )
 
     /**
@@ -138,6 +144,7 @@ class PairEditorViewModelTest {
             settingsRepository = mockSettingsRepository,
             localFolderAccessChecker = mockAccessChecker,
             localChangeWatcherRefresher = mockLocalChangeWatcherRefresher,
+            folderTreeBrowser = fakeFolderTreeBrowser,
         )
 
     // -------------------------------------------------------------------------
@@ -710,6 +717,7 @@ class PairEditorViewModelTest {
                     settingsRepository = mockSettingsRepository,
                     localFolderAccessChecker = mockAccessChecker,
                     localChangeWatcherRefresher = mockLocalChangeWatcherRefresher,
+                    folderTreeBrowser = fakeFolderTreeBrowser,
                 )
             advanceUntilIdle()
 
@@ -748,6 +756,7 @@ class PairEditorViewModelTest {
                     settingsRepository = mockSettingsRepository,
                     localFolderAccessChecker = mockAccessChecker,
                     localChangeWatcherRefresher = mockLocalChangeWatcherRefresher,
+                    folderTreeBrowser = fakeFolderTreeBrowser,
                 )
             advanceUntilIdle()
 
@@ -1065,5 +1074,189 @@ class PairEditorViewModelTest {
         vm.onSchedulePresetChange(SyncSchedulePreset.CUSTOM)
         vm.onCustomIntervalChange("5")
         assertEquals(15L, vm.state.value.scheduleIntervalMinutes)
+    }
+
+    // -------------------------------------------------------------------------
+    // Selective sync folder tree
+    // -------------------------------------------------------------------------
+
+    @Test
+    fun `refreshFolderTree lists the sync root children`() =
+        runTest {
+            fakeFolderTreeBrowser.children[""] = listOf(node("Camera"), node("Documents"))
+
+            val vm = createVmWithFolder()
+            vm.refreshFolderTree()
+            advanceUntilIdle()
+
+            assertEquals(
+                listOf("Camera", "Documents"),
+                vm.state.value.folderTreeRows.map { it.node.relativePath },
+            )
+            assertTrue(vm.state.value.folderTreeRows.none { it.excluded })
+        }
+
+    @Test
+    fun `expanding a folder lists and shows its children`() =
+        runTest {
+            fakeFolderTreeBrowser.children[""] = listOf(node("Camera"))
+            fakeFolderTreeBrowser.children["Camera"] = listOf(node("Camera/2024", "2024"))
+
+            val vm = createVmWithFolder()
+            vm.refreshFolderTree()
+            advanceUntilIdle()
+            vm.onFolderExpandToggle("Camera")
+            advanceUntilIdle()
+
+            assertEquals(
+                listOf("Camera" to 0, "Camera/2024" to 1),
+                vm.state.value.folderTreeRows.map { it.node.relativePath to it.depth },
+            )
+
+            vm.onFolderExpandToggle("Camera")
+            assertEquals(listOf("Camera"), vm.state.value.folderTreeRows.map { it.node.relativePath })
+        }
+
+    @Test
+    fun `excluding a folder marks its descendants excluded by ancestor`() =
+        runTest {
+            fakeFolderTreeBrowser.children[""] = listOf(node("Camera"))
+            fakeFolderTreeBrowser.children["Camera"] = listOf(node("Camera/2024", "2024"))
+
+            val vm = createVmWithFolder()
+            vm.refreshFolderTree()
+            advanceUntilIdle()
+            vm.onFolderExpandToggle("Camera")
+            advanceUntilIdle()
+            vm.onFolderIncludedChange("Camera", included = false)
+
+            val rows = vm.state.value.folderTreeRows.associateBy { it.node.relativePath }
+            assertEquals(setOf("Camera"), vm.state.value.excludedRelativePaths)
+            assertTrue(rows.getValue("Camera").excluded)
+            assertFalse(rows.getValue("Camera").excludedByAncestor)
+            assertTrue(rows.getValue("Camera/2024").excluded)
+            assertTrue(rows.getValue("Camera/2024").excludedByAncestor)
+        }
+
+    @Test
+    fun `excluding a parent drops redundant descendant exclusions`() {
+        val vm = createVmWithFolder()
+
+        vm.onFolderIncludedChange("Camera/2024", included = false)
+        vm.onFolderIncludedChange("Camera", included = false)
+
+        assertEquals(setOf("Camera"), vm.state.value.excludedRelativePaths)
+    }
+
+    @Test
+    fun `re-including a folder removes it from the exclusion set`() {
+        val vm = createVmWithFolder()
+
+        vm.onFolderIncludedChange("Camera", included = false)
+        vm.onFolderIncludedChange("Camera", included = true)
+
+        assertTrue(vm.state.value.excludedRelativePaths.isEmpty())
+    }
+
+    @Test
+    fun `save persists the folder exclusion set`() =
+        runTest {
+            coEvery { mockRepo.upsert(any()) } returns 42L
+
+            val vm = createVmWithFolder()
+            vm.onDisplayNameChange("Test Pair")
+            vm.onRemoteFolderPicked("remote-id", "Remote")
+            vm.onFolderIncludedChange("Camera", included = false)
+            advanceUntilIdle()
+            vm.onAccountChange("test-account")
+
+            vm.save {}
+            advanceUntilIdle()
+
+            coVerify {
+                mockRepo.upsert(
+                    match { it.excludedRelativePaths == listOf("Camera") },
+                )
+            }
+        }
+
+    @Test
+    fun `loadExisting restores the persisted folder exclusion set`() =
+        runTest {
+            coEvery { mockRepo.getById(7L) } returns
+                SyncPair(
+                    id = 7L,
+                    displayName = "Existing",
+                    localTreeUri = "content://tree/primary",
+                    provider = CloudProviderType.GOOGLE_DRIVE,
+                    accountId = "test-account",
+                    remoteFolderId = "remote-id",
+                    excludedRelativePaths = listOf("Camera/", " Documents "),
+                )
+
+            val vm = createVm(pairId = 7L)
+            advanceUntilIdle()
+
+            assertEquals(setOf("Camera", "Documents"), vm.state.value.excludedRelativePaths)
+            assertFalse(vm.isDirty)
+        }
+
+    @Test
+    fun `toggling a folder exclusion marks the form dirty`() =
+        runTest {
+            coEvery { mockRepo.getById(7L) } returns
+                SyncPair(
+                    id = 7L,
+                    displayName = "Existing",
+                    localTreeUri = "content://tree/primary",
+                    provider = CloudProviderType.GOOGLE_DRIVE,
+                    accountId = "test-account",
+                    remoteFolderId = "remote-id",
+                )
+
+            val vm = createVm(pairId = 7L)
+            advanceUntilIdle()
+            vm.onFolderIncludedChange("Camera", included = false)
+
+            assertTrue(vm.isDirty)
+        }
+
+    @Test
+    fun `folder tree listing failures leave the tree empty`() =
+        runTest {
+            fakeFolderTreeBrowser.failure = IllegalStateException("provider offline")
+
+            val vm = createVmWithFolder()
+            vm.refreshFolderTree()
+            advanceUntilIdle()
+
+            assertTrue(vm.state.value.folderTreeRows.isEmpty())
+            assertTrue(vm.state.value.loadingFolderPaths.isEmpty())
+        }
+
+    private fun node(
+        relativePath: String,
+        name: String = relativePath,
+        existsLocally: Boolean = true,
+        existsRemotely: Boolean = true,
+    ) = FolderTreeNode(
+        relativePath = relativePath,
+        name = name,
+        existsLocally = existsLocally,
+        existsRemotely = existsRemotely,
+    )
+
+    /** In-memory [FolderTreeBrowser] returning canned children per relative path. */
+    private class FakeFolderTreeBrowser : FolderTreeBrowser {
+        val children = mutableMapOf<String, List<FolderTreeNode>>()
+        var failure: Throwable? = null
+
+        override suspend fun listChildFolders(
+            target: FolderTreeTarget,
+            relativePath: String,
+        ): List<FolderTreeNode> {
+            failure?.let { throw it }
+            return children[relativePath].orEmpty()
+        }
     }
 }
