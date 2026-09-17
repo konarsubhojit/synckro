@@ -30,29 +30,31 @@ class FakeRemoteEnumerator
             val page = provider.changesSince(deltaToken)
             val mapped =
                 page.changes.mapNotNull { c ->
+                    val removedId = c.removedId
+                    val file = c.file
                     when {
-                        c.removedId != null ->
+                        removedId != null ->
                             RemoteChange(
                                 // Deleted items are no longer in the store; the sync engine
                                 // looks up the canonical path via the stable remoteId in the
                                 // pre-scan index, so we use the remoteId as a fallback here.
-                                relativePath = c.removedId,
+                                relativePath = removedId,
                                 type = RemoteChangeType.DELETE,
-                                remoteId = c.removedId,
+                                remoteId = removedId,
                             )
-                        c.file != null ->
+                        file != null ->
                             RemoteChange(
                                 // Resolve the full path relative to the sync root so that
                                 // nested files are represented with their complete path
                                 // (e.g. "docs/subdir/report.pdf" rather than "report.pdf").
-                                relativePath = provider.resolvePath(c.file.id).ifEmpty { c.file.name },
+                                relativePath = provider.resolvePath(file.id).ifEmpty { file.name },
                                 type = RemoteChangeType.MODIFY,
-                                remoteId = c.file.id,
-                                sizeBytes = c.file.size,
-                                mtimeMs = c.file.lastModifiedMs,
-                                etag = c.file.eTag,
-                                contentHash = c.file.contentHash,
-                                isFolder = c.file.isFolder,
+                                remoteId = file.id,
+                                sizeBytes = file.size,
+                                mtimeMs = file.lastModifiedMs,
+                                etag = file.eTag,
+                                contentHash = file.contentHash,
+                                isFolder = file.isFolder,
                             )
                         else -> null
                     }

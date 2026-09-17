@@ -487,6 +487,10 @@ ksp {
 }
 
 dependencies {
+    // Platform-free sync domain (SyncDiffer, SyncPathScope, FileCandidatePolicy,
+    // and the shared domain model / provider contracts)
+    implementation(project(":core:domain"))
+
     // Core / Compose
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
