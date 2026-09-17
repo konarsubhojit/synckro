@@ -53,8 +53,9 @@ class Migration17To18InstrumentedTest {
                 "direction, conflictPolicy, includeGlobs, excludeGlobs, wifiOnly, " +
                 "requiresCharging, autoSyncEnabled, scheduleIntervalMinutes, " +
                 "excludeSubfolders, excludeEmptyFolders, instantSyncEnabled) VALUES " +
-                "('$displayName', 'content://test', 'GOOGLE_DRIVE', 'remote123', " +
+                "(?, 'content://test', 'GOOGLE_DRIVE', 'remote123', " +
                 "'BIDIRECTIONAL', 'NEWEST_WINS', '', '', 1, 0, 1, 60, 0, 0, 0)",
+            arrayOf<Any?>(displayName),
         )
     }
 
@@ -64,8 +65,8 @@ class Migration17To18InstrumentedTest {
     ): String? =
         db
             .query(
-                "SELECT excludedRelativePaths FROM sync_pair WHERE displayName = '$displayName'",
-                emptyArray(),
+                "SELECT excludedRelativePaths FROM sync_pair WHERE displayName = ?",
+                arrayOf<Any?>(displayName),
             ).use {
                 assertTrue(it.moveToFirst())
                 if (it.isNull(0)) null else it.getString(0)
