@@ -456,7 +456,10 @@ androidComponents {
 tasks.register<JacocoCoverageVerification>("verifyDebugUnitTestCoverage") {
     group = "verification"
     // The platform-free sync domain (SyncDiffer, SyncPathScope, FileCandidatePolicy,
-    // domain model/provider contracts) now lives in :core:domain and is verified by
+    // FileStabilityDetector, InstantSyncEligibilityPolicy, LocalChangeWatcher,
+    // PairDispatchHistory, PairSignalCoordinator, RetryPolicy, WatcherLifecyclePolicy,
+    // RemoteEnumerator, AccountAwareRemoteEnumerator, TransferProgress, domain
+    // model/provider contracts) now lives in :core:domain and is verified by
     // :core:domain:verifyUnitTestCoverage, so it no longer counts towards this bundle.
     description = "Verifies debug unit-test line coverage is at least 22%."
     dependsOn("createDebugUnitTestCoverageReport")
@@ -491,6 +494,9 @@ ksp {
 
 dependencies {
     // Platform-free sync domain (SyncDiffer, SyncPathScope, FileCandidatePolicy,
+    // FileStabilityDetector, InstantSyncEligibilityPolicy, LocalChangeWatcher,
+    // PairDispatchHistory, PairSignalCoordinator, RetryPolicy, WatcherLifecyclePolicy,
+    // RemoteEnumerator, AccountAwareRemoteEnumerator, TransferProgress,
     // and the shared domain model / provider contracts)
     implementation(project(":core:domain"))
 
