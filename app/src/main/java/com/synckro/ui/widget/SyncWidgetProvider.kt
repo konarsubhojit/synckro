@@ -138,7 +138,11 @@ class SyncWidgetProvider : AppWidgetProvider() {
             val syncPendingIntent =
                 PendingIntent.getBroadcast(
                     context,
-                    pair.id.toInt(),
+                    // The distinct `data` URI above is what disambiguates PendingIntents
+                    // across pairs, so a constant request code is safe here and avoids the
+                    // request-code collisions a truncating `pair.id.toInt()` could hit for
+                    // two ids that differ only in their upper 32 bits.
+                    0,
                     syncIntent,
                     PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
                 )
