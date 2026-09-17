@@ -23,6 +23,8 @@
     <string name="add_sync_pair">Add sync pair</string>
     <string name="coach_tooltip_pairs_fab">Tap to create your first sync pair</string>
     <string name="sync_now">Sync now</string>
+    <!-- Issue #362: manual cancel action for a running/queued sync run. -->
+    <string name="cancel_sync">Cancel sync</string>
     <!-- Phase 5b: bulk-sync action + pull-to-refresh feedback. -->
     <string name="home_sync_all_now">Sync all now</string>
     <string name="home_sync_all_result_synced_format">Started sync for %1$d pair(s)</string>

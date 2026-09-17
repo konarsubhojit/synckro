@@ -419,6 +419,10 @@ fun SynckroNavHost(
                     val current = sharedHomeViewModel.state.value.pairs.firstOrNull { it.id == id }
                     if (current != null) sharedHomeViewModel.syncNow(current)
                 },
+                onCancelSync = { id ->
+                    val current = sharedHomeViewModel.state.value.pairs.firstOrNull { it.id == id }
+                    if (current != null) sharedHomeViewModel.cancelSync(current)
+                },
                 onDelete = { id ->
                     val current = sharedHomeViewModel.state.value.pairs.firstOrNull { it.id == id }
                     if (current != null) {

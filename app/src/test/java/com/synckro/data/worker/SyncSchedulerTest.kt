@@ -466,6 +466,59 @@ class SyncSchedulerTest {
     }
 
     // -------------------------------------------------------------------------
+    // cancelActiveRun (issue #362)
+    // -------------------------------------------------------------------------
+
+    @Test
+    fun `cancelActiveRun cancels manual instant and periodic work`() {
+        val mockWm = mockk<WorkManager>(relaxed = true)
+        val testScheduler = SyncScheduler(mockWm)
+
+        testScheduler.cancelActiveRun(pair(id = 42L), globalAutoSyncEnabled = true)
+
+        verify { mockWm.cancelUniqueWork(SyncWorker.syncNowUniqueName(42L)) }
+        verify { mockWm.cancelUniqueWork(SyncWorker.instantName(42L)) }
+        verify { mockWm.cancelUniqueWork(SyncWorker.uniqueName(42L)) }
+    }
+
+    @Test
+    fun `cancelActiveRun restores the periodic schedule when auto-sync is enabled`() {
+        val p = pair(id = 44L)
+        scheduler.schedulePeriodic(p)
+        workManager.enqueueUniqueWork(
+            SyncWorker.syncNowUniqueName(p.id),
+            ExistingWorkPolicy.KEEP,
+            SyncScheduler.oneTimeRequestFor(p),
+        )
+
+        scheduler.cancelActiveRun(p, globalAutoSyncEnabled = true)
+
+        val periodicInfos = workManager.getWorkInfosForUniqueWork(SyncWorker.uniqueName(p.id)).get()
+        val manualInfos = workManager.getWorkInfosForUniqueWork(SyncWorker.syncNowUniqueName(p.id)).get()
+        assertTrue(
+            "The periodic schedule must survive a manual cancel",
+            periodicInfos.any { it.state == WorkInfo.State.ENQUEUED },
+        )
+        assertTrue(
+            "The cancelled manual run must not remain enqueued",
+            manualInfos.isEmpty() || manualInfos.none { it.state == WorkInfo.State.ENQUEUED },
+        )
+    }
+
+    @Test
+    fun `cancelActiveRun leaves periodic cancelled when auto-sync is off`() {
+        val p = pair(id = 45L, autoSyncEnabled = false)
+        scheduler.schedulePeriodic(p)
+
+        scheduler.cancelActiveRun(p, globalAutoSyncEnabled = true)
+
+        val periodicInfos = workManager.getWorkInfosForUniqueWork(SyncWorker.uniqueName(p.id)).get()
+        assertTrue(
+            periodicInfos.isEmpty() || periodicInfos.all { it.state == WorkInfo.State.CANCELLED },
+        )
+    }
+
+    // -------------------------------------------------------------------------
     // scheduleOrCancel
     // -------------------------------------------------------------------------
 

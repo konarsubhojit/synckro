@@ -15,6 +15,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Error
@@ -81,6 +82,7 @@ fun PairDetailScreen(
     onBack: () -> Unit,
     onEdit: (Long) -> Unit,
     onSyncNow: (Long) -> Unit,
+    onCancelSync: (Long) -> Unit,
     onDelete: (Long) -> Unit,
     onOpenConflicts: () -> Unit,
     onOpenLogs: (Long) -> Unit,
@@ -220,20 +222,31 @@ fun PairDetailScreen(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Button(
-                    onClick = { onSyncNow(pair.id) },
-                    // Disable for pairs that are not eligible for a manual sync
-                    // (already syncing, paused, or needing re-link / re-auth) so the
-                    // action never fails silently (issue #250). The status card above
-                    // explains the needs-action state.
-                    enabled =
-                        !state.isSyncing &&
-                            HomeViewModel.isPairEligibleForManualSync(pair, emptySet()),
-                    modifier = Modifier.weight(1f),
-                ) {
-                    Icon(Icons.Default.Sync, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.size(8.dp))
-                    Text(stringResource(R.string.sync_now))
+                if (state.isSyncing) {
+                    // Issue #362: swap the (disabled) Sync now action for an
+                    // explicit cancel while a run is queued or running.
+                    Button(
+                        onClick = { onCancelSync(pair.id) },
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.size(8.dp))
+                        Text(stringResource(R.string.cancel_sync))
+                    }
+                } else {
+                    Button(
+                        onClick = { onSyncNow(pair.id) },
+                        // Disable for pairs that are not eligible for a manual sync
+                        // (paused, or needing re-link / re-auth) so the action never
+                        // fails silently (issue #250). The status card above explains
+                        // the needs-action state.
+                        enabled = HomeViewModel.isPairEligibleForManualSync(pair, emptySet()),
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Icon(Icons.Default.Sync, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.size(8.dp))
+                        Text(stringResource(R.string.sync_now))
+                    }
                 }
                 OutlinedButton(
                     onClick = onOpenConflicts,

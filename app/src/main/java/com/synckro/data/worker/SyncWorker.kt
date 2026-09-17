@@ -1296,6 +1296,29 @@ class SyncScheduler(
     }
 
     /**
+     * Cancels every queued/running sync run for [pair] in response to an explicit
+     * user "Cancel sync" action (issue #362).
+     *
+     * Manual and instant work are simply cancelled. A periodic run is stopped by
+     * cancelling its unique work and then immediately re-scheduling it (when
+     * auto-sync is still enabled for the pair), so cancelling an in-flight run
+     * never silently disables the pair's recurring schedule.
+     *
+     * [SyncWorker] releases its run lease from a `NonCancellable` `finally` block,
+     * so a cancelled run does not leave the pair's lease stuck.
+     *
+     * @param pair The pair whose in-flight/queued runs should be cancelled.
+     * @param globalAutoSyncEnabled Current value of the global auto-sync setting,
+     *   used to decide whether the periodic schedule is restored.
+     */
+    fun cancelActiveRun(pair: SyncPair, globalAutoSyncEnabled: Boolean = true) {
+        cancelManual(pair.id)
+        cancelInstant(pair.id)
+        cancelPeriodic(pair.id)
+        scheduleOrCancel(pair, globalAutoSyncEnabled)
+    }
+
+    /**
      * Enqueues an expedited one-shot instant sync dispatch for [pair].
      *
      * Uses [ExistingWorkPolicy.KEEP] so repeated triggers coalesce into a single pending request.
