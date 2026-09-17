@@ -159,6 +159,7 @@ class SyncPairDaoTest {
             val uri = "content://com.android.externalstorage.documents/tree/primary%3ADocuments"
             val remoteFolderId = "remote-folder-456"
             val remoteFolderName = "Documents"
+            val deltaToken = "delta-token-789"
             val id =
                 dao.insert(
                     buildEntity(uri).copy(
@@ -166,19 +167,23 @@ class SyncPairDaoTest {
                         remoteFolderName = remoteFolderName,
                     ),
                 )
+            dao.updateDeltaToken(id, deltaToken)
 
             val raw = dao.getByIdEncrypted(id)!!
             assertNotEquals(uri, raw.localTreeUri)
             assertNotEquals(remoteFolderId, raw.remoteFolderId)
             assertNotEquals(remoteFolderName, raw.remoteFolderName)
+            assertNotEquals(deltaToken, raw.lastDeltaToken)
             assertTrue(SyncPairFieldEncryption.isEncrypted(raw.localTreeUri))
             assertTrue(SyncPairFieldEncryption.isEncrypted(raw.remoteFolderId))
             assertTrue(SyncPairFieldEncryption.isEncrypted(raw.remoteFolderName!!))
+            assertTrue(SyncPairFieldEncryption.isEncrypted(raw.lastDeltaToken!!))
 
             val retrieved = dao.getById(id)!!
             assertEquals(uri, retrieved.localTreeUri)
             assertEquals(remoteFolderId, retrieved.remoteFolderId)
             assertEquals(remoteFolderName, retrieved.remoteFolderName)
+            assertEquals(deltaToken, retrieved.lastDeltaToken)
         }
 
     @Test

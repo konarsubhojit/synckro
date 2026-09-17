@@ -499,18 +499,20 @@ abstract class SynckroDatabase : RoomDatabase() {
                         "ALTER TABLE `sync_pair` ADD COLUMN `avoidMeteredNetworks` INTEGER NOT NULL DEFAULT 0",
                     )
                     db.query(
-                        "SELECT id, localTreeUri, remoteFolderId, remoteFolderName FROM `sync_pair`",
+                        "SELECT id, localTreeUri, remoteFolderId, remoteFolderName, lastDeltaToken FROM `sync_pair`",
                     ).use { cursor ->
                         val idIndex = cursor.getColumnIndexOrThrow("id")
                         val localTreeUriIndex = cursor.getColumnIndexOrThrow("localTreeUri")
                         val remoteFolderIdIndex = cursor.getColumnIndexOrThrow("remoteFolderId")
                         val remoteFolderNameIndex = cursor.getColumnIndexOrThrow("remoteFolderName")
+                        val lastDeltaTokenIndex = cursor.getColumnIndexOrThrow("lastDeltaToken")
                         while (cursor.moveToNext()) {
                             db.execSQL(
                                 "UPDATE `sync_pair` SET " +
                                     "`localTreeUri` = ?, " +
                                     "`remoteFolderId` = ?, " +
-                                    "`remoteFolderName` = ? " +
+                                    "`remoteFolderName` = ?, " +
+                                    "`lastDeltaToken` = ? " +
                                     "WHERE `id` = ?",
                                 arrayOf(
                                     SyncPairFieldEncryption.encrypt(cursor.getString(localTreeUriIndex)),
@@ -519,6 +521,11 @@ abstract class SynckroDatabase : RoomDatabase() {
                                         null
                                     } else {
                                         SyncPairFieldEncryption.encrypt(cursor.getString(remoteFolderNameIndex))
+                                    },
+                                    if (cursor.isNull(lastDeltaTokenIndex)) {
+                                        null
+                                    } else {
+                                        SyncPairFieldEncryption.encrypt(cursor.getString(lastDeltaTokenIndex))
                                     },
                                     cursor.getLong(idIndex),
                                 ),

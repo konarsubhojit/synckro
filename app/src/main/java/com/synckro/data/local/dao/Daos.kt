@@ -258,10 +258,17 @@ interface SyncPairDao {
      * @param token  The new delta token from the cloud provider, or null to clear it.
      */
     @Query("UPDATE sync_pair SET lastDeltaToken = :token WHERE id = :pairId")
-    suspend fun updateDeltaToken(
+    suspend fun updateEncryptedDeltaToken(
         pairId: Long,
         token: String?,
     )
+
+    suspend fun updateDeltaToken(
+        pairId: Long,
+        token: String?,
+    ) {
+        updateEncryptedDeltaToken(pairId, token?.let(SyncPairFieldEncryption::encrypt))
+    }
 
     /**
      * Records the epoch-millisecond timestamp of the last completed full local scan for [pairId].

@@ -45,6 +45,7 @@ object SyncPairFieldEncryption {
             localTreeUri = encrypt(pair.localTreeUri),
             remoteFolderId = encrypt(pair.remoteFolderId),
             remoteFolderName = pair.remoteFolderName?.let(::encrypt),
+            lastDeltaToken = pair.lastDeltaToken?.let(::encrypt),
         )
 
     fun decrypt(pair: SyncPairEntity): SyncPairEntity =
@@ -52,6 +53,7 @@ object SyncPairFieldEncryption {
             localTreeUri = decrypt(pair.localTreeUri),
             remoteFolderId = decrypt(pair.remoteFolderId),
             remoteFolderName = pair.remoteFolderName?.let(::decrypt),
+            lastDeltaToken = pair.lastDeltaToken?.let(::decrypt),
         )
 
     fun useCipherForTesting(testCipher: StringFieldCipher) {

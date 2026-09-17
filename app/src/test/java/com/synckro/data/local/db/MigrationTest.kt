@@ -185,18 +185,22 @@ class MigrationTest {
             SynckroDatabase.MIGRATION_17_18.migrate(db)
             val pairId = firstPairId(db)
             db.execSQL("UPDATE sync_pair SET remoteFolderName = 'Remote Folder' WHERE id = $pairId")
+            db.execSQL("UPDATE sync_pair SET lastDeltaToken = 'delta-token' WHERE id = $pairId")
 
             SynckroDatabase.MIGRATION_18_19.migrate(db)
 
             val rawLocalTreeUri = stringAt(db, "SELECT localTreeUri FROM sync_pair WHERE id = $pairId")
             val rawRemoteFolderId = stringAt(db, "SELECT remoteFolderId FROM sync_pair WHERE id = $pairId")
             val rawRemoteFolderName = stringAt(db, "SELECT remoteFolderName FROM sync_pair WHERE id = $pairId")
+            val rawLastDeltaToken = stringAt(db, "SELECT lastDeltaToken FROM sync_pair WHERE id = $pairId")
             assertNotEquals("content://test", rawLocalTreeUri)
             assertNotEquals("remote123", rawRemoteFolderId)
             assertNotEquals("Remote Folder", rawRemoteFolderName)
+            assertNotEquals("delta-token", rawLastDeltaToken)
             assertTrue(SyncPairFieldEncryption.isEncrypted(rawLocalTreeUri))
             assertTrue(SyncPairFieldEncryption.isEncrypted(rawRemoteFolderId))
             assertTrue(SyncPairFieldEncryption.isEncrypted(rawRemoteFolderName))
+            assertTrue(SyncPairFieldEncryption.isEncrypted(rawLastDeltaToken))
 
             db.execSQL("PRAGMA user_version = 19")
             db.close()
@@ -210,6 +214,7 @@ class MigrationTest {
                 assertEquals("content://test", pair.localTreeUri)
                 assertEquals("remote123", pair.remoteFolderId)
                 assertEquals("Remote Folder", pair.remoteFolderName)
+                assertEquals("delta-token", pair.lastDeltaToken)
             } finally {
                 roomDb.close()
             }
