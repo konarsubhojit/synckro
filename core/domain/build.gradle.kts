@@ -16,10 +16,6 @@ dependencies {
     testImplementation(libs.junit)
 }
 
-tasks.withType<Test>().configureEach {
-    finalizedBy(tasks.named("jacocoTestReport"))
-}
-
 tasks.named<JacocoReport>("jacocoTestReport") {
     dependsOn(tasks.named("test"))
 }
