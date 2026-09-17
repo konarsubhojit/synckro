@@ -25,7 +25,6 @@
     <string name="sync_now">Sync now</string>
     <!-- Issue #362: manual cancel action for a running/queued sync run. -->
     <string name="cancel_sync">Cancel sync</string>
-    <string name="cancel_sync_requested">Cancelling sync…</string>
     <!-- Phase 5b: bulk-sync action + pull-to-refresh feedback. -->
     <string name="home_sync_all_now">Sync all now</string>
     <string name="home_sync_all_result_synced_format">Started sync for %1$d pair(s)</string>
