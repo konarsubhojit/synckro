@@ -14,6 +14,7 @@ import com.synckro.data.local.dao.PendingUploadDao
 import com.synckro.data.local.dao.SyncPairDao
 import com.synckro.data.local.db.SynckroDatabase
 import com.synckro.data.local.entity.SyncPairEntity
+import com.synckro.data.local.fs.LocalFolderAccessChecker
 import com.synckro.data.repository.SettingsRepository
 import com.synckro.data.repository.SyncEventRepository
 import com.synckro.domain.model.CloudProviderType
@@ -212,6 +213,7 @@ class SyncWorkerLeaseTest {
             pendingUploadDao = pendingUploadDao,
             instantCandidateResolver = instantCandidateResolver,
             pairRunLeaseDao = leaseDao,
+            localFolderAccessChecker = mockk<LocalFolderAccessChecker>(relaxed = true),
         )
     }
 
