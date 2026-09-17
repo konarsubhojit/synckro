@@ -247,6 +247,16 @@
     <string name="pair_editor_selective_sync_preview_skip_types">Will skip file-type groups: %1$s</string>
     <string name="pair_editor_selective_sync_preview_include_override">Advanced include patterns below can narrow the final sync scope even further.</string>
     <string name="pair_editor_selective_sync_advanced_patterns">Advanced patterns</string>
+    <string name="pair_editor_folder_tree_title">Folder tree</string>
+    <string name="pair_editor_folder_tree_body">Browse the folders of this pair and uncheck the ones you do not want to sync. Exclusions are saved with the pair and apply to both upload and download, on top of the patterns below.</string>
+    <string name="pair_editor_folder_tree_unavailable">Pick a local folder (or a remote folder and account) to browse the folder tree.</string>
+    <string name="pair_editor_folder_tree_empty">No subfolders were found under the sync root.</string>
+    <string name="pair_editor_folder_tree_expand">Show subfolders of %1$s</string>
+    <string name="pair_editor_folder_tree_collapse">Hide subfolders of %1$s</string>
+    <string name="pair_editor_folder_tree_local_only">Local only</string>
+    <string name="pair_editor_folder_tree_remote_only">Remote only</string>
+    <string name="pair_editor_folder_tree_excluded_by_parent">Excluded with its parent folder</string>
+    <string name="pair_editor_folder_tree_excluded_count">Excluding %1$d folder(s) and everything inside them.</string>
     <string name="pair_editor_include_globs">Advanced include patterns (one per line)</string>
     <string name="pair_editor_exclude_globs">Advanced exclude patterns (one per line)</string>
     <string name="pair_editor_globs_hint">e.g. *.jpg or docs/**</string>

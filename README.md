@@ -172,12 +172,12 @@ Completed work (current release):
 - [x] Re-authentication notifications with deep-link back to Accounts screen.
 - [x] Sync logs, per-pair sync history, and log export.
 - [x] Concurrent transfer support with configurable parallelism.
+- [x] Selective sync tree view (browse the pair's folder tree and exclude sub-folders).
 
 Near-term planned work:
 
 - [ ] Storage-quota display improvements (inline progress bar on account cards).
 - [ ] Onboarding wizard improvements for first-time users.
-- [ ] Selective sync tree view (browse and choose sub-folders to include/exclude).
 - [ ] Android widget showing last-sync timestamps and quick "Sync now" buttons.
 
 ## License

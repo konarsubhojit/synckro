@@ -8,12 +8,15 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -133,6 +136,12 @@ fun PairEditorScreen(
                     }.getOrDefault(emptyList())
                 }
             }
+    }
+
+    // Re-list the selective-sync folder tree whenever the browsable endpoints
+    // change (local folder re-picked, account switched, remote folder changed).
+    LaunchedEffect(state.localTreeUri, state.provider, state.accountId, state.remoteFolderId) {
+        viewModel.refreshFolderTree()
     }
 
     LaunchedEffect(state.excludeGlobsText, topLevelFolderNames) {
@@ -639,6 +648,64 @@ fun PairEditorScreen(
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         Text(
+                            text = stringResource(R.string.pair_editor_folder_tree_title),
+                            style = MaterialTheme.typography.titleSmall,
+                        )
+                        Text(
+                            text = stringResource(R.string.pair_editor_folder_tree_body),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        val folderTreeRows = state.folderTreeRows
+                        val rootLoading =
+                            PairEditorViewModel.ROOT_FOLDER_PATH in state.loadingFolderPaths
+                        when {
+                            state.folderTreeUnavailable ->
+                                Text(
+                                    text = stringResource(R.string.pair_editor_folder_tree_unavailable),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            rootLoading && folderTreeRows.isEmpty() ->
+                                CircularProgressIndicator(modifier = Modifier.size(20.dp))
+                            folderTreeRows.isEmpty() ->
+                                Text(
+                                    text = stringResource(R.string.pair_editor_folder_tree_empty),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            else ->
+                                folderTreeRows.forEach { row ->
+                                    FolderTreeRowItem(
+                                        row = row,
+                                        onExpandToggle = {
+                                            viewModel.onFolderExpandToggle(row.node.relativePath)
+                                        },
+                                        onIncludedChange = { included ->
+                                            viewModel.onFolderIncludedChange(row.node.relativePath, included)
+                                        },
+                                    )
+                                }
+                        }
+                        if (state.excludedRelativePaths.isNotEmpty()) {
+                            Text(
+                                text =
+                                    stringResource(
+                                        R.string.pair_editor_folder_tree_excluded_count,
+                                        state.excludedRelativePaths.size,
+                                    ),
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
+                    }
+                }
+
+                OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text(
                             text = stringResource(R.string.pair_editor_selective_sync_types_title),
                             style = MaterialTheme.typography.titleSmall,
                         )
@@ -956,6 +1023,81 @@ internal fun InstantSyncControl(
                 },
             modifier = if (unavailableText == null) Modifier else Modifier.clearAndSetSemantics {},
         )
+    }
+}
+
+@Composable
+private fun FolderTreeRowItem(
+    row: FolderTreeRow,
+    onExpandToggle: () -> Unit,
+    onIncludedChange: (Boolean) -> Unit,
+) {
+    val expandLabel =
+        stringResource(
+            if (row.expanded) {
+                R.string.pair_editor_folder_tree_collapse
+            } else {
+                R.string.pair_editor_folder_tree_expand
+            },
+            row.node.name,
+        )
+    val caption =
+        when {
+            row.excludedByAncestor -> stringResource(R.string.pair_editor_folder_tree_excluded_by_parent)
+            !row.node.existsRemotely -> stringResource(R.string.pair_editor_folder_tree_local_only)
+            !row.node.existsLocally -> stringResource(R.string.pair_editor_folder_tree_remote_only)
+            else -> null
+        }
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(start = (row.depth * 16).dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        IconButton(
+            onClick = onExpandToggle,
+            modifier = Modifier.semantics { contentDescription = expandLabel },
+        ) {
+            if (row.loading) {
+                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+            } else {
+                Icon(
+                    imageVector = if (row.expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                    contentDescription = expandLabel,
+                )
+            }
+        }
+        Row(
+            modifier =
+                Modifier
+                    .weight(1f)
+                    .toggleable(
+                        value = !row.excluded,
+                        enabled = !row.excludedByAncestor,
+                        role = Role.Checkbox,
+                        onValueChange = onIncludedChange,
+                    )
+                    .padding(vertical = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Checkbox(
+                checked = !row.excluded,
+                onCheckedChange = null,
+                enabled = !row.excludedByAncestor,
+            )
+            Column {
+                Text(
+                    text = row.node.name,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                if (caption != null) {
+                    Text(
+                        text = caption,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
     }
 }
 
