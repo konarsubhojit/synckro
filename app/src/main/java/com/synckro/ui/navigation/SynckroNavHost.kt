@@ -69,6 +69,9 @@ object Routes {
     /** Per-pair detail screen (Phase 5c). Requires a `pairId` path arg. */
     const val PAIR_DETAIL = "pair_detail/{pairId}"
 
+    /** Per-pair sync dry-run preview screen. Requires a `pairId` path arg. */
+    const val SYNC_PREVIEW = "sync_preview/{pairId}"
+
     const val PICK_FOLDER = "pick_folder"
 
     /** Route template for the remote folder browser; requires a `provider` query parameter. */
@@ -80,6 +83,8 @@ object Routes {
     fun pairEditor(pairId: Long = 0L) = "pair_editor?pairId=$pairId"
 
     fun pairDetail(pairId: Long) = "pair_detail/$pairId"
+
+    fun syncPreview(pairId: Long) = "sync_preview/$pairId"
 
     fun logs(pairId: Long) = "main?destination=logs&pairId=$pairId"
 
@@ -466,7 +471,27 @@ fun SynckroNavHost(
                     pendingLogsPairId = pairId
                     nav.popBackStack(Routes.MAIN, inclusive = false)
                 },
+                onOpenPreview = { id -> nav.navigate(Routes.syncPreview(id)) { launchSingleTop = true } },
                 homeViewModel = sharedHomeViewModel,
+            )
+        }
+
+        composable(
+            route = Routes.SYNC_PREVIEW,
+            enterTransition = { detailEnterTransition() },
+            exitTransition = { detailExitTransition() },
+            popEnterTransition = { detailPopEnterTransition() },
+            popExitTransition = { detailPopExitTransition() },
+            arguments =
+                listOf(
+                    navArgument("pairId") {
+                        type = NavType.LongType
+                    },
+                ),
+        ) {
+            // pairId is read by SyncPreviewViewModel from its SavedStateHandle.
+            com.synckro.ui.screens.syncpreview.SyncPreviewScreen(
+                onBack = { nav.popBackStack() },
             )
         }
     }

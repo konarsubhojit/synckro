@@ -2698,6 +2698,139 @@ class SyncEngineRealIntegrationTest {
             assertFalse("File entry must have isFolder=false", fileChange!!.isFolder)
         }
 
+    // -------------------------------------------------------------------------
+    // previewOnce — dry run
+    // -------------------------------------------------------------------------
+
+    /** Seeds one local-only and one remote-only file so a run has a two-op plan. */
+    private suspend fun seedLocalAndRemoteFile() {
+        val remoteContent = "from cloud".toByteArray()
+        fakeProvider.uploadNew(
+            parentId = "remote-root",
+            name = "remote-only.txt",
+            content = remoteContent.inputStream(),
+            size = remoteContent.size.toLong(),
+            mimeType = "text/plain",
+        )
+        val localContent = "from device".toByteArray()
+        localFileAccess.put("local-only.txt", localContent)
+        inMemoryChildren.set(
+            "root",
+            listOf(
+                RawDocChild(
+                    docId = "doc-local",
+                    name = "local-only.txt",
+                    mimeType = "text/plain",
+                    size = localContent.size.toLong(),
+                    lastModifiedMs = 5_000L,
+                ),
+            ),
+        )
+    }
+
+    @Test
+    fun `previewOnce returns the planned ops without applying them`() =
+        runTest {
+            seedLocalAndRemoteFile()
+            val pair = insertPair(direction = SyncDirection.BIDIRECTIONAL)
+
+            val preview = buildEngine().previewOnce(pair)
+
+            assertTrue("Expected a preview plan, got: $preview", preview is SyncEngine.PreviewResult.Success)
+            val ops = (preview as SyncEngine.PreviewResult.Success).ops
+            assertEquals(
+                setOf<SyncOp>(SyncOp.UploadNew("local-only.txt"), SyncOp.DownloadNew("remote-only.txt")),
+                ops.toSet(),
+            )
+            assertNull("Preview must not download the remote file", localFileAccess.openRead("remote-only.txt"))
+            assertTrue(
+                "Preview must not upload the local file",
+                fakeProvider.list("remote-root").none { it.name == "local-only.txt" },
+            )
+        }
+
+    @Test
+    fun `previewOnce performs no database writes`() =
+        runTest {
+            seedLocalAndRemoteFile()
+            val pair = insertPair(direction = SyncDirection.BIDIRECTIONAL)
+
+            val preview = buildEngine().previewOnce(pair)
+
+            assertTrue(preview is SyncEngine.PreviewResult.Success)
+            assertTrue(
+                "Preview must not write local_index rows",
+                localIndexDao.getForPair(pair.id).isEmpty(),
+            )
+            assertTrue(
+                "Preview must not write sync events",
+                eventRepository.getAll().isEmpty(),
+            )
+            val stored = syncPairDao.getById(pair.id)
+            assertNotNull(stored)
+            assertNull("Preview must not advance the delta token", stored!!.lastDeltaToken)
+            assertNull("Preview must not checkpoint the full scan", stored.lastFullScanAtMs)
+        }
+
+    @Test
+    fun `previewOnce produces the same ops as the real run's diff step`() =
+        runTest {
+            seedLocalAndRemoteFile()
+            val pair = insertPair(direction = SyncDirection.BIDIRECTIONAL)
+            val engine = buildEngine()
+
+            val previewOps = (engine.previewOnce(pair) as SyncEngine.PreviewResult.Success).ops
+
+            // The real run that follows is unaffected by the preview: it applies exactly
+            // the previewed plan, and a second preview afterwards is empty.
+            val result = engine.runOnce(pair)
+            assertTrue("Real run after preview should succeed, got: $result", result is SyncEngine.Result.Success)
+            assertEquals(previewOps.size, (result as SyncEngine.Result.Success).applied)
+            assertNotNull("Previewed download should now exist", localFileAccess.openRead("remote-only.txt"))
+            assertTrue(
+                "Previewed upload should now exist",
+                fakeProvider.list("remote-root").any { it.name == "local-only.txt" },
+            )
+
+            val storedToken = syncPairDao.getById(pair.id)!!.lastDeltaToken
+            // The downloaded file now exists locally, so the SAF tree must report it too.
+            inMemoryChildren.set(
+                "root",
+                listOf(
+                    RawDocChild(
+                        docId = "doc-local",
+                        name = "local-only.txt",
+                        mimeType = "text/plain",
+                        size = "from device".toByteArray().size.toLong(),
+                        lastModifiedMs = 5_000L,
+                    ),
+                    RawDocChild(
+                        docId = "doc-remote",
+                        name = "remote-only.txt",
+                        mimeType = "text/plain",
+                        size = "from cloud".toByteArray().size.toLong(),
+                        lastModifiedMs = 5_000L,
+                    ),
+                ),
+            )
+            val secondPreview = engine.previewOnce(pair.copy(deltaToken = storedToken))
+            assertEquals(
+                emptyList<SyncOp>(),
+                (secondPreview as SyncEngine.PreviewResult.Success).ops,
+            )
+        }
+
+    @Test
+    fun `previewOnce reports a failure for a pair without an account`() =
+        runTest {
+            val pair = insertPair().copy(accountId = null)
+
+            val preview = buildEngine().previewOnce(pair)
+
+            assertTrue(preview is SyncEngine.PreviewResult.Failure)
+            assertTrue((preview as SyncEngine.PreviewResult.Failure).needsReLink)
+        }
+
     companion object {
         /**
          * Fixed epoch-ms timestamp used for keep-both conflict detection in tests.

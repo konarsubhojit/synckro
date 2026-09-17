@@ -128,6 +128,10 @@ class LocalFsEnumerator internal constructor(
      * @param excludeSubfolders When `true`, only files at the immediate root of the
      *                     SAF tree are enumerated — sub-directories are not traversed.
      *                     Combine with [ignoreGlobs] for fine-grained filtering.
+     * @param persist      When `true` (the default) the computed diff is written back to
+     *                     `local_index`. Pass `false` for read-only callers (e.g. the
+     *                     sync dry-run preview) that need the snapshot and diff sets
+     *                     without mutating any persisted state.
      * @return [EnumerationResult] containing the full snapshot and diff sets.
      */
     suspend fun enumerate(
@@ -136,6 +140,7 @@ class LocalFsEnumerator internal constructor(
         includeGlobs: List<String> = emptyList(),
         ignoreGlobs: List<String> = emptyList(),
         excludeSubfolders: Boolean = false,
+        persist: Boolean = true,
     ): EnumerationResult {
         // 1. Load existing local_index as a map for O(1) lookup.
         val cached: Map<String, LocalIndexEntity> =
@@ -260,29 +265,32 @@ class LocalFsEnumerator internal constructor(
         val deleted = cached.keys.filter { it !in snapshotPaths }.toSet()
 
         // 5. Atomically persist: upsert changed entries, delete stale ones.
-        val toUpsert =
-            snapshot
-                .filter { it.relativePath in added || it.relativePath in modified }
-                .map { entry ->
-                    val existing = cached[entry.relativePath]
-                    LocalIndexEntity(
-                        pairId = pairId,
-                        relativePath = entry.relativePath,
-                        sizeBytes = entry.sizeBytes,
-                        mtimeMs = entry.mtimeMs,
-                        contentHash = entry.contentHash,
-                        remoteId = existing?.remoteId,
-                        // Preserve remote metadata so that a local-mtime-only change does not
-                        // make the file disappear from syntheticRemote and trigger a spurious
-                        // re-upload or remote-deletion on the next sync run.  Remote metadata
-                        // is only refreshed by SyncOpApplier after a real remote operation.
-                        remoteSizeBytes = existing?.remoteSizeBytes,
-                        remoteMtimeMs = existing?.remoteMtimeMs,
-                        remoteEtag = existing?.remoteEtag,
-                        remoteContentHash = existing?.remoteContentHash,
-                    )
-                }
-        localIndexDao.reconcileForPair(pairId, toUpsert, snapshotPaths.toList())
+        //    Skipped entirely for read-only callers (persist = false).
+        if (persist) {
+            val toUpsert =
+                snapshot
+                    .filter { it.relativePath in added || it.relativePath in modified }
+                    .map { entry ->
+                        val existing = cached[entry.relativePath]
+                        LocalIndexEntity(
+                            pairId = pairId,
+                            relativePath = entry.relativePath,
+                            sizeBytes = entry.sizeBytes,
+                            mtimeMs = entry.mtimeMs,
+                            contentHash = entry.contentHash,
+                            remoteId = existing?.remoteId,
+                            // Preserve remote metadata so that a local-mtime-only change does not
+                            // make the file disappear from syntheticRemote and trigger a spurious
+                            // re-upload or remote-deletion on the next sync run.  Remote metadata
+                            // is only refreshed by SyncOpApplier after a real remote operation.
+                            remoteSizeBytes = existing?.remoteSizeBytes,
+                            remoteMtimeMs = existing?.remoteMtimeMs,
+                            remoteEtag = existing?.remoteEtag,
+                            remoteContentHash = existing?.remoteContentHash,
+                        )
+                    }
+            localIndexDao.reconcileForPair(pairId, toUpsert, snapshotPaths.toList())
+        }
 
         return EnumerationResult(
             snapshot = snapshot,
