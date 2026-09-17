@@ -25,6 +25,15 @@ val feedbackEmail = secretOrEmpty("FEEDBACK_EMAIL")
 // file is actually present. This keeps local builds and forks green without
 // any Firebase project configured — see "Firebase setup" in README.md.
 val googleServicesJsonPresent = rootProject.file("app/google-services.json").exists()
+val allowDebugKeyReleaseSigningValue = secretOrEmpty("ALLOW_DEBUG_KEYSTORE_FOR_RELEASE")
+check(
+    allowDebugKeyReleaseSigningValue.isEmpty() ||
+        allowDebugKeyReleaseSigningValue.equals("true", ignoreCase = true) ||
+        allowDebugKeyReleaseSigningValue.equals("false", ignoreCase = true),
+) {
+    "ALLOW_DEBUG_KEYSTORE_FOR_RELEASE must be 'true' or 'false' when set."
+}
+val allowDebugKeyReleaseSigning = allowDebugKeyReleaseSigningValue.equals("true", ignoreCase = true)
 
 plugins {
     alias(libs.plugins.android.application)
@@ -87,6 +96,22 @@ android {
                 keyPassword =
                     secretOrEmpty("DEBUG_KEY_PASSWORD")
                         .ifEmpty { secretOrEmpty("DEBUG_KEYSTORE_PASSWORD") }
+            }
+        }
+        create("releaseSigning") {
+            val ksPath = secretOrEmpty("RELEASE_KEYSTORE_PATH")
+            if (ksPath.isNotEmpty()) {
+                val ksFile = file(ksPath)
+                if (ksFile.exists() &&
+                    secretOrEmpty("RELEASE_KEYSTORE_PASSWORD").isNotEmpty()
+                ) {
+                    storeFile = ksFile
+                    storePassword = secretOrEmpty("RELEASE_KEYSTORE_PASSWORD")
+                    keyAlias = secretOrEmpty("RELEASE_KEY_ALIAS")
+                    keyPassword =
+                        secretOrEmpty("RELEASE_KEY_PASSWORD")
+                            .ifEmpty { secretOrEmpty("RELEASE_KEYSTORE_PASSWORD") }
+                }
             }
         }
     }
@@ -209,14 +234,18 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
-            val pinned = signingConfigs.getByName("debugPinned")
-            if (pinned.storeFile != null) {
-                signingConfig = pinned
+            val releaseSigning = signingConfigs.getByName("releaseSigning")
+            val debugPinned = signingConfigs.getByName("debugPinned")
+            if (releaseSigning.storeFile != null) {
+                signingConfig = releaseSigning
+            } else if (allowDebugKeyReleaseSigning && debugPinned.storeFile != null) {
+                signingConfig = debugPinned
             } else {
                 println(
-                    "WARNING: debugPinned signing config is not fully configured. " +
+                    "WARNING: release signing config is not fully configured. " +
                         "Release APK will use default unsigned output locally. " +
-                        "Set DEBUG_KEYSTORE_* values to build a signed testing release APK.",
+                        "Set RELEASE_KEYSTORE_* for signed releases or DEBUG_KEYSTORE_* " +
+                        "for signed testing release APKs.",
                 )
             }
             configureAuthForBuildType(expectedHost = "com.synckro")

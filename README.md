@@ -127,15 +127,22 @@ step-by-step instructions covering:
 
 ## CI / CD
 
-GitHub Actions builds both the debug APK and a testing-only signed release APK
+GitHub Actions builds both the debug APK and a testing-only release APK
 on every push, on pull requests, and on manual dispatch. Each run uploads:
 
 - `synckro-debug-apk-<run_number>` from `app/build/outputs/apk/debug/`
 - `synckro-testing-release-apk-<run_number>` from `app/build/outputs/apk/release/`
 
-The release artifact is for internal/dev testing only. It reuses the same
+The release APK artifact is for internal/dev testing only. It reuses the same
 `GOOGLE_WEB_CLIENT_ID`, `MS_CLIENT_ID`, `MSAL_REDIRECT_URI`, and
-`DEBUG_KEYSTORE_*` values already used by debug builds.
+`DEBUG_KEYSTORE_*` values already used by debug builds when explicitly opted in
+for local testing; production-signed release artifacts are only built by the
+tag-driven workflow below.
+
+Version tags matching `v*` run the **Android signed release** workflow, which
+requires `RELEASE_KEYSTORE_*` secrets, builds a signed release AAB with
+`bundleRelease`, and publishes a GitHub Release using the matching
+`CHANGELOG.md` entry as release notes.
 
 Pushes to `master` and manual dispatches use the self-hosted Android builder;
 pull requests deliberately use GitHub-hosted runners. See
@@ -146,10 +153,10 @@ Room database migrations also have an on-device instrumented test
 (`Migration11To12InstrumentedTest`, using `MigrationTestHelper`) that cannot
 run under `testDebugUnitTest`. A separate **Android instrumented tests**
 workflow (`.github/workflows/android-instrumented-tests.yml`) boots a
-GitHub-hosted emulator to run it nightly and on manual dispatch rather than on
-every push/PR — see
+GitHub-hosted emulator for push/PR changes that can affect Room migrations,
+nightly, and on manual dispatch — see
 **[docs/ci-self-hosted-runner.md](docs/ci-self-hosted-runner.md#instrumented-android-tests)**
-for the cost tradeoff.
+for details.
 
 ## Roadmap
 
