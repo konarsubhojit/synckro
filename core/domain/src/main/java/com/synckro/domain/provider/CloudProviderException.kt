@@ -12,8 +12,8 @@ sealed class CloudProviderException(
 ) : Exception(message, cause) {
     /**
      * The provider has no valid token and interactive sign-in is required.
-     * Callers (e.g. [com.synckro.data.worker.SyncWorker])
-     * should treat this as a [com.synckro.domain.sync.SyncEngine.Result.Terminal]
+     * Callers (e.g. `SyncWorker` in `:app`)
+     * should treat this as a `SyncEngine.Result.Terminal`
      * and redirect the user to the Accounts screen.
      */
     class AuthenticationRequired(

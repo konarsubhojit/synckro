@@ -52,18 +52,23 @@ a folder on **OneDrive** or **Google Drive**.
 
 ## Module / package layout
 
-Currently a single-module project (`:app`) with a clean package layout so it can
-be split into Gradle modules later without code churn:
+The Android app lives in `:app`; the platform-free sync domain has been
+extracted into the `:core:domain` Kotlin JVM module (no Android dependencies,
+unit-tested on the plain JVM):
 
 ```text
+core/domain/src/main/java/com/synckro/
+└── domain/
+    ├── model/                          # SyncPair, FileIndexEntry, enums
+    ├── provider/CloudProvider.kt       # Provider interface + models
+    └── sync/                           # SyncDiffer, SyncPathScope, FileCandidatePolicy
+
 app/src/main/java/com/synckro/
 ├── SynckroApp.kt                       # Hilt Application
 ├── MainActivity.kt                     # Compose entry point
 ├── ui/                                 # Compose screens, theme, navigation
 ├── domain/
-│   ├── model/                          # SyncPair, FileIndexEntry, enums
-│   ├── provider/CloudProvider.kt       # Provider interface + models
-│   └── sync/SyncEngine.kt              # Pure diff/apply logic
+│   └── sync/SyncEngine.kt              # Android-bound orchestration (DAOs, SAF)
 ├── data/
 │   ├── local/                          # Room entities, DAOs, database
 │   └── worker/SyncWorker.kt            # WorkManager worker + scheduler

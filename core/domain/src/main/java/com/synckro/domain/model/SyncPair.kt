@@ -15,7 +15,7 @@ data class SyncPair(
     val localTreeUri: String,
     val provider: CloudProviderType,
     /**
-     * The id of the [com.synckro.domain.auth.Account] this pair is bound to,
+     * The id of the `Account` (in `:app`) this pair is bound to,
      * or `null` if the pair has not yet been linked to a specific account
      * (for example, pairs created before multi-account support, or pairs whose
      * account was disconnected). The UI surfaces null-accountId pairs as
@@ -95,10 +95,10 @@ data class SyncPair(
      * explicitly filtered out of the delta before the sync differ sees them,
      * preventing empty remote folders from being processed as sync operations.
      *
-     * **Local side**: [LocalFsEnumerator] already only emits file entries;
+     * **Local side**: `LocalFsEnumerator` (in `:app`) already only emits file entries;
      * empty local directories produce no snapshot entries and therefore never
      * trigger remote folder creation (folders are created on-demand by
-     * [SyncOpApplier.ensureRemoteFolderPath] only when a file needs to be
+     * `SyncOpApplier.ensureRemoteFolderPath` (in `:app`) only when a file needs to be
      * uploaded into them).
      */
     val excludeEmptyFolders: Boolean = false,

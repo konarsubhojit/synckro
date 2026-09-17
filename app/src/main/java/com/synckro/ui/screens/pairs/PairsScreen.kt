@@ -885,12 +885,13 @@ private fun SyncPairRow(
                                 java.text.DateFormat.SHORT,
                             )
                         }
+                    val lastSyncAtMs = pair.lastSyncAtMs
                     Text(
                         text =
-                            if (pair.lastSyncAtMs != null) {
+                            if (lastSyncAtMs != null) {
                                 stringResource(
                                     R.string.home_last_sync_format,
-                                    dateFormatter.format(java.util.Date(pair.lastSyncAtMs)),
+                                    dateFormatter.format(java.util.Date(lastSyncAtMs)),
                                 )
                             } else {
                                 stringResource(R.string.home_never_synced)

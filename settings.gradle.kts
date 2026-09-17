@@ -16,4 +16,5 @@ dependencyResolutionManagement {
 
 rootProject.name = "synckro"
 include(":app")
+include(":core:domain")
 include(":benchmark")

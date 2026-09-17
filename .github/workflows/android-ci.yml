@@ -143,7 +143,7 @@ jobs:
           DEBUG_KEYSTORE_PASSWORD: ${{ secrets.DEBUG_KEYSTORE_PASSWORD }}
           DEBUG_KEY_ALIAS: ${{ secrets.DEBUG_KEY_ALIAS }}
           DEBUG_KEY_PASSWORD: ${{ secrets.DEBUG_KEY_PASSWORD }}
-        run: ./gradlew verifyDebugUnitTestCoverage lintDebug assembleDebug --no-daemon --console=plain
+        run: ./gradlew :core:domain:verifyUnitTestCoverage verifyDebugUnitTestCoverage lintDebug assembleDebug --no-daemon --console=plain
 
       - name: Assemble testing release APK
         if: github.event_name != 'pull_request'
