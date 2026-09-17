@@ -1,6 +1,7 @@
 package com.synckro.data.local.db
 
 import android.content.Context
+import android.os.Build
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
@@ -25,7 +26,12 @@ object SyncPairFieldEncryption {
     private var cipher: StringFieldCipher = PlainStringFieldCipher
 
     fun configure(context: Context) {
-        cipher = AndroidKeyStoreStringFieldCipher(context.applicationContext)
+        cipher =
+            if (Build.FINGERPRINT == "robolectric") {
+                PlainStringFieldCipher
+            } else {
+                AndroidKeyStoreStringFieldCipher(context.applicationContext)
+            }
     }
 
     fun encrypt(value: String): String = if (isEncrypted(value)) value else PREFIX + cipher.encrypt(value)
