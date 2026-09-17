@@ -5,6 +5,7 @@ import com.synckro.domain.sync.RemoteEnumerator
 import com.synckro.providers.fake.FakeRemoteEnumerator
 import com.synckro.providers.gdrive.GoogleDriveRemoteEnumerator
 import com.synckro.providers.onedrive.OneDriveRemoteEnumerator
+import com.synckro.providers.webdav.WebDavRemoteEnumerator
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -35,4 +36,9 @@ object RemoteEnumeratorModule {
     @CloudProviderKey(CloudProviderType.ONEDRIVE)
     @Singleton
     fun provideOneDriveRemoteEnumerator(impl: OneDriveRemoteEnumerator): RemoteEnumerator = impl
+
+    @Provides @IntoMap
+    @CloudProviderKey(CloudProviderType.WEBDAV)
+    @Singleton
+    fun provideWebDavRemoteEnumerator(impl: WebDavRemoteEnumerator): RemoteEnumerator = impl
 }

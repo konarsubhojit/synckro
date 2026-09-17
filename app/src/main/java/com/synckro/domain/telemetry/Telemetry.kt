@@ -130,6 +130,7 @@ fun CloudProviderType.toTelemetryLabel(): String =
         CloudProviderType.FAKE -> "fake"
         CloudProviderType.ONEDRIVE -> "onedrive"
         CloudProviderType.GOOGLE_DRIVE -> "gdrive"
+        CloudProviderType.WEBDAV -> "webdav"
     }
 
 /** Maps a [SyncDirection] to a stable lowercase telemetry label. */

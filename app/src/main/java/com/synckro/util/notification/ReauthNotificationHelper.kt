@@ -94,6 +94,7 @@ object ReauthNotificationHelper {
         mapOf(
             CloudProviderType.GOOGLE_DRIVE to "Google Drive",
             CloudProviderType.ONEDRIVE to "OneDrive",
+            CloudProviderType.WEBDAV to "WebDAV / Nextcloud",
             CloudProviderType.FAKE to "Test Provider",
         )
 

@@ -225,6 +225,7 @@
     <string name="provider_label_fake">Fake (in-memory)</string>
     <string name="provider_label_onedrive">OneDrive</string>
     <string name="provider_label_google_drive">Google Drive</string>
+    <string name="provider_label_webdav">WebDAV / Nextcloud</string>
 
     <!-- Conflict-policy display names -->
     <string name="conflict_policy_newest_wins">Newest wins</string>
