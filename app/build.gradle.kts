@@ -98,7 +98,7 @@ android {
                         .ifEmpty { secretOrEmpty("DEBUG_KEYSTORE_PASSWORD") }
             }
         }
-        create("releaseCi") {
+        create("releaseSigning") {
             val ksPath = secretOrEmpty("RELEASE_KEYSTORE_PATH")
             if (ksPath.isNotEmpty()) {
                 val ksFile = file(ksPath)
@@ -234,10 +234,10 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
-            val releaseCi = signingConfigs.getByName("releaseCi")
+            val releaseSigning = signingConfigs.getByName("releaseSigning")
             val debugPinned = signingConfigs.getByName("debugPinned")
-            if (releaseCi.storeFile != null) {
-                signingConfig = releaseCi
+            if (releaseSigning.storeFile != null) {
+                signingConfig = releaseSigning
             } else if (allowDebugKeyReleaseSigning && debugPinned.storeFile != null) {
                 signingConfig = debugPinned
             } else {

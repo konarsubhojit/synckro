@@ -112,19 +112,20 @@ jobs:
           RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
         run: |
           version="${RELEASE_TAG#v}"
+          bracket_heading="## [$version]"
+          plain_heading="## $version"
           in_section=0
           while IFS= read -r line; do
-            case "$line" in
-              "## [$version]"*|"## $version"*)
-                in_section=1
-                continue
-                ;;
-              "## "*)
-                if [ "$in_section" -eq 1 ]; then
-                  break
-                fi
-                ;;
-            esac
+            if [ "$line" = "$bracket_heading" ] ||
+              [ "${line#"$bracket_heading "}" != "$line" ] ||
+              [ "$line" = "$plain_heading" ] ||
+              [ "${line#"$plain_heading "}" != "$line" ]; then
+              in_section=1
+              continue
+            fi
+            if [ "${line#"## "}" != "$line" ] && [ "$in_section" -eq 1 ]; then
+              break
+            fi
             if [ "$in_section" -eq 1 ]; then
               printf '%s\n' "$line"
             fi
