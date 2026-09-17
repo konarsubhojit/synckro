@@ -112,7 +112,7 @@ The Gradle wrapper is committed in `gradlew`, `gradlew.bat`, and
 
 ```bash
 ./gradlew assembleDebug        # build APK
-./gradlew assembleRelease      # build testing release APK (signed when DEBUG_KEYSTORE_* is set)
+./gradlew assembleRelease      # build testing release APK (signed with DEBUG_KEYSTORE_* when ALLOW_DEBUG_KEYSTORE_FOR_RELEASE=true)
 ./gradlew testDebugUnitTest    # run unit tests
 ./gradlew lintDebug            # Android lint
 ```
