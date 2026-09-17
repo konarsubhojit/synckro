@@ -498,6 +498,33 @@ abstract class SynckroDatabase : RoomDatabase() {
                     db.execSQL(
                         "ALTER TABLE `sync_pair` ADD COLUMN `avoidMeteredNetworks` INTEGER NOT NULL DEFAULT 0",
                     )
+                    db.query(
+                        "SELECT id, localTreeUri, remoteFolderId, remoteFolderName FROM `sync_pair`",
+                    ).use { cursor ->
+                        val idIndex = cursor.getColumnIndexOrThrow("id")
+                        val localTreeUriIndex = cursor.getColumnIndexOrThrow("localTreeUri")
+                        val remoteFolderIdIndex = cursor.getColumnIndexOrThrow("remoteFolderId")
+                        val remoteFolderNameIndex = cursor.getColumnIndexOrThrow("remoteFolderName")
+                        while (cursor.moveToNext()) {
+                            db.execSQL(
+                                "UPDATE `sync_pair` SET " +
+                                    "`localTreeUri` = ?, " +
+                                    "`remoteFolderId` = ?, " +
+                                    "`remoteFolderName` = ? " +
+                                    "WHERE `id` = ?",
+                                arrayOf(
+                                    SyncPairFieldEncryption.encrypt(cursor.getString(localTreeUriIndex)),
+                                    SyncPairFieldEncryption.encrypt(cursor.getString(remoteFolderIdIndex)),
+                                    if (cursor.isNull(remoteFolderNameIndex)) {
+                                        null
+                                    } else {
+                                        SyncPairFieldEncryption.encrypt(cursor.getString(remoteFolderNameIndex))
+                                    },
+                                    cursor.getLong(idIndex),
+                                ),
+                            )
+                        }
+                    }
                 }
             }
     }

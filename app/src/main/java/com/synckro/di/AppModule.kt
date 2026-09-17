@@ -17,6 +17,7 @@ import com.synckro.data.local.dao.PairRunLeaseDao
 import com.synckro.data.local.dao.PendingUploadDao
 import com.synckro.data.local.dao.SyncEventDao
 import com.synckro.data.local.dao.SyncPairDao
+import com.synckro.data.local.db.SyncPairFieldEncryption
 import com.synckro.data.local.db.SynckroDatabase
 import com.synckro.data.local.fs.ContentResolverLocalFolderAccessChecker
 import com.synckro.data.local.fs.LocalFolderAccessChecker
@@ -93,6 +94,7 @@ object AppModule {
     fun provideDatabase(
         @ApplicationContext ctx: Context,
     ): SynckroDatabase {
+        SyncPairFieldEncryption.configure(ctx)
         val builder =
             Room
                 .databaseBuilder(ctx, SynckroDatabase::class.java, SynckroDatabase.NAME)

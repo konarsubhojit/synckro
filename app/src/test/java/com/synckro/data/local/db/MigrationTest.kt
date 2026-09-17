@@ -2,12 +2,15 @@ package com.synckro.data.local.db
 
 import android.content.Context
 import android.database.Cursor
+import androidx.room.Room
 import androidx.sqlite.db.SupportSQLiteDatabase
 import androidx.sqlite.db.SupportSQLiteOpenHelper
 import androidx.sqlite.db.framework.FrameworkSQLiteOpenHelperFactory
 import androidx.test.core.app.ApplicationProvider
+import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -35,6 +38,7 @@ class MigrationTest {
 
     @Before
     fun setUp() {
+        SyncPairFieldEncryption.useCipherForTesting(ReversingStringFieldCipher)
         context.deleteDatabase(TEST_DB)
         db = openAtV6(context)
     }
@@ -42,6 +46,7 @@ class MigrationTest {
     @After
     fun tearDown() {
         if (::db.isInitialized && db.isOpen) db.close()
+        SyncPairFieldEncryption.resetForTesting()
         context.deleteDatabase(TEST_DB)
         context.deleteDatabase("${TEST_DB}_v1")
     }
@@ -152,7 +157,7 @@ class MigrationTest {
     }
 
     // -------------------------------------------------------------------------
-    // MIGRATION_18_19 – metered network policy
+    // MIGRATION_18_19 – encrypted sync-pair fields and metered network policy
     // -------------------------------------------------------------------------
 
     @Test
@@ -169,6 +174,46 @@ class MigrationTest {
         assertTrue("avoidMeteredNetworks" in columnNames(db, "sync_pair"))
         assertEquals(0L, longAt(db, "SELECT avoidMeteredNetworks FROM sync_pair WHERE id = $pairId"))
     }
+
+    @Test
+    fun `MIGRATION_18_19 encrypts sensitive sync pair fields and DAO reads plaintext`() =
+        runBlocking {
+            insertSyncPair(db)
+            migrateV6To15(db)
+            SynckroDatabase.MIGRATION_15_16.migrate(db)
+            SynckroDatabase.MIGRATION_16_17.migrate(db)
+            SynckroDatabase.MIGRATION_17_18.migrate(db)
+            val pairId = firstPairId(db)
+            db.execSQL("UPDATE sync_pair SET remoteFolderName = 'Remote Folder' WHERE id = $pairId")
+
+            SynckroDatabase.MIGRATION_18_19.migrate(db)
+
+            val rawLocalTreeUri = stringAt(db, "SELECT localTreeUri FROM sync_pair WHERE id = $pairId")
+            val rawRemoteFolderId = stringAt(db, "SELECT remoteFolderId FROM sync_pair WHERE id = $pairId")
+            val rawRemoteFolderName = stringAt(db, "SELECT remoteFolderName FROM sync_pair WHERE id = $pairId")
+            assertNotEquals("content://test", rawLocalTreeUri)
+            assertNotEquals("remote123", rawRemoteFolderId)
+            assertNotEquals("Remote Folder", rawRemoteFolderName)
+            assertTrue(SyncPairFieldEncryption.isEncrypted(rawLocalTreeUri))
+            assertTrue(SyncPairFieldEncryption.isEncrypted(rawRemoteFolderId))
+            assertTrue(SyncPairFieldEncryption.isEncrypted(rawRemoteFolderName))
+
+            db.execSQL("PRAGMA user_version = 19")
+            db.close()
+            val roomDb =
+                Room
+                    .databaseBuilder(context, SynckroDatabase::class.java, TEST_DB)
+                    .allowMainThreadQueries()
+                    .build()
+            try {
+                val pair = roomDb.syncPairDao().getById(pairId)!!
+                assertEquals("content://test", pair.localTreeUri)
+                assertEquals("remote123", pair.remoteFolderId)
+                assertEquals("Remote Folder", pair.remoteFolderName)
+            } finally {
+                roomDb.close()
+            }
+        }
 
     // -------------------------------------------------------------------------
     // MIGRATION_6_7 – sync_pair changes
@@ -969,6 +1014,12 @@ class MigrationTest {
                 "('Migration Test', 'content://test', 'ONEDRIVE', 'remote123', " +
                 "'BIDIRECTIONAL', 'NEWEST_WINS', '', '', 1, 0, 60)",
         )
+    }
+
+    private object ReversingStringFieldCipher : StringFieldCipher {
+        override fun encrypt(plaintext: String): String = plaintext.reversed()
+
+        override fun decrypt(ciphertext: String): String = ciphertext.reversed()
     }
 
     companion object {

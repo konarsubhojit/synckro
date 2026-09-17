@@ -3,6 +3,8 @@ package com.synckro.data.local.dao
 import android.content.Context
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
+import com.synckro.data.local.db.StringFieldCipher
+import com.synckro.data.local.db.SyncPairFieldEncryption
 import com.synckro.data.local.db.SynckroDatabase
 import com.synckro.data.local.entity.SyncPairEntity
 import com.synckro.domain.model.CloudProviderType
@@ -12,7 +14,9 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -32,6 +36,7 @@ class SyncPairDaoTest {
 
     @Before
     fun setUp() {
+        SyncPairFieldEncryption.useCipherForTesting(ReversingStringFieldCipher)
         val context = ApplicationProvider.getApplicationContext<Context>()
         db =
             Room
@@ -44,6 +49,7 @@ class SyncPairDaoTest {
     @After
     fun tearDown() {
         db.close()
+        SyncPairFieldEncryption.resetForTesting()
     }
 
     // ---------------------------------------------------------------------------
@@ -148,6 +154,34 @@ class SyncPairDaoTest {
         }
 
     @Test
+    fun `insert encrypts sensitive fields at rest and getById decrypts them`() =
+        runTest {
+            val uri = "content://com.android.externalstorage.documents/tree/primary%3ADocuments"
+            val remoteFolderId = "remote-folder-456"
+            val remoteFolderName = "Documents"
+            val id =
+                dao.insert(
+                    buildEntity(uri).copy(
+                        remoteFolderId = remoteFolderId,
+                        remoteFolderName = remoteFolderName,
+                    ),
+                )
+
+            val raw = dao.getByIdEncrypted(id)!!
+            assertNotEquals(uri, raw.localTreeUri)
+            assertNotEquals(remoteFolderId, raw.remoteFolderId)
+            assertNotEquals(remoteFolderName, raw.remoteFolderName)
+            assertTrue(SyncPairFieldEncryption.isEncrypted(raw.localTreeUri))
+            assertTrue(SyncPairFieldEncryption.isEncrypted(raw.remoteFolderId))
+            assertTrue(SyncPairFieldEncryption.isEncrypted(raw.remoteFolderName!!))
+
+            val retrieved = dao.getById(id)!!
+            assertEquals(uri, retrieved.localTreeUri)
+            assertEquals(remoteFolderId, retrieved.remoteFolderId)
+            assertEquals(remoteFolderName, retrieved.remoteFolderName)
+        }
+
+    @Test
     fun `observeAll emits all inserted entities with correct localTreeUri`() =
         runTest {
             val uri1 = "content://com.android.externalstorage.documents/tree/primary%3AMusic"
@@ -162,4 +196,10 @@ class SyncPairDaoTest {
             assertEquals(uri1, all[0].localTreeUri)
             assertEquals(uri2, all[1].localTreeUri)
         }
+
+    private object ReversingStringFieldCipher : StringFieldCipher {
+        override fun encrypt(plaintext: String): String = plaintext.reversed()
+
+        override fun decrypt(ciphertext: String): String = ciphertext.reversed()
+    }
 }

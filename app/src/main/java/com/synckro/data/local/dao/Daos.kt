@@ -6,6 +6,7 @@ import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Transaction
 import androidx.room.Upsert
+import com.synckro.data.local.db.SyncPairFieldEncryption
 import com.synckro.data.local.entity.AccountEntity
 import com.synckro.data.local.entity.ConflictRecordEntity
 import com.synckro.data.local.entity.FileIndexEntity
@@ -17,6 +18,7 @@ import com.synckro.data.local.entity.SyncEventEntity
 import com.synckro.data.local.entity.SyncPairEntity
 import com.synckro.domain.model.CloudProviderType
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 
 @Dao
 interface AccountDao {
@@ -188,7 +190,10 @@ interface SyncPairDao {
      * @return A Flow that emits lists of `SyncPairEntity` containing all rows ordered by `id` ascending; emits a new list on table changes.
      */
     @Query("SELECT * FROM sync_pair ORDER BY id ASC")
-    fun observeAll(): Flow<List<SyncPairEntity>>
+    fun observeAllEncrypted(): Flow<List<SyncPairEntity>>
+
+    fun observeAll(): Flow<List<SyncPairEntity>> =
+        observeAllEncrypted().map { pairs -> pairs.map(SyncPairFieldEncryption::decrypt) }
 
     /**
      * Fetches the sync pair row for the given id.
@@ -197,7 +202,9 @@ interface SyncPairDao {
      * @return The matching `SyncPairEntity`, or `null` if no row matches.
      */
     @Query("SELECT * FROM sync_pair WHERE id = :id")
-    suspend fun getById(id: Long): SyncPairEntity?
+    suspend fun getByIdEncrypted(id: Long): SyncPairEntity?
+
+    suspend fun getById(id: Long): SyncPairEntity? = getByIdEncrypted(id)?.let(SyncPairFieldEncryption::decrypt)
 
     /**
      * Inserts the given SyncPairEntity into the sync_pair table, replacing any existing row on primary-key conflict.
@@ -206,7 +213,9 @@ interface SyncPairDao {
      * @return The row ID of the inserted or replaced entry.
      */
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insert(pair: SyncPairEntity): Long
+    suspend fun insertEncrypted(pair: SyncPairEntity): Long
+
+    suspend fun insert(pair: SyncPairEntity): Long = insertEncrypted(SyncPairFieldEncryption.encrypt(pair))
 
     /**
      * Inserts the given SyncPairEntity or updates an existing row with the same primary key.
@@ -214,7 +223,11 @@ interface SyncPairDao {
      * @param pair The SyncPairEntity to insert or update in the `sync_pair` table.
      */
     @Upsert
-    suspend fun upsert(pair: SyncPairEntity)
+    suspend fun upsertEncrypted(pair: SyncPairEntity)
+
+    suspend fun upsert(pair: SyncPairEntity) {
+        upsertEncrypted(SyncPairFieldEncryption.encrypt(pair))
+    }
 
     /**
      * Deletes the SyncPair row with the specified id from the database.
@@ -330,7 +343,10 @@ interface SyncPairDao {
      * the reassign/delete confirmation flow.
      */
     @Query("SELECT * FROM sync_pair WHERE accountId = :accountId ORDER BY id ASC")
-    suspend fun getByAccountId(accountId: String): List<SyncPairEntity>
+    suspend fun getByAccountIdEncrypted(accountId: String): List<SyncPairEntity>
+
+    suspend fun getByAccountId(accountId: String): List<SyncPairEntity> =
+        getByAccountIdEncrypted(accountId).map(SyncPairFieldEncryption::decrypt)
 
     /**
      * Reassigns every sync pair currently bound to [fromAccountId] so it
