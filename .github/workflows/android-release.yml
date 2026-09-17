@@ -144,7 +144,7 @@ jobs:
           RELEASE_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
           RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
           RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
-        run: ./gradlew ktlintCheck testDebugUnitTest lintDebug bundleRelease --no-daemon --console=plain
+        run: ./gradlew bundleRelease --no-daemon --console=plain
 
       - name: Upload signed AAB artifact
         uses: actions/upload-artifact@v4

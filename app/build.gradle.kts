@@ -25,7 +25,15 @@ val feedbackEmail = secretOrEmpty("FEEDBACK_EMAIL")
 // file is actually present. This keeps local builds and forks green without
 // any Firebase project configured — see "Firebase setup" in README.md.
 val googleServicesJsonPresent = rootProject.file("app/google-services.json").exists()
-val allowDebugKeyReleaseSigning = secretOrEmpty("ALLOW_DEBUG_KEYSTORE_FOR_RELEASE").toBoolean()
+val allowDebugKeyReleaseSigningValue = secretOrEmpty("ALLOW_DEBUG_KEYSTORE_FOR_RELEASE")
+check(
+    allowDebugKeyReleaseSigningValue.isEmpty() ||
+        allowDebugKeyReleaseSigningValue.equals("true", ignoreCase = true) ||
+        allowDebugKeyReleaseSigningValue.equals("false", ignoreCase = true),
+) {
+    "ALLOW_DEBUG_KEYSTORE_FOR_RELEASE must be 'true' or 'false' when set."
+}
+val allowDebugKeyReleaseSigning = allowDebugKeyReleaseSigningValue.equals("true", ignoreCase = true)
 
 plugins {
     alias(libs.plugins.android.application)
