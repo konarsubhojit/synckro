@@ -19,7 +19,7 @@ class PairStatsTest {
         assertEquals(0, stats.runsConsidered)
         assertEquals(0, stats.successCount)
         assertEquals(0, stats.failureCount)
-        assertEquals(0, stats.totalFilesTransferred)
+        assertEquals(0L, stats.totalBytesTransferred)
         assertNull(stats.lastSuccessAtMs)
         assertEquals(0f, stats.successRate)
     }
@@ -28,10 +28,10 @@ class PairStatsTest {
     fun `computes totals success-rate and last success timestamp across mixed outcomes`() {
         val events =
             listOf(
-                event(SyncEventLevel.WARN, "Sync partial failure: 2 applied, 1 errors — boom", t = 400L),
-                event(SyncEventLevel.INFO, "Sync succeeded: 5 applied, 0 conflicts", t = 300L),
+                event(SyncEventLevel.WARN, "Sync partial failure: 2 applied, 1 errors — boom", t = 400L, bytes = 20L),
+                event(SyncEventLevel.INFO, "Sync succeeded: 5 applied, 0 conflicts", t = 300L, bytes = 50L),
                 event(SyncEventLevel.ERROR, "Sync failed after 5 attempt(s), giving up: timeout", t = 200L),
-                event(SyncEventLevel.INFO, "Sync succeeded: 3 applied, 1 conflicts", t = 100L),
+                event(SyncEventLevel.INFO, "Sync succeeded: 3 applied, 1 conflicts", t = 100L, bytes = 30L),
             )
 
         val stats = aggregatePairStats(events, windowSize = 10)
@@ -39,7 +39,7 @@ class PairStatsTest {
         assertEquals(4, stats.runsConsidered)
         assertEquals(2, stats.successCount)
         assertEquals(2, stats.failureCount)
-        assertEquals(2 + 5 + 0 + 3, stats.totalFilesTransferred)
+        assertEquals(100L, stats.totalBytesTransferred)
         // Newest-first input — the first SUCCESS encountered is the most recent one.
         assertEquals(300L, stats.lastSuccessAtMs)
         assertEquals(0.5f, stats.successRate)
@@ -75,7 +75,7 @@ class PairStatsTest {
 
         assertEquals(1, stats.runsConsidered)
         assertEquals(1, stats.successCount)
-        assertEquals(9, stats.totalFilesTransferred)
+        assertEquals(0L, stats.totalBytesTransferred)
         assertEquals(200L, stats.lastSuccessAtMs)
     }
 
@@ -100,5 +100,13 @@ class PairStatsTest {
         message: String,
         t: Long,
         pairId: Long = 1L,
-    ) = SyncEvent(pairId = pairId, timestampMs = t, level = level, tag = SyncEventTag.SYNC_WORKER, message = message)
+        bytes: Long? = null,
+    ) = SyncEvent(
+        pairId = pairId,
+        timestampMs = t,
+        level = level,
+        tag = SyncEventTag.SYNC_WORKER,
+        message = message,
+        bytesTransferred = bytes,
+    )
 }

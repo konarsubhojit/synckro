@@ -181,6 +181,8 @@ object SyncEventTaxonomy {
  * @param level Severity of the event.
  * @param tag Short alphanumeric label (e.g. "SyncWorker", "Retry").
  * @param message Human-readable description.
+ * @param bytesTransferred Total upload and download bytes transferred by this run,
+ *   or `null` when the event is not a completed sync run.
  */
 data class SyncEvent(
     val id: Long = 0,
@@ -189,4 +191,5 @@ data class SyncEvent(
     val level: SyncEventLevel,
     val tag: String,
     val message: String,
+    val bytesTransferred: Long? = null,
 )

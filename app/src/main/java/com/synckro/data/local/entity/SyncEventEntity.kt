@@ -36,4 +36,5 @@ data class SyncEventEntity(
     /** Short source label, e.g. "SyncWorker" or "Retry". */
     val tag: String,
     val message: String,
+    val bytesTransferred: Long? = null,
 )

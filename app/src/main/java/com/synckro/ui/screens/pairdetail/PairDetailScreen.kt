@@ -1,5 +1,6 @@
 package com.synckro.ui.screens.pairdetail
 
+import android.text.format.Formatter
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -296,8 +297,8 @@ private fun StatsCard(stats: PairStats) {
         Text(
             text =
                 stringResource(
-                    R.string.pair_detail_stats_files_transferred_format,
-                    stats.totalFilesTransferred,
+                    R.string.pair_detail_stats_bytes_transferred_format,
+                    Formatter.formatFileSize(LocalContext.current, stats.totalBytesTransferred),
                     stats.runsConsidered,
                 ),
             style = MaterialTheme.typography.bodyMedium,

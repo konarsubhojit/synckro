@@ -44,12 +44,14 @@ class SyncEventRepository
          * @param level     Severity level.
          * @param tag       Short source label.
          * @param message   Human-readable description.
+         * @param bytesTransferred Total transfer bytes for a completed sync run.
          */
         suspend fun log(
             pairId: Long?,
             level: SyncEventLevel,
             tag: String,
             message: String,
+            bytesTransferred: Long? = null,
         ) {
             log(
                 SyncEvent(
@@ -58,6 +60,7 @@ class SyncEventRepository
                     level = level,
                     tag = tag,
                     message = message,
+                    bytesTransferred = bytesTransferred,
                 ),
             )
         }
@@ -163,6 +166,7 @@ class SyncEventRepository
                 level = level.name,
                 tag = tag,
                 message = message,
+                bytesTransferred = bytesTransferred,
             )
 
         private fun SyncEvent.sanitized(): SyncEvent = copy(message = SyncEventTaxonomy.sanitizeMessage(message))
@@ -175,6 +179,7 @@ class SyncEventRepository
                 level = SyncEventLevel.valueOf(level),
                 tag = tag,
                 message = message,
+                bytesTransferred = bytesTransferred,
             )
 
         companion object {

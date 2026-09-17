@@ -204,6 +204,7 @@ class MigrationTest {
                 Room
                     .databaseBuilder(context, SynckroDatabase::class.java, TEST_DB)
                     .allowMainThreadQueries()
+                    .addMigrations(SynckroDatabase.MIGRATION_19_20)
                     .build()
             try {
                 val pair = roomDb.syncPairDao().getById(pairId)!!
@@ -214,6 +215,19 @@ class MigrationTest {
                 roomDb.close()
             }
         }
+
+    @Test
+    fun `MIGRATION_19_20 adds nullable transferred byte total to sync events`() {
+        migrateV6To15(db)
+        SynckroDatabase.MIGRATION_15_16.migrate(db)
+        SynckroDatabase.MIGRATION_16_17.migrate(db)
+        SynckroDatabase.MIGRATION_17_18.migrate(db)
+        SynckroDatabase.MIGRATION_18_19.migrate(db)
+
+        SynckroDatabase.MIGRATION_19_20.migrate(db)
+
+        assertTrue("bytesTransferred" in columnNames(db, "sync_event"))
+    }
 
     // -------------------------------------------------------------------------
     // MIGRATION_6_7 – sync_pair changes
