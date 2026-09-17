@@ -10,14 +10,9 @@ import android.net.Uri
 import android.text.format.DateUtils
 import android.view.View
 import android.widget.RemoteViews
-import androidx.work.ExistingWorkPolicy
-import androidx.work.WorkManager
 import com.synckro.R
 import com.synckro.data.repository.SyncPairRepository
-import com.synckro.data.worker.SyncScheduler
-import com.synckro.data.worker.SyncWorker
 import com.synckro.domain.model.SyncPair
-import com.synckro.ui.screens.home.HomeViewModel
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -35,18 +30,22 @@ import javax.inject.Inject
  * pairs is the expected common case) does not need a `RemoteViewsService`
  * list adapter. [refresh] is called from [onUpdate] (platform-driven, at most
  * every ~30 minutes per [android.appwidget.AppWidgetProviderInfo]),
- * immediately after a widget "Sync now" tap, and from
- * [com.synckro.SynckroApp], which observes the pairs table and pushes a
- * refresh whenever a sync (started from anywhere: widget, app, or the
+ * immediately after a widget "Sync now" tap (see [SyncWidgetActionReceiver]),
+ * and from [com.synckro.SynckroApp], which observes the pairs table and pushes
+ * a refresh whenever a sync (started from anywhere: widget, app, or the
  * periodic worker) changes `lastSyncAtMs`.
+ *
+ * The "Sync now" tap itself is handled by the separate, non-exported
+ * [SyncWidgetActionReceiver] rather than by this class, because this provider
+ * must be `exported="true"` for the system to deliver `APPWIDGET_UPDATE` —
+ * an exported component can be sent an explicit-component broadcast by *any*
+ * app regardless of its intent-filter, so a privileged action like enqueuing a
+ * sync must live on a component the system cannot reach.
  */
 @AndroidEntryPoint
 class SyncWidgetProvider : AppWidgetProvider() {
     @Inject
     lateinit var syncPairRepository: SyncPairRepository
-
-    @Inject
-    lateinit var workManager: WorkManager
 
     override fun onUpdate(
         context: Context,
@@ -66,50 +65,7 @@ class SyncWidgetProvider : AppWidgetProvider() {
         }
     }
 
-    override fun onReceive(
-        context: Context,
-        intent: Intent,
-    ) {
-        if (intent.action != ACTION_SYNC_NOW) {
-            super.onReceive(context, intent)
-            return
-        }
-        val pairId = intent.getLongExtra(EXTRA_PAIR_ID, -1L)
-        if (pairId < 0) return
-        val pendingResult = goAsync()
-        providerScope.launch {
-            try {
-                handleSyncNow(context, pairId)
-            } catch (e: Exception) {
-                Timber.w(e, "Widget \"Sync now\" failed for pair %d", pairId)
-            } finally {
-                pendingResult.finish()
-            }
-        }
-    }
-
-    private suspend fun handleSyncNow(
-        context: Context,
-        pairId: Long,
-    ) {
-        val pairs = syncPairRepository.getAll(context.contentResolver)
-        val pair = pairs.firstOrNull { it.id == pairId } ?: return
-        val blockedReason = HomeViewModel.manualSyncBlockedReason(pair, syncingPairIds = emptySet())
-        if (blockedReason != null) {
-            Timber.i("Widget \"Sync now\"(id=$pairId) skipped: not eligible ($blockedReason)")
-            return
-        }
-        workManager.enqueueUniqueWork(
-            SyncWorker.syncNowUniqueName(pair.id),
-            ExistingWorkPolicy.KEEP,
-            SyncScheduler.oneTimeRequestFor(pair),
-        )
-        refresh(context, pairs)
-    }
-
     companion object {
-        const val ACTION_SYNC_NOW = "com.synckro.widget.ACTION_SYNC_NOW"
-        const val EXTRA_PAIR_ID = "pair_id"
         private const val MAX_ROWS = 8
 
         // A tiny long-lived scope for a broadcast receiver's one-shot work; mirrors
@@ -172,9 +128,9 @@ class SyncWidgetProvider : AppWidgetProvider() {
             row.setTextViewText(R.id.widget_row_subtitle, lastSyncLabel(context, pair))
 
             val syncIntent =
-                Intent(context, SyncWidgetProvider::class.java).apply {
-                    action = ACTION_SYNC_NOW
-                    putExtra(EXTRA_PAIR_ID, pair.id)
+                Intent(context, SyncWidgetActionReceiver::class.java).apply {
+                    action = SyncWidgetActionReceiver.ACTION_SYNC_NOW
+                    putExtra(SyncWidgetActionReceiver.EXTRA_PAIR_ID, pair.id)
                     // Distinct data URIs per pair so PendingIntent does not collapse the
                     // extras of otherwise identical (same action/component) intents.
                     data = Uri.parse("synckro://widget-sync/${pair.id}")
