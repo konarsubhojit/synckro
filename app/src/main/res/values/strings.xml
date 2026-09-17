@@ -51,6 +51,12 @@
     <string name="home_auto_sync_disabled">Auto-sync off</string>
     <string name="home_last_sync_format">Last sync: %1$s</string>
     <string name="home_never_synced">Never synced</string>
+    <!-- Home-screen widget (SyncWidgetProvider): pair list with last-sync + "Sync now". -->
+    <string name="widget_title">Synckro</string>
+    <string name="widget_empty_state">No sync pairs yet. Open Synckro to add one.</string>
+    <string name="widget_sync_now">Sync</string>
+    <string name="widget_never_synced">Never synced</string>
+    <string name="widget_last_synced_format">Last sync: %1$s</string>
     <!-- Phase 5a: next-run ETA and last-result summary surfaced on each pair card. -->
     <string name="home_next_sync_due_now">Next sync due now</string>
     <string name="home_next_sync_overdue">Next sync overdue</string>

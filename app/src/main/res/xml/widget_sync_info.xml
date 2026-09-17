@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  AppWidgetProviderInfo for the Synckro home-screen widget. Resizable so a
+  user can grow it to show more than the default number of pair rows;
+  updatePeriodMillis is the platform floor of 30 minutes — SyncWidgetProvider
+  is also refreshed immediately after a manual/automatic sync completes via
+  SynckroApp observing the pairs table, so this is only a safety-net refresh.
+-->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:initialLayout="@layout/widget_sync"
+    android:minWidth="250dp"
+    android:minHeight="110dp"
+    android:minResizeWidth="180dp"
+    android:minResizeHeight="80dp"
+    android:resizeMode="horizontal|vertical"
+    android:updatePeriodMillis="1800000"
+    android:widgetCategory="home_screen"
+    android:previewImage="@mipmap/ic_launcher" />

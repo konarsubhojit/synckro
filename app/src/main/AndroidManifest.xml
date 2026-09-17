@@ -122,6 +122,31 @@
                 android:resource="@xml/debug_log_file_paths" />
         </provider>
 
+        <!-- Home-screen widget: pair list with last-sync timestamps and a per-pair
+             "Sync now" action. Must be exported so the launcher (a different app)
+             can deliver APPWIDGET_UPDATE broadcasts. The "Sync now" tap itself is
+             handled by the separate SyncWidgetActionReceiver below, not by this
+             provider, because an exported="true" component can be sent an
+             explicit-component broadcast by *any* app. -->
+        <receiver
+            android:name=".ui.widget.SyncWidgetProvider"
+            android:exported="true"
+            android:label="@string/widget_title">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_sync_info" />
+        </receiver>
+
+        <!-- Handles the widget's "Sync now" tap. Not exported: only this app builds
+             the PendingIntent that targets it, and non-exported components cannot be
+             reached by an explicit-component broadcast from another app/UID. -->
+        <receiver
+            android:name=".ui.widget.SyncWidgetActionReceiver"
+            android:exported="false" />
+
     </application>
 
 </manifest>

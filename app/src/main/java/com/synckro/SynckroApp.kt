@@ -12,6 +12,7 @@ import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
 import com.synckro.data.repository.AppLanguagePreference
 import com.synckro.data.repository.SettingsRepository
+import com.synckro.data.repository.SyncPairRepository
 import com.synckro.data.watcher.InstantSyncWatcherService
 import com.synckro.data.watcher.WatchablePairs
 import com.synckro.data.watcher.WatcherServiceController
@@ -20,6 +21,7 @@ import com.synckro.data.worker.SyncWorker
 import com.synckro.domain.sync.WatcherLifecycleTrigger
 import com.synckro.domain.telemetry.Telemetry
 import com.synckro.providers.onedrive.OneDriveMultiAccountStartupProbe
+import com.synckro.ui.widget.SyncWidgetProvider
 import com.synckro.util.logging.FileLoggingTree
 import com.synckro.util.notification.ReauthNotificationHelper
 import com.synckro.util.notification.SyncStatusNotifier
@@ -63,6 +65,8 @@ class SynckroApp :
 
     @Inject lateinit var watchablePairs: WatchablePairs
 
+    @Inject lateinit var syncPairRepository: SyncPairRepository
+
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     @Volatile
@@ -77,6 +81,7 @@ class SynckroApp :
             oneDriveMultiAccountStartupProbe.runIfNeeded()
         }
         observeWatcherHostLifecycle()
+        observeSyncWidget()
         applicationScope.launch {
             runCatching { pendingDispatchResumer.resume() }
                 .onFailure { Timber.w(it, "Failed to resume pending instant dispatch") }
@@ -159,6 +164,23 @@ class SynckroApp :
         applicationScope.launch {
             runCatching { watcherServiceController.evaluate(trigger) }
                 .onFailure { Timber.w(it, "Failed to evaluate the watcher host for %s", trigger) }
+        }
+    }
+
+    /**
+     * Keeps any pinned [SyncWidgetProvider] instances fresh. Every emission from
+     * [SyncPairRepository.observeAll] (a new pair, a rename, or a sync run updating
+     * `lastSyncAtMs`/`lastSyncResult`) triggers a rebuild of the widget's rows, so the
+     * "Last sync" timestamp shown there is not gated behind the platform's ~30 minute
+     * minimum `updatePeriodMillis`. [SyncWidgetProvider.refresh] itself is a no-op when
+     * no widget is currently pinned, so this collector is cheap to run unconditionally.
+     */
+    private fun observeSyncWidget() {
+        applicationScope.launch {
+            syncPairRepository.observeAll(contentResolver).collect { pairs ->
+                runCatching { SyncWidgetProvider.refresh(this@SynckroApp, pairs) }
+                    .onFailure { Timber.w(it, "Failed to refresh the sync widget") }
+            }
         }
     }
 
