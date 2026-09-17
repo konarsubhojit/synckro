@@ -78,6 +78,19 @@ class PairStatsTest {
     }
 
     @Test
+    fun `legacy events without byte totals contribute zero`() {
+        val stats =
+            aggregatePairStats(
+                listOf(
+                    event(SyncEventLevel.INFO, "Sync succeeded: 1 applied, 0 conflicts", t = 200L, bytes = 2_048L),
+                    event(SyncEventLevel.INFO, "Sync succeeded: 1 applied, 0 conflicts", t = 100L),
+                ),
+            )
+
+        assertEquals(2_048L, stats.totalBytesTransferred)
+    }
+
+    @Test
     fun `non-terminal rows are skipped without counting against the window`() {
         val events =
             listOf(
