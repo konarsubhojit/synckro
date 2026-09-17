@@ -14,7 +14,7 @@ import com.synckro.ui.screens.home.parsePairSummary
  *   failure, failure, needs-reauth, needs-relink).
  * @param totalBytesTransferred Sum of upload and download bytes across the window.
  *   Events written before byte tracking, and outcomes without transfer data,
- *   contribute zero.
+ *   contribute zero. Terminal failures do not have a completed transfer total.
  * @param lastSuccessAtMs       Timestamp (epoch ms) of the most recent successful
  *   run within the window, or `null` when no success is present.
  */

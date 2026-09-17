@@ -87,6 +87,7 @@ class PairStatsTest {
                 ),
             )
 
+        assertEquals(2, stats.runsConsidered)
         assertEquals(2_048L, stats.totalBytesTransferred)
     }
 
