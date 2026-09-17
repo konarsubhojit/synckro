@@ -282,6 +282,7 @@ private fun StatsCard(stats: PairStats) {
     val context = LocalContext.current
     val configuration = LocalConfiguration.current
     val formattedTransferredBytes =
+        // Reformat when the locale or other display configuration changes.
         remember(context, configuration, stats.totalBytesTransferred) {
             Formatter.formatFileSize(context, stats.totalBytesTransferred)
         }

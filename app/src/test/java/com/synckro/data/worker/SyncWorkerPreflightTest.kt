@@ -21,9 +21,11 @@ import com.synckro.domain.model.SyncEventLevel
 import com.synckro.domain.provider.CloudProvider
 import com.synckro.domain.provider.CloudProviderFactory
 import com.synckro.domain.sync.SyncEngine
+import com.synckro.domain.sync.TransferProgress
 import com.synckro.providers.fake.FakeCloudProvider
 import com.synckro.util.notification.SyncStatusNotifier
 import io.mockk.coEvery
+import io.mockk.coJustRun
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
@@ -79,6 +81,35 @@ class SyncWorkerPreflightTest {
             coVerify(exactly = 1) { provider.ensureAuthenticated() }
             coVerify(exactly = 1) { provider.getMetadata(remoteFolderId) }
             coVerify(exactly = 1) { engine.runOnce(any(), any(), any()) }
+        }
+
+    @Test
+    fun `out of order progress records the largest transferred byte total`() =
+        runTest {
+            coEvery { syncPairDao.getById(PAIR_ID) } returns pair()
+            coEvery { engine.runOnce(any(), any(), any()) } coAnswers {
+                secondArg<suspend (TransferProgress) -> Unit>()(
+                    TransferProgress(1, 2, bytesTransferred = 1_024L, totalBytes = 2_048L),
+                )
+                secondArg<suspend (TransferProgress) -> Unit>()(
+                    TransferProgress(2, 2, bytesTransferred = 512L, totalBytes = 2_048L),
+                )
+                SyncEngine.Result.Success(2, 0)
+            }
+
+            val syncWorker = spyk(worker())
+            coJustRun { syncWorker.setProgress(any()) }
+            syncWorker.doWork()
+
+            coVerify {
+                eventRepository.log(
+                    PAIR_ID,
+                    SyncEventLevel.INFO,
+                    "SyncWorker",
+                    "Sync succeeded: 2 applied, 0 conflicts",
+                    1_024L,
+                )
+            }
         }
 
     @Test
