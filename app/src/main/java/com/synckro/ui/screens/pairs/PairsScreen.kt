@@ -23,6 +23,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.CompareArrows
@@ -274,6 +275,7 @@ fun PairsScreen(
             onOpenReauth = onOpenReauth,
             onRequestDelete = viewModel::requestDelete,
             onSyncNow = viewModel::syncNow,
+            onCancelSync = viewModel::cancelSync,
             onSyncAllNow = viewModel::syncAllNow,
             onSetGlobalAutoSync = viewModel::setGlobalAutoSync,
             onSetPairAutoSync = viewModel::setPairAutoSync,
@@ -305,6 +307,7 @@ fun PairsScreen(
                     onOpenReauth = onOpenReauth,
                     onRequestDelete = viewModel::requestDelete,
                     onSyncNow = viewModel::syncNow,
+                    onCancelSync = viewModel::cancelSync,
                     onSyncAllNow = viewModel::syncAllNow,
                     onSetGlobalAutoSync = viewModel::setGlobalAutoSync,
                     onSetPairAutoSync = viewModel::setPairAutoSync,
@@ -330,6 +333,9 @@ fun PairsScreen(
                         onEditSyncPair = onEditSyncPair,
                         onSyncPairNow = { id ->
                             state.pairs.firstOrNull { it.id == id }?.let(viewModel::syncNow)
+                        },
+                        onCancelPairSync = { id ->
+                            state.pairs.firstOrNull { it.id == id }?.let(viewModel::cancelSync)
                         },
                         onDeletePair = { id ->
                             state.pairs.firstOrNull { it.id == id }?.let(viewModel::requestDelete)
@@ -360,6 +366,7 @@ private fun PairsListScaffold(
     onOpenReauth: (String?) -> Unit,
     onRequestDelete: (SyncPair) -> Unit,
     onSyncNow: (SyncPair) -> Unit,
+    onCancelSync: (SyncPair) -> Unit,
     onSyncAllNow: () -> Unit,
     onSetGlobalAutoSync: (Boolean) -> Unit,
     onSetPairAutoSync: (SyncPair, Boolean) -> Unit,
@@ -407,6 +414,7 @@ private fun PairsListScaffold(
             onEditSyncPair = onEditSyncPair,
             onRequestDelete = onRequestDelete,
             onSyncNow = onSyncNow,
+            onCancelSync = onCancelSync,
             onSyncAllNow = onSyncAllNow,
             onAddSyncPair = onAddSyncPair,
             onOpenPairDetail = onOpenPairDetail,
@@ -424,6 +432,7 @@ private fun PairDetailPane(
     pairId: Long,
     onEditSyncPair: (Long) -> Unit,
     onSyncPairNow: (Long) -> Unit,
+    onCancelPairSync: (Long) -> Unit,
     onDeletePair: (Long) -> Unit,
     onOpenConflicts: () -> Unit,
     onOpenLogs: (Long) -> Unit,
@@ -446,6 +455,7 @@ private fun PairDetailPane(
                     onBack = onBack,
                     onEdit = onEditSyncPair,
                     onSyncNow = onSyncPairNow,
+                    onCancelSync = onCancelPairSync,
                     onDelete = onDeletePair,
                     onOpenConflicts = onOpenConflicts,
                     onOpenLogs = onOpenLogs,
@@ -462,6 +472,7 @@ private fun PairsList(
     onEditSyncPair: (Long) -> Unit,
     onRequestDelete: (SyncPair) -> Unit,
     onSyncNow: (SyncPair) -> Unit,
+    onCancelSync: (SyncPair) -> Unit,
     onSyncAllNow: () -> Unit,
     onAddSyncPair: () -> Unit,
     onOpenPairDetail: (Long) -> Unit,
@@ -547,6 +558,7 @@ private fun PairsList(
                         onEdit = { onEditSyncPair(pair.id) },
                         onDelete = { onRequestDelete(pair) },
                         onSyncNow = { onSyncNow(pair) },
+                        onCancelSync = { onCancelSync(pair) },
                         onOpenDetail = { onOpenPairDetail(pair.id) },
                         onOpenReauth = { onOpenReauth(pair.accountId) },
                         onSetPairAutoSync = { enabled -> onSetPairAutoSync(pair, enabled) },
@@ -625,6 +637,7 @@ private fun SyncPairRow(
     onEdit: () -> Unit,
     onDelete: () -> Unit,
     onSyncNow: () -> Unit,
+    onCancelSync: () -> Unit,
     onOpenDetail: () -> Unit,
     onOpenReauth: () -> Unit,
     onSetPairAutoSync: (Boolean) -> Unit,
@@ -907,11 +920,23 @@ private fun SyncPairRow(
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        IconButton(onClick = onSyncNow, enabled = !isSyncing) {
-                            Icon(
-                                Icons.Default.Sync,
-                                contentDescription = stringResource(R.string.sync_now),
-                            )
+                        // Issue #362: while a run is in flight the sync action is
+                        // replaced by an explicit "Cancel sync" action so the user
+                        // can stop a running/queued run from the list.
+                        if (isSyncing) {
+                            IconButton(onClick = onCancelSync) {
+                                Icon(
+                                    Icons.Default.Close,
+                                    contentDescription = stringResource(R.string.cancel_sync),
+                                )
+                            }
+                        } else {
+                            IconButton(onClick = onSyncNow) {
+                                Icon(
+                                    Icons.Default.Sync,
+                                    contentDescription = stringResource(R.string.sync_now),
+                                )
+                            }
                         }
                         // Phase 3 (Synced Folders redesign): collapse the
                         // standalone Edit/Delete icon buttons into a single

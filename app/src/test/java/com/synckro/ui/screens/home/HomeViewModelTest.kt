@@ -250,6 +250,39 @@ class HomeViewModelTest {
         }
     }
 
+    // -------------------------------------------------------------------------
+    // Cancel sync (#362)
+    // -------------------------------------------------------------------------
+
+    @Test
+    fun `cancelSync cancels the pair's active run through the scheduler`() {
+        val vm = createVm()
+        val testPair = pair(9L)
+
+        vm.cancelSync(testPair)
+
+        verify { mockScheduler.cancelActiveRun(testPair, true) }
+    }
+
+    @Test
+    fun `cancelSync clears the optimistic syncing flag`() =
+        runTest {
+            val vm = createVm()
+            val collectJob = launch { vm.state.collect {} }
+            advanceUntilIdle()
+
+            val testPair = pair(10L)
+            vm.syncNow(testPair)
+            runCurrent()
+            assertTrue(10L in vm.state.value.syncingPairIds)
+
+            vm.cancelSync(testPair)
+            runCurrent()
+
+            assertFalse(10L in vm.state.value.syncingPairIds)
+            collectJob.cancel()
+        }
+
     @Test
     fun `manualSyncBlockedReason classifies ineligible pairs and returns null when eligible`() {
         val healthy = pair(1L)

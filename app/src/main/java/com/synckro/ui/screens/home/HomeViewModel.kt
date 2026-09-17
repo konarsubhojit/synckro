@@ -594,6 +594,37 @@ class HomeViewModel
         }
 
         /**
+         * Cancels the running/queued sync run for [pair] on explicit user request
+         * (issue #362).
+         *
+         * Delegates to [SyncScheduler.cancelActiveRun], which cancels the manual,
+         * instant and periodic unique work for the pair and re-schedules the
+         * periodic job so cancelling a run does not disable auto-sync. The
+         * optimistic [UiState.syncingPairIds] / progress entries are cleared
+         * immediately so the card returns to its idle state even if the
+         * WorkManager watcher is slow (or already gone).
+         *
+         * Cancellation is safe for the durable state: [SyncWorker] releases its
+         * run lease from a `NonCancellable` block and the pending-upload queue and
+         * local/file indexes are only advanced per completed operation, so the
+         * next run resumes from where the cancelled one stopped.
+         */
+        fun cancelSync(pair: SyncPair) {
+            Timber.i("HomeViewModel.cancelSync(id=${pair.id})")
+            syncScheduler.cancelActiveRun(pair, state.value.globalAutoSyncEnabled)
+            pairProgress.update { it - pair.id }
+            syncingIds.update { it - pair.id }
+            viewModelScope.launch {
+                syncEventRepository.log(
+                    pair.id,
+                    SyncEventLevel.INFO,
+                    SyncEventTag.SCHEDULER,
+                    SyncEventTaxonomy.queueDropped("user_cancelled"),
+                )
+            }
+        }
+
+        /**
          * Pure helper that computes the [UiState.nextRunByPairId] map from the
          * currently observed pairs and the global auto-sync flag. Extracted so it
          * can be reused (and unit-tested) without spinning up the full StateFlow
