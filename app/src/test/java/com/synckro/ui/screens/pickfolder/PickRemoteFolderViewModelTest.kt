@@ -458,6 +458,32 @@ class PickRemoteFolderViewModelTest {
         }
 
     @Test
+    fun `transient AuthenticationFailed emits reauthEvent once and then surfaces the error`() =
+        runTest {
+            val transientAuthError =
+                com.synckro.domain.provider.CloudProviderException.AuthenticationFailed(
+                    "OneDrive silent sign-in failed transiently (attempt 1/2). Will retry.",
+                )
+            coEvery { mockProvider.list(null) } throws transientAuthError
+
+            val vm = createVm()
+            advanceUntilIdle()
+
+            // First failure offers an interactive sign-in instead of a dead-end error.
+            assertTrue(vm.state.value.isReauthenticating)
+            assertNull(vm.state.value.error)
+
+            vm.retry()
+            advanceUntilIdle()
+
+            // Second failure surfaces the error so the user is not prompted in a loop.
+            assertFalse(vm.state.value.isReauthenticating)
+            assertFalse(vm.state.value.isLoading)
+            assertNotNull(vm.state.value.error)
+            assertTrue(vm.state.value.error!!.contains("silent sign-in failed"))
+        }
+
+    @Test
     fun `signInAndRetry on cancel shows error and clears loading`() =
         runTest {
             val fakeAuthManager = com.synckro.domain.auth.FakeAuthManager(CloudProviderType.FAKE)
@@ -600,7 +626,60 @@ class PickRemoteFolderViewModelTest {
 
             verify(exactly = 1) { providerFactory.providerFor(requestedAccountId) }
             verify(exactly = 0) { providerFactory.providerFor(firstAccountId) }
-            coVerify(exactly = 0) { manager.currentAccounts() }
+        }
+
+    @Test
+    fun `requested account id that is no longer signed in falls back to a signed-in account`() =
+        runTest {
+            val staleAccountId = "disconnected-account"
+            val reconnectedAccountId = "reconnected-account"
+            val providerFactory = mockk<CloudProviderFactory>(relaxed = true)
+            val manager = mockk<AuthManager>()
+            coEvery { authRegistry.find(CloudProviderType.ONEDRIVE) } returns manager
+            coEvery { manager.currentAccounts() } returns
+                listOf(Account(reconnectedAccountId, CloudProviderType.ONEDRIVE, "Reconnected", null))
+            every { providerFactory.providerFor(any()) } returns mockProvider
+            coEvery { mockProvider.list(null) } returns emptyList()
+
+            PickRemoteFolderViewModel(
+                savedStateHandle =
+                    SavedStateHandle(
+                        mapOf(
+                            PickRemoteFolderViewModel.ARG_PROVIDER to CloudProviderType.ONEDRIVE.name,
+                            PickRemoteFolderViewModel.ARG_ACCOUNT_ID to staleAccountId,
+                        ),
+                    ),
+                providerFactories = mapOf(CloudProviderType.ONEDRIVE to providerFactory),
+                authRegistry = authRegistry,
+            )
+            advanceUntilIdle()
+
+            verify(exactly = 1) { providerFactory.providerFor(reconnectedAccountId) }
+            verify(exactly = 0) { providerFactory.providerFor(staleAccountId) }
+        }
+
+    @Test
+    fun `no signed-in account emits reauthEvent instead of a dead-end error`() =
+        runTest {
+            val providerFactory = mockk<CloudProviderFactory>(relaxed = true)
+            val manager = mockk<AuthManager>()
+            coEvery { authRegistry.find(CloudProviderType.ONEDRIVE) } returns manager
+            coEvery { manager.currentAccounts() } returns emptyList()
+
+            val vm =
+                PickRemoteFolderViewModel(
+                    savedStateHandle =
+                        SavedStateHandle(
+                            mapOf(PickRemoteFolderViewModel.ARG_PROVIDER to CloudProviderType.ONEDRIVE.name),
+                        ),
+                    providerFactories = mapOf(CloudProviderType.ONEDRIVE to providerFactory),
+                    authRegistry = authRegistry,
+                )
+            advanceUntilIdle()
+
+            assertTrue(vm.state.value.isReauthenticating)
+            assertNull(vm.state.value.error)
+            verify(exactly = 0) { providerFactory.providerFor(any()) }
         }
 
     @Test
