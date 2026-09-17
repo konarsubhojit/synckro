@@ -793,6 +793,8 @@
     <string name="settings_send_feedback_title">Send feedback</string>
     <string name="settings_send_feedback_body">Compose an email with logs and device details pre-attached.</string>
     <string name="settings_send_feedback_body_unset">Feedback email isn\u0027t configured in this build; draft uses %1$s.</string>
+    <string name="settings_replay_onboarding_title">Replay onboarding tour</string>
+    <string name="settings_replay_onboarding_body">Walk through connecting an account and creating your first sync pair again.</string>
     <string name="settings_send_feedback_subject">Synckro feedback - %1$s</string>
     <string name="settings_send_feedback_template">App version: %1$s\nAndroid version: %2$s\nDevice: %3$s %4$s\nLocale: %5$s\n\nDescribe what happened:\n</string>
     <string name="settings_send_feedback_no_app">Couldn\'t open an email app to send feedback.</string>
