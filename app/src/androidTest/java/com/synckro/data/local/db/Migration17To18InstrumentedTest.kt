@@ -31,6 +31,7 @@ class Migration17To18InstrumentedTest {
     fun migrate17To18_addsExcludedRelativePathsAndRemoteContentHashColumns() {
         helper.createDatabase(TEST_DB, 17).apply {
             insertSyncPair(displayName = "Migration Test")
+            insertLocalIndexEntry(pairId = 1, relativePath = "file.txt")
             close()
         }
 
@@ -45,6 +46,7 @@ class Migration17To18InstrumentedTest {
         assertTrue(columnNames(migrated, "sync_pair").contains("excludedRelativePaths"))
         assertEquals("", excludedRelativePathsFor(migrated, "Migration Test"))
         assertTrue(columnNames(migrated, "local_index").contains("remoteContentHash"))
+        assertEquals(null, remoteContentHashFor(migrated, pairId = 1, relativePath = "file.txt"))
     }
 
     private fun SupportSQLiteDatabase.insertSyncPair(displayName: String) {
@@ -67,6 +69,30 @@ class Migration17To18InstrumentedTest {
             .query(
                 "SELECT excludedRelativePaths FROM sync_pair WHERE displayName = ?",
                 arrayOf<Any?>(displayName),
+            ).use {
+                assertTrue(it.moveToFirst())
+                if (it.isNull(0)) null else it.getString(0)
+            }
+
+    private fun SupportSQLiteDatabase.insertLocalIndexEntry(
+        pairId: Long,
+        relativePath: String,
+    ) {
+        execSQL(
+            "INSERT INTO local_index (pairId, relativePath, sizeBytes, mtimeMs) VALUES (?, ?, 1, 2)",
+            arrayOf<Any?>(pairId, relativePath),
+        )
+    }
+
+    private fun remoteContentHashFor(
+        db: SupportSQLiteDatabase,
+        pairId: Long,
+        relativePath: String,
+    ): String? =
+        db
+            .query(
+                "SELECT remoteContentHash FROM local_index WHERE pairId = ? AND relativePath = ?",
+                arrayOf<Any?>(pairId, relativePath),
             ).use {
                 assertTrue(it.moveToFirst())
                 if (it.isNull(0)) null else it.getString(0)
