@@ -37,6 +37,15 @@ object Routes {
     const val ONBOARDING = "onboarding"
 
     /**
+     * Re-entrant onboarding route pushed on top of [SETTINGS] when the user
+     * taps "Replay onboarding tour". Unlike [ONBOARDING] this route always
+     * renders the pager immediately (it bypasses [OnboardingGateway] since
+     * the gateway's implicit-completion checks would otherwise skip it for
+     * users who already have accounts/pairs).
+     */
+    const val ONBOARDING_REPLAY = "onboarding_replay"
+
+    /**
      * The top-level host route. Renders [MainScaffold] with its primary
      * destinations (Status / Sync history / Synced folders). Secondary
      * destinations (Conflicts / Accounts / Settings) are full-screen routes
@@ -252,6 +261,25 @@ fun SynckroNavHost(
             com.synckro.ui.screens.settings.SettingsScreen(
                 onBack = { nav.popBackStack() },
                 onNavigateToAccounts = { nav.navigate(Routes.accounts()) { launchSingleTop = true } },
+                onReplayOnboarding = {
+                    nav.navigate(Routes.ONBOARDING_REPLAY) { launchSingleTop = true }
+                },
+            )
+        }
+        composable(
+            route = Routes.ONBOARDING_REPLAY,
+            enterTransition = { detailEnterTransition() },
+            exitTransition = { detailExitTransition() },
+            popEnterTransition = { detailPopEnterTransition() },
+            popExitTransition = { detailPopExitTransition() },
+        ) {
+            OnboardingScreen(
+                activity = activity,
+                onSkip = { nav.popBackStack() },
+                onCreateFirstSyncPair = {
+                    nav.popBackStack(Routes.MAIN, inclusive = false)
+                    nav.navigate(Routes.pairEditor()) { launchSingleTop = true }
+                },
             )
         }
         composable(

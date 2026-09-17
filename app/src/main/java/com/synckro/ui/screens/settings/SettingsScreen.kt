@@ -108,12 +108,16 @@ private const val SECTION_SUPPORT = "support"
  *   (e.g. host scaffold close). `null` hides the back arrow at root level.
  * @param onNavigateToAccounts Called when the user taps the Accounts menu
  *   entry. Pass `null` to disable the row (e.g. Accounts is not reachable).
+ * @param onReplayOnboarding Called when the user taps "Replay onboarding tour"
+ *   in the Help &amp; support section. Pass `null` to hide the row (e.g. when
+ *   the host can't re-enter the onboarding flow).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     onBack: (() -> Unit)? = null,
     onNavigateToAccounts: (() -> Unit)? = null,
+    onReplayOnboarding: (() -> Unit)? = null,
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -296,6 +300,7 @@ fun SettingsScreen(
                     viewModel = viewModel,
                     ctx = ctx,
                     contentPadding = contentPadding,
+                    onReplayOnboarding = onReplayOnboarding,
                 )
         }
     }
@@ -1116,6 +1121,7 @@ private fun SupportSettingsContent(
     viewModel: SettingsViewModel,
     ctx: Context,
     contentPadding: PaddingValues,
+    onReplayOnboarding: (() -> Unit)? = null,
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -1136,6 +1142,15 @@ private fun SupportSettingsContent(
                 body = feedbackBody,
                 onClick = viewModel::sendFeedback,
             )
+        }
+        if (onReplayOnboarding != null) {
+            item {
+                ActionRow(
+                    title = stringResource(R.string.settings_replay_onboarding_title),
+                    body = stringResource(R.string.settings_replay_onboarding_body),
+                    onClick = onReplayOnboarding,
+                )
+            }
         }
     }
 }
