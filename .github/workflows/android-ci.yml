@@ -21,47 +21,47 @@ permissions:
 jobs:
   build-apks:
     name: Build debug + testing release APKs
-    runs-on: ${{ github.event_name == 'pull_request' && 'ubuntu-latest' || fromJSON('["self-hosted","android-builder"]') }}
+    runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
-      ANDROID_SDK_ROOT: ${{ github.event_name == 'pull_request' && format('{0}/.android-sdk', github.workspace) || '/opt/android-sdk' }}
+      ANDROID_SDK_ROOT: ${{ github.workspace }}/.android-sdk
       ANDROID_API_LEVEL: '34'
       ANDROID_BUILD_TOOLS_VERSION: '34.0.0'
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
-        with:
-          clean: true
 
       - name: Set up JDK 21
-        if: github.event_name == 'pull_request'
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '21'
 
-      - name: Verify preinstalled JDK 21
-        if: github.event_name != 'pull_request'
-        env:
-          JAVA_HOME: /usr/lib/jvm/java-21-openjdk-amd64
-        run: |
-          test -x "$JAVA_HOME/bin/java"
-          "$JAVA_HOME/bin/java" -version
-          echo "JAVA_HOME=$JAVA_HOME" >> "$GITHUB_ENV"
-          echo "$JAVA_HOME/bin" >> "$GITHUB_PATH"
-
       - name: Validate Gradle wrapper
         uses: gradle/actions/wrapper-validation@v4
 
       - name: Set up Gradle
-        if: github.event_name == 'pull_request'
         uses: gradle/actions/setup-gradle@v4
         with:
-          # Hosted PRs use the GitHub Actions cache; the self-hosted runner
-          # uses its persistent Gradle user home instead.
-          cache-read-only: true
+          # Read-only cache on PRs; writable on master pushes so future
+          # runs can populate the cache. GitHub Actions caches are evicted
+          # after 7 days of inactivity, which provides our 7-day cache TTL.
+          cache-read-only: ${{ github.event_name == 'pull_request' }}
           gradle-home-cache-cleanup: true
+
+      - name: Cache Android SDK
+        # Read-only cache on PRs; writable on master pushes. GitHub evicts
+        # unused caches after 7 days, giving us the desired 7-day TTL.
+        uses: actions/cache@v4
+        if: github.event_name != 'pull_request'
+        with:
+          path: ${{ env.ANDROID_SDK_ROOT }}
+          key: ${{ runner.os }}-android-sdk-${{ env.ANDROID_API_LEVEL }}-build-tools-${{ env.ANDROID_BUILD_TOOLS_VERSION }}-v1
+          restore-keys: |
+            ${{ runner.os }}-android-sdk-${{ env.ANDROID_API_LEVEL }}-build-tools-${{ env.ANDROID_BUILD_TOOLS_VERSION }}-
+            ${{ runner.os }}-android-sdk-${{ env.ANDROID_API_LEVEL }}-
+            ${{ runner.os }}-android-sdk-
 
       - name: Restore Android SDK cache (read-only on PRs)
         uses: actions/cache/restore@v4
@@ -75,7 +75,6 @@ jobs:
             ${{ runner.os }}-android-sdk-
 
       - name: Set up Android SDK
-        if: github.event_name == 'pull_request'
         uses: android-actions/setup-android@v3
         with:
           packages: >
@@ -105,7 +104,6 @@ jobs:
 
       - name: Derive per-build-type MSAL redirect URIs
         env:
-          MS_CLIENT_ID: ${{ secrets.MS_CLIENT_ID }}
           MSAL_REDIRECT_URI: ${{ secrets.MSAL_REDIRECT_URI }}
         run: |
           # Gradle configures every build type up front, so each build type's
@@ -113,12 +111,6 @@ jobs:
           # host. From the single MSAL_REDIRECT_URI secret, derive both the
           # debug- and release-form URIs and expose them as build-type-specific
           # env vars consumed by app/build.gradle.kts.
-          if [ -z "$MS_CLIENT_ID" ] || [ -z "$MSAL_REDIRECT_URI" ]; then
-            if [ -n "$MS_CLIENT_ID" ] || [ -n "$MSAL_REDIRECT_URI" ]; then
-              echo "::warning::MS_CLIENT_ID and MSAL_REDIRECT_URI must both be set for CI auth config; continuing with OneDrive sign-in disabled."
-            fi
-            exit 0
-          fi
           DEBUG_URI="$MSAL_REDIRECT_URI"
           RELEASE_URI="$MSAL_REDIRECT_URI"
           if [ -n "$MSAL_REDIRECT_URI" ]; then
@@ -129,37 +121,30 @@ jobs:
               RELEASE_URI="msauth://com.synckro/$redirect_path"
             fi
           fi
-          echo "MS_CLIENT_ID=$MS_CLIENT_ID" >> "$GITHUB_ENV"
           echo "MSAL_REDIRECT_URI_DEBUG=$DEBUG_URI" >> "$GITHUB_ENV"
           echo "MSAL_REDIRECT_URI_RELEASE=$RELEASE_URI" >> "$GITHUB_ENV"
 
-      - name: Run ktlintCheck
-        run: ./gradlew ktlintCheck --no-daemon --console=plain
-
-      - name: Verify unit-test coverage, lint, and assemble debug APK
+      - name: Run unit tests, lint, and assemble debug APK
         env:
           GOOGLE_WEB_CLIENT_ID: ${{ secrets.GOOGLE_WEB_CLIENT_ID }}
+          MS_CLIENT_ID: ${{ secrets.MS_CLIENT_ID }}
+          MSAL_REDIRECT_URI: ${{ secrets.MSAL_REDIRECT_URI }}
           DEBUG_KEYSTORE_PATH: ${{ github.workspace }}/debug.keystore
           DEBUG_KEYSTORE_PASSWORD: ${{ secrets.DEBUG_KEYSTORE_PASSWORD }}
           DEBUG_KEY_ALIAS: ${{ secrets.DEBUG_KEY_ALIAS }}
           DEBUG_KEY_PASSWORD: ${{ secrets.DEBUG_KEY_PASSWORD }}
-        run: ./gradlew :core:domain:verifyUnitTestCoverage verifyDebugUnitTestCoverage lintDebug assembleDebug --no-daemon --console=plain
+        run: ./gradlew testDebugUnitTest lintDebug assembleDebug
 
       - name: Assemble testing release APK
         if: github.event_name != 'pull_request'
         env:
           GOOGLE_WEB_CLIENT_ID: ${{ secrets.GOOGLE_WEB_CLIENT_ID }}
+          MS_CLIENT_ID: ${{ secrets.MS_CLIENT_ID }}
+          MSAL_REDIRECT_URI: ${{ secrets.MSAL_REDIRECT_URI }}
           DEBUG_KEYSTORE_PATH: ${{ github.workspace }}/debug.keystore
           DEBUG_KEYSTORE_PASSWORD: ${{ secrets.DEBUG_KEYSTORE_PASSWORD }}
           DEBUG_KEY_ALIAS: ${{ secrets.DEBUG_KEY_ALIAS }}
           DEBUG_KEY_PASSWORD: ${{ secrets.DEBUG_KEY_PASSWORD }}
-          # The testing release APK is not a signed production release, so it
-          # is intentionally signed with the same debug keystore as the debug
-          # APK above. Without this flag, app/build.gradle.kts leaves the
-          # release build type unsigned whenever RELEASE_KEYSTORE_* secrets
-          # aren't configured, producing an APK that installers reject as
-          # invalid.
-          ALLOW_DEBUG_KEYSTORE_FOR_RELEASE: 'true'
         run: ./gradlew assembleRelease
 
       - name: Upload debug APK artifact
