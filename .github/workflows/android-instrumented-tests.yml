@@ -1,5 +1,8 @@
 name: Android instrumented tests
 
+# Room migrations need a real SQLite implementation via MigrationTestHelper.
+# Keep this emulator lane separate from the main Android CI job, but run it for
+# push/PR events so migration regressions block CI before merge.
 on:
   push:
     branches:
