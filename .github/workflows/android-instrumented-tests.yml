@@ -1,12 +1,14 @@
 name: Android instrumented tests
 
-# Room migrations (see app/src/androidTest/java/com/synckro/data/local/db/) need a
-# real SQLite implementation via MigrationTestHelper, which only runs against an
-# on-device/emulator instrumentation process. Booting an emulator adds several
-# minutes to every run, so this lane is intentionally kept out of the
-# per-push/per-PR android-ci.yml pipeline and instead runs nightly plus on
-# manual dispatch. See docs/ci-self-hosted-runner.md for the cost rationale.
 on:
+  push:
+    branches:
+      - master
+    paths-ignore:
+      - '**/*.md'
+  pull_request:
+    paths-ignore:
+      - '**/*.md'
   schedule:
     - cron: '17 3 * * *'
   workflow_dispatch:

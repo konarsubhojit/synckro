@@ -89,6 +89,22 @@ android {
                         .ifEmpty { secretOrEmpty("DEBUG_KEYSTORE_PASSWORD") }
             }
         }
+        create("releaseCi") {
+            val ksPath = secretOrEmpty("RELEASE_KEYSTORE_PATH")
+            if (ksPath.isNotEmpty()) {
+                val ksFile = file(ksPath)
+                if (ksFile.exists() &&
+                    secretOrEmpty("RELEASE_KEYSTORE_PASSWORD").isNotEmpty()
+                ) {
+                    storeFile = ksFile
+                    storePassword = secretOrEmpty("RELEASE_KEYSTORE_PASSWORD")
+                    keyAlias = secretOrEmpty("RELEASE_KEY_ALIAS")
+                    keyPassword =
+                        secretOrEmpty("RELEASE_KEY_PASSWORD")
+                            .ifEmpty { secretOrEmpty("RELEASE_KEYSTORE_PASSWORD") }
+                }
+            }
+        }
     }
 
     val googleWebClientId = secretOrEmpty("GOOGLE_WEB_CLIENT_ID")
@@ -209,14 +225,18 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
-            val pinned = signingConfigs.getByName("debugPinned")
-            if (pinned.storeFile != null) {
-                signingConfig = pinned
+            val releaseCi = signingConfigs.getByName("releaseCi")
+            val debugPinned = signingConfigs.getByName("debugPinned")
+            if (releaseCi.storeFile != null) {
+                signingConfig = releaseCi
+            } else if (debugPinned.storeFile != null) {
+                signingConfig = debugPinned
             } else {
                 println(
-                    "WARNING: debugPinned signing config is not fully configured. " +
+                    "WARNING: release signing config is not fully configured. " +
                         "Release APK will use default unsigned output locally. " +
-                        "Set DEBUG_KEYSTORE_* values to build a signed testing release APK.",
+                        "Set RELEASE_KEYSTORE_* for signed releases or DEBUG_KEYSTORE_* " +
+                        "for signed testing release APKs.",
                 )
             }
             configureAuthForBuildType(expectedHost = "com.synckro")
