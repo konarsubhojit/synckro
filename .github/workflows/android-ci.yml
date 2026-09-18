@@ -89,6 +89,9 @@ jobs:
         run: |
           if [ -n "$DEBUG_KEYSTORE_BASE64" ]; then
             echo "$DEBUG_KEYSTORE_BASE64" | base64 --decode > "${{ github.workspace }}/debug.keystore"
+          elif [ "$GITHUB_EVENT_NAME" != "pull_request" ]; then
+            echo "::error::DEBUG_KEYSTORE_BASE64 secret is required to produce a signed testing release APK on non-pull-request runs."
+            exit 1
           fi
 
       - name: Decode google-services.json
@@ -146,7 +149,29 @@ jobs:
           DEBUG_KEYSTORE_PASSWORD: ${{ secrets.DEBUG_KEYSTORE_PASSWORD }}
           DEBUG_KEY_ALIAS: ${{ secrets.DEBUG_KEY_ALIAS }}
           DEBUG_KEY_PASSWORD: ${{ secrets.DEBUG_KEY_PASSWORD }}
+          ALLOW_DEBUG_KEYSTORE_FOR_RELEASE: 'true'
         run: ./gradlew assembleRelease
+
+      - name: Verify testing release APK signature
+        if: github.event_name != 'pull_request'
+        run: |
+          SIGNED_APK="app/build/outputs/apk/release/app-release.apk"
+          UNSIGNED_APK="app/build/outputs/apk/release/app-release-unsigned.apk"
+          if [ -e "$UNSIGNED_APK" ]; then
+            echo "::error::Unsigned testing release APK was produced: $UNSIGNED_APK"
+            exit 1
+          fi
+          if [ ! -f "$SIGNED_APK" ]; then
+            echo "::error::Signed testing release APK is missing: $SIGNED_APK"
+            exit 1
+          fi
+
+          APKSIGNER="$ANDROID_SDK_ROOT/build-tools/$ANDROID_BUILD_TOOLS_VERSION/apksigner"
+          if [ -x "$APKSIGNER" ]; then
+            "$APKSIGNER" verify "$SIGNED_APK"
+          else
+            echo "::warning::apksigner is unavailable at $APKSIGNER; verified the signed APK filename only."
+          fi
 
       - name: Upload debug APK artifact
         uses: actions/upload-artifact@v4
@@ -161,7 +186,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: synckro-testing-release-apk-${{ github.run_number }}
-          path: app/build/outputs/apk/release/*.apk
+          path: app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
           retention-days: ${{ github.event_name == 'pull_request' && 3 || 14 }}
 
