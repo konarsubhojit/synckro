@@ -53,6 +53,13 @@ requests deliberately remain on GitHub-hosted `ubuntu-latest` runners. Also
 enable **Settings → Actions → General → Fork pull request workflows → Require
 approval for all external contributors**.
 
+The tag-driven signed release workflow also runs on this persistent runner
+because it needs the production Android signing key. It is intentionally limited
+to pushed `v*` tags and manual dispatch for an existing `v*` tag, never pull
+requests or branch pushes. See **[release-signing.md](release-signing.md)** for
+the keystore threat model, required `RELEASE_KEYSTORE_*` secrets, and cleanup
+guardrails.
+
 ## Instrumented Android tests
 
 Room migrations are covered by both a JVM test (`MigrationTest.kt`, runs under

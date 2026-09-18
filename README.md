@@ -137,37 +137,35 @@ step-by-step instructions covering:
 
 ## CI / CD
 
-GitHub Actions builds the debug APK on every push, pull request, and manual
-dispatch. Pushes and manual dispatches also build a testing-only release APK.
-The applicable runs upload:
+GitHub Actions runs **Android CI** on pushes to `master`, pull requests, and
+manual dispatches. It builds the debug APK, runs unit tests and lint, and
+uploads applicable artifacts:
 
 - `synckro-debug-apk-<run_number>` from `app/build/outputs/apk/debug/`
 - `synckro-testing-release-apk-<run_number>` from `app/build/outputs/apk/release/`
 
-The release APK artifact is for internal/dev testing only. CI signs it with the
-pinned debug keystore by setting `ALLOW_DEBUG_KEYSTORE_FOR_RELEASE=true` and
-reusing the `GOOGLE_WEB_CLIENT_ID`, `MS_CLIENT_ID`, `MSAL_REDIRECT_URI`, and
-`DEBUG_KEYSTORE_*` values used by debug builds. Production-signed release
-artifacts are only built by the tag-driven workflow below.
+The release APK artifact from Android CI is for internal/dev testing only. CI
+signs it with the pinned debug keystore by setting
+`ALLOW_DEBUG_KEYSTORE_FOR_RELEASE=true` and reusing the `GOOGLE_WEB_CLIENT_ID`,
+`MS_CLIENT_ID`, `MSAL_REDIRECT_URI`, and `DEBUG_KEYSTORE_*` values used by debug
+builds.
 
-Version tags matching `v*` run the **Android signed release** workflow, which
-requires `RELEASE_KEYSTORE_*` secrets, builds a signed release AAB with
-`bundleRelease`, and publishes a GitHub Release using the matching
-`CHANGELOG.md` entry as release notes.
+Version tags matching `v*` run **Android signed release**
+(`.github/workflows/android-release.yml`). That workflow is not triggered by
+pull requests or branch pushes. It requires the production
+`RELEASE_KEYSTORE_BASE64`, `RELEASE_KEYSTORE_PASSWORD`, and `RELEASE_KEY_ALIAS`
+secrets (`RELEASE_KEY_PASSWORD` is optional), decodes the keystore into the
+runner's temporary directory, runs `bundleRelease assembleRelease`, verifies the
+APK signature, prints the public signing-certificate fingerprints to the job
+summary, shreds the temporary keystore, and publishes a GitHub Release with the
+matching `CHANGELOG.md` entry as release notes. See
+**[docs/release-signing.md](docs/release-signing.md)**.
 
-Pushes to `master` and manual dispatches use the self-hosted Android builder;
-pull requests deliberately use GitHub-hosted runners. See
+Pushes to `master`, manual CI dispatches, and signed release jobs use the
+self-hosted Android builder; pull requests deliberately use GitHub-hosted
+runners. See
 **[docs/ci-self-hosted-runner.md](docs/ci-self-hosted-runner.md)** for runner
 provisioning, operations, and the security rationale.
-
-Room database migrations also have an on-device instrumented test
-(`Migration11To12InstrumentedTest`, using `MigrationTestHelper`) that cannot
-run under `testDebugUnitTest`. A separate **Android instrumented tests**
-workflow (`.github/workflows/android-instrumented-tests.yml`) boots a
-GitHub-hosted emulator for push/PR changes that can affect Room migrations,
-nightly, and on manual dispatch — see
-**[docs/ci-self-hosted-runner.md](docs/ci-self-hosted-runner.md#instrumented-android-tests)**
-for details.
 
 ## Roadmap
 

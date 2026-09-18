@@ -1,0 +1,257 @@
+name: Android signed release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing v* tag to release. Optional when dispatching from a tag ref.'
+        required: false
+        type: string
+
+concurrency:
+  group: ${{ github.workflow }}-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  signed-release:
+    name: Build and publish signed release
+    runs-on: ['self-hosted', 'android-builder']
+    timeout-minutes: 30
+    env:
+      ANDROID_SDK_ROOT: /opt/android-sdk
+      ANDROID_API_LEVEL: '34'
+      ANDROID_BUILD_TOOLS_VERSION: '34.0.0'
+
+    steps:
+      - name: Resolve release tag
+        id: release-ref
+        env:
+          DISPATCH_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] && [ -n "$DISPATCH_TAG" ]; then
+            release_tag="$DISPATCH_TAG"
+          else
+            release_tag="$GITHUB_REF_NAME"
+          fi
+
+          if [ "$GITHUB_EVENT_NAME" = "push" ] && [ "$GITHUB_REF_TYPE" != "tag" ]; then
+            echo "::error::Android signed release only runs for pushed v* tags."
+            exit 1
+          fi
+
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] && [ -z "$DISPATCH_TAG" ] && [ "$GITHUB_REF_TYPE" != "tag" ]; then
+            echo "::error::Provide a v* tag input when manually dispatching from a branch."
+            exit 1
+          fi
+
+          if [[ "$release_tag" != v* ]]; then
+            echo "::error::Release tag must match v*. Got '$release_tag'."
+            exit 1
+          fi
+
+          printf 'tag=%s\n' "$release_tag" >> "$GITHUB_OUTPUT"
+          printf 'version=%s\n' "${release_tag#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          ref: refs/tags/${{ steps.release-ref.outputs.tag }}
+          clean: true
+
+      - name: Verify preinstalled JDK 21
+        env:
+          JAVA_HOME: /usr/lib/jvm/java-21-openjdk-amd64
+        run: |
+          test -x "$JAVA_HOME/bin/java"
+          "$JAVA_HOME/bin/java" -version
+          echo "JAVA_HOME=$JAVA_HOME" >> "$GITHUB_ENV"
+          echo "$JAVA_HOME/bin" >> "$GITHUB_PATH"
+
+      - name: Validate Gradle wrapper
+        uses: gradle/actions/wrapper-validation@v4
+
+      - name: Validate release signing secrets
+        env:
+          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+          RELEASE_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+
+          missing=0
+          for name in RELEASE_KEYSTORE_BASE64 RELEASE_KEYSTORE_PASSWORD RELEASE_KEY_ALIAS; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::$name is not set. See docs/release-signing.md."
+              missing=1
+            fi
+          done
+
+          if [ "$missing" -ne 0 ]; then
+            exit 1
+          fi
+
+          if [ -z "${RELEASE_KEY_PASSWORD:-}" ]; then
+            echo "::notice::RELEASE_KEY_PASSWORD is not set; Gradle will fall back to RELEASE_KEYSTORE_PASSWORD."
+          fi
+
+      - name: Decode release keystore
+        env:
+          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$RELEASE_KEYSTORE_BASE64" ]; then
+            echo "::error::RELEASE_KEYSTORE_BASE64 is not set. See docs/release-signing.md."
+            exit 1
+          fi
+          umask 077
+          printf '%s' "$RELEASE_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.keystore"
+          echo "RELEASE_KEYSTORE_PATH=$RUNNER_TEMP/release.keystore" >> "$GITHUB_ENV"
+
+      - name: Derive release MSAL redirect URI
+        env:
+          MSAL_REDIRECT_URI: ${{ secrets.MSAL_REDIRECT_URI }}
+        run: |
+          DEBUG_URI="$MSAL_REDIRECT_URI"
+          RELEASE_URI="$MSAL_REDIRECT_URI"
+          if [ -n "$MSAL_REDIRECT_URI" ]; then
+            redirect_without_scheme="${MSAL_REDIRECT_URI#msauth://}"
+            redirect_path="${redirect_without_scheme#*/}"
+            if [ -n "$redirect_path" ] && [ "$redirect_path" != "$redirect_without_scheme" ]; then
+              DEBUG_URI="msauth://com.synckro.debug/$redirect_path"
+              RELEASE_URI="msauth://com.synckro/$redirect_path"
+            fi
+          fi
+          echo "MSAL_REDIRECT_URI_DEBUG=$DEBUG_URI" >> "$GITHUB_ENV"
+          echo "MSAL_REDIRECT_URI_RELEASE=$RELEASE_URI" >> "$GITHUB_ENV"
+
+      - name: Build signed release APK and AAB
+        env:
+          RELEASE_KEYSTORE_PATH: ${{ env.RELEASE_KEYSTORE_PATH }}
+          RELEASE_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+          GOOGLE_WEB_CLIENT_ID: ${{ secrets.GOOGLE_WEB_CLIENT_ID }}
+          MS_CLIENT_ID: ${{ secrets.MS_CLIENT_ID }}
+          MSAL_REDIRECT_URI: ${{ secrets.MSAL_REDIRECT_URI }}
+        run: ./gradlew --no-daemon --console=plain bundleRelease assembleRelease
+
+      - name: Verify signed release outputs
+        run: |
+          set -euo pipefail
+
+          SIGNED_APK="app/build/outputs/apk/release/app-release.apk"
+          UNSIGNED_APK="app/build/outputs/apk/release/app-release-unsigned.apk"
+          RELEASE_AAB="app/build/outputs/bundle/release/app-release.aab"
+          APKSIGNER="$ANDROID_SDK_ROOT/build-tools/$ANDROID_BUILD_TOOLS_VERSION/apksigner"
+          CERTS_OUTPUT="$RUNNER_TEMP/apksigner-certs.txt"
+
+          if [ -e "$UNSIGNED_APK" ]; then
+            echo "::error::Unsigned release APK was produced: $UNSIGNED_APK"
+            exit 1
+          fi
+          if [ ! -f "$SIGNED_APK" ]; then
+            echo "::error::Signed release APK is missing: $SIGNED_APK"
+            exit 1
+          fi
+          if [ ! -x "$APKSIGNER" ]; then
+            echo "::error::apksigner is unavailable at $APKSIGNER."
+            exit 1
+          fi
+
+          "$APKSIGNER" verify --print-certs "$SIGNED_APK" | tee "$CERTS_OUTPUT"
+
+          sha1="$(sed -n 's/^Signer #1 certificate SHA-1 digest: //p' "$CERTS_OUTPUT" | head -n 1)"
+          sha256="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' "$CERTS_OUTPUT" | head -n 1)"
+          if [ -z "$sha1" ] || [ -z "$sha256" ]; then
+            echo "::error::Could not read signing certificate fingerprints from apksigner output."
+            exit 1
+          fi
+
+          {
+            echo "## Release signing certificate"
+            echo
+            echo "- SHA-1: \`$sha1\`"
+            echo "- SHA-256: \`$sha256\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ ! -f "$RELEASE_AAB" ]; then
+            echo "::error::Release AAB is missing: $RELEASE_AAB"
+            exit 1
+          fi
+
+      - name: Extract changelog release notes
+        env:
+          RELEASE_VERSION: ${{ steps.release-ref.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          notes_path="$RUNNER_TEMP/release-notes.md"
+          python3 - "$RELEASE_VERSION" "$notes_path" <<'PY'
+          from pathlib import Path
+          import re
+          import sys
+
+          version, notes_path = sys.argv[1], sys.argv[2]
+          lines = Path("CHANGELOG.md").read_text(encoding="utf-8").splitlines()
+          header = re.compile(rf"^##\s+\[{re.escape(version)}\](?:\s+-|$)")
+          start = None
+
+          for index, line in enumerate(lines):
+              if header.match(line):
+                  start = index
+                  break
+
+          if start is None:
+              print(
+                  f"::error::CHANGELOG.md has no release notes section for version {version}.",
+                  file=sys.stderr,
+              )
+              sys.exit(1)
+
+          end = len(lines)
+          for index in range(start + 1, len(lines)):
+              if lines[index].startswith("## "):
+                  end = index
+                  break
+
+          section = "\n".join(lines[start:end]).strip()
+          has_body = any(
+              line.strip() and not line.startswith("## ")
+              for line in section.splitlines()
+          )
+          if not has_body:
+              print(
+                  f"::error::CHANGELOG.md section for version {version} is empty.",
+                  file=sys.stderr,
+              )
+              sys.exit(1)
+
+          Path(notes_path).write_text(section + "\n", encoding="utf-8")
+          PY
+
+          echo "RELEASE_NOTES_PATH=$notes_path" >> "$GITHUB_ENV"
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.release-ref.outputs.tag }}
+          name: Synckro ${{ steps.release-ref.outputs.version }}
+          body_path: ${{ env.RELEASE_NOTES_PATH }}
+          prerelease: ${{ contains(steps.release-ref.outputs.tag, '-') }}
+          files: |
+            app/build/outputs/bundle/release/app-release.aab
+            app/build/outputs/apk/release/app-release.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Shred release keystore
+        if: always()
+        run: shred -u "$RUNNER_TEMP/release.keystore" 2>/dev/null || rm -f "$RUNNER_TEMP/release.keystore"
