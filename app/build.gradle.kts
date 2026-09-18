@@ -241,12 +241,59 @@ android {
             } else if (allowDebugKeyReleaseSigning && debugPinned.storeFile != null) {
                 signingConfig = debugPinned
             } else {
-                println(
-                    "WARNING: release signing config is not fully configured. " +
-                        "Release APK will use default unsigned output locally. " +
-                        "Set RELEASE_KEYSTORE_* for signed releases or DEBUG_KEYSTORE_* " +
-                        "for signed testing release APKs.",
-                )
+                val releaseKeystorePath = secretOrEmpty("RELEASE_KEYSTORE_PATH")
+                val debugKeystorePath =
+                    secretOrEmpty("DEBUG_KEYSTORE_PATH")
+                        .ifEmpty { rootProject.file("debug.keystore").absolutePath }
+                val missingSigningInputs =
+                    buildList {
+                        if (releaseKeystorePath.isEmpty()) {
+                            add("RELEASE_KEYSTORE_PATH")
+                        } else if (!file(releaseKeystorePath).exists()) {
+                            add("RELEASE_KEYSTORE_PATH (file not found)")
+                        }
+                        if (secretOrEmpty("RELEASE_KEYSTORE_PASSWORD").isEmpty()) {
+                            add("RELEASE_KEYSTORE_PASSWORD")
+                        }
+                        if (secretOrEmpty("RELEASE_KEY_ALIAS").isEmpty()) {
+                            add("RELEASE_KEY_ALIAS")
+                        }
+                        if (!file(debugKeystorePath).exists()) {
+                            add("DEBUG_KEYSTORE_PATH (file not found)")
+                        }
+                        if (secretOrEmpty("DEBUG_KEYSTORE_PASSWORD").isEmpty()) {
+                            add("DEBUG_KEYSTORE_PASSWORD")
+                        }
+                        if (!allowDebugKeyReleaseSigning) {
+                            add("ALLOW_DEBUG_KEYSTORE_FOR_RELEASE=true")
+                        }
+                    }
+                val signingFailureMessage =
+                    "Release signing config is not fully configured. Missing or invalid inputs: " +
+                        "${missingSigningInputs.joinToString()}. Set RELEASE_KEYSTORE_* for signed releases " +
+                        "or DEBUG_KEYSTORE_* with ALLOW_DEBUG_KEYSTORE_FOR_RELEASE=true for signed testing " +
+                        "release APKs."
+                val isCi =
+                    System.getenv("CI").equals("true", ignoreCase = true) ||
+                        !System.getenv("GITHUB_ACTIONS").isNullOrBlank()
+                if (isCi) {
+                    val appProjectPath = project.path
+                    val releaseOutputTasks = setOf("assembleRelease", "bundleRelease", "packageRelease")
+                    gradle.taskGraph.whenReady {
+                        if (allTasks.any {
+                                it.project.path == appProjectPath &&
+                                    it.name in releaseOutputTasks
+                            }
+                        ) {
+                            throw GradleException(signingFailureMessage)
+                        }
+                    }
+                } else {
+                    println(
+                        "WARNING: $signingFailureMessage " +
+                            "Release APK will use default unsigned output locally.",
+                    )
+                }
             }
             configureAuthForBuildType(expectedHost = "com.synckro")
         }

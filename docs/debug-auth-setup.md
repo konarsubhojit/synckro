@@ -192,8 +192,8 @@ Actions → New repository secret**.
 
 Add each secret listed in the table below.
 
-| Secret name               | Value                                                                 |
-|---------------------------|-----------------------------------------------------------------------|
+| Secret or workflow setting | Value                                                                |
+|----------------------------|----------------------------------------------------------------------|
 | `GOOGLE_WEB_CLIENT_ID`    | The Web OAuth Client ID from Step 2 (e.g. `123….apps.googleusercontent.com`). |
 | `MS_CLIENT_ID`            | The Application (client) ID from Step 3.                             |
 | `MSAL_REDIRECT_URI`       | The full redirect URI from Step 3 (e.g. `msauth://com.synckro.debug/<hash>`). |
@@ -201,12 +201,20 @@ Add each secret listed in the table below.
 | `DEBUG_KEYSTORE_PASSWORD` | The keystore store password (e.g. `android`).                        |
 | `DEBUG_KEY_ALIAS`         | The key alias (e.g. `androiddebugkey`).                              |
 | `DEBUG_KEY_PASSWORD`      | The key password (e.g. `android`; may be the same as the store password). |
+| `ALLOW_DEBUG_KEYSTORE_FOR_RELEASE` | `true` in the testing-release build step. This non-secret opt-in permits signing the internal release APK with the pinned debug key. |
 | `FEEDBACK_EMAIL` *(optional)* | Support inbox used by Settings → About → Send feedback. Leave unset to use an obvious placeholder address in the draft (`feedback@example.com`). |
 
-> All seven secrets are independent — you can add them in any order.  The
-> effects of missing or empty secrets:
-> - Missing keystore secrets → CI falls back to AGP's auto-generated debug
->   keystore (auth will fail for the reasons described at the top of this doc).
+> The seven secrets are independent — you can add them in any order. The
+> `ALLOW_DEBUG_KEYSTORE_FOR_RELEASE` setting is not sensitive and is set
+> directly in `.github/workflows/android-ci.yml`. The effects of missing or
+> empty values:
+> - Missing `DEBUG_KEYSTORE_BASE64` → non-pull-request CI runs fail before the
+>   build with an actionable error because they must produce a signed testing
+>   release APK. Pull requests remain lenient and use AGP's generated debug
+>   keystore when repository secrets are unavailable.
+> - Missing debug keystore credentials or
+>   `ALLOW_DEBUG_KEYSTORE_FOR_RELEASE=true` → testing-release CI builds fail
+>   with a message naming the missing signing inputs.
 > - Missing `MSAL_REDIRECT_URI` **or** `MS_CLIENT_ID` (only one of the two set)
 >   → **`assembleDebug` / `assembleRelease` fail at configuration time** with a
 >   message naming the missing variable and pointing at `docs/login-setup.md`.
@@ -238,11 +246,17 @@ After adding all secrets, trigger a new workflow run:
 2. Wait for the run to succeed.
 3. Download the **`synckro-debug-apk-<run_number>`** and
    **`synckro-testing-release-apk-<run_number>`** artifacts from the run summary.
-4. Install the APK on a device or emulator:
+4. Confirm that the testing-release artifact contains `app-release.apk` and not
+   `app-release-unsigned.apk`, then verify its signature:
+   ```bash
+   apksigner verify --verbose --print-certs app-release.apk
+   ```
+5. Install both APKs on a device or emulator:
    ```bash
    adb install app-debug.apk
+   adb install app-release.apk
    ```
-5. Open the app and attempt to sign in with Google and/or Microsoft.
+6. Open each app and attempt to sign in with Google and/or Microsoft.
    Both should complete successfully without certificate errors.
 
 ---

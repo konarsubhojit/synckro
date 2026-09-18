@@ -137,17 +137,18 @@ step-by-step instructions covering:
 
 ## CI / CD
 
-GitHub Actions builds both the debug APK and a testing-only release APK
-on every push, on pull requests, and on manual dispatch. Each run uploads:
+GitHub Actions builds the debug APK on every push, pull request, and manual
+dispatch. Pushes and manual dispatches also build a testing-only release APK.
+The applicable runs upload:
 
 - `synckro-debug-apk-<run_number>` from `app/build/outputs/apk/debug/`
 - `synckro-testing-release-apk-<run_number>` from `app/build/outputs/apk/release/`
 
-The release APK artifact is for internal/dev testing only. It reuses the same
-`GOOGLE_WEB_CLIENT_ID`, `MS_CLIENT_ID`, `MSAL_REDIRECT_URI`, and
-`DEBUG_KEYSTORE_*` values already used by debug builds when explicitly opted in
-for local testing; production-signed release artifacts are only built by the
-tag-driven workflow below.
+The release APK artifact is for internal/dev testing only. CI signs it with the
+pinned debug keystore by setting `ALLOW_DEBUG_KEYSTORE_FOR_RELEASE=true` and
+reusing the `GOOGLE_WEB_CLIENT_ID`, `MS_CLIENT_ID`, `MSAL_REDIRECT_URI`, and
+`DEBUG_KEYSTORE_*` values used by debug builds. Production-signed release
+artifacts are only built by the tag-driven workflow below.
 
 Version tags matching `v*` run the **Android signed release** workflow, which
 requires `RELEASE_KEYSTORE_*` secrets, builds a signed release AAB with
