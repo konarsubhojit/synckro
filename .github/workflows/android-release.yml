@@ -103,17 +103,66 @@ jobs:
             echo "::notice::RELEASE_KEY_PASSWORD is not set; Gradle will fall back to RELEASE_KEYSTORE_PASSWORD."
           fi
 
-      - name: Decode release keystore
+      - name: Decode and verify release keystore
         env:
           RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+          RELEASE_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
         run: |
+          set -euo pipefail
+
           if [ -z "$RELEASE_KEYSTORE_BASE64" ]; then
             echo "::error::RELEASE_KEYSTORE_BASE64 is not set. See docs/release-signing.md."
             exit 1
           fi
+
+          keystore_path="$RUNNER_TEMP/release.keystore"
+          keytool_log="$RUNNER_TEMP/keytool-verify.log"
           umask 077
-          printf '%s' "$RELEASE_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.keystore"
-          echo "RELEASE_KEYSTORE_PATH=$RUNNER_TEMP/release.keystore" >> "$GITHUB_ENV"
+
+          # Secrets are often pasted with wrapped lines, so strip whitespace before
+          # decoding instead of letting `base64` reject the value.
+          if ! printf '%s' "$RELEASE_KEYSTORE_BASE64" | tr -d '[:space:]' | base64 --decode > "$keystore_path"; then
+            echo "::error::RELEASE_KEYSTORE_BASE64 is not valid base64. Re-create it with 'base64 -w0 <keystore>'. See docs/release-signing.md."
+            exit 1
+          fi
+
+          if [ ! -s "$keystore_path" ]; then
+            echo "::error::RELEASE_KEYSTORE_BASE64 decoded to an empty file. Re-create it with 'base64 -w0 <keystore>'. See docs/release-signing.md."
+            exit 1
+          fi
+
+          # A keystore is binary; pure base64 text here means the secret was encoded twice.
+          if ! LC_ALL=C grep -qs '[^A-Za-z0-9+/=[:space:]]' "$keystore_path"; then
+            echo "::error::RELEASE_KEYSTORE_BASE64 appears to be base64-encoded twice. Store the output of 'base64 -w0 <keystore>' run on the keystore file itself. See docs/release-signing.md."
+            exit 1
+          fi
+
+          # Gradle falls back to the keystore password when no key password is set,
+          # so verify the exact credentials the build will use.
+          key_password="${RELEASE_KEY_PASSWORD:-$RELEASE_KEYSTORE_PASSWORD}"
+          if ! "$JAVA_HOME/bin/keytool" -list \
+            -keystore "$keystore_path" \
+            -storepass "$RELEASE_KEYSTORE_PASSWORD" \
+            -alias "$RELEASE_KEY_ALIAS" < /dev/null > "$keytool_log" 2>&1; then
+            cat "$keytool_log"
+            echo "::error::The decoded release keystore could not be read with RELEASE_KEYSTORE_PASSWORD and RELEASE_KEY_ALIAS. The secret may be truncated, corrupt, or the password/alias may be wrong. See docs/release-signing.md."
+            exit 1
+          fi
+
+          if ! "$JAVA_HOME/bin/keytool" -certreq \
+            -keystore "$keystore_path" \
+            -storepass "$RELEASE_KEYSTORE_PASSWORD" \
+            -alias "$RELEASE_KEY_ALIAS" \
+            -keypass "$key_password" < /dev/null > /dev/null 2>"$keytool_log"; then
+            cat "$keytool_log"
+            echo "::error::The release private key could not be recovered. Set RELEASE_KEY_PASSWORD when the key password differs from RELEASE_KEYSTORE_PASSWORD. See docs/release-signing.md."
+            exit 1
+          fi
+
+          rm -f "$keytool_log"
+          echo "RELEASE_KEYSTORE_PATH=$keystore_path" >> "$GITHUB_ENV"
 
       - name: Derive release MSAL redirect URI
         env:
@@ -254,4 +303,6 @@ jobs:
 
       - name: Shred release keystore
         if: always()
-        run: shred -u "$RUNNER_TEMP/release.keystore" 2>/dev/null || rm -f "$RUNNER_TEMP/release.keystore"
+        run: |
+          shred -u "$RUNNER_TEMP/release.keystore" 2>/dev/null || rm -f "$RUNNER_TEMP/release.keystore"
+          rm -f "$RUNNER_TEMP/keytool-verify.log"
