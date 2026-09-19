@@ -63,8 +63,44 @@ Configure these repository secrets under
 
 The Gradle build keeps a path-based contract: it reads
 `RELEASE_KEYSTORE_PATH`, not the base64 secret. The release workflow decodes
-`RELEASE_KEYSTORE_BASE64` into `$RUNNER_TEMP/release.keystore` and exports
-`RELEASE_KEYSTORE_PATH` for `bundleRelease assembleRelease`.
+`RELEASE_KEYSTORE_BASE64` into `$RUNNER_TEMP/release.keystore`, verifies that the
+decoded keystore can be opened with `RELEASE_KEYSTORE_PASSWORD` /
+`RELEASE_KEY_ALIAS` and that the private key can be recovered with the effective
+key password, and only then exports `RELEASE_KEYSTORE_PATH` for
+`bundleRelease assembleRelease`.
+
+## Troubleshooting
+
+If the release job fails in `:app:packageRelease` with
+
+```
+com.android.ide.common.signing.KeytoolException: Failed to read key *** from store "...": null
+```
+
+the decoded keystore is not readable at all — the `null` cause is an
+`EOFException` raised while loading it. That means `RELEASE_KEYSTORE_BASE64`
+holds something other than a complete keystore, most often because it was
+truncated when pasted or because the value was base64-encoded twice. Re-create
+the secret from the keystore file:
+
+```bash
+base64 -w0 synckro-release.p12 > synckro-release.p12.b64
+```
+
+then paste the whole contents of `synckro-release.p12.b64` (never the output of
+`base64 -w0 synckro-release.p12.b64`) into the secret. The workflow tolerates
+wrapped lines, but the value must decode to the keystore itself.
+
+Verify the secret locally before updating it:
+
+```bash
+base64 -d synckro-release.p12.b64 > /tmp/release.keystore
+keytool -list -keystore /tmp/release.keystore -alias synckro-release
+```
+
+When the key password differs from the keystore password, set
+`RELEASE_KEY_PASSWORD`; otherwise the workflow's key-recovery check fails with
+`Cannot recover key`.
 
 ## OAuth registrations for the release key
 
@@ -115,6 +151,7 @@ A final `if: always()` cleanup step runs:
 
 ```bash
 shred -u "$RUNNER_TEMP/release.keystore" 2>/dev/null || rm -f "$RUNNER_TEMP/release.keystore"
+rm -f "$RUNNER_TEMP/keytool-verify.log"
 ```
 
 This cleanup runs even when the build, verification, or release publishing step
