@@ -281,9 +281,11 @@ private fun PermissionsPage(activity: ComponentActivity) {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                     notificationLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
                 } else {
-                    activity.startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
-                        putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
-                    })
+                    activity.startActivity(
+                        Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                            putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                        },
+                    )
                 }
             },
             modifier = Modifier.fillMaxWidth(),
