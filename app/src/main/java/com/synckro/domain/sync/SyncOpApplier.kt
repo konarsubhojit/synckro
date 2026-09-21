@@ -66,6 +66,31 @@ interface LocalFileAccess {
     ): LocalFileStat
 
     /**
+     * Writes [content] to a temporary sibling of [relativePath]. Callers must
+     * verify the temporary file and then either [commitTemporaryWrite] or
+     * [delete] [PendingLocalWrite.tempRelativePath].
+     */
+    fun writeTemporary(
+        relativePath: String,
+        content: InputStream,
+        mimeType: String?,
+    ): PendingLocalWrite {
+        val tempPath = "$relativePath.synckro-download-${System.nanoTime()}.tmp"
+        val stat = write(tempPath, content, mimeType)
+        return PendingLocalWrite(tempPath, stat)
+    }
+
+    /**
+     * Promotes a previously written temporary file into its final destination.
+     *
+     * Implementations should use the most atomic replace primitive available.
+     */
+    fun commitTemporaryWrite(
+        pending: PendingLocalWrite,
+        relativePath: String,
+    ): LocalFileStat = move(pending.tempRelativePath, relativePath) ?: error("Temporary file missing: ${pending.tempRelativePath}")
+
+    /**
      * Deletes the local file at [relativePath].
      *
      * @return `true` if the file existed and was deleted, `false` if it did not exist.
@@ -120,6 +145,11 @@ data class LocalFileStat(
     val sizeBytes: Long,
     val mtimeMs: Long,
     val mimeType: String? = null,
+)
+
+data class PendingLocalWrite(
+    val tempRelativePath: String,
+    val stat: LocalFileStat,
 )
 
 /**
@@ -791,6 +821,7 @@ class SyncOpApplier(
                     mimeType = stat.mimeType,
                 )
             }
+        val localHash = computeLocalProviderHash(pair, op.relativePath, "upload_new")
         if (retried) {
             eventRepository.log(
                 pair.id,
@@ -805,7 +836,7 @@ class SyncOpApplier(
                 relativePath = op.relativePath,
                 sizeBytes = stat.sizeBytes,
                 mtimeMs = stat.mtimeMs,
-                contentHash = null,
+                contentHash = localHash,
                 remoteId = remote.id,
                 remoteSizeBytes = remote.size,
                 remoteMtimeMs = remote.lastModifiedMs,
@@ -817,6 +848,7 @@ class SyncOpApplier(
             relativePath = op.relativePath,
             uploadedStat = stat,
             remote = remote,
+            localContentHash = localHash,
             entry = uploadedEntry,
             cleanupMutation = { discardUploadedRemote(remote.id, uploadedEntry) },
         )
@@ -832,12 +864,13 @@ class SyncOpApplier(
         val stat =
             withRetry(onRetry = { _, _ -> retried = true }) {
                 val stream = provider.download(remote.id)
-                localFileAccess.write(
+                localFileAccess.writeTemporary(
                     op.relativePath,
                     ProgressInputStream(stream, onBytesTransferred),
                     remote.mimeType,
                 )
             }
+        val (committedStat, localHash) = verifyAndCommitDownload(pair, op.relativePath, stat, remote, "download_new")
         if (retried) {
             eventRepository.log(
                 pair.id,
@@ -850,9 +883,9 @@ class SyncOpApplier(
             LocalIndexEntity(
                 pairId = pair.id,
                 relativePath = op.relativePath,
-                sizeBytes = stat.sizeBytes,
-                mtimeMs = stat.mtimeMs,
-                contentHash = null,
+                sizeBytes = committedStat.sizeBytes,
+                mtimeMs = committedStat.mtimeMs,
+                contentHash = localHash,
                 remoteId = remote.id,
                 remoteSizeBytes = remote.size,
                 remoteMtimeMs = remote.lastModifiedMs,
@@ -887,6 +920,7 @@ class SyncOpApplier(
                     mimeType = stat.mimeType,
                 )
             }
+        val localHash = computeLocalProviderHash(pair, op.relativePath, "update_remote")
         if (retried) {
             eventRepository.log(
                 pair.id,
@@ -900,11 +934,12 @@ class SyncOpApplier(
             relativePath = op.relativePath,
             uploadedStat = stat,
             remote = remote,
+            localContentHash = localHash,
             entry =
                 index.copy(
                     sizeBytes = stat.sizeBytes,
                     mtimeMs = stat.mtimeMs,
-                    contentHash = null,
+                    contentHash = localHash,
                     remoteId = remote.id,
                     remoteSizeBytes = remote.size,
                     remoteMtimeMs = remote.lastModifiedMs,
@@ -925,12 +960,13 @@ class SyncOpApplier(
         val stat =
             withRetry(onRetry = { _, _ -> retried = true }) {
                 val stream = provider.download(remote.id)
-                localFileAccess.write(
+                localFileAccess.writeTemporary(
                     op.relativePath,
                     ProgressInputStream(stream, onBytesTransferred),
                     remote.mimeType,
                 )
             }
+        val (committedStat, localHash) = verifyAndCommitDownload(pair, op.relativePath, stat, remote, "update_local")
         if (retried) {
             eventRepository.log(
                 pair.id,
@@ -943,9 +979,9 @@ class SyncOpApplier(
             LocalIndexEntity(
                 pairId = pair.id,
                 relativePath = op.relativePath,
-                sizeBytes = stat.sizeBytes,
-                mtimeMs = stat.mtimeMs,
-                contentHash = null,
+                sizeBytes = committedStat.sizeBytes,
+                mtimeMs = committedStat.mtimeMs,
+                contentHash = localHash,
                 remoteId = remote.id,
                 remoteSizeBytes = remote.size,
                 remoteMtimeMs = remote.lastModifiedMs,
@@ -1045,6 +1081,7 @@ class SyncOpApplier(
                     mimeType = stat.mimeType,
                 )
             }
+        val localHash = computeLocalProviderHash(pair, op.relativePath, "move_remote")
         if (retried) {
             eventRepository.log(
                 pair.id,
@@ -1059,7 +1096,7 @@ class SyncOpApplier(
                 relativePath = op.relativePath,
                 sizeBytes = stat.sizeBytes,
                 mtimeMs = stat.mtimeMs,
-                contentHash = null,
+                contentHash = localHash,
                 remoteId = remote.id,
                 remoteSizeBytes = remote.size,
                 remoteMtimeMs = remote.lastModifiedMs,
@@ -1071,6 +1108,7 @@ class SyncOpApplier(
             relativePath = op.relativePath,
             uploadedStat = stat,
             remote = remote,
+            localContentHash = localHash,
             entry = movedEntry,
             cleanupMutation = { discardUploadedRemote(remote.id, movedEntry) },
         )
@@ -1138,6 +1176,7 @@ class SyncOpApplier(
                                 mimeType = stat.mimeType,
                             )
                         }
+                    val localHash = computeLocalProviderHash(pair, op.relativePath, "conflict_local_wins")
                     if (retried) {
                         eventRepository.log(
                             pair.id,
@@ -1151,11 +1190,12 @@ class SyncOpApplier(
                         relativePath = op.relativePath,
                         uploadedStat = stat,
                         remote = updatedRemote,
+                        localContentHash = localHash,
                         entry =
                             index.copy(
                                 sizeBytes = stat.sizeBytes,
                                 mtimeMs = stat.mtimeMs,
-                                contentHash = null,
+                                contentHash = localHash,
                                 remoteId = updatedRemote.id,
                                 remoteSizeBytes = updatedRemote.size,
                                 remoteMtimeMs = updatedRemote.lastModifiedMs,
@@ -1204,8 +1244,10 @@ class SyncOpApplier(
                     val stat =
                         withRetry(onRetry = { _, _ -> retried = true }) {
                             val stream = provider.download(remote.id)
-                            localFileAccess.write(op.relativePath, stream, remote.mimeType)
+                            localFileAccess.writeTemporary(op.relativePath, stream, remote.mimeType)
                         }
+                    val (committedStat, localHash) =
+                        verifyAndCommitDownload(pair, op.relativePath, stat, remote, "conflict_remote_wins")
                     if (retried) {
                         eventRepository.log(
                             pair.id,
@@ -1218,9 +1260,9 @@ class SyncOpApplier(
                         LocalIndexEntity(
                             pairId = pair.id,
                             relativePath = op.relativePath,
-                            sizeBytes = stat.sizeBytes,
-                            mtimeMs = stat.mtimeMs,
-                            contentHash = null,
+                            sizeBytes = committedStat.sizeBytes,
+                            mtimeMs = committedStat.mtimeMs,
+                            contentHash = localHash,
                             remoteId = remote.id,
                             remoteSizeBytes = remote.size,
                             remoteMtimeMs = remote.lastModifiedMs,
@@ -1264,6 +1306,7 @@ class SyncOpApplier(
         relativePath: String,
         uploadedStat: LocalFileStat,
         remote: RemoteFile,
+        localContentHash: String?,
         entry: LocalIndexEntity,
         cleanupMutation: suspend () -> Unit,
     ) {
@@ -1286,7 +1329,62 @@ class SyncOpApplier(
                 },
             )
         }
+        verifyUploadedHash(pair, relativePath, localContentHash, remote, cleanupMutation)
         localIndexDao.upsertSyncedRemoteState(entry)
+    }
+
+    private suspend fun computeLocalProviderHash(
+        pair: SyncPair,
+        relativePath: String,
+        op: String,
+    ): String? {
+        val stream = localFileAccess.openRead(relativePath) ?: return null
+        val hash = provider.computeContentHash(stream)
+        if (hash == null) {
+            eventRepository.log(pair.id, SyncEventLevel.DEBUG, SyncEventTag.OP_APPLIER, "$op hash verification skipped: local hash unavailable")
+        }
+        return hash
+    }
+
+    private suspend fun verifyUploadedHash(
+        pair: SyncPair,
+        relativePath: String,
+        localHash: String?,
+        remote: RemoteFile,
+        cleanupMutation: suspend () -> Unit,
+    ) {
+        val remoteHash = remote.contentHash
+        if (localHash == null || remoteHash == null) {
+            eventRepository.log(
+                pair.id,
+                SyncEventLevel.DEBUG,
+                SyncEventTag.OP_APPLIER,
+                "upload hash verification skipped: provider hash unavailable",
+            )
+            return
+        }
+        if (!localHash.equals(remoteHash, ignoreCase = true)) {
+            cleanUpMutatedUpload(pair, cleanupMutation)
+            throw TransferHashMismatchException("Upload hash mismatch for $relativePath")
+        }
+    }
+
+    private suspend fun verifyAndCommitDownload(
+        pair: SyncPair,
+        relativePath: String,
+        pending: PendingLocalWrite,
+        remote: RemoteFile,
+        op: String,
+    ): Pair<LocalFileStat, String?> {
+        val remoteHash = remote.contentHash
+        val localHash = localFileAccess.openRead(pending.tempRelativePath)?.let { provider.computeContentHash(it) }
+        if (localHash == null || remoteHash == null) {
+            eventRepository.log(pair.id, SyncEventLevel.DEBUG, SyncEventTag.OP_APPLIER, "$op hash verification skipped: provider hash unavailable")
+        } else if (!localHash.equals(remoteHash, ignoreCase = true)) {
+            localFileAccess.delete(pending.tempRelativePath)
+            throw TransferHashMismatchException("Download hash mismatch for $relativePath")
+        }
+        return localFileAccess.commitTemporaryWrite(pending, relativePath) to localHash
     }
 
     /**
@@ -1372,6 +1470,10 @@ class SyncOpApplier(
     }
 
     private class LocalFileChangedDuringUploadException(
+        message: String,
+    ) : Exception(message)
+
+    private class TransferHashMismatchException(
         message: String,
     ) : Exception(message)
 

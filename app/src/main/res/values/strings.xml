@@ -12,6 +12,17 @@
     <string name="onboarding_page2_body">Sign in to Google Drive or OneDrive. You can connect more than one account.</string>
     <string name="onboarding_page3_title">Pick your first folders</string>
     <string name="onboarding_page3_body">Choose a local folder on your device and a cloud folder to keep in sync. You can add more pairs anytime.</string>
+    <string name="onboarding_permissions_title">Set up helpful permissions</string>
+    <string name="onboarding_permissions_body">Synckro asks one thing at a time. Notifications show sync progress and warnings; folder access is requested later only for the folder you choose.</string>
+    <string name="onboarding_permissions_notifications_cta">Allow sync notifications</string>
+    <string name="onboarding_battery_title">Keep background sync reliable</string>
+    <string name="onboarding_battery_oem_title">%1$s may limit background work</string>
+    <string name="onboarding_battery_body">For Instant Sync to survive, allow Synckro to run in the background or exclude it from battery optimisation in Android settings.</string>
+    <string name="onboarding_battery_cta">Open app settings</string>
+    <string name="onboarding_preview_title">Preview before anything moves</string>
+    <string name="onboarding_preview_body">After you create the first pair, run a dry-run preview to see uploads, downloads, and conflicts before the first transfer.</string>
+    <string name="onboarding_preview_step_title">Dry-run plan</string>
+    <string name="onboarding_preview_step_body">Synckro enumerates both sides and shows what would happen without changing either folder.</string>
 
     <!-- Home -->
     <string name="home_title">Sync pairs</string>

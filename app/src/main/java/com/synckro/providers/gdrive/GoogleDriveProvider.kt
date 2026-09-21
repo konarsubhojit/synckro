@@ -10,6 +10,7 @@ import com.synckro.domain.provider.RemoteFile
 import com.synckro.domain.provider.StorageQuota
 import timber.log.Timber
 import java.io.InputStream
+import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -34,6 +35,18 @@ class GoogleDriveProvider
         private val interactiveSignInFailureThreshold: Int = INTERACTIVE_SIGNIN_FAILURE_THRESHOLD,
     ) : CloudProvider {
         override val displayName: String = "Google Drive"
+
+        override fun computeContentHash(content: InputStream): String =
+            content.use { stream ->
+                val digest = MessageDigest.getInstance("MD5")
+                val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                while (true) {
+                    val read = stream.read(buffer)
+                    if (read < 0) break
+                    digest.update(buffer, 0, read)
+                }
+                digest.digest().joinToString(separator = "") { "%02x".format(it) }
+            }
 
         /**
          * Cached access token from the last successful [ensureAuthenticated] call.

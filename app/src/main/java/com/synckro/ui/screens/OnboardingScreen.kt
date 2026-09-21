@@ -1,6 +1,13 @@
 package com.synckro.ui.screens
 
+import android.Manifest
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.provider.Settings
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -21,7 +28,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
+import androidx.compose.material.icons.filled.BatteryFull
 import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Preview
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -42,6 +52,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -53,14 +64,16 @@ import com.synckro.ui.auth.ActivityAuthUiHost
 import com.synckro.ui.screens.accounts.AccountsViewModel
 import kotlinx.coroutines.launch
 
-private const val ONBOARDING_PAGE_COUNT = 3
+private const val ONBOARDING_PAGE_COUNT = 5
 
 /**
  * Multi-step onboarding pager shown on the user's first launch. Guides them
- * through three pages:
+ * through five pages:
  * 1. **Welcome** – what Synckro does (condensed).
- * 2. **Connect an account** – live provider-connect buttons via [AccountsViewModel].
- * 3. **Pick your first folders** – primary CTA navigates to the pair editor.
+ * 2. **Permissions** – explains notifications and battery settings before prompting.
+ * 3. **Connect an account** – live provider-connect buttons via [AccountsViewModel].
+ * 4. **Pick your first folders** – primary CTA navigates to the pair editor.
+ * 5. **Preview** – explains that the first pair flow ends with a dry-run plan.
  *
  * A **Skip** action (top-right) and the final-page CTA both invoke
  * [onCreateFirstSyncPair] / [onSkip] so the host ([SynckroNavHost]) can mark
@@ -111,7 +124,8 @@ fun OnboardingScreen(
             ) { page ->
                 when (page) {
                     0 -> WelcomePage()
-                    1 ->
+                    1 -> PermissionsPage(activity = activity)
+                    2 ->
                         ConnectPage(
                             rows = accountsState.rows,
                             onConnect = { providerKey ->
@@ -120,7 +134,8 @@ fun OnboardingScreen(
                                 }
                             },
                         )
-                    2 -> FirstPairPage()
+                    3 -> FirstPairPage()
+                    4 -> PreviewPage()
                 }
             }
 
@@ -218,6 +233,103 @@ private fun WelcomePage() {
                 title = stringResource(R.string.onboarding_step3_title),
                 body = stringResource(R.string.onboarding_step3_body),
             )
+        }
+    }
+}
+
+@Composable
+private fun PermissionsPage(activity: ComponentActivity) {
+    val context = LocalContext.current
+    val notificationLauncher =
+        rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
+            // The wizard stays skippable; denial is handled by continuing without progress notifications.
+        }
+    val manufacturer = Build.MANUFACTURER.orEmpty()
+    val needsOemGuidance =
+        listOf("xiaomi", "samsung", "oneplus", "huawei")
+            .any { manufacturer.contains(it, ignoreCase = true) }
+
+    Column(
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 24.dp, vertical = 32.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Icon(
+            imageVector = Icons.Default.Notifications,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(56.dp),
+        )
+        Text(
+            text = stringResource(R.string.onboarding_permissions_title),
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center,
+        )
+        Text(
+            text = stringResource(R.string.onboarding_permissions_body),
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+        )
+        Button(
+            onClick = {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    notificationLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                } else {
+                    activity.startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                        putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                    })
+                }
+            },
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text(stringResource(R.string.onboarding_permissions_notifications_cta))
+        }
+
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            color = MaterialTheme.colorScheme.surfaceVariant,
+            shape = MaterialTheme.shapes.medium,
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.BatteryFull, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                    Text(
+                        text =
+                            if (needsOemGuidance) {
+                                stringResource(R.string.onboarding_battery_oem_title, manufacturer)
+                            } else {
+                                stringResource(R.string.onboarding_battery_title)
+                            },
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
+                Text(
+                    text = stringResource(R.string.onboarding_battery_body),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                TextButton(
+                    onClick = {
+                        val intent =
+                            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                data = Uri.parse("package:${context.packageName}")
+                            }
+                        activity.startActivity(intent)
+                    },
+                ) {
+                    Text(stringResource(R.string.onboarding_battery_cta))
+                }
+            }
         }
     }
 }
@@ -334,6 +446,44 @@ private fun FirstPairPage() {
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
+        )
+    }
+}
+
+@Composable
+private fun PreviewPage() {
+    Column(
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 24.dp, vertical = 32.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Icon(
+            imageVector = Icons.Default.Preview,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(64.dp),
+        )
+        Text(
+            text = stringResource(R.string.onboarding_preview_title),
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center,
+        )
+        Text(
+            text = stringResource(R.string.onboarding_preview_body),
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+        )
+        OnboardingStep(
+            stepNumber = 4,
+            icon = Icons.Default.Preview,
+            title = stringResource(R.string.onboarding_preview_step_title),
+            body = stringResource(R.string.onboarding_preview_step_body),
         )
     }
 }

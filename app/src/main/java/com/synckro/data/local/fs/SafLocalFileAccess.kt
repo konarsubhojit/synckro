@@ -12,6 +12,7 @@ import com.synckro.domain.sync.LocalFileStat
 import dagger.hilt.android.qualifiers.ApplicationContext
 import timber.log.Timber
 import java.io.InputStream
+import java.util.UUID
 import javax.inject.Inject
 
 /**
@@ -110,6 +111,48 @@ internal class SafLocalFileAccess(
             mtimeMs = updatedDoc?.lastModifiedMs ?: System.currentTimeMillis(),
             mimeType = updatedDoc?.mimeType ?: mimeType,
         )
+    }
+
+    override fun writeTemporary(
+        relativePath: String,
+        content: InputStream,
+        mimeType: String?,
+    ): com.synckro.domain.sync.PendingLocalWrite {
+        val segments = relativePath.split('/').filter { it.isNotEmpty() }
+        require(segments.isNotEmpty()) { "SafLocalFileAccess: relativePath must not be empty" }
+        val tempName = ".${segments.last()}.synckro-${UUID.randomUUID()}.tmp"
+        val tempPath = (segments.dropLast(1) + tempName).joinToString("/")
+        val stat = write(tempPath, content, mimeType)
+        return com.synckro.domain.sync.PendingLocalWrite(tempPath, stat)
+    }
+
+    override fun commitTemporaryWrite(
+        pending: com.synckro.domain.sync.PendingLocalWrite,
+        relativePath: String,
+    ): LocalFileStat {
+        val tempDocId = findDocId(pending.tempRelativePath) ?: error("SafLocalFileAccess: temp file missing '${pending.tempRelativePath}'")
+        val segments = relativePath.split('/').filter { it.isNotEmpty() }
+        require(segments.isNotEmpty()) { "SafLocalFileAccess: relativePath must not be empty" }
+        var parentDocId = DocumentsContract.getTreeDocumentId(treeUri)
+        for (dirName in segments.dropLast(1)) {
+            parentDocId =
+                listChildren(parentDocId)
+                    .find { it.name == dirName && it.mimeType == DocumentsContract.Document.MIME_TYPE_DIR }
+                    ?.docId
+                    ?: error("SafLocalFileAccess: parent directory missing '$dirName'")
+        }
+        listChildren(parentDocId)
+            .find { it.name == segments.last() }
+            ?.let { existing ->
+                DocumentsContract.deleteDocument(
+                    resolver,
+                    DocumentsContract.buildDocumentUriUsingTree(treeUri, existing.docId),
+                )
+            }
+        val tempUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, tempDocId)
+        DocumentsContract.renameDocument(resolver, tempUri, segments.last())
+            ?: error("SafLocalFileAccess: failed to promote temp file for '$relativePath'")
+        return stat(relativePath) ?: pending.stat
     }
 
     override fun delete(relativePath: String): Boolean {

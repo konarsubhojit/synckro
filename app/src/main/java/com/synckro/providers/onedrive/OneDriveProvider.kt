@@ -35,6 +35,8 @@ class OneDriveProvider
     ) : CloudProvider {
         override val displayName: String = "OneDrive"
 
+        override fun computeContentHash(content: InputStream): String = OneDriveQuickXorHash.compute(content)
+
         /**
          * Cached access token from the last successful [ensureAuthenticated] call.
          * Cleared whenever a new token is acquired.
@@ -362,6 +364,39 @@ class OneDriveProviderFactory
                 OneDriveProvider(accountId = it, authManager = authManager, graphClient = graphClient)
             }
     }
+
+private object OneDriveQuickXorHash {
+    private const val HASH_BITS = 160
+    private const val HASH_BYTES = HASH_BITS / 8
+    private const val SHIFT = 11
+
+    fun compute(content: InputStream): String =
+        content.use { stream ->
+            val hash = ByteArray(HASH_BYTES)
+            val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+            var length = 0L
+            while (true) {
+                val read = stream.read(buffer)
+                if (read < 0) break
+                for (offset in 0 until read) {
+                    val value = buffer[offset].toInt() and 0xff
+                    for (bit in 0 until 8) {
+                        if ((value and (1 shl bit)) != 0) {
+                            val hashBit = (((length * SHIFT) + bit) % HASH_BITS).toInt()
+                            hash[hashBit / 8] = (hash[hashBit / 8].toInt() xor (1 shl (hashBit % 8))).toByte()
+                        }
+                    }
+                    length++
+                }
+            }
+            var remaining = length
+            for (i in 0 until Long.SIZE_BYTES) {
+                hash[HASH_BYTES - 1 - i] = (hash[HASH_BYTES - 1 - i].toInt() xor (remaining and 0xff).toInt()).toByte()
+                remaining = remaining ushr 8
+            }
+            android.util.Base64.encodeToString(hash, android.util.Base64.NO_WRAP)
+        }
+}
 
 // ---------------------------------------------------------------------------
 // Extension: map GraphDriveItem → RemoteFile
