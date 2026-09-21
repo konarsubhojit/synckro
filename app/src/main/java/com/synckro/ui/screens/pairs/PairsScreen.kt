@@ -839,9 +839,10 @@ private fun SyncPairRow(
                     SyncProgressRows(
                         progress = progress,
                         syncingLabel = syncingLabel,
-                        // Per-file active transfer rows now live in the Status
-                        // screen's Sync status card; keep this card compact.
-                        showActiveTransfers = false,
+                        // Show the single most relevant in-flight transfer here to
+                        // keep this card compact; the full aggregated list lives on
+                        // the Status screen's Sync status card.
+                        maxActiveTransfers = 1,
                     )
                 }
 

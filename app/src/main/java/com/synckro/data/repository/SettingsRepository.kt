@@ -440,6 +440,26 @@ class SettingsRepository
             dataStore.edit { it[KEY_LOG_RETENTION_DAYS] = days }
         }
 
+        /**
+         * Emits `true` when the user has opted in to "Show technical details" mode.
+         *
+         * By default (`false`) the Sync history tab shows only plain-language,
+         * actionable copy produced by the event-to-copy mapper — raw Instant Sync
+         * taxonomy strings, tags, and reasons never reach the UI. When enabled,
+         * the Sync history list falls back to showing the raw [com.synckro.domain.model.SyncEvent.message]
+         * and tag for every persisted event, for technical users who want the
+         * unfiltered detail without leaving the app. Either way, every event is
+         * still persisted to the `sync_event` table and included verbatim in
+         * [com.synckro.util.logging.LogExporter] output.
+         */
+        val showTechnicalDetails: Flow<Boolean> =
+            dataStore.data.map { it[KEY_SHOW_TECHNICAL_DETAILS] ?: false }
+
+        /** Persists the "Show technical details" opt-in preference. */
+        suspend fun setShowTechnicalDetails(enabled: Boolean) {
+            dataStore.edit { it[KEY_SHOW_TECHNICAL_DETAILS] = enabled }
+        }
+
         // -------------------------------------------------------------------------
         // Status surface dismissals
         // -------------------------------------------------------------------------
@@ -538,6 +558,7 @@ class SettingsRepository
             internal val KEY_BIOMETRIC_APP_LOCK_ENABLED = booleanPreferencesKey("biometric_app_lock_enabled")
 
             internal val KEY_LOG_RETENTION_DAYS = intPreferencesKey("log_retention_days")
+            internal val KEY_SHOW_TECHNICAL_DETAILS = booleanPreferencesKey("show_technical_details")
 
             internal val KEY_ONBOARDING_COMPLETED_AT_MS = longPreferencesKey("onboarding_completed_at_ms")
             internal val KEY_SEEN_TOOLTIPS = stringSetPreferencesKey("seen_tooltips")

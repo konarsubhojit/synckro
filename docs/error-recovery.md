@@ -170,6 +170,12 @@ from:
 - **Pair Detail** screen → **Logs** section.
 - **Home screen** bottom sheet for a pair in an error state.
 
+By default the log shows short, plain-language messages (e.g. "Watching your
+folder for changes", "Lost access to your folder. Tap to choose it again.")
+instead of internal taxonomy identifiers, reason codes, or pair IDs. Enable
+**Settings → "Show technical details"** to see the raw per-event tag, level,
+and message text inline instead.
+
 The log supports **level filtering** (Info / Warning / Error) and **tag
 filtering** (Upload / Download / Conflict / Auth / etc.) to isolate the
 relevant entries quickly.
@@ -179,6 +185,11 @@ relevant entries quickly.
 1. Open **Settings → Debug → Export logs**.
 2. Choose whether to redact file paths and account IDs in the export.
 3. Share the exported file with the development team.
+
+The export always contains the full raw technical record regardless of the
+"Show technical details" toggle above — it is the single source of technical
+truth and is unaffected by the plain-language simplification in the on-screen
+list.
 
 Log retention is configurable under **Settings → Sync → Log retention period**
 (default: 30 days). Entries older than the retention period are pruned

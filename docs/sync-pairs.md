@@ -194,8 +194,28 @@ The **Pair Detail** screen shows:
 |:-----|:------------|
 | **Last synced** | Timestamp of the most recently completed sync run. |
 | **Last result** | `SUCCESS`, `PARTIAL_FAILURE`, or `FAILURE`. |
-| **Sync log** | Filterable per-pair log of every sync event (uploads, downloads, skips, errors). |
-| **Progress** | While a sync is in progress, per-file transfer rows show the current file name and direction. |
+| **Sync log** | Plain-language history of what happened, written for a non-technical reader (see below). |
+| **Progress** | While a sync is in progress, per-file transfer rows show the file name (last path segment only), upload/download direction, bytes transferred vs. total, percent complete, and — once the transfer rate stabilizes — a smoothed transfer speed and estimated time remaining. The Pairs screen card shows the single most relevant in-flight transfer; the Status screen aggregates one row per syncing pair. |
+
+### Two-tier detail: plain language in the app, full detail in the export
+
+Synckro's Sync history is deliberately **two-tier**:
+
+- **In the app (default view)**, every event is translated into short, actionable,
+  plain-language copy by `EventCopyMapper` (e.g. "Watching your folder for changes",
+  "Lost access to your folder. Tap to choose it again."). Internal taxonomy
+  identifiers (like `instant.watch.unavailable`), reason codes (like
+  `saf_access_lost`), and pair IDs are never shown. Events with no sensible
+  plain-language translation are simply omitted from this view rather than shown
+  raw.
+- **Settings → "Show technical details"** lets a technical user opt back into the
+  raw per-event tag, level, and message text inline in the Sync history list, for
+  on-device troubleshooting.
+- **The log export** (Settings → Export logs) is unaffected by either view and
+  always contains the complete, unfiltered technical record — every event, at
+  every level and tag, with its raw taxonomy string, reason, and pair ID. This is
+  the single source of technical truth and is what should be attached to bug
+  reports.
 
 For failure diagnosis and recovery steps, see
 **[docs/error-recovery.md](error-recovery.md)**.

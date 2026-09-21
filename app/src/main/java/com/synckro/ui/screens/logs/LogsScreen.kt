@@ -89,6 +89,7 @@ import com.synckro.ui.components.EmptyState
 import com.synckro.ui.components.ErrorState
 import com.synckro.ui.components.LoadingState
 import com.synckro.ui.theme.SynckroTheme
+import com.synckro.util.logging.EventCopyMapper
 import com.synckro.util.logging.LogExportConfig
 import com.synckro.util.logging.LogExportSink
 import com.synckro.util.logging.LogVisibilityConfig
@@ -450,6 +451,7 @@ fun LogsTabContent(
                         SyncHistoryRow(
                             event = event,
                             dateFormat = dateFormat,
+                            showTechnicalDetails = state.showTechnicalDetails,
                             onLongPress = { onRowLongPress(event) },
                         )
                     }
@@ -471,6 +473,7 @@ fun LogsTabContent(
 private fun SyncHistoryRow(
     event: SyncEvent,
     dateFormat: SimpleDateFormat,
+    showTechnicalDetails: Boolean = true,
     onLongPress: () -> Unit = {},
 ) {
     var expanded by rememberSaveable(event.id) { mutableStateOf(false) }
@@ -483,6 +486,16 @@ private fun SyncHistoryRow(
     val collapseLabel = stringResource(R.string.logs_history_collapse)
     val rowStateLabel = if (expanded) collapseLabel else expandLabel
 
+    // Plain-language mode: no raw taxonomy, tag, or expandable technical detail — just the
+    // mapped copy. See EventCopyMapper and Settings > "Show technical details".
+    val copy = remember(event) { EventCopyMapper.map(event) }
+    val displayMessage =
+        if (showTechnicalDetails) {
+            event.message
+        } else {
+            copy?.let { stringResource(it.resId, *it.args.toTypedArray()) } ?: event.message
+        }
+
     Card(
         modifier =
             Modifier
@@ -490,11 +503,11 @@ private fun SyncHistoryRow(
                 .heightIn(min = 48.dp)
                 .animateContentSize()
                 .combinedClickable(
-                    onClick = { expanded = !expanded },
+                    onClick = { if (showTechnicalDetails) expanded = !expanded },
                     onLongClick = onLongPress,
                 )
                 .semantics {
-                    stateDescription = rowStateLabel
+                    if (showTechnicalDetails) stateDescription = rowStateLabel
                 },
         colors =
             CardDefaults.cardColors(
@@ -535,21 +548,23 @@ private fun SyncHistoryRow(
                 modifier = Modifier.weight(1f),
             ) {
                 Text(
-                    text = event.message,
+                    text = displayMessage,
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.onSurface,
                     maxLines = if (expanded) Int.MAX_VALUE else 2,
                     overflow = TextOverflow.Ellipsis,
                 )
-                Spacer(Modifier.height(2.dp))
-                Text(
-                    text = event.tag,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                if (showTechnicalDetails) {
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        text = event.tag,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
 
             Spacer(Modifier.width(8.dp))
@@ -565,16 +580,18 @@ private fun SyncHistoryRow(
                     textAlign = TextAlign.End,
                     maxLines = 1,
                 )
-                Icon(
-                    imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(18.dp),
-                )
+                if (showTechnicalDetails) {
+                    Icon(
+                        imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
             }
         }
 
-        if (expanded) {
+        if (showTechnicalDetails && expanded) {
             SyncHistoryRowDetails(
                 event = event,
                 dateFormat = dateFormat,

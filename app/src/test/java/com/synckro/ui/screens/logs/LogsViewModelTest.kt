@@ -4,6 +4,7 @@ import androidx.lifecycle.SavedStateHandle
 import com.synckro.data.local.dao.SyncPairDao
 import com.synckro.data.local.entity.SyncPairEntity
 import com.synckro.data.repository.AccountRepository
+import com.synckro.data.repository.SettingsRepository
 import com.synckro.data.repository.SyncEventRepository
 import com.synckro.domain.model.SyncEvent
 import com.synckro.domain.model.SyncEventLevel
@@ -18,6 +19,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -42,6 +44,7 @@ class LogsViewModelTest {
     private lateinit var pairsFlow: MutableStateFlow<List<SyncPairEntity>>
     private lateinit var syncEventRepository: SyncEventRepository
     private lateinit var logExporter: LogExporter
+    private lateinit var settingsRepository: SettingsRepository
     private lateinit var accountRepository: AccountRepository
     private lateinit var syncPairDao: SyncPairDao
 
@@ -52,6 +55,12 @@ class LogsViewModelTest {
         pairsFlow = MutableStateFlow(emptyList())
         syncEventRepository = mockk(relaxed = true)
         logExporter = mockk(relaxed = true)
+        settingsRepository =
+            mockk(relaxed = true) {
+                // Defaults to the pre-existing behavior (raw events) for tests that
+                // don't specifically exercise plain-language filtering.
+                every { showTechnicalDetails } returns flowOf(true)
+            }
         accountRepository = mockk(relaxed = true)
         syncPairDao = mockk(relaxed = true)
         every { syncEventRepository.observeAll(any()) } returns eventsFlow
@@ -70,6 +79,7 @@ class LogsViewModelTest {
             savedStateHandle = SavedStateHandle(),
             syncEventRepository = syncEventRepository,
             logExporter = logExporter,
+            settingsRepository = settingsRepository,
             accountRepository = accountRepository,
             syncPairDao = syncPairDao,
         ).also { it.clock = clock }

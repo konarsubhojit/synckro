@@ -1026,6 +1026,14 @@ private fun BackupSettingsContent(
         contentPadding = contentPadding,
     ) {
         item {
+            SwitchRow(
+                title = stringResource(R.string.settings_show_technical_details_title),
+                body = stringResource(R.string.settings_show_technical_details_body),
+                checked = state.showTechnicalDetails,
+                onCheckedChange = viewModel::setShowTechnicalDetails,
+            )
+        }
+        item {
             LogRetentionRow(
                 days = state.logRetentionDays,
                 onSelected = { viewModel.setLogRetentionDays(it.days) },
