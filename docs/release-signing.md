@@ -69,9 +69,14 @@ decoded keystore can be opened with `RELEASE_KEYSTORE_PASSWORD` /
 key password, and only then exports `RELEASE_KEYSTORE_PATH` for
 `bundleRelease assembleRelease`.
 
+During this preflight, the workflow writes a notice with the decoded keystore's
+byte count and SHA-256. These values help confirm that Actions received the
+expected password-protected file without exposing its contents or passwords.
+
 ## Troubleshooting
 
-If the release job fails in `:app:packageRelease` with
+If the `Decode and verify release keystore` preflight step reports an
+`EOFException`, or if the release job fails in `:app:packageRelease` with
 
 ```
 com.android.ide.common.signing.KeytoolException: Failed to read key *** from store "...": null
@@ -90,6 +95,10 @@ base64 -w0 synckro-release.p12 > synckro-release.p12.b64
 then paste the whole contents of `synckro-release.p12.b64` (never the output of
 `base64 -w0 synckro-release.p12.b64`) into the secret. The workflow tolerates
 wrapped lines, but the value must decode to the keystore itself.
+
+Compare the preflight notice's byte count and SHA-256 with the original local
+keystore before updating the secret. An `Invalid keystore format` or
+`DerInputStream` preflight error has the same truncated/corrupt-secret cause.
 
 Verify the secret locally before updating it:
 

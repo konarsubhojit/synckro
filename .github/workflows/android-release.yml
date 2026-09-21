@@ -66,6 +66,74 @@ jobs:
           ref: refs/tags/${{ steps.release-ref.outputs.tag }}
           clean: true
 
+      - name: Extract changelog release notes
+        env:
+          RELEASE_VERSION: ${{ steps.release-ref.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          notes_path="$RUNNER_TEMP/release-notes.md"
+          python3 - "$RELEASE_VERSION" "$notes_path" <<'PY'
+          from pathlib import Path
+          import re
+          import sys
+
+          version, notes_path = sys.argv[1], sys.argv[2]
+          lines = Path("CHANGELOG.md").read_text(encoding="utf-8").splitlines()
+          header = re.compile(rf"^##\s+\[{re.escape(version)}\](?:\s+-|$)")
+          start = None
+
+          for index, line in enumerate(lines):
+              if header.match(line):
+                  start = index
+                  break
+
+          if start is None:
+              print(
+                  f"::error::CHANGELOG.md has no release notes section for version {version}.",
+                  file=sys.stderr,
+              )
+              sys.exit(1)
+
+          end = len(lines)
+          for index in range(start + 1, len(lines)):
+              if lines[index].startswith("## "):
+                  end = index
+                  break
+
+          section = "\n".join(lines[start:end]).strip()
+          has_body = any(
+              line.strip() and not line.startswith("## ")
+              for line in section.splitlines()
+          )
+          if not has_body:
+              print(
+                  f"::error::CHANGELOG.md section for version {version} is empty.",
+                  file=sys.stderr,
+              )
+              sys.exit(1)
+
+          Path(notes_path).write_text(section + "\n", encoding="utf-8")
+          PY
+
+          echo "RELEASE_NOTES_PATH=$notes_path" >> "$GITHUB_ENV"
+
+      - name: Verify tag matches versionName
+        env:
+          RELEASE_VERSION: ${{ steps.release-ref.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          version_name="$(sed -nE 's/^[[:space:]]*versionName[[:space:]]*=[[:space:]]*"([^"]+)".*/\1/p' app/build.gradle.kts | head -n 1)"
+          if [ -z "$version_name" ]; then
+            echo "::error::Could not read versionName from app/build.gradle.kts."
+            exit 1
+          fi
+          if [ "$version_name" != "$RELEASE_VERSION" ]; then
+            echo "::error::Release tag version '$RELEASE_VERSION' does not match app/build.gradle.kts versionName '$version_name'."
+            exit 1
+          fi
+
       - name: Verify preinstalled JDK 21
         env:
           JAVA_HOME: /usr/lib/jvm/java-21-openjdk-amd64
@@ -133,6 +201,10 @@ jobs:
             exit 1
           fi
 
+          keystore_bytes="$(wc -c < "$keystore_path")"
+          keystore_sha256="$(sha256sum "$keystore_path" | awk '{print $1}')"
+          echo "::notice::Decoded release keystore: $keystore_bytes bytes, SHA-256 $keystore_sha256."
+
           # A keystore is binary; pure base64 text here means the secret was encoded twice.
           if ! LC_ALL=C grep -qs '[^A-Za-z0-9+/=[:space:]]' "$keystore_path"; then
             echo "::error::RELEASE_KEYSTORE_BASE64 appears to be base64-encoded twice. Store the output of 'base64 -w0 <keystore>' run on the keystore file itself. See docs/release-signing.md."
@@ -147,7 +219,15 @@ jobs:
             -storepass "$RELEASE_KEYSTORE_PASSWORD" \
             -alias "$RELEASE_KEY_ALIAS" < /dev/null > "$keytool_log" 2>&1; then
             cat "$keytool_log"
-            echo "::error::The decoded release keystore could not be read with RELEASE_KEYSTORE_PASSWORD and RELEASE_KEY_ALIAS. The secret may be truncated, corrupt, or the password/alias may be wrong. See docs/release-signing.md."
+            if grep -Eq 'EOFException|Invalid keystore format|DerInputStream' "$keytool_log"; then
+              echo "::error::The decoded release keystore is truncated or corrupt. Re-create RELEASE_KEYSTORE_BASE64 with 'base64 -w0 <keystore>'. See docs/release-signing.md."
+            elif grep -Eq 'keystore password was incorrect|Integrity check failed' "$keytool_log"; then
+              echo "::error::RELEASE_KEYSTORE_PASSWORD is incorrect. Check for a trailing newline. See docs/release-signing.md."
+            elif grep -Eq 'Alias .* does not exist' "$keytool_log"; then
+              echo "::error::RELEASE_KEY_ALIAS is incorrect. PKCS12 aliases are case-sensitive. See docs/release-signing.md."
+            else
+              echo "::error::The decoded release keystore could not be read with RELEASE_KEYSTORE_PASSWORD and RELEASE_KEY_ALIAS. The secret may be truncated, corrupt, or the password/alias may be wrong. See docs/release-signing.md."
+            fi
             exit 1
           fi
 
@@ -235,58 +315,6 @@ jobs:
             echo "::error::Release AAB is missing: $RELEASE_AAB"
             exit 1
           fi
-
-      - name: Extract changelog release notes
-        env:
-          RELEASE_VERSION: ${{ steps.release-ref.outputs.version }}
-        run: |
-          set -euo pipefail
-
-          notes_path="$RUNNER_TEMP/release-notes.md"
-          python3 - "$RELEASE_VERSION" "$notes_path" <<'PY'
-          from pathlib import Path
-          import re
-          import sys
-
-          version, notes_path = sys.argv[1], sys.argv[2]
-          lines = Path("CHANGELOG.md").read_text(encoding="utf-8").splitlines()
-          header = re.compile(rf"^##\s+\[{re.escape(version)}\](?:\s+-|$)")
-          start = None
-
-          for index, line in enumerate(lines):
-              if header.match(line):
-                  start = index
-                  break
-
-          if start is None:
-              print(
-                  f"::error::CHANGELOG.md has no release notes section for version {version}.",
-                  file=sys.stderr,
-              )
-              sys.exit(1)
-
-          end = len(lines)
-          for index in range(start + 1, len(lines)):
-              if lines[index].startswith("## "):
-                  end = index
-                  break
-
-          section = "\n".join(lines[start:end]).strip()
-          has_body = any(
-              line.strip() and not line.startswith("## ")
-              for line in section.splitlines()
-          )
-          if not has_body:
-              print(
-                  f"::error::CHANGELOG.md section for version {version} is empty.",
-                  file=sys.stderr,
-              )
-              sys.exit(1)
-
-          Path(notes_path).write_text(section + "\n", encoding="utf-8")
-          PY
-
-          echo "RELEASE_NOTES_PATH=$notes_path" >> "$GITHUB_ENV"
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
