@@ -375,18 +375,19 @@ private object OneDriveQuickXorHash {
             val hash = ByteArray(HASH_BYTES)
             val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
             var length = 0L
+            var shift = 0
             while (true) {
                 val read = stream.read(buffer)
                 if (read < 0) break
                 for (offset in 0 until read) {
                     val value = buffer[offset].toInt() and 0xff
-                    for (bit in 0 until 8) {
-                        if ((value and (1 shl bit)) != 0) {
-                            val hashBit = (((length * SHIFT) + bit) % HASH_BITS).toInt()
-                            hash[hashBit / 8] = (hash[hashBit / 8].toInt() xor (1 shl (hashBit % 8))).toByte()
-                        }
-                    }
+                    val arrayIndex = shift / 8
+                    val bitOffset = shift % 8
+                    hash[arrayIndex] = (hash[arrayIndex].toInt() xor ((value shl bitOffset) and 0xff)).toByte()
+                    hash[(arrayIndex + 1) % HASH_BYTES] =
+                        (hash[(arrayIndex + 1) % HASH_BYTES].toInt() xor (value ushr (8 - bitOffset))).toByte()
                     length++
+                    shift = (shift + SHIFT) % HASH_BITS
                 }
             }
             var remaining = length

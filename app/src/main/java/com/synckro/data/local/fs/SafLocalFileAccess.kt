@@ -152,7 +152,7 @@ internal class SafLocalFileAccess(
         val tempUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, tempDocId)
         DocumentsContract.renameDocument(resolver, tempUri, segments.last())
             ?: error("SafLocalFileAccess: failed to promote temp file for '$relativePath'")
-        return stat(relativePath) ?: pending.stat
+        return stat(relativePath) ?: error("SafLocalFileAccess: promoted file missing '$relativePath'")
     }
 
     override fun delete(relativePath: String): Boolean {

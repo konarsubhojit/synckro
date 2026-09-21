@@ -457,7 +457,7 @@ object SyncDiffer {
     private fun matchingHashes(
         a: FileSnapshot,
         b: FileSnapshot,
-    ): Boolean = a.hash != null && b.hash != null && a.hash == b.hash
+    ): Boolean = a.hash != null && b.hash != null && a.hash.equals(b.hash, ignoreCase = true)
 
     /**
      * Determines whether the remote snapshot differs from the remote columns in the index.
