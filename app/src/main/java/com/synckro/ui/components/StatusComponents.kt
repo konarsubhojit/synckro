@@ -33,6 +33,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.synckro.R
 import com.synckro.domain.model.CloudProviderType
+import com.synckro.domain.sync.TransferRateTracker
 import com.synckro.ui.screens.status.StatusOverview
 
 @Composable
@@ -88,8 +89,13 @@ fun SyncStatusCard(status: StatusOverview.SyncStatus) {
                 // uploaded / downloaded across every running pair, so users
                 // don't have to drill into a sync pair card to find it.
                 if (status.activeTransfers.isNotEmpty()) {
+                    val rateTracker = remember { TransferRateTracker() }
+                    val rateEstimates =
+                        remember(status.activeTransfers) {
+                            rateTracker.update(System.currentTimeMillis(), status.activeTransfers)
+                        }
                     status.activeTransfers.forEach { transfer ->
-                        ActiveTransferRow(transfer = transfer)
+                        ActiveTransferRow(transfer = transfer, rateEstimate = rateEstimates[transfer.relativePath])
                     }
                 }
             }

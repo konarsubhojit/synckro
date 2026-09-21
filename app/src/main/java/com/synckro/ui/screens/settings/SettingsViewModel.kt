@@ -96,6 +96,7 @@ class SettingsViewModel
             val analyticsEnabled: Boolean = true,
             // Logs
             val logRetentionDays: Int = 30,
+            val showTechnicalDetails: Boolean = false,
         )
 
         /**
@@ -234,6 +235,8 @@ class SettingsViewModel
                 ) { crashReporting, analytics -> crashReporting to analytics },
             ) { uiState, (crashReporting, analytics) ->
                 uiState.copy(crashReportingEnabled = crashReporting, analyticsEnabled = analytics)
+            }.combine(settingsRepository.showTechnicalDetails) { uiState, showTechnicalDetails ->
+                uiState.copy(showTechnicalDetails = showTechnicalDetails)
             }.stateIn(
                 scope = viewModelScope,
                 started = SharingStarted.WhileSubscribed(5_000),
@@ -434,6 +437,16 @@ class SettingsViewModel
 
         fun setLogRetentionDays(days: Int) {
             viewModelScope.launch { settingsRepository.setLogRetentionDays(days) }
+        }
+
+        /**
+         * Toggles "Show technical details": when off (default), the Sync history tab
+         * shows only plain-language, actionable copy; when on, it shows the raw
+         * event message and tag. Every event is always persisted and included in
+         * full in the log export regardless of this setting.
+         */
+        fun setShowTechnicalDetails(enabled: Boolean) {
+            viewModelScope.launch { settingsRepository.setShowTechnicalDetails(enabled) }
         }
 
         /**

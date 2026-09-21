@@ -6,12 +6,14 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.synckro.data.local.dao.SyncPairDao
 import com.synckro.data.repository.AccountRepository
+import com.synckro.data.repository.SettingsRepository
 import com.synckro.data.repository.SyncEventRepository
 import com.synckro.domain.auth.Account
 import com.synckro.domain.model.CloudProviderType
 import com.synckro.domain.model.SyncEvent
 import com.synckro.domain.model.SyncEventLevel
 import com.synckro.domain.model.SyncEventTag
+import com.synckro.util.logging.EventCopyMapper
 import com.synckro.util.logging.LogExportConfig
 import com.synckro.util.logging.LogExporter
 import com.synckro.util.logging.LogVisibilityConfig
@@ -65,6 +67,7 @@ class LogsViewModel
         private val savedStateHandle: SavedStateHandle,
         private val syncEventRepository: SyncEventRepository,
         private val logExporter: LogExporter,
+        private val settingsRepository: SettingsRepository,
         accountRepository: AccountRepository,
         syncPairDao: SyncPairDao,
     ) : ViewModel() {
@@ -101,6 +104,14 @@ class LogsViewModel
             val pairIdFilter: Long? = null,
             /** True when no user filters or search are active. */
             val hasActiveFilters: Boolean = false,
+            /**
+             * When `false` (default), [events] is already narrowed to entries with a
+             * plain-language [EventCopyMapper] rendering; the UI should show that
+             * rendering rather than the raw [SyncEvent.message] / [SyncEvent.tag].
+             * When `true`, every visible event is included and the UI should show the
+             * raw technical detail (see Settings > "Show technical details").
+             */
+            val showTechnicalDetails: Boolean = false,
         )
 
         private val pairIdFilterFlow = MutableStateFlow(savedStatePairId.takeIf { it != 0L })
@@ -145,10 +156,17 @@ class LogsViewModel
                 },
                 pairIdFilterFlow,
                 pairContexts,
-                accountsFlow,
-            ) { events, filters, pairIdFilter, contexts, accounts ->
+                accountsFlow.combine(settingsRepository.showTechnicalDetails) { accounts, showTechnicalDetails ->
+                    accounts to showTechnicalDetails
+                },
+            ) { events, filters, pairIdFilter, contexts, accountsAndTechnicalDetails ->
+                val (accounts, showTechnicalDetails) = accountsAndTechnicalDetails
                 val q = filters.query.trim()
-                val filtered = events.filter { e -> matches(e, filters, contexts, q) }
+                val visible = events.filter { e -> matches(e, filters, contexts, q) }
+                // Plain-language mode additionally excludes any event with no sensible
+                // plain-language rendering, rather than showing it with raw taxonomy.
+                // Persistence and LogExporter output are unaffected by this UI-only filter.
+                val filtered = if (showTechnicalDetails) visible else visible.filter { EventCopyMapper.map(it) != null }
                 UiState(
                     events = filtered,
                     isLoading = false,
@@ -168,6 +186,7 @@ class LogsViewModel
                             filters.provider != null ||
                             filters.timeWindow != null ||
                             q.isNotEmpty(),
+                    showTechnicalDetails = showTechnicalDetails,
                 )
             }.catch { e ->
                 Timber.w(e, "LogsViewModel: state flow error")

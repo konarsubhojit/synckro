@@ -94,6 +94,28 @@ class LogExporterTest {
         assertFalse(csv.contains("accountId=abc123"))
     }
 
+    @Test
+    fun `buildCsvBytes preserves raw taxonomy message unchanged, proving export fidelity`() {
+        // The UI's EventCopyMapper turns this into "Lost access to your folder...", but the
+        // export must always retain the full raw taxonomy string, tag, level and reason token
+        // as the single source of technical truth -- see EventCopyMapperTest for the UI side.
+        val rawMessage = "instant.watch.unavailable reason=saf_access_lost pairId=42"
+        val events =
+            listOf(
+                event(id = 1, pairId = 42, message = rawMessage).copy(
+                    tag = "InstantWatch",
+                    level = SyncEventLevel.WARN,
+                ),
+            )
+
+        val csv = LogExporter.buildCsvBytes(events).toString(Charsets.UTF_8)
+
+        assertTrue("Raw dotted taxonomy id must survive export", csv.contains("instant.watch.unavailable"))
+        assertTrue("Raw reason token must survive export", csv.contains("reason=saf_access_lost"))
+        assertTrue("Tag must survive export", csv.contains("InstantWatch"))
+        assertTrue("Level must survive export", csv.contains("WARN"))
+    }
+
     // -------------------------------------------------------------------------
     // buildExportZip
     // -------------------------------------------------------------------------

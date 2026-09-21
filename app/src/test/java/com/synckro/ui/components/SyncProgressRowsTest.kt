@@ -72,4 +72,14 @@ class SyncProgressRowsTest {
 
         assertEquals(0.75f, transferProgressFraction(transfer))
     }
+
+    @Test
+    fun transferFileName_returnsLastPathSegmentOnly() {
+        assertEquals("cat.jpg", transferFileName("Pictures/Vacation/cat.jpg"))
+    }
+
+    @Test
+    fun transferFileName_returnsWholeStringWhenNoSeparator() {
+        assertEquals("cat.jpg", transferFileName("cat.jpg"))
+    }
 }

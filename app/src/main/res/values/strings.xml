@@ -81,6 +81,23 @@
     <string name="home_sync_transfer_download">Downloading</string>
     <string name="home_sync_transfer_progress_percent">%1$d%%</string>
     <string name="home_sync_transfer_size_format">%1$s / %2$s</string>
+    <!-- Per-file transfer speed and ETA, shown only once the rate has stabilized. -->
+    <string name="home_sync_transfer_speed_format">%1$s/s</string>
+    <string name="home_sync_transfer_eta_minutes_format">%1$d min left</string>
+    <string name="home_sync_transfer_eta_seconds_format">%1$d sec left</string>
+    <string name="home_sync_transfer_row_description_format">%1$s %2$s, %3$s of %4$s, %5$d percent complete</string>
+    <string name="home_sync_transfer_row_description_with_eta_format">%1$s %2$s, %3$s of %4$s, %5$d percent complete, %6$s at %7$s</string>
+
+    <!-- Plain-language event copy (EventCopyMapper): user-facing Sync history rewrites
+         raw Instant Sync taxonomy strings into actionable, reassuring copy. Raw tags,
+         reasons, and dotted taxonomy identifiers are never shown here; the full detail
+         remains available via Settings > "Show technical details" or a log export. -->
+    <string name="event_copy_watch_registered">Watching your folder for changes</string>
+    <string name="event_copy_watch_lost_access">Lost access to your folder. Tap to choose it again.</string>
+    <string name="event_copy_dispatch_instant">Change detected — syncing now</string>
+    <string name="event_copy_outcome_applied">Backed up your change</string>
+    <string name="event_copy_outcome_failed">Couldn\'t sync a change automatically. It will be retried.</string>
+    <string name="event_copy_passthrough">%1$s</string>
 
     <!-- Phase 3 (Synced Folders redesign): master auto-sync card + per-pair switch / overflow. -->
     <string name="pairs_master_autosync_title">Auto-sync</string>
@@ -804,6 +821,8 @@
     <string name="settings_notification_channels_action">Open channel settings</string>
 
     <!-- Settings: storage &amp; logs -->
+    <string name="settings_show_technical_details_title">Show technical details</string>
+    <string name="settings_show_technical_details_body">Sync history shows plain-language messages by default. Turn this on to see raw event tags and technical detail in the app instead — the full detail is always included in log exports either way.</string>
     <string name="settings_log_retention_title">Log retention</string>
     <string name="settings_log_retention_body">Older sync events are deleted automatically after this many days.</string>
     <string name="settings_log_retention_7d">7 days</string>

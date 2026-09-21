@@ -10,6 +10,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -26,6 +27,9 @@ import com.synckro.R
 import com.synckro.domain.sync.ActiveTransfer
 import com.synckro.domain.sync.TransferDirection
 import com.synckro.domain.sync.TransferProgress
+import com.synckro.domain.sync.TransferRateEstimate
+import com.synckro.domain.sync.TransferRateTracker
+import java.util.concurrent.TimeUnit
 
 @Composable
 fun SyncProgressRows(
@@ -33,8 +37,13 @@ fun SyncProgressRows(
     syncingLabel: String,
     modifier: Modifier = Modifier,
     showActiveTransfers: Boolean = true,
+    /** Caps the number of per-file rows rendered; `null` (default) renders every active transfer. */
+    maxActiveTransfers: Int? = null,
 ) {
     val fraction = primaryProgressFraction(progress)
+    // One tracker per composition instance so successive TransferProgress emissions build up
+    // a smoothed rate/ETA per relative path (see TransferRateTracker) rather than jittering.
+    val rateTracker = remember { TransferRateTracker() }
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -80,8 +89,13 @@ fun SyncProgressRows(
         }
         val activeTransfers = progress?.activeTransfers.orEmpty()
         if (showActiveTransfers && activeTransfers.isNotEmpty()) {
-            activeTransfers.forEach { transfer ->
-                ActiveTransferRow(transfer = transfer)
+            val rateEstimates =
+                remember(activeTransfers) {
+                    rateTracker.update(System.currentTimeMillis(), activeTransfers)
+                }
+            val shown = maxActiveTransfers?.let { activeTransfers.take(it) } ?: activeTransfers
+            shown.forEach { transfer ->
+                ActiveTransferRow(transfer = transfer, rateEstimate = rateEstimates[transfer.relativePath])
             }
         } else if (activeTransfers.isEmpty()) {
             // Fall back to the legacy single "currently syncing <file>" text when
@@ -107,17 +121,21 @@ fun SyncProgressRows(
 }
 
 /**
- * Renders a single in-flight file transfer row: direction label + relative
- * path, bytes transferred / total, and a percentage on the right. Visible
- * inside both the Status screen's Sync status card (aggregated across every
- * syncing pair) and the per-pair [SyncProgressRows] composable.
+ * Renders a single in-flight file transfer row: direction label + file name (last path
+ * segment only — never the full [ActiveTransfer.relativePath]), bytes transferred / total,
+ * a percentage, and — once the rate has stabilized — transfer speed and an ETA. Visible
+ * inside both the Status screen's Sync status card (aggregated across every syncing pair)
+ * and the per-pair [SyncProgressRows] composable.
  *
  * @param transfer The in-flight transfer to render. `totalBytes == 0L` is
  *   treated as "unknown size" and renders a 0% indicator.
+ * @param rateEstimate Smoothed speed/ETA for this transfer (see [TransferRateTracker]), or
+ *   `null` when not yet available — the speed/ETA text is simply omitted in that case.
  */
 @Composable
 fun ActiveTransferRow(
     transfer: ActiveTransfer,
+    rateEstimate: TransferRateEstimate? = null,
 ) {
     val context = LocalContext.current
     val directionLabel =
@@ -125,7 +143,9 @@ fun ActiveTransferRow(
             TransferDirection.UPLOAD -> stringResource(R.string.home_sync_transfer_upload)
             TransferDirection.DOWNLOAD -> stringResource(R.string.home_sync_transfer_download)
         }
+    val fileName = transferFileName(transfer.relativePath)
     val transferFraction = transferProgressFraction(transfer)
+    val percent = ((transferFraction ?: 0f) * 100f).toInt()
     val sizeDone =
         Formatter.formatShortFileSize(
             context,
@@ -136,47 +156,101 @@ fun ActiveTransferRow(
             context,
             transfer.totalBytes.coerceAtLeast(0L),
         )
+    val speedText =
+        rateEstimate?.bytesPerSecond?.let { rate ->
+            stringResource(
+                R.string.home_sync_transfer_speed_format,
+                Formatter.formatShortFileSize(context, rate.toLong().coerceAtLeast(0L)),
+            )
+        }
+    val etaText = rateEstimate?.etaMillis?.let { etaText(it) }
+    val rowDescription =
+        if (speedText != null && etaText != null) {
+            stringResource(
+                R.string.home_sync_transfer_row_description_with_eta_format,
+                directionLabel,
+                fileName,
+                sizeDone,
+                sizeTotal,
+                percent,
+                speedText,
+                etaText,
+            )
+        } else {
+            stringResource(
+                R.string.home_sync_transfer_row_description_format,
+                directionLabel,
+                fileName,
+                sizeDone,
+                sizeTotal,
+                percent,
+            )
+        }
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .semantics {
+                    contentDescription = rowDescription
+                    transferFraction?.let { fraction ->
+                        progressBarRangeInfo = ProgressBarRangeInfo(fraction, 0f..1f)
+                    }
+                    liveRegion = LiveRegionMode.Polite
+                },
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = "$directionLabel · ${transfer.relativePath}",
+                text = "$directionLabel · $fileName",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            Text(
-                text = stringResource(R.string.home_sync_transfer_size_format, sizeDone, sizeTotal),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    text = stringResource(R.string.home_sync_transfer_size_format, sizeDone, sizeTotal),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                if (speedText != null) {
+                    Text(
+                        text = speedText,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                if (etaText != null) {
+                    Text(
+                        text = etaText,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
         }
         Text(
-            text =
-                stringResource(
-                    R.string.home_sync_transfer_progress_percent,
-                    ((transferFraction ?: 0f) * 100f).toInt(),
-                ),
+            text = stringResource(R.string.home_sync_transfer_progress_percent, percent),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
-            modifier =
-                Modifier
-                    .widthIn(min = 48.dp)
-                    .semantics {
-                        contentDescription = "$directionLabel ${transfer.relativePath}"
-                        transferFraction?.let { fraction ->
-                            progressBarRangeInfo = ProgressBarRangeInfo(fraction, 0f..1f)
-                        }
-                        liveRegion = LiveRegionMode.Polite
-                    },
+            modifier = Modifier.widthIn(min = 48.dp),
         )
     }
 }
+
+@Composable
+private fun etaText(etaMillis: Long): String {
+    val totalSeconds = TimeUnit.MILLISECONDS.toSeconds(etaMillis)
+    return if (totalSeconds >= 60) {
+        stringResource(R.string.home_sync_transfer_eta_minutes_format, (totalSeconds / 60).toInt())
+    } else {
+        stringResource(R.string.home_sync_transfer_eta_seconds_format, totalSeconds.toInt())
+    }
+}
+
+internal fun transferFileName(relativePath: String): String = relativePath.substringAfterLast('/')
 
 internal fun primaryProgressFraction(progress: TransferProgress?): Float? =
     when {
