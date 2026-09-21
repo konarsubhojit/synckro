@@ -10,7 +10,11 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -89,10 +93,13 @@ fun SyncProgressRows(
         }
         val activeTransfers = progress?.activeTransfers.orEmpty()
         if (showActiveTransfers && activeTransfers.isNotEmpty()) {
-            val rateEstimates =
-                remember(activeTransfers) {
-                    rateTracker.update(System.currentTimeMillis(), activeTransfers)
-                }
+            // The tracker update mutates internal state and must not run inside a remember{}
+            // calculation (which Compose can re-invoke); do it as an explicit side effect keyed
+            // on the transfer list instead, publishing the result into a stable state holder.
+            var rateEstimates by remember { mutableStateOf(emptyMap<String, TransferRateEstimate>()) }
+            LaunchedEffect(activeTransfers) {
+                rateEstimates = rateTracker.update(System.currentTimeMillis(), activeTransfers)
+            }
             val shown = maxActiveTransfers?.let { activeTransfers.take(it) } ?: activeTransfers
             shown.forEach { transfer ->
                 ActiveTransferRow(transfer = transfer, rateEstimate = rateEstimates[transfer.relativePath])

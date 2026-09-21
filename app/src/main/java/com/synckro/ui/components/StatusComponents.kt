@@ -20,7 +20,11 @@ import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -33,6 +37,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.synckro.R
 import com.synckro.domain.model.CloudProviderType
+import com.synckro.domain.sync.TransferRateEstimate
 import com.synckro.domain.sync.TransferRateTracker
 import com.synckro.ui.screens.status.StatusOverview
 
@@ -90,10 +95,13 @@ fun SyncStatusCard(status: StatusOverview.SyncStatus) {
                 // don't have to drill into a sync pair card to find it.
                 if (status.activeTransfers.isNotEmpty()) {
                     val rateTracker = remember { TransferRateTracker() }
-                    val rateEstimates =
-                        remember(status.activeTransfers) {
-                            rateTracker.update(System.currentTimeMillis(), status.activeTransfers)
-                        }
+                    // The tracker update mutates internal state and must not run inside a
+                    // remember{} calculation (which Compose can re-invoke); do it as an explicit
+                    // side effect keyed on the transfer list, publishing into a state holder.
+                    var rateEstimates by remember { mutableStateOf(emptyMap<String, TransferRateEstimate>()) }
+                    LaunchedEffect(status.activeTransfers) {
+                        rateEstimates = rateTracker.update(System.currentTimeMillis(), status.activeTransfers)
+                    }
                     status.activeTransfers.forEach { transfer ->
                         ActiveTransferRow(transfer = transfer, rateEstimate = rateEstimates[transfer.relativePath])
                     }
