@@ -751,7 +751,7 @@ class SyncEngineRealIntegrationTest {
                         name = "notes.txt",
                         mimeType = "text/plain",
                         size = localContent.size.toLong(),
-                        lastModifiedMs = (remoteFile.lastModifiedMs ?: 5_000L) + 1_000L,
+                        lastModifiedMs = (remoteFile.lastModifiedMs ?: 5_000L) + 5 * 60 * 1_000L,
                     ),
                 ),
             )
@@ -1236,7 +1236,7 @@ class SyncEngineRealIntegrationTest {
                                         type = RemoteChangeType.MODIFY,
                                         remoteId = uploadedFile.id, // real ID in fakeProvider
                                         sizeBytes = remoteContent.size.toLong(),
-                                        mtimeMs = 9_000L, // remote is newer
+                                        mtimeMs = 200_000L, // remote is newer outside the skew window
                                         etag = uploadedFile.eTag,
                                     ),
                                 ),
@@ -1255,7 +1255,7 @@ class SyncEngineRealIntegrationTest {
                         name = "doc.txt",
                         mimeType = "text/plain",
                         size = localContent.size.toLong(),
-                        lastModifiedMs = 1_000L, // local is older than remote's 9_000L
+                        lastModifiedMs = 1_000L, // local is older than remote's timestamp
                     ),
                 ),
             )
