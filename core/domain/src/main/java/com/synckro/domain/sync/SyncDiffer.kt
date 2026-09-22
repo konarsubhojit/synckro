@@ -133,6 +133,7 @@ object SyncDiffer {
         conflictPolicy: ConflictPolicy,
         retentionDays: Int? = null,
         nowMs: Long = System.currentTimeMillis(),
+        newestWinsSkewToleranceMs: Long = DEFAULT_NEWEST_WINS_SKEW_TOLERANCE_MS,
     ): List<SyncOp> {
         val localByPath = local.associateBy { it.relativePath }
         val remoteByPath = remote.associateBy { it.relativePath }
@@ -271,7 +272,7 @@ object SyncDiffer {
             // through to conflict resolution.
             if (idx == null && l != null && r != null) {
                 if (snapshotsEquivalent(l, r)) continue
-                val op = resolveConflict(path, l, r, conflictPolicy, direction)
+                val op = resolveConflict(path, l, r, conflictPolicy, direction, newestWinsSkewToleranceMs)
                 if (op != null) ops += op
                 continue
             }
@@ -280,6 +281,10 @@ object SyncDiffer {
             val remoteChanged = r != null && (idx == null || changedRemote(r, idx))
             val localDeleted = l == null && idx != null
             val remoteDeleted = r == null && idx != null
+
+            if (l != null && r != null && localChanged && remoteChanged && matchingHashes(l, r)) {
+                continue
+            }
 
             // New on one side only
             if (l != null && r == null && idx == null) {
@@ -331,7 +336,7 @@ object SyncDiffer {
             // Both changed → conflict
             if (localChanged && remoteChanged) {
                 // When both sides changed, both snapshots are present by definition.
-                val op = resolveConflict(path, l, r, conflictPolicy, direction)
+                val op = resolveConflict(path, l, r, conflictPolicy, direction, newestWinsSkewToleranceMs)
                 if (op != null) ops += op
                 continue
             }
@@ -449,6 +454,11 @@ object SyncDiffer {
         return a.size == b.size && a.lastModifiedMs == b.lastModifiedMs
     }
 
+    private fun matchingHashes(
+        a: FileSnapshot,
+        b: FileSnapshot,
+    ): Boolean = a.hash != null && b.hash != null && a.hash.equals(b.hash, ignoreCase = true)
+
     /**
      * Determines whether the remote snapshot differs from the remote columns in the index.
      *
@@ -485,6 +495,7 @@ object SyncDiffer {
         remote: FileSnapshot?,
         policy: ConflictPolicy,
         direction: SyncDirection,
+        newestWinsSkewToleranceMs: Long,
     ): SyncOp? =
         when (policy) {
             ConflictPolicy.PREFER_LOCAL ->
@@ -492,9 +503,12 @@ object SyncDiffer {
             ConflictPolicy.PREFER_REMOTE ->
                 if (direction.allowsDownload) SyncOp.UpdateLocal(path) else null
             ConflictPolicy.NEWEST_WINS ->
-                // On exact-tie timestamps we deterministically prefer local, since a
-                // local edit is generally what the user most recently interacted with.
-                if ((local?.lastModifiedMs ?: 0L) >= (remote?.lastModifiedMs ?: 0L)) {
+                if (local != null &&
+                    remote != null &&
+                    kotlin.math.abs(local.lastModifiedMs - remote.lastModifiedMs) <= newestWinsSkewToleranceMs
+                ) {
+                    SyncOp.Conflict(path, localNewerThanRemote = local.lastModifiedMs >= remote.lastModifiedMs)
+                } else if ((local?.lastModifiedMs ?: 0L) >= (remote?.lastModifiedMs ?: 0L)) {
                     if (direction.allowsUpload) SyncOp.UpdateRemote(path) else null
                 } else {
                     if (direction.allowsDownload) SyncOp.UpdateLocal(path) else null
@@ -504,6 +518,8 @@ object SyncDiffer {
         }
 
     private enum class ChangedSide { LOCAL, REMOTE }
+
+    private const val DEFAULT_NEWEST_WINS_SKEW_TOLERANCE_MS = 2L * 60L * 1000L
 
     private fun resolveModifyDeleteConflict(
         path: String,

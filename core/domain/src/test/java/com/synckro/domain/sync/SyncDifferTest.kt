@@ -238,7 +238,7 @@ class SyncDifferTest {
     fun `both modified prefer remote updates local`() {
         val ops =
             SyncDiffer.diff(
-                local = listOf(snap("a.txt", size = 20, mtime = 3_000)),
+                local = listOf(snap("a.txt", size = 20, mtime = 200_000)),
                 remote = listOf(snap("a.txt", size = 30, mtime = 2_000)),
                 lastIndex = listOf(idx("a.txt")),
                 direction = SyncDirection.BIDIRECTIONAL,
@@ -252,7 +252,7 @@ class SyncDifferTest {
     fun `both modified newest wins prefers local when newer`() {
         val ops =
             SyncDiffer.diff(
-                local = listOf(snap("a.txt", size = 20, mtime = 3_000)),
+                local = listOf(snap("a.txt", size = 20, mtime = 200_000)),
                 remote = listOf(snap("a.txt", size = 30, mtime = 2_000)),
                 lastIndex = listOf(idx("a.txt")),
                 direction = SyncDirection.BIDIRECTIONAL,
@@ -267,13 +267,42 @@ class SyncDifferTest {
         val ops =
             SyncDiffer.diff(
                 local = listOf(snap("a.txt", size = 20, mtime = 2_000)),
-                remote = listOf(snap("a.txt", size = 30, mtime = 3_000)),
+                remote = listOf(snap("a.txt", size = 30, mtime = 200_000)),
                 lastIndex = listOf(idx("a.txt")),
                 direction = SyncDirection.BIDIRECTIONAL,
                 conflictPolicy = ConflictPolicy.NEWEST_WINS,
             )
 
         assertEquals(listOf<SyncOp>(SyncOp.UpdateLocal("a.txt")), ops)
+    }
+
+    @Test
+    fun `both modified with matching current hashes is no-op despite metadata skew`() {
+        val ops =
+            SyncDiffer.diff(
+                local = listOf(snap("a.txt", size = 20, mtime = 10_000, hash = "same")),
+                remote = listOf(snap("a.txt", size = 30, mtime = 20_000, hash = "same")),
+                lastIndex = listOf(idx("a.txt", size = 10, mtime = 1_000, hash = "old")),
+                direction = SyncDirection.BIDIRECTIONAL,
+                conflictPolicy = ConflictPolicy.NEWEST_WINS,
+            )
+
+        assertTrue(ops.isEmpty())
+    }
+
+    @Test
+    fun `newest wins emits conflict inside clock skew tolerance`() {
+        val ops =
+            SyncDiffer.diff(
+                local = listOf(snap("a.txt", size = 20, mtime = 10_000, hash = "local")),
+                remote = listOf(snap("a.txt", size = 30, mtime = 11_000, hash = "remote")),
+                lastIndex = listOf(idx("a.txt", size = 10, mtime = 1_000, hash = "old")),
+                direction = SyncDirection.BIDIRECTIONAL,
+                conflictPolicy = ConflictPolicy.NEWEST_WINS,
+                newestWinsSkewToleranceMs = 5_000,
+            )
+
+        assertEquals(listOf<SyncOp>(SyncOp.Conflict("a.txt", localNewerThanRemote = false)), ops)
     }
 
     @Test

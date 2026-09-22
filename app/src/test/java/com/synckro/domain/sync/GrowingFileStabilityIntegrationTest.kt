@@ -105,7 +105,7 @@ class GrowingFileStabilityIntegrationTest {
 
             assertEquals(GateOutcome.Uploaded("video.mp4"), afterRename.await())
             assertEquals(listOf("video.mp4"), provider.list(REMOTE_ROOT).map { it.name })
-            assertEquals(1, file.reads)
+            assertEquals(2, file.reads)
         }
 
     @Test
@@ -231,7 +231,7 @@ class GrowingFileStabilityIntegrationTest {
             advanceUntilIdle()
 
             assertEquals(GateOutcome.Uploaded("video.mp4"), outcome.await())
-            assertEquals(1, file.reads)
+            assertEquals(2, file.reads)
             assertEquals(3, file.metadataReads)
             assertEquals(1, provider.list(REMOTE_ROOT).size)
             assertTrue(gate.requeued.isEmpty())

@@ -26,6 +26,8 @@ import java.util.concurrent.ConcurrentHashMap
 class FakeCloudProvider : CloudProvider {
     override val displayName: String = "Fake"
 
+    var reportedContentHashOverride: String? = null
+
     private data class Record(
         val meta: RemoteFile,
         val bytes: ByteArray,
@@ -36,6 +38,8 @@ class FakeCloudProvider : CloudProvider {
             .getInstance("SHA-256")
             .digest(this)
             .joinToString(separator = "") { "%02x".format(it) }
+
+    override fun computeContentHash(content: InputStream): String = content.use { it.readBytes().sha256Hex() }
 
     private val store = ConcurrentHashMap<String, Record>()
     private val changeLog = mutableListOf<RemoteChange>()
@@ -156,7 +160,7 @@ class FakeCloudProvider : CloudProvider {
                     lastModifiedMs = System.currentTimeMillis(),
                     eTag = UUID.randomUUID().toString(),
                     mimeType = mimeType,
-                    contentHash = bytes.sha256Hex(),
+                    contentHash = reportedContentHashOverride ?: bytes.sha256Hex(),
                 )
             store[meta.id] = Record(meta, bytes)
             changeLog += RemoteChange(file = meta, removedId = null)
@@ -194,7 +198,7 @@ class FakeCloudProvider : CloudProvider {
                     lastModifiedMs = System.currentTimeMillis(),
                     eTag = UUID.randomUUID().toString(),
                     mimeType = mimeType ?: existing.meta.mimeType,
-                    contentHash = bytes.sha256Hex(),
+                    contentHash = reportedContentHashOverride ?: bytes.sha256Hex(),
                 )
             store[id] = Record(meta, bytes)
             changeLog += RemoteChange(file = meta, removedId = null)

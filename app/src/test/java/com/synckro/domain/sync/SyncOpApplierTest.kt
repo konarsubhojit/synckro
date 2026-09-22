@@ -16,6 +16,7 @@ import com.synckro.domain.provider.RemoteFile
 import com.synckro.providers.fake.FakeCloudProvider
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.spyk
@@ -228,6 +229,26 @@ class SyncOpApplierTest {
 
             assertEquals(0, result.applied)
             assertEquals(1, result.errors.size)
+        }
+
+    @Test
+    fun `UploadNew fails and does not index when provider reports mismatched hash`() =
+        runTest {
+            fakeProvider.reportedContentHashOverride = "wrong"
+            localFs.put("file.txt", "data".toByteArray())
+
+            val result =
+                buildApplier().apply(
+                    ops = listOf(SyncOp.UploadNew("file.txt")),
+                    pair = pair(),
+                    remoteFilesByPath = emptyMap(),
+                    localIndexByPath = emptyMap(),
+                )
+
+            assertEquals(0, result.applied)
+            assertEquals(1, result.errors.size)
+            coVerify(exactly = 0) { localIndexDao.upsertSyncedRemoteState(any()) }
+            coVerify { eventRepo.log(1L, SyncEventLevel.ERROR, SyncEventTag.INSTANT_OUTCOME, any()) }
         }
 
     // =========================================================================
@@ -558,6 +579,27 @@ class SyncOpApplierTest {
             val slot = slot<LocalIndexEntity>()
             coVerify { localIndexDao.upsert(capture(slot)) }
             assertEquals(remote.id, slot.captured.remoteId)
+        }
+
+    @Test
+    fun `UpdateLocal hash mismatch leaves original local file intact`() =
+        runTest {
+            val original = "original".toByteArray()
+            localFs.put("n.txt", original)
+            val remote = seedRemote("n.txt", "remote".toByteArray()).copy(contentHash = "wrong")
+
+            val result =
+                buildApplier().apply(
+                    ops = listOf(SyncOp.UpdateLocal("n.txt")),
+                    pair = pair(),
+                    remoteFilesByPath = mapOf("n.txt" to remote),
+                    localIndexByPath = emptyMap(),
+                )
+
+            assertEquals(0, result.applied)
+            assertEquals(1, result.errors.size)
+            assertEquals(original.toList(), localFs.get("n.txt")!!.toList())
+            coVerify(exactly = 0) { localIndexDao.upsert(any()) }
         }
 
     // =========================================================================
@@ -997,6 +1039,9 @@ class SyncOpApplierTest {
                 callCount++
                 if (callCount < 2) throw RuntimeException("transient error")
                 fakeProvider.download(remote.id)
+            }
+            every { retryingProvider.computeContentHash(any()) } answers {
+                fakeProvider.computeContentHash(firstArg())
             }
 
             val applier =

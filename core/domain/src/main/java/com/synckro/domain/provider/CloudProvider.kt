@@ -115,6 +115,19 @@ interface CloudProvider {
     suspend fun download(id: String): InputStream
 
     /**
+     * Computes this provider's content-hash format for [content], when the
+     * provider exposes a comparable content fingerprint in [RemoteFile.contentHash].
+     *
+     * Implementations must consume and close [content]. Return `null` when the
+     * provider has no stable content hash (or when the hash cannot be computed
+     * locally), in which case callers should fall back to metadata-only behavior.
+     */
+    fun computeContentHash(content: InputStream): String? {
+        content.close()
+        return null
+    }
+
+    /**
      * Uploads a new file named [name] under [parentId] with the provided content.
      *
      * The provider takes ownership of [content] and must close it before returning, even on failure.
