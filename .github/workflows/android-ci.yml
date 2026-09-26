@@ -21,10 +21,10 @@ permissions:
 jobs:
   build-apks:
     name: Build debug + testing release APKs
-    runs-on: ${{ github.event_name == 'pull_request' && 'ubuntu-latest' || fromJSON('["self-hosted","android-builder"]') }}
-    timeout-minutes: 20
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
     env:
-      ANDROID_SDK_ROOT: ${{ github.event_name == 'pull_request' && format('{0}/.android-sdk', github.workspace) || '/opt/android-sdk' }}
+      ANDROID_SDK_ROOT: ${{ github.workspace }}/.android-sdk
       ANDROID_API_LEVEL: '34'
       ANDROID_BUILD_TOOLS_VERSION: '34.0.0'
 
@@ -35,37 +35,23 @@ jobs:
           clean: true
 
       - name: Set up JDK 21
-        if: github.event_name == 'pull_request'
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '21'
 
-      - name: Verify preinstalled JDK 21
-        if: github.event_name != 'pull_request'
-        env:
-          JAVA_HOME: /usr/lib/jvm/java-21-openjdk-amd64
-        run: |
-          test -x "$JAVA_HOME/bin/java"
-          "$JAVA_HOME/bin/java" -version
-          echo "JAVA_HOME=$JAVA_HOME" >> "$GITHUB_ENV"
-          echo "$JAVA_HOME/bin" >> "$GITHUB_PATH"
-
       - name: Validate Gradle wrapper
         uses: gradle/actions/wrapper-validation@v4
 
       - name: Set up Gradle
-        if: github.event_name == 'pull_request'
         uses: gradle/actions/setup-gradle@v4
         with:
-          # Hosted PRs use the GitHub Actions cache; the self-hosted runner
-          # uses its persistent Gradle user home instead.
-          cache-read-only: true
+          # Only write to the shared Gradle cache from trusted master builds.
+          cache-read-only: ${{ github.event_name == 'pull_request' }}
           gradle-home-cache-cleanup: true
 
-      - name: Restore Android SDK cache (read-only on PRs)
-        uses: actions/cache/restore@v4
-        if: github.event_name == 'pull_request'
+      - name: Cache Android SDK
+        uses: actions/cache@v4
         with:
           path: ${{ env.ANDROID_SDK_ROOT }}
           key: ${{ runner.os }}-android-sdk-${{ env.ANDROID_API_LEVEL }}-build-tools-${{ env.ANDROID_BUILD_TOOLS_VERSION }}-v1
@@ -75,7 +61,6 @@ jobs:
             ${{ runner.os }}-android-sdk-
 
       - name: Set up Android SDK
-        if: github.event_name == 'pull_request'
         uses: android-actions/setup-android@v3
         with:
           packages: >
