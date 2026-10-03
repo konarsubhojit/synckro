@@ -605,6 +605,11 @@ dependencies {
         // Exclude Surface Duo dependency that is not in Maven Central
         exclude(group = "com.microsoft.device.display", module = "display-mask")
     }
+    constraints {
+        implementation(libs.nimbus.jose.jwt) {
+            because("MSAL brings Nimbus 9.9, which is affected by a denial-of-service vulnerability.")
+        }
+    }
     implementation(libs.androidx.credentials)
     implementation(libs.androidx.credentials.play.services)
     implementation(libs.googleid)

@@ -81,6 +81,48 @@ class SyncDifferTest {
     }
 
     @Test
+    fun `initial sync matching hashes with different casing is no-op`() {
+        val ops =
+            SyncDiffer.diff(
+                local = listOf(snap("same.txt", hash = "abc123")),
+                remote = listOf(snap("same.txt", mtime = 9_999, hash = "ABC123")),
+                lastIndex = emptyList(),
+                direction = SyncDirection.BIDIRECTIONAL,
+                conflictPolicy = ConflictPolicy.PREFER_REMOTE,
+            )
+
+        assertTrue(ops.isEmpty())
+    }
+
+    @Test
+    fun `hash casing changes in the index do not trigger transfers`() {
+        for ((localHash, remoteHash) in listOf("ABC123" to "abc123", "abc123" to "ABC123")) {
+            val ops =
+                SyncDiffer.diff(
+                    local = listOf(snap("same.txt", hash = localHash)),
+                    remote = listOf(snap("same.txt", hash = remoteHash)),
+                    lastIndex = listOf(idx("same.txt", hash = "abc123")),
+                    direction = SyncDirection.BIDIRECTIONAL,
+                    conflictPolicy = ConflictPolicy.KEEP_BOTH,
+                )
+
+            assertTrue(ops.isEmpty())
+        }
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun `negative retention is rejected before planning deletions`() {
+        SyncDiffer.diff(
+            local = listOf(snap("same.txt")),
+            remote = listOf(snap("same.txt")),
+            lastIndex = listOf(idx("same.txt")),
+            direction = SyncDirection.UPLOAD_AND_DELETE_LOCAL_AFTER_N_DAYS,
+            conflictPolicy = ConflictPolicy.NEWEST_WINS,
+            retentionDays = -1,
+        )
+    }
+
+    @Test
     fun `initial sync same file with matching size and mtime but no hash is no-op`() {
         val ops =
             SyncDiffer.diff(

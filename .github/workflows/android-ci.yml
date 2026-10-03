@@ -122,7 +122,7 @@ jobs:
           DEBUG_KEYSTORE_PASSWORD: ${{ secrets.DEBUG_KEYSTORE_PASSWORD }}
           DEBUG_KEY_ALIAS: ${{ secrets.DEBUG_KEY_ALIAS }}
           DEBUG_KEY_PASSWORD: ${{ secrets.DEBUG_KEY_PASSWORD }}
-        run: ./gradlew testDebugUnitTest lintDebug assembleDebug
+        run: ./gradlew --no-daemon --console=plain :core:domain:test ktlintCheck testDebugUnitTest lintDebug assembleDebug
 
       - name: Assemble testing release APK
         if: github.event_name != 'pull_request'
@@ -135,7 +135,7 @@ jobs:
           DEBUG_KEY_ALIAS: ${{ secrets.DEBUG_KEY_ALIAS }}
           DEBUG_KEY_PASSWORD: ${{ secrets.DEBUG_KEY_PASSWORD }}
           ALLOW_DEBUG_KEYSTORE_FOR_RELEASE: 'true'
-        run: ./gradlew assembleRelease
+        run: ./gradlew --no-daemon --console=plain assembleRelease
 
       - name: Verify testing release APK signature
         if: github.event_name != 'pull_request'
