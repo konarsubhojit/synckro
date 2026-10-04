@@ -113,7 +113,9 @@ The Gradle wrapper is committed in `gradlew`, `gradlew.bat`, and
 ```bash
 ./gradlew assembleDebug        # build APK
 ./gradlew assembleRelease      # build testing release APK (signed with DEBUG_KEYSTORE_* when ALLOW_DEBUG_KEYSTORE_FOR_RELEASE=true)
-./gradlew testDebugUnitTest    # run unit tests
+./gradlew testDebugUnitTest    # run Android app unit tests
+./gradlew :core:domain:test    # run platform-free domain unit tests
+./gradlew ktlintCheck          # Kotlin formatting checks across modules
 ./gradlew lintDebug            # Android lint
 ```
 
@@ -138,7 +140,8 @@ step-by-step instructions covering:
 ## CI / CD
 
 GitHub Actions runs **Android CI** on pushes to `master`, pull requests, and
-manual dispatches. It builds the debug APK, runs unit tests and lint, and
+manual dispatches. It builds the debug APK, runs app and domain unit tests,
+Kotlin formatting checks and Android lint, and
 uploads applicable artifacts:
 
 - `synckro-debug-apk-<run_number>` from `app/build/outputs/apk/debug/`

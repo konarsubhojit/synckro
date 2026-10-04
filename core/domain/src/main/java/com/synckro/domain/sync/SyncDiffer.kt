@@ -135,6 +135,7 @@ object SyncDiffer {
         nowMs: Long = System.currentTimeMillis(),
         newestWinsSkewToleranceMs: Long = DEFAULT_NEWEST_WINS_SKEW_TOLERANCE_MS,
     ): List<SyncOp> {
+        require(retentionDays == null || retentionDays >= 0) { "retentionDays must be non-negative" }
         val localByPath = local.associateBy { it.relativePath }
         val remoteByPath = remote.associateBy { it.relativePath }
         val indexByPath = lastIndex.associateBy { it.relativePath }
@@ -434,7 +435,7 @@ object SyncDiffer {
         snap: FileSnapshot,
         idx: FileIndexEntry,
     ): Boolean {
-        if (snap.hash != null && idx.localHash != null) return snap.hash != idx.localHash
+        if (snap.hash != null && idx.localHash != null) return !snap.hash.equals(idx.localHash, ignoreCase = true)
         return snap.size != idx.localSize || snap.lastModifiedMs != idx.localLastModifiedMs
     }
 
@@ -450,7 +451,7 @@ object SyncDiffer {
         a: FileSnapshot,
         b: FileSnapshot,
     ): Boolean {
-        if (a.hash != null && b.hash != null) return a.hash == b.hash
+        if (a.hash != null && b.hash != null) return matchingHashes(a, b)
         return a.size == b.size && a.lastModifiedMs == b.lastModifiedMs
     }
 
@@ -472,7 +473,7 @@ object SyncDiffer {
     ): Boolean {
         // Prefer the provider content hash when available so metadata-only changes
         // (such as renames that preserve content) do not force a transfer.
-        if (snap.hash != null && idx.remoteContentHash != null) return snap.hash != idx.remoteContentHash
+        if (snap.hash != null && idx.remoteContentHash != null) return !snap.hash.equals(idx.remoteContentHash, ignoreCase = true)
         // For the remote side we compare against the remote columns of the index.
         val idxSize = idx.remoteSize ?: return true
         val idxMtime = idx.remoteLastModifiedMs ?: return true

@@ -55,6 +55,12 @@ internal class SafLocalFileAccess(
         relativePath: String,
         content: InputStream,
         mimeType: String?,
+    ): LocalFileStat = content.use { writeContent(relativePath, it, mimeType) }
+
+    private fun writeContent(
+        relativePath: String,
+        content: InputStream,
+        mimeType: String?,
     ): LocalFileStat {
         val segments = relativePath.split('/').filter { it.isNotEmpty() }
         require(segments.isNotEmpty()) { "SafLocalFileAccess: relativePath must not be empty" }
@@ -101,7 +107,7 @@ internal class SafLocalFileAccess(
         // Write content, truncating any previous content.
         var bytesWritten = 0L
         resolver.openOutputStream(docUri, "wt")?.use { out ->
-            content.use { inp -> bytesWritten = inp.copyTo(out) }
+            bytesWritten = content.copyTo(out)
         } ?: error("SafLocalFileAccess: cannot open output stream for '$relativePath'")
 
         // Re-query to return accurate file metadata.

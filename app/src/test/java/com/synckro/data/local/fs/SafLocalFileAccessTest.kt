@@ -6,6 +6,8 @@ import android.provider.DocumentsContract
 import androidx.test.core.app.ApplicationProvider
 import com.synckro.data.scanner.DocumentChildrenQuery
 import com.synckro.data.scanner.RawDocChild
+import io.mockk.every
+import io.mockk.mockk
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -149,6 +151,55 @@ class SafLocalFileAccessTest {
     // -------------------------------------------------------------------------
     // delete
     // -------------------------------------------------------------------------
+
+    @Test
+    fun `write closes content when querying the parent fails`() {
+        val access = accessWithThrowingQuery(SecurityException("Permission denied"))
+        var closed = false
+        val content =
+            object : ByteArrayInputStream(byteArrayOf(1)) {
+                override fun close() {
+                    closed = true
+                    super.close()
+                }
+            }
+
+        try {
+            access.write("file.txt", content, null)
+            fail("Expected LocalStorageException")
+        } catch (_: LocalStorageException) {
+        }
+
+        assertTrue(closed)
+    }
+
+    @Test
+    fun `write closes content when output stream is unavailable`() {
+        val resolver = mockk<android.content.ContentResolver>()
+        every { resolver.openOutputStream(any(), "wt") } returns null
+        val access =
+            SafLocalFileAccess(
+                resolver,
+                treeUri,
+                DocumentChildrenQuery { _, _, _ -> listOf(file("file.txt")) },
+            )
+        var closed = false
+        val content =
+            object : ByteArrayInputStream(byteArrayOf(1)) {
+                override fun close() {
+                    closed = true
+                    super.close()
+                }
+            }
+
+        try {
+            access.write("file.txt", content, null)
+            fail("Expected IllegalStateException")
+        } catch (_: IllegalStateException) {
+        }
+
+        assertTrue(closed)
+    }
 
     @Test
     fun `delete returns false when file is absent`() {

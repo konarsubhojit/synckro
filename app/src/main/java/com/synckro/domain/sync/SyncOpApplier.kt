@@ -1375,17 +1375,24 @@ class SyncOpApplier(
         pending: PendingLocalWrite,
         remote: RemoteFile,
         op: String,
-    ): Pair<LocalFileStat, String?> {
-        val remoteHash = remote.contentHash
-        val localHash = localFileAccess.openRead(pending.tempRelativePath)?.let { provider.computeContentHash(it) }
-        if (localHash == null || remoteHash == null) {
-            eventRepository.log(pair.id, SyncEventLevel.DEBUG, SyncEventTag.OP_APPLIER, "$op hash verification skipped: provider hash unavailable")
-        } else if (!localHash.equals(remoteHash, ignoreCase = true)) {
-            localFileAccess.delete(pending.tempRelativePath)
-            throw TransferHashMismatchException("Download hash mismatch for $relativePath")
+    ): Pair<LocalFileStat, String?> =
+        try {
+            val remoteHash = remote.contentHash
+            val localHash = localFileAccess.openRead(pending.tempRelativePath)?.let { provider.computeContentHash(it) }
+            if (localHash == null || remoteHash == null) {
+                eventRepository.log(pair.id, SyncEventLevel.DEBUG, SyncEventTag.OP_APPLIER, "$op hash verification skipped: provider hash unavailable")
+            } else if (!localHash.equals(remoteHash, ignoreCase = true)) {
+                throw TransferHashMismatchException("Download hash mismatch for $relativePath")
+            }
+            localFileAccess.commitTemporaryWrite(pending, relativePath) to localHash
+        } catch (failure: Throwable) {
+            try {
+                localFileAccess.delete(pending.tempRelativePath)
+            } catch (cleanupFailure: Throwable) {
+                if (cleanupFailure !== failure) failure.addSuppressed(cleanupFailure)
+            }
+            throw failure
         }
-        return localFileAccess.commitTemporaryWrite(pending, relativePath) to localHash
-    }
 
     /**
      * Runs the provider/index cleanup for an upload whose local source mutated mid-flight.

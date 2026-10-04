@@ -582,6 +582,40 @@ class SyncOpApplierTest {
         }
 
     @Test
+    fun `UpdateLocal cleans temporary download when commit fails`() =
+        runTest {
+            val original = "original".toByteArray()
+            localFs.put("n.txt", original)
+            val remote = seedRemote("n.txt", "remote".toByteArray())
+            val access = spyk(localFs)
+            val pending = slot<PendingLocalWrite>()
+            every { access.commitTemporaryWrite(capture(pending), "n.txt") } throws IllegalStateException("Commit failed")
+            val applier =
+                SyncOpApplier(
+                    provider = fakeProvider,
+                    localIndexDao = localIndexDao,
+                    conflictRepository = conflictRepo,
+                    eventRepository = eventRepo,
+                    localFileAccess = access,
+                    ioDispatcher = Dispatchers.Unconfined,
+                )
+
+            val result =
+                applier.apply(
+                    ops = listOf(SyncOp.UpdateLocal("n.txt")),
+                    pair = pair(),
+                    remoteFilesByPath = mapOf("n.txt" to remote),
+                    localIndexByPath = emptyMap(),
+                )
+
+            assertEquals(0, result.applied)
+            assertEquals(1, result.errors.size)
+            assertEquals(original.toList(), access.get("n.txt")!!.toList())
+            assertEquals(null, access.get(pending.captured.tempRelativePath))
+            coVerify(exactly = 0) { localIndexDao.upsert(any()) }
+        }
+
+    @Test
     fun `UpdateLocal hash mismatch leaves original local file intact`() =
         runTest {
             val original = "original".toByteArray()
