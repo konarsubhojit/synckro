@@ -56,6 +56,9 @@ The Android app lives in `:app`; the platform-free sync domain has been
 extracted into the `:core:domain` Kotlin JVM module (no Android dependencies,
 unit-tested on the plain JVM):
 
+See **[docs/architecture-review.md](docs/architecture-review.md)** for the
+current architecture review and prioritized optimization plan.
+
 ```text
 core/domain/src/main/java/com/synckro/
 └── domain/
